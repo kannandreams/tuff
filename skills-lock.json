@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "cli-first-tool-design": {
+      "source": "kannandreams/agent-forge",
+      "sourceType": "github",
+      "skillPath": "skills/architecture/cli-first-tool-design/SKILL.md",
+      "computedHash": "04dcd3096dab08188fbbccb238c9f76e80d688353c1db3610befac26544a101d"
+    },
+    "just-command-orchestration": {
+      "source": "kannandreams/agent-forge",
+      "sourceType": "github",
+      "skillPath": "skills/tooling/just-command-orchestration/SKILL.md",
+      "computedHash": "fb4786179dc4bc1665447fa8bec1340cae52d470a841d07bb616a6c290ddf018"
+    },
+    "uv-project-setup": {
+      "source": "kannandreams/agent-forge",
+      "sourceType": "github",
+      "skillPath": "skills/python/uv-project-setup/SKILL.md",
+      "computedHash": "5a630e984db8cdd451cb89b76020ff328729b9cffdef9b0c8fed2062430486a9"
+    }
+  }
+}
