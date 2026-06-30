@@ -5,6 +5,7 @@ default:
 
 setup:
     uv sync
+    pnpm install
 
 test:
     uv run pytest
@@ -12,13 +13,13 @@ test:
 lint:
     uv run ruff check .
 
-check: lint test
+check: lint test docs-build
 
 run *args:
     uv run loadout {{args}}
 
 docs-serve:
-    uv run mkdocs serve
+    pnpm docs:start
 
 docs-build:
-    uv run mkdocs build --strict
+    pnpm docs:build

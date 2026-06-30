@@ -33,3 +33,17 @@ Loadout currently supports:
 
 Loadout does not yet support remote registries, multiple harness targets,
 hooks, tools, workflows, or update merges.
+
+## Positioning
+
+Loadout is not trying to be another broad skill marketplace. Vercel Skills has
+already validated that category for skill installation and discovery across
+many agents.
+
+Loadout's narrower bet is typed lifecycle management for repo-local primitives:
+skills first, then tools, hooks, and workflows, with stronger drift, diff, and
+future merge behavior for teams that intentionally customize installed
+artifacts.
+
+See the [Vercel Skills comparison](comparison/vercel-skills.md) for the
+strategic distinction.

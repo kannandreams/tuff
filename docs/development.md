@@ -2,10 +2,13 @@
 
 Loadout is a Python project managed with `uv`.
 
+The Docusaurus docs use Node 24 LTS and `pnpm`.
+
 ## Setup
 
 ```sh
 uv sync
+pnpm install
 ```
 
 ## Run tests
@@ -36,13 +39,13 @@ just check
 ## Build docs
 
 ```sh
-uv run mkdocs build --strict
+pnpm docs:build
 ```
 
 ## Serve docs locally
 
 ```sh
-uv run mkdocs serve
+pnpm docs:start
 ```
 
 If `just` is installed:
@@ -57,5 +60,5 @@ just docs-serve
 src/loadout/       CLI and core implementation
 tests/             unit and CLI lifecycle tests
 examples/fixtures/ sample primitives
-docs/              MkDocs source files
+docs/              Docusaurus documentation source files
 ```
