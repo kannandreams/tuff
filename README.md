@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/loadout.png" alt="Loadout logo" width="320">
+</p>
+
 # Loadout
 
 Loadout is a minimal CLI for installing repo-local agent primitives, tracking
