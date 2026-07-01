@@ -5,7 +5,7 @@ default:
 
 setup:
     uv sync
-    pnpm install
+    npm ci
 
 test:
     uv run pytest
@@ -19,7 +19,7 @@ run *args:
     uv run loadout {{args}}
 
 docs-serve:
-    pnpm docs:start
+    npm run docs:start
 
 docs-build:
-    pnpm docs:build
+    npm run docs:build

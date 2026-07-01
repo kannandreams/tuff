@@ -6,8 +6,8 @@ Loadout is currently developed as a local Python CLI managed with `uv`.
 
 - Python 3.12 or newer
 - `uv`
-- Node 24 LTS
-- `pnpm`
+- Node 18 or newer
+- npm
 
 For project command shortcuts, install `just` as well. The underlying Python
 commands can always be run directly through `uv`.
@@ -18,7 +18,7 @@ Clone the repository, then install dependencies:
 
 ```sh
 uv sync
-pnpm install
+npm ci
 ```
 
 Verify the CLI entry point:

@@ -1,7 +1,8 @@
 # Getting Started
 
-This guide installs the included `python-uv-default` fixture primitive into a
-repository.
+This guide installs the `python-uv-default` sample fixture primitive into a
+repository. The fixture demonstrates the engine lifecycle; it is not a bundled
+standard pack or a core product opinion.
 
 ## 1. Initialize Loadout state
 
@@ -19,7 +20,7 @@ This creates:
 
 ## 2. Add a primitive
 
-Install the sample primitive:
+Install the sample fixture primitive:
 
 ```sh
 uv run loadout add examples/fixtures/python-uv-default
@@ -73,3 +74,9 @@ uv run loadout diff python-uv-default
 
 The diff compares the installed skill against the baseline captured at install
 time.
+
+## Production use
+
+For real projects, put primitives in a project-owned directory or in a separate
+pack repository. Loadout core should provide the lifecycle mechanics; your repo
+or pack should provide the content.

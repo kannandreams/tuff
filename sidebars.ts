@@ -5,6 +5,7 @@ const sidebars: SidebarsConfig = {
     'index',
     'installation',
     'getting-started',
+    'repository-model',
     'cli',
     'primitive-format',
     {

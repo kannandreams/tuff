@@ -1,6 +1,8 @@
 # Loadout
 
-Loadout is a small CLI for managing repo-local agent primitives.
+Loadout is a small CLI for managing repo-local agent primitives. It is the
+engine for primitive lifecycle management, not a repository of company-specific
+skills.
 
 The first milestone focuses on one practical loop:
 
@@ -21,6 +23,11 @@ between repositories by hand, then drift over time.
 
 Loadout treats installed primitives as repo-owned files while still keeping a
 baseline that makes local changes visible.
+
+Loadout core is content-agnostic. Opinionated primitives belong in separate
+pack repos or in the user projects that own them. See the
+[Repository Model](repository-model.md) for the `dbt-core` style split between
+core, packs, and user projects.
 
 ## Current scope
 
@@ -44,6 +51,9 @@ Loadout's narrower bet is typed lifecycle management for repo-local primitives:
 skills first, then tools, hooks, and workflows, with stronger drift, diff, and
 future merge behavior for teams that intentionally customize installed
 artifacts.
+
+Optional starter packs can exist later, but they should sit above Loadout core
+instead of becoming core behavior.
 
 See the [Vercel Skills comparison](comparison/vercel-skills.md) for the
 strategic distinction.

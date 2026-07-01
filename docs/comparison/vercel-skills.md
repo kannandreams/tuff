@@ -31,7 +31,7 @@ the full product thesis.
 | Agent targets | Broad multi-agent support across many coding assistants | Codex target first; multi-target support is not the near-term wedge |
 | Install ownership | Project or global scope, with copy/symlink behavior | Project-local artifacts are repo-owned after install |
 | Drift handling | Update behavior exists, but local-edit merge semantics are not the core positioning | Baseline hashes and diffs are central; future update/merge behavior is the product bet |
-| Opinion layer | Broad ecosystem and discovery directory | Curated typed primitives and opinionated packs can sit above the engine |
+| Opinion layer | Broad ecosystem and discovery directory | Optional packs can sit above the content-agnostic engine |
 | Best use case | Finding and installing reusable skills across many agents | Managing locally customized primitives over time without losing upstream context |
 
 ## Strategic take
@@ -45,7 +45,7 @@ Loadout should go deeper where the skill ecosystem is thinner:
 - typed primitives beyond markdown skills
 - lifecycle state that makes local customization explicit
 - diffs and future merges against known baselines
-- curated conventions where the opinion matters as much as the packaging
+- optional packs where curated conventions can evolve outside core
 
 That direction makes Loadout complementary to the broader ecosystem rather than
 a smaller clone of it.

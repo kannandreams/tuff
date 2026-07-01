@@ -4,6 +4,9 @@ A primitive is a directory with a `loadout.toml` manifest and source files.
 
 The current MVP supports only Codex skills.
 
+The examples below use `python-uv-default` as a fixture. It demonstrates the
+format; it is not a built-in default that Loadout core applies automatically.
+
 ## Directory layout
 
 ```text
@@ -58,3 +61,13 @@ It also stores the install-time baseline at:
 ```text
 .loadout/baselines/python-uv-default/SKILL.md
 ```
+
+## Where primitives should live
+
+Loadout core should stay content-agnostic. Production primitives should live in
+one of two places:
+
+- the user project that owns the primitive
+- an external pack repository maintained by a person, team, or company
+
+Fixtures under `examples/fixtures` are for tests and documentation examples.

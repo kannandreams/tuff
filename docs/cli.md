@@ -20,6 +20,9 @@ Install a local primitive:
 uv run loadout add examples/fixtures/python-uv-default
 ```
 
+This example uses a demo fixture from the Loadout repo. Production primitives
+should normally come from a user project directory or an external pack repo.
+
 For the current Codex target, this installs:
 
 ```text
