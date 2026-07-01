@@ -38,6 +38,24 @@ If `just` is installed:
 just check
 ```
 
+## Smoke test an installed binary
+
+Use this flow to test Loadout the way a user would: install the current checkout
+as a binary, move to a separate directory, and run `loadout` directly.
+
+```sh
+cargo install --path .
+mkdir -p /tmp/loadout-smoke
+cd /tmp/loadout-smoke
+loadout --version
+loadout init
+loadout add /absolute/path/to/loadout/examples/fixtures/python-uv-default
+loadout list
+```
+
+From this repo, `just smoke-install` runs the same flow using the fixture path
+from the current checkout.
+
 ## Build docs
 
 ```sh

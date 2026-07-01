@@ -18,6 +18,18 @@ This creates:
 .loadout/lock.json
 ```
 
+Initial contents:
+
+```json
+{
+  "version": 1,
+  "primitives": {}
+}
+```
+
+`loadout init` does not install anything. It only prepares the repository so
+Loadout can record installed primitives later.
+
 ## 2. Add a primitive
 
 Install the sample fixture primitive:

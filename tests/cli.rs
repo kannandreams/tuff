@@ -42,6 +42,19 @@ fn version_outputs_current_version() {
 }
 
 #[test]
+fn bare_command_outputs_welcome_menu() {
+    loadout()
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Loadout manages repo-local agent primitives",
+        ))
+        .stdout(predicate::str::contains("loadout init"))
+        .stdout(predicate::str::contains("loadout add <primitive-path>"))
+        .stdout(predicate::str::contains("loadout --help"));
+}
+
+#[test]
 fn cli_lifecycle_reports_clean_modified_and_diff() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");

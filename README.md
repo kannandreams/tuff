@@ -55,15 +55,42 @@ cargo install --path .
 loadout --version
 ```
 
+## Test from another directory
+
+This is the closest local workflow to how an engineer would try Loadout after
+installing it:
+
+```sh
+cargo install --path .
+mkdir -p /tmp/loadout-smoke
+cd /tmp/loadout-smoke
+loadout --version
+loadout init
+loadout add /absolute/path/to/loadout/examples/fixtures/python-uv-default
+loadout list
+```
+
+From this repo, the same smoke test is wrapped as:
+
+```sh
+just smoke-install
+```
+
 ## CLI usage
 
 ```sh
+loadout
 loadout --version
 loadout init
 loadout add examples/fixtures/python-uv-default
 loadout list
 loadout diff python-uv-default
 ```
+
+Running `loadout` with no arguments shows the ASCII banner and starter menu.
+
+`loadout init` only creates `.loadout/lock.json` with empty primitive state. It
+does not install defaults or create skills.
 
 The CLI is implemented as a Rust binary crate and commits `Cargo.lock` for
 reproducible builds.

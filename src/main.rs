@@ -15,6 +15,7 @@ const LOCKFILE_VERSION: u8 = 1;
 const SUPPORTED_KIND: &str = "skill";
 const SUPPORTED_TARGET: &str = "codex";
 const SUPPORTED_FILES: [&str; 1] = ["src/SKILL.md"];
+const LOADOUT_ASCII: &str = include_str!("../assets/loadout.txt");
 
 type Result<T> = std::result::Result<T, LoadoutError>;
 
@@ -57,7 +58,7 @@ impl From<toml::de::Error> for LoadoutError {
 #[command(name = "loadout", version)]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -130,11 +131,14 @@ fn run() -> Result<()> {
     let repo_root = std::env::current_dir()?;
 
     match cli.command {
-        Command::Init => {
+        None => {
+            print_welcome();
+        }
+        Some(Command::Init) => {
             let lock_path = init_lockfile(&repo_root)?;
             println!("initialized {}", relative_display(&lock_path, &repo_root));
         }
-        Command::Add { primitive } => {
+        Some(Command::Add { primitive }) => {
             let mut lockfile = require_lockfile(&repo_root)?;
             let primitive_dir = absolutize(&repo_root, &primitive);
             let manifest = load_manifest(&primitive_dir)?;
@@ -146,7 +150,7 @@ fn run() -> Result<()> {
                 relative_display(&target_path, &repo_root)
             );
         }
-        Command::List => {
+        Some(Command::List) => {
             let lockfile = require_lockfile(&repo_root)?;
             if lockfile.primitives.is_empty() {
                 println!("no primitives installed");
@@ -161,7 +165,7 @@ fn run() -> Result<()> {
                 );
             }
         }
-        Command::Diff { primitive_id } => {
+        Some(Command::Diff { primitive_id }) => {
             let lockfile = require_lockfile(&repo_root)?;
             let entry = lockfile.primitives.get(&primitive_id).ok_or_else(|| {
                 LoadoutError::new(format!("primitive is not installed: {primitive_id}"))
@@ -174,6 +178,37 @@ fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn print_welcome() {
+    let use_color = std::env::var_os("NO_COLOR").is_none();
+    let army_green = if use_color { "\x1b[38;5;64m" } else { "" };
+    let gray = if use_color { "\x1b[38;5;245m" } else { "" };
+    let white = if use_color { "\x1b[38;5;250m" } else { "" };
+    let bold = if use_color { "\x1b[1m" } else { "" };
+    let reset = if use_color { "\x1b[0m" } else { "" };
+
+    println!(
+        r#"{bold}{army_green}{LOADOUT_ASCII}{reset}
+
+{gray}cross-harness primitives manager for coding agents{reset}
+{gray}v{version}{reset}
+
+{white}Loadout{reset} manages repo-local agent primitives.
+{gray}Install, track, diff, and eventually merge skills/tools/hooks/workflows.{reset}
+
+{white}Start here:{reset}
+  {army_green}loadout init{reset}                         Create .loadout/lock.json
+  {army_green}loadout add <primitive-path>{reset}         Install a local primitive
+  {army_green}loadout list{reset}                         Show installed primitives and drift
+  {army_green}loadout diff <id>{reset}                    Compare local artifact to baseline
+
+{white}More:{reset}
+  {army_green}loadout --help{reset}                       Show command reference
+  {army_green}loadout --version{reset}                    Show installed version
+"#,
+        version = env!("CARGO_PKG_VERSION")
+    );
 }
 
 fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
