@@ -7,3 +7,4 @@ build/
 .docusaurus/
 node_modules/
 .pnpm-store/
+target/

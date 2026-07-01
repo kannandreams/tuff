@@ -1,30 +1,37 @@
 # Installation
 
-Loadout is currently developed as a local Python CLI managed with `uv`.
+Loadout is currently developed as a Rust CLI.
 
 ## Requirements
 
-- Python 3.12 or newer
-- `uv`
+- Rust and Cargo
 - Node 18 or newer
 - npm
 
-For project command shortcuts, install `just` as well. The underlying Python
-commands can always be run directly through `uv`.
+For project command shortcuts, install `just` as well. The underlying CLI
+commands can always be run directly through Cargo.
 
 ## Set up from source
 
 Clone the repository, then install dependencies:
 
 ```sh
-uv sync
+cargo fetch
 npm ci
 ```
 
 Verify the CLI entry point:
 
 ```sh
-uv run loadout --help
+cargo run -- --help
+cargo run -- --version
+```
+
+Install the local binary from the checkout:
+
+```sh
+cargo install --path .
+loadout --version
 ```
 
 ## Optional command runner
@@ -39,5 +46,6 @@ just run -- --help
 
 ## Package status
 
-Loadout is not yet published to PyPI. Until it is, use the source checkout with
-`uv run loadout ...`.
+Loadout does not yet publish release binaries or a Homebrew formula. Until
+those exist, use the source checkout with `cargo run -- ...` or install locally
+with `cargo install --path .`.

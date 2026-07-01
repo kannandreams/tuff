@@ -9,7 +9,7 @@ standard pack or a core product opinion.
 From the repository root:
 
 ```sh
-uv run loadout init
+loadout init
 ```
 
 This creates:
@@ -23,7 +23,7 @@ This creates:
 Install the sample fixture primitive:
 
 ```sh
-uv run loadout add examples/fixtures/python-uv-default
+loadout add examples/fixtures/python-uv-default
 ```
 
 This writes:
@@ -39,7 +39,7 @@ baseline hash, and installed hash.
 ## 3. List installed primitives
 
 ```sh
-uv run loadout list
+loadout list
 ```
 
 Expected output after a fresh install:
@@ -61,7 +61,7 @@ Loadout treats this as normal repository ownership, not an error.
 ## 5. Check drift
 
 ```sh
-uv run loadout list
+loadout list
 ```
 
 The primitive now reports `modified`.
@@ -69,7 +69,7 @@ The primitive now reports `modified`.
 ## 6. Show the baseline diff
 
 ```sh
-uv run loadout diff python-uv-default
+loadout diff python-uv-default
 ```
 
 The diff compares the installed skill against the baseline captured at install

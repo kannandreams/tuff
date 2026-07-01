@@ -1,0 +1,23 @@
+[package]
+name = "loadout"
+version = "0.1.0"
+edition = "2024"
+description = "CLI lifecycle manager for repo-local agent primitives."
+license = "MIT"
+
+[[bin]]
+name = "loadout"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5.53", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+similar = "2.7.0"
+toml = "0.9.8"
+
+[dev-dependencies]
+assert_cmd = "2.1.1"
+predicates = "3.1.3"
+tempfile = "3.23.0"

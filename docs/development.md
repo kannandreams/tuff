@@ -1,33 +1,35 @@
 # Development
 
-Loadout is a Python project managed with `uv`.
+Loadout is a Rust CLI project managed with Cargo.
 
 The Docusaurus docs use Node 18 or newer and npm.
 
 ## Setup
 
 ```sh
-uv sync
+cargo fetch
 npm ci
 ```
 
 ## Run tests
 
 ```sh
-uv run pytest
+cargo test
 ```
 
 ## Run lint
 
 ```sh
-uv run ruff check .
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 ## Run all checks
 
 ```sh
-uv run ruff check .
-uv run pytest
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
 ```
 
 If `just` is installed:
@@ -57,8 +59,8 @@ just docs-serve
 ## Project structure
 
 ```text
-src/loadout/       CLI and core implementation
-tests/             unit and CLI lifecycle tests
+src/main.rs        CLI and core implementation
+tests/             integration tests
 examples/fixtures/ demo and test primitives
 docs/              Docusaurus documentation source files
 ```

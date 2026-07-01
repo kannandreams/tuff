@@ -7,7 +7,7 @@ Run commands from the repository root.
 Initialize Loadout state:
 
 ```sh
-uv run loadout init
+loadout init
 ```
 
 Creates `.loadout/lock.json` if it does not already exist.
@@ -17,7 +17,7 @@ Creates `.loadout/lock.json` if it does not already exist.
 Install a local primitive:
 
 ```sh
-uv run loadout add examples/fixtures/python-uv-default
+loadout add examples/fixtures/python-uv-default
 ```
 
 This example uses a demo fixture from the Loadout repo. Production primitives
@@ -36,7 +36,7 @@ Loadout refuses to overwrite an existing untracked skill at the same path.
 List installed primitives:
 
 ```sh
-uv run loadout list
+loadout list
 ```
 
 Statuses:
@@ -50,7 +50,7 @@ Statuses:
 Show a unified diff between the recorded baseline and the installed artifact:
 
 ```sh
-uv run loadout diff python-uv-default
+loadout diff python-uv-default
 ```
 
 If there are no local changes, the command exits successfully with no diff

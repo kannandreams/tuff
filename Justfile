@@ -4,19 +4,20 @@ default:
     just --list
 
 setup:
-    uv sync
+    cargo fetch
     npm ci
 
 test:
-    uv run pytest
+    cargo test
 
 lint:
-    uv run ruff check .
+    cargo fmt --check
+    cargo clippy --all-targets --all-features -- -D warnings
 
 check: lint test docs-build
 
 run *args:
-    uv run loadout {{args}}
+    cargo run -- {{args}}
 
 docs-serve:
     npm run docs:start

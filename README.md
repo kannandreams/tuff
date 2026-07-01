@@ -39,23 +39,57 @@ Build the static docs site:
 npm run docs:build
 ```
 
-## Commands
+## Install for local development
+
+From this repository:
 
 ```sh
-just setup
-just check
-just run -- init
-just run -- add examples/fixtures/python-uv-default
-just run -- list
-just run -- diff python-uv-default
+cargo run -- --help
+cargo run -- --version
 ```
 
-The project uses `uv` for dependency management and commits `uv.lock` for
-reproducible CLI/test behavior.
+To install the CLI from this checkout while developing locally:
+
+```sh
+cargo install --path .
+loadout --version
+```
+
+## CLI usage
+
+```sh
+loadout --version
+loadout init
+loadout add examples/fixtures/python-uv-default
+loadout list
+loadout diff python-uv-default
+```
+
+The CLI is implemented as a Rust binary crate and commits `Cargo.lock` for
+reproducible builds.
 
 The `examples/fixtures/python-uv-default` primitive is a demo/test fixture, not
 a bundled standard pack. Production primitives should live in separate pack
 repositories or in the repositories that use them.
+
+## Developer commands
+
+`just` is only a contributor convenience wrapper for this repo, not the user
+interface:
+
+```sh
+just setup
+just check
+just run -- --help
+```
+
+End users should run `loadout ...` directly.
+
+## Packaging direction
+
+Loadout is now Rust-first. The near-term install path is `cargo install --path .`
+for local development. Standalone release binaries and a Homebrew tap should
+come after the CLI contract, lockfile format, and primitive lifecycle stabilize.
 
 ## License
 
