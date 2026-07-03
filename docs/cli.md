@@ -32,9 +32,9 @@ Initial contents:
 }
 ```
 
-`loadout init` does not install primitives, create skills, or apply defaults.
+`loadout init` does not install capabilities, create skills, or apply defaults.
 It only prepares the repository for lifecycle tracking. Commands that install
-or inspect primitives use this lockfile as their source of Loadout state.
+or inspect capabilities use this lockfile as their source of Loadout state.
 
 ## `loadout add <primitive-path>`
 
@@ -44,7 +44,7 @@ Install a local primitive:
 loadout add examples/fixtures/python-uv-default
 ```
 
-This example uses a demo fixture from the Loadout repo. Production primitives
+This example uses a demo fixture from the Loadout repo. Production capabilities
 should normally come from a user project directory or an external pack repo.
 
 For the current Codex target, this installs:
@@ -57,7 +57,7 @@ Loadout refuses to overwrite an existing untracked skill at the same path.
 
 ## `loadout list`
 
-List installed primitives:
+List installed capabilities:
 
 ```sh
 loadout list

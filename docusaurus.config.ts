@@ -4,7 +4,7 @@ import {themes} from 'prism-react-renderer';
 
 const config: Config = {
   title: 'Loadout',
-  tagline: 'Typed lifecycle management for repo-local agent primitives.',
+  tagline: 'Lifecycle management for project-owned agent capabilities.',
   favicon: 'img/favicon.ico',
 
   url: 'https://loadout.dev',
@@ -32,7 +32,7 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           routeBasePath: '/',
-          editUrl: 'https://github.com/your-org/loadout/tree/main/',
+          editUrl: 'https://github.com/kannandreams/loadout/tree/main/',
         },
         blog: false,
         theme: {
@@ -53,7 +53,12 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/your-org/loadout',
+          label: 'Roadmap',
+          to: '/roadmap',
+          position: 'left',
+        },
+        {
+          href: 'https://github.com/kannandreams/loadout',
           label: 'GitHub',
           position: 'right',
         },
@@ -70,7 +75,15 @@ const config: Config = {
               to: '/getting-started',
             },
             {
-              label: 'Vercel Skills Comparison',
+              label: 'Usage Scenarios',
+              to: '/usage-scenarios',
+            },
+            {
+              label: 'Roadmap',
+              to: '/roadmap',
+            },
+            {
+              label: 'Skills.sh Comparison',
               to: '/comparison/vercel-skills',
             },
           ],

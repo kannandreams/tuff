@@ -4,25 +4,17 @@
 
 # Loadout
 
-Loadout is a minimal CLI for installing repo-local agent primitives, tracking
-their installed baseline, detecting local edits, and showing diffs against that
-baseline.
+Loadout is a CLI for managing project-owned agent capabilities: skills, tools,
+hooks, and workflows that teams load into coding harnesses such as Codex,
+Claude, Cursor, and others.
 
 This first implementation targets Codex-style skills installed at
 `.agents/skills/<id>/SKILL.md`.
 
-Loadout core is intentionally content-agnostic. It is the engine for primitive
-schema, install state, drift detection, diffing, validation, and future
-adapters. Actual skills, tools, hooks, and workflows should live in separate
-pack repos or in the user project that owns them.
-
-Think of the split like dbt:
-
-| Layer | Analogy | Contents |
-| --- | --- | --- |
-| Loadout core | `dbt-core` | CLI, schema, lockfile, diff/merge, validation, adapters |
-| Loadout packs | `dbt-utils` or starter packages | Optional shared primitives and curated defaults |
-| User projects | dbt projects | Installed and locally modified `.loadout/` primitives |
+Loadout core is intentionally content-agnostic. It is the engine for manifests,
+install state, drift detection, diffing, validation, and future harness
+adapters. Actual capability content should live in separate pack repositories
+or in the projects that own and customize it.
 
 ## Documentation
 
@@ -38,6 +30,13 @@ Build the static docs site:
 ```sh
 npm run docs:build
 ```
+
+Start with:
+
+- [Introduction](docs/index.md)
+- [Usage Scenarios](docs/usage-scenarios.md)
+- [Roadmap](docs/roadmap.md)
+- [Skills.sh and Vercel Skills Comparison](docs/comparison/vercel-skills.md)
 
 ## Install for local development
 
@@ -96,7 +95,7 @@ The CLI is implemented as a Rust binary crate and commits `Cargo.lock` for
 reproducible builds.
 
 The `examples/fixtures/python-uv-default` primitive is a demo/test fixture, not
-a bundled standard pack. Production primitives should live in separate pack
+a bundled standard pack. Production capabilities should live in separate pack
 repositories or in the repositories that use them.
 
 ## Developer commands
@@ -116,7 +115,8 @@ End users should run `loadout ...` directly.
 
 Loadout is now Rust-first. The near-term install path is `cargo install --path .`
 for local development. Standalone release binaries and a Homebrew tap should
-come after the CLI contract, lockfile format, and primitive lifecycle stabilize.
+come after the CLI contract, lockfile format, and capability lifecycle
+stabilize.
 
 ## License
 

@@ -1,25 +1,75 @@
 :root {
-  --ifm-color-primary: #245f73;
-  --ifm-color-primary-dark: #205668;
-  --ifm-color-primary-darker: #1e5162;
-  --ifm-color-primary-darkest: #194350;
-  --ifm-color-primary-light: #28687e;
-  --ifm-color-primary-lighter: #2a6d84;
-  --ifm-color-primary-lightest: #2f7b95;
+  --ifm-color-primary: #137a3d;
+  --ifm-color-primary-dark: #116e37;
+  --ifm-color-primary-darker: #106834;
+  --ifm-color-primary-darkest: #0d552a;
+  --ifm-color-primary-light: #158644;
+  --ifm-color-primary-lighter: #168c47;
+  --ifm-color-primary-lightest: #19a250;
+  --ifm-background-color: #ffffff;
+  --ifm-heading-color: #121613;
+  --ifm-font-color-base: #202620;
   --ifm-code-font-size: 95%;
+  --loadout-neon: #39ff88;
+  --loadout-ink: #080b09;
+  --loadout-panel: #f4f7f4;
+  --loadout-border: #d9e2db;
 }
 
 [data-theme='dark'] {
-  --ifm-color-primary: #58b7d0;
-  --ifm-color-primary-dark: #41aec9;
-  --ifm-color-primary-darker: #36a7c2;
-  --ifm-color-primary-darkest: #2d8aa0;
-  --ifm-color-primary-light: #70c0d7;
-  --ifm-color-primary-lighter: #7bc5da;
-  --ifm-color-primary-lightest: #9ed4e4;
+  --ifm-color-primary: #39ff88;
+  --ifm-color-primary-dark: #19ff77;
+  --ifm-color-primary-darker: #09ff6f;
+  --ifm-color-primary-darkest: #00d858;
+  --ifm-color-primary-light: #65ffa2;
+  --ifm-color-primary-lighter: #78ffad;
+  --ifm-color-primary-lightest: #a4ffc8;
+  --ifm-background-color: #080b09;
+  --ifm-heading-color: #f4fff8;
+  --ifm-font-color-base: #e6eee8;
+  --loadout-panel: #101611;
+  --loadout-border: #26382b;
 }
 
 .markdown table {
   display: table;
   width: 100%;
+}
+
+.navbar {
+  border-bottom: 1px solid var(--loadout-border);
+}
+
+.loadout-hero {
+  background: linear-gradient(135deg, #080b09 0%, #151a16 62%, #1f2922 100%);
+  border: 1px solid #223127;
+  border-radius: 8px;
+  color: #f4fff8;
+  margin-bottom: 2rem;
+  padding: 1.5rem 1.75rem;
+}
+
+.loadout-hero p {
+  color: #dce8df;
+  font-size: 1.05rem;
+  margin: 0.55rem 0 0;
+  max-width: 820px;
+}
+
+.loadout-hero-label {
+  color: var(--loadout-neon);
+  font-weight: 500;
+}
+
+.markdown h2 {
+  border-top: 1px solid var(--loadout-border);
+  padding-top: 1.5rem;
+}
+
+.theme-doc-markdown a {
+  font-weight: 600;
+}
+
+.footer {
+  border-top: 1px solid #1d2a21;
 }

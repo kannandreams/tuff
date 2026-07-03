@@ -1,6 +1,8 @@
 # Primitive Format
 
-A primitive is a directory with a `loadout.toml` manifest and source files.
+A Loadout capability is a directory with a `loadout.toml` manifest and source
+files. The internal schema uses the term `primitive` because Loadout will manage
+several artifact kinds through one lifecycle engine.
 
 The current MVP supports only Codex skills.
 
@@ -30,11 +32,11 @@ files = ["src/SKILL.md"]
 ## Fields
 
 `id`
-: Stable primitive identifier. For Codex skills, this becomes the skill
+: Stable capability identifier. For Codex skills, this becomes the skill
   directory name under `.agents/skills/`.
 
 `version`
-: Primitive version recorded in `.loadout/lock.json`.
+: Capability version recorded in `.loadout/lock.json`.
 
 `kind`
 : Must be `skill` in the current implementation.
@@ -43,7 +45,7 @@ files = ["src/SKILL.md"]
 : Must be `codex` in the current implementation.
 
 `description`
-: Human-readable primitive summary.
+: Human-readable capability summary.
 
 `files`
 : Must currently be `["src/SKILL.md"]`.
@@ -62,12 +64,12 @@ It also stores the install-time baseline at:
 .loadout/baselines/python-uv-default/SKILL.md
 ```
 
-## Where primitives should live
+## Where capabilities should live
 
-Loadout core should stay content-agnostic. Production primitives should live in
+Loadout core should stay content-agnostic. Production capabilities should live in
 one of two places:
 
-- the user project that owns the primitive
+- the user project that owns the capability
 - an external pack repository maintained by a person, team, or company
 
 Fixtures under `examples/fixtures` are for tests and documentation examples.

@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide installs the `python-uv-default` sample fixture primitive into a
+This guide installs the `python-uv-default` sample fixture capability into a
 repository. The fixture demonstrates the engine lifecycle; it is not a bundled
 standard pack or a core product opinion.
 
@@ -28,11 +28,11 @@ Initial contents:
 ```
 
 `loadout init` does not install anything. It only prepares the repository so
-Loadout can record installed primitives later.
+Loadout can record installed capabilities later.
 
-## 2. Add a primitive
+## 2. Add a capability
 
-Install the sample fixture primitive:
+Install the sample fixture capability:
 
 ```sh
 loadout add examples/fixtures/python-uv-default
@@ -45,10 +45,10 @@ This writes:
 .loadout/baselines/python-uv-default/SKILL.md
 ```
 
-The lockfile records the primitive version, source path, installed target path,
+The lockfile records the capability version, source path, installed target path,
 baseline hash, and installed hash.
 
-## 3. List installed primitives
+## 3. List installed capabilities
 
 ```sh
 loadout list
@@ -76,7 +76,7 @@ Loadout treats this as normal repository ownership, not an error.
 loadout list
 ```
 
-The primitive now reports `modified`.
+The capability now reports `modified`.
 
 ## 6. Show the baseline diff
 
@@ -89,6 +89,6 @@ time.
 
 ## Production use
 
-For real projects, put primitives in a project-owned directory or in a separate
-pack repository. Loadout core should provide the lifecycle mechanics; your repo
-or pack should provide the content.
+For real projects, put capabilities in a project-owned directory or in a
+separate pack repository. Loadout core should provide the lifecycle mechanics;
+your repo or pack should provide the content.

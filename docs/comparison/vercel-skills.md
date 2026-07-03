@@ -1,18 +1,22 @@
-# Vercel Skills vs Loadout
+# Skills.sh and Vercel Skills vs Loadout
 
-Vercel Skills and Loadout overlap on the basic idea that agent context should
-be installable and reusable across repositories. The strategic difference is
-that Vercel Skills is already a broad skill ecosystem, while Loadout is aiming
-at typed primitive lifecycle management.
+Skills.sh and Vercel Skills helped validate the basic idea that agent context
+should be installable and reusable across repositories. Loadout is inspired by
+that direction, but it is not trying to be a smaller clone of the same
+marketplace.
+
+The strategic difference is that Vercel Skills is a broad skill ecosystem,
+while Loadout is aiming at lifecycle management for project-owned agent
+capabilities.
 
 ## Summary
 
 Loadout should not compete head-on as another `npx skills` clone. Vercel has
 already shipped the broad skill installation and discovery layer.
 
-Loadout's wedge is narrower:
+Loadout's wedge is narrower and more operational:
 
-- model tools, hooks, and workflows as first-class primitives, not only skills
+- model tools, hooks, and workflows as first-class capabilities, not only skills
 - treat installed artifacts as repo-owned files
 - track baselines so local drift is visible
 - build toward real update and merge behavior for customized primitives
@@ -24,15 +28,15 @@ the full product thesis.
 
 | Area | Vercel Skills | Loadout |
 | --- | --- | --- |
-| Primary scope | Open skill ecosystem for reusable agent context | Typed lifecycle manager for repo-local agent primitives |
-| Current primitive model | Skills, typically `SKILL.md` plus supporting files | Starts with skills, designed to expand to tools, hooks, and workflows |
-| Distribution | Public git repos, local folders, and ecosystem discovery | Local filesystem primitives first; registry behavior deferred |
+| Primary scope | Open skill ecosystem for reusable agent context | Lifecycle manager for project-owned agent capabilities |
+| Current model | Skills, typically `SKILL.md` plus supporting files | Starts with skills, designed to expand to tools, hooks, and workflows |
+| Distribution | Public git repos, local folders, and ecosystem discovery | Local filesystem capabilities first; pack and registry behavior deferred |
 | CLI shape | `npx skills add`, `find`, `list`, `remove`, `update`, `init`, and related commands | `loadout init`, `add`, `list`, and `diff` for the first lifecycle loop |
 | Agent targets | Broad multi-agent support across many coding assistants | Codex target first; multi-target support is not the near-term wedge |
 | Install ownership | Project or global scope, with copy/symlink behavior | Project-local artifacts are repo-owned after install |
 | Drift handling | Update behavior exists, but local-edit merge semantics are not the core positioning | Baseline hashes and diffs are central; future update/merge behavior is the product bet |
 | Opinion layer | Broad ecosystem and discovery directory | Optional packs can sit above the content-agnostic engine |
-| Best use case | Finding and installing reusable skills across many agents | Managing locally customized primitives over time without losing upstream context |
+| Best use case | Finding and installing reusable skills across many agents | Managing locally customized capabilities over time without losing upstream context |
 
 ## Strategic take
 
@@ -42,7 +46,7 @@ that as a generic marketplace would be a weak starting point.
 
 Loadout should go deeper where the skill ecosystem is thinner:
 
-- typed primitives beyond markdown skills
+- typed capabilities beyond markdown skills
 - lifecycle state that makes local customization explicit
 - diffs and future merges against known baselines
 - optional packs where curated conventions can evolve outside core
@@ -54,4 +58,5 @@ a smaller clone of it.
 
 - [Vercel Skills changelog](https://vercel.com/changelog/introducing-skills-the-open-agent-skills-ecosystem)
 - [Vercel guide to creating, installing, and sharing agent skills](https://vercel.com/kb/guide/agent-skills-creating-installing-and-sharing-reusable-agent-context)
+- [Skills.sh](https://skills.sh/)
 - [Docusaurus installation documentation](https://docusaurus.io/docs/installation)
