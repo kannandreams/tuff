@@ -9,11 +9,16 @@
   --ifm-background-color: #ffffff;
   --ifm-heading-color: #121613;
   --ifm-font-color-base: #202620;
+  --ifm-font-family-base: Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ifm-font-family-monospace: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   --ifm-code-font-size: 95%;
   --loadout-neon: #39ff88;
   --loadout-ink: #080b09;
   --loadout-panel: #f4f7f4;
   --loadout-border: #d9e2db;
+  --loadout-code-bg: #080b09;
+  --loadout-code-border: #233327;
+  --loadout-code-text: #ffffff;
 }
 
 [data-theme='dark'] {
@@ -29,6 +34,9 @@
   --ifm-font-color-base: #e6eee8;
   --loadout-panel: #101611;
   --loadout-border: #26382b;
+  --loadout-code-bg: #050705;
+  --loadout-code-border: #26382b;
+  --loadout-code-text: #ffffff;
 }
 
 .markdown table {
@@ -68,6 +76,28 @@
 
 .theme-doc-markdown a {
   font-weight: 600;
+}
+
+.theme-code-block,
+.markdown pre {
+  background: var(--loadout-code-bg) !important;
+  border: 1px solid var(--loadout-code-border);
+  border-radius: 8px;
+}
+
+.theme-code-block pre,
+.markdown pre,
+.markdown pre code,
+.markdown pre code span,
+.theme-code-block code,
+.theme-code-block code span,
+.prism-code,
+.prism-code span {
+  color: var(--loadout-code-text) !important;
+}
+
+.theme-code-block code {
+  background: transparent;
 }
 
 .footer {
