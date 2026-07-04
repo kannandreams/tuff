@@ -1,32 +1,10 @@
 {
-  "name": "loadout-docs",
-  "version": "0.1.0",
+  "name": "coral-root",
   "private": true,
   "scripts": {
-    "docs:start": "NODE_OPTIONS='--localstorage-file=/tmp/docusaurus-localstorage' docusaurus start",
-    "docs:build": "NODE_OPTIONS='--localstorage-file=/tmp/docusaurus-localstorage' docusaurus build",
-    "build": "NODE_OPTIONS='--localstorage-file=/tmp/docusaurus-localstorage' docusaurus build",
-    "serve": "NODE_OPTIONS='--localstorage-file=/tmp/docusaurus-localstorage' docusaurus serve",
-    "start": "NODE_OPTIONS='--localstorage-file=/tmp/docusaurus-localstorage' docusaurus start",
-    "docs:clear": "docusaurus clear",
-    "docs:typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@docusaurus/core": "^3.8.1",
-    "@docusaurus/preset-classic": "^3.8.1",
-    "@mdx-js/react": "^3.1.0",
-    "clsx": "^2.1.1",
-    "prism-react-renderer": "^2.4.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.8.1",
-    "@docusaurus/tsconfig": "^3.8.1",
-    "@docusaurus/types": "^3.8.1",
-    "typescript": "^5.8.3"
-  },
-  "engines": {
-    "node": ">=18.0"
+    "docs:start": "npm --prefix website run dev",
+    "docs:build": "npm --prefix website run build",
+    "docs:serve": "npm --prefix website run preview",
+    "docs:typecheck": "npm --prefix website run check"
   }
 }

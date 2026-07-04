@@ -15,47 +15,77 @@ const LOCKFILE_VERSION: u8 = 1;
 const SUPPORTED_KIND: &str = "skill";
 const SUPPORTED_TARGET: &str = "codex";
 const SUPPORTED_FILES: [&str; 1] = ["src/SKILL.md"];
-const LOADOUT_ASCII: &str = include_str!("../assets/loadout.txt");
+const CORAL_WORDMARK_ASCII: &str = include_str!("../assets/coral.txt");
 
-type Result<T> = std::result::Result<T, LoadoutError>;
+/// Gradient stops (position, RGB) used to color the wordmark.
+const WORDMARK_GRADIENT: [(f64, (u8, u8, u8)); 5] = [
+    (0.00, (255, 128, 0)),
+    (0.25, (255, 105, 180)),
+    (0.50, (138, 43, 226)),
+    (0.75, (30, 144, 255)),
+    (1.00, (0, 206, 209)),
+];
+
+fn lerp_u8(a: u8, b: u8, t: f64) -> u8 {
+    (a as f64 + (b as f64 - a as f64) * t).round() as u8
+}
+
+fn wordmark_color_at(t: f64) -> (u8, u8, u8) {
+    let t = t.clamp(0.0, 1.0);
+    for window in WORDMARK_GRADIENT.windows(2) {
+        let (t0, c0) = window[0];
+        let (t1, c1) = window[1];
+        if t <= t1 {
+            let frac = if t1 != t0 { (t - t0) / (t1 - t0) } else { 0.0 };
+            return (
+                lerp_u8(c0.0, c1.0, frac),
+                lerp_u8(c0.1, c1.1, frac),
+                lerp_u8(c0.2, c1.2, frac),
+            );
+        }
+    }
+    WORDMARK_GRADIENT[WORDMARK_GRADIENT.len() - 1].1
+}
+
+type Result<T> = std::result::Result<T, CoralError>;
 
 #[derive(Debug)]
-struct LoadoutError(String);
+struct CoralError(String);
 
-impl LoadoutError {
+impl CoralError {
     fn new(message: impl Into<String>) -> Self {
         Self(message.into())
     }
 }
 
-impl Display for LoadoutError {
+impl Display for CoralError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl Error for LoadoutError {}
+impl Error for CoralError {}
 
-impl From<std::io::Error> for LoadoutError {
+impl From<std::io::Error> for CoralError {
     fn from(error: std::io::Error) -> Self {
         Self(error.to_string())
     }
 }
 
-impl From<serde_json::Error> for LoadoutError {
+impl From<serde_json::Error> for CoralError {
     fn from(error: serde_json::Error) -> Self {
         Self(error.to_string())
     }
 }
 
-impl From<toml::de::Error> for LoadoutError {
+impl From<toml::de::Error> for CoralError {
     fn from(error: toml::de::Error) -> Self {
-        Self(format!("invalid primitive manifest TOML: {error}"))
+        Self(format!("invalid capability manifest TOML: {error}"))
     }
 }
 
 #[derive(Parser)]
-#[command(name = "loadout", version)]
+#[command(name = "coral", version)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -63,19 +93,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Initialize .loadout state.
+    /// Initialize .coral state.
     Init,
-    /// Install a local primitive.
+    /// Install a local capability.
     Add {
-        /// Path to a primitive directory.
-        primitive: PathBuf,
+        /// Path to a capability directory.
+        capability: PathBuf,
     },
-    /// List installed primitives.
+    /// List installed capabilities.
     List,
-    /// Diff an installed primitive against baseline.
+    /// Diff an installed capability against baseline.
     Diff {
-        /// Installed primitive id.
-        primitive_id: String,
+        /// Installed capability id.
+        capability_id: String,
     },
 }
 
@@ -95,8 +125,8 @@ struct PrimitiveManifest {
 impl PrimitiveManifest {
     fn skill_source_path(&self) -> Result<PathBuf> {
         if self.files != SUPPORTED_FILES {
-            return Err(LoadoutError::new(
-                "codex skill primitives must declare files = ['src/SKILL.md']",
+            return Err(CoralError::new(
+                "codex skill capabilities must declare files = ['src/SKILL.md']",
             ));
         }
         Ok(self.root.join("src").join("SKILL.md"))
@@ -138,10 +168,10 @@ fn run() -> Result<()> {
             let lock_path = init_lockfile(&repo_root)?;
             println!("initialized {}", relative_display(&lock_path, &repo_root));
         }
-        Some(Command::Add { primitive }) => {
+        Some(Command::Add { capability }) => {
             let mut lockfile = require_lockfile(&repo_root)?;
-            let primitive_dir = absolutize(&repo_root, &primitive);
-            let manifest = load_manifest(&primitive_dir)?;
+            let capability_dir = absolutize(&repo_root, &capability);
+            let manifest = load_manifest(&capability_dir)?;
             let target_path = install_codex_skill(&repo_root, &mut lockfile, &manifest)?;
             write_lockfile(&repo_root, &lockfile)?;
             println!(
@@ -165,14 +195,14 @@ fn run() -> Result<()> {
                 );
             }
         }
-        Some(Command::Diff { primitive_id }) => {
+        Some(Command::Diff { capability_id }) => {
             let lockfile = require_lockfile(&repo_root)?;
-            let entry = lockfile.primitives.get(&primitive_id).ok_or_else(|| {
-                LoadoutError::new(format!("primitive is not installed: {primitive_id}"))
+            let entry = lockfile.primitives.get(&capability_id).ok_or_else(|| {
+                CoralError::new(format!("capability is not installed: {capability_id}"))
             })?;
             print!(
                 "{}",
-                diff_against_baseline(&repo_root, &primitive_id, entry)?
+                diff_against_baseline(&repo_root, &capability_id, entry)?
             );
         }
     }
@@ -182,39 +212,138 @@ fn run() -> Result<()> {
 
 fn print_welcome() {
     let use_color = std::env::var_os("NO_COLOR").is_none();
-    let army_green = if use_color { "\x1b[38;5;64m" } else { "" };
-    let gray = if use_color { "\x1b[38;5;245m" } else { "" };
-    let white = if use_color { "\x1b[38;5;250m" } else { "" };
-    let bold = if use_color { "\x1b[1m" } else { "" };
+    let coral = if use_color {
+        "\x1b[38;2;255;122;89m"
+    } else {
+        ""
+    };
+    let pink = if use_color {
+        "\x1b[38;2;255;92;191m"
+    } else {
+        ""
+    };
+    let violet = if use_color {
+        "\x1b[38;2;178;108;255m"
+    } else {
+        ""
+    };
+    let cyan = if use_color {
+        "\x1b[38;2;57;208;255m"
+    } else {
+        ""
+    };
+    let mint = if use_color {
+        "\x1b[38;2;63;255;196m"
+    } else {
+        ""
+    };
+    let white = if use_color {
+        "\x1b[38;2;241;246;248m"
+    } else {
+        ""
+    };
+    let gray = if use_color {
+        "\x1b[38;2;143;153;166m"
+    } else {
+        ""
+    };
     let reset = if use_color { "\x1b[0m" } else { "" };
 
+    let logo_lines = CORAL_WORDMARK_ASCII
+        .lines()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    let logo_width = logo_lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    let mut hero = String::new();
+    for line in &logo_lines {
+        for (char_index, ch) in line.chars().enumerate() {
+            if ch == ' ' {
+                hero.push(' ');
+                continue;
+            }
+
+            let tx = if logo_width <= 1 {
+                0.0
+            } else {
+                char_index as f64 / (logo_width - 1) as f64
+            };
+            if use_color {
+                let (r, g, b) = wordmark_color_at(tx);
+                hero.push_str(&format!("\x1b[38;2;{r};{g};{b}m"));
+            }
+            hero.push(ch);
+        }
+        if use_color {
+            hero.push_str(reset);
+        }
+        hero.push('\n');
+    }
+
+    let gradient_divider = format!(
+        "{coral}{}{pink}{}{violet}{}{cyan}{}{mint}{}{reset}",
+        "─".repeat(18),
+        "─".repeat(18),
+        "─".repeat(18),
+        "─".repeat(18),
+        "─".repeat(18),
+    );
+
+    let title = format!(
+        "{cyan}│{reset} {mint}{:<84}{reset} {cyan}│{reset}",
+        "Quick Start"
+    );
+    let rows = [
+        ("coral init", "Initialize .coral/lock.json"),
+        ("coral add <path>", "Install a local capability"),
+        ("coral list", "Show installed capabilities and drift"),
+        ("coral diff <id>", "Compare local artifact to baseline"),
+        ("coral --help", "Show command reference"),
+    ];
+    let mut quick_start = String::new();
+    quick_start.push_str(&format!(
+        "{cyan}┌──────────────────────────────────────────────────────────────────────────────────────┐{reset}\n"
+    ));
+    quick_start.push_str(&title);
+    quick_start.push('\n');
+    quick_start.push_str(&format!(
+        "{cyan}├─────────────────────────┬────────────────────────────────────────────────────────────┤{reset}\n"
+    ));
+    for (index, (left, right)) in rows.iter().enumerate() {
+        quick_start.push_str(&format!(
+            "{cyan}│{reset} {coral}{:<23}{reset} {cyan}│{reset} {gray}{:<58}{reset} {cyan}│{reset}",
+            left, right
+        ));
+        if index + 1 < rows.len() {
+            quick_start.push('\n');
+        }
+    }
+    quick_start.push('\n');
+    quick_start.push_str(&format!(
+        "{cyan}└─────────────────────────┴────────────────────────────────────────────────────────────┘{reset}"
+    ));
+
     println!(
-        r#"{bold}{army_green}{LOADOUT_ASCII}{reset}
+        r#"{hero}
+{gradient_divider}
+{coral}Coral{reset} {white}is a capability lifecycle manager for coding agents.{reset}
 
-{gray}cross-harness primitives manager for coding agents{reset}
-{gray}v{version}{reset}
-
-{white}Loadout{reset} manages repo-local agent primitives.
-{gray}Install, track, diff, and eventually merge skills/tools/hooks/workflows.{reset}
-
-{white}Start here:{reset}
-  {army_green}loadout init{reset}                         Create .loadout/lock.json
-  {army_green}loadout add <primitive-path>{reset}         Install a local primitive
-  {army_green}loadout list{reset}                         Show installed primitives and drift
-  {army_green}loadout diff <id>{reset}                    Compare local artifact to baseline
-
-{white}More:{reset}
-  {army_green}loadout --help{reset}                       Show command reference
-  {army_green}loadout --version{reset}                    Show installed version
+{quick_start}
 "#,
-        version = env!("CARGO_PKG_VERSION")
+        hero = hero,
+        gradient_divider = gradient_divider,
+        quick_start = quick_start,
     );
 }
 
 fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
-    let loadout_dir = repo_root.join(".loadout");
-    fs::create_dir_all(&loadout_dir)?;
-    let lock_path = loadout_dir.join("lock.json");
+    let coral_dir = repo_root.join(".coral");
+    fs::create_dir_all(&coral_dir)?;
+    let lock_path = coral_dir.join("lock.json");
     if !lock_path.exists() {
         write_lockfile(
             repo_root,
@@ -228,16 +357,16 @@ fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
 }
 
 fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
-    let lock_path = repo_root.join(".loadout").join("lock.json");
+    let lock_path = repo_root.join(".coral").join("lock.json");
     if !lock_path.exists() {
-        return Err(LoadoutError::new(
-            ".loadout/lock.json is missing; run 'loadout init' first",
+        return Err(CoralError::new(
+            ".coral/lock.json is missing; run 'coral init' first",
         ));
     }
 
     let lockfile: Lockfile = serde_json::from_str(&fs::read_to_string(lock_path)?)?;
     if lockfile.version != LOCKFILE_VERSION {
-        return Err(LoadoutError::new(format!(
+        return Err(CoralError::new(format!(
             "unsupported lockfile version: {}",
             lockfile.version
         )));
@@ -246,7 +375,7 @@ fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
 }
 
 fn write_lockfile(repo_root: &Path, lockfile: &Lockfile) -> Result<()> {
-    let lock_path = repo_root.join(".loadout").join("lock.json");
+    let lock_path = repo_root.join(".coral").join("lock.json");
     if let Some(parent) = lock_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -255,10 +384,10 @@ fn write_lockfile(repo_root: &Path, lockfile: &Lockfile) -> Result<()> {
 }
 
 fn load_manifest(primitive_dir: &Path) -> Result<PrimitiveManifest> {
-    let manifest_path = primitive_dir.join("loadout.toml");
+    let manifest_path = primitive_dir.join("coral.toml");
     if !manifest_path.exists() {
-        return Err(LoadoutError::new(format!(
-            "primitive manifest not found: {}",
+        return Err(CoralError::new(format!(
+            "capability manifest not found: {}",
             manifest_path.display()
         )));
     }
@@ -273,22 +402,22 @@ fn load_manifest(primitive_dir: &Path) -> Result<PrimitiveManifest> {
     validate_non_empty("description", &manifest.description)?;
 
     if manifest.kind != SUPPORTED_KIND {
-        return Err(LoadoutError::new(format!(
-            "unsupported primitive kind '{}'; only '{}' is supported",
+        return Err(CoralError::new(format!(
+            "unsupported capability kind '{}'; only '{}' is supported",
             manifest.kind, SUPPORTED_KIND
         )));
     }
     if manifest.target != SUPPORTED_TARGET {
-        return Err(LoadoutError::new(format!(
-            "unsupported primitive target '{}'; only '{}' is supported",
+        return Err(CoralError::new(format!(
+            "unsupported capability target '{}'; only '{}' is supported",
             manifest.target, SUPPORTED_TARGET
         )));
     }
 
     let source_path = manifest.skill_source_path()?;
     if !source_path.exists() {
-        return Err(LoadoutError::new(format!(
-            "primitive source file not found: {}",
+        return Err(CoralError::new(format!(
+            "capability source file not found: {}",
             source_path.display()
         )));
     }
@@ -298,8 +427,8 @@ fn load_manifest(primitive_dir: &Path) -> Result<PrimitiveManifest> {
 
 fn validate_non_empty(field: &str, value: &str) -> Result<()> {
     if value.is_empty() {
-        return Err(LoadoutError::new(format!(
-            "primitive manifest field '{field}' must be a non-empty string"
+        return Err(CoralError::new(format!(
+            "capability manifest field '{field}' must be a non-empty string"
         )));
     }
     Ok(())
@@ -317,14 +446,14 @@ fn install_codex_skill(
         .join(&manifest.id)
         .join("SKILL.md");
     let baseline_path = repo_root
-        .join(".loadout")
+        .join(".coral")
         .join("baselines")
         .join(&manifest.id)
         .join("SKILL.md");
 
     if target_path.exists() && !lockfile.primitives.contains_key(&manifest.id) {
-        return Err(LoadoutError::new(format!(
-            "refusing to overwrite untracked skill at {}; remove it or track it in Loadout first",
+        return Err(CoralError::new(format!(
+            "refusing to overwrite untracked skill at {}; remove it or track it in Coral first",
             target_path.display()
         )));
     }
@@ -376,14 +505,14 @@ fn diff_against_baseline(
     let baseline_path = repo_root.join(&entry.baseline_path);
     let target_path = repo_root.join(&entry.installed_target_path);
     if !baseline_path.exists() {
-        return Err(LoadoutError::new(format!(
+        return Err(CoralError::new(format!(
             "baseline file missing for '{}': {}",
             primitive_id,
             baseline_path.display()
         )));
     }
     if !target_path.exists() {
-        return Err(LoadoutError::new(format!(
+        return Err(CoralError::new(format!(
             "installed file missing for '{}': {}",
             primitive_id,
             target_path.display()

@@ -5,7 +5,7 @@ default:
 
 setup:
     cargo fetch
-    npm ci
+    cd website && npm install
 
 test:
     cargo test
@@ -21,15 +21,15 @@ run *args:
 
 smoke-install:
     cargo install --path .
-    rm -rf /tmp/loadout-smoke
-    mkdir -p /tmp/loadout-smoke
-    cd /tmp/loadout-smoke && loadout --version
-    cd /tmp/loadout-smoke && loadout init
-    cd /tmp/loadout-smoke && loadout add {{justfile_directory()}}/examples/fixtures/python-uv-default
-    cd /tmp/loadout-smoke && loadout list
+    rm -rf /tmp/coral-smoke
+    mkdir -p /tmp/coral-smoke
+    cd /tmp/coral-smoke && coral --version
+    cd /tmp/coral-smoke && coral init
+    cd /tmp/coral-smoke && coral add {{justfile_directory()}}/examples/fixtures/python-uv-default
+    cd /tmp/coral-smoke && coral list
 
 docs-serve:
-    npm run docs:start
+    cd website && npm run dev
 
 docs-build:
-    npm run docs:build
+    cd website && npm run build

@@ -1,12 +1,12 @@
 [package]
-name = "loadout"
+name = "coral"
 version = "0.1.0"
 edition = "2024"
-description = "CLI lifecycle manager for repo-local agent primitives."
+description = "Capability lifecycle manager for coding agents."
 license = "MIT"
 
 [[bin]]
-name = "loadout"
+name = "coral"
 path = "src/main.rs"
 
 [dependencies]

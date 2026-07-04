@@ -8,13 +8,13 @@ fn make_primitive(root: &Path, primitive_id: &str) -> std::path::PathBuf {
     let primitive = root.join("primitive");
     fs::create_dir_all(primitive.join("src")).unwrap();
     fs::write(
-        primitive.join("loadout.toml"),
+        primitive.join("coral.toml"),
         format!(
             r#"id = "{primitive_id}"
 version = "1.0.0"
 kind = "skill"
 target = "codex"
-description = "Example primitive."
+description = "Example capability."
 files = ["src/SKILL.md"]
 "#
         ),
@@ -28,30 +28,31 @@ files = ["src/SKILL.md"]
     primitive
 }
 
-fn loadout() -> Command {
-    Command::cargo_bin("loadout").unwrap()
+fn coral() -> Command {
+    Command::cargo_bin("coral").unwrap()
 }
 
 #[test]
 fn version_outputs_current_version() {
-    loadout()
+    coral()
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("loadout 0.1.0"));
+        .stdout(predicate::str::contains("coral 0.1.0"));
 }
 
 #[test]
 fn bare_command_outputs_welcome_menu() {
-    loadout()
+    coral()
         .assert()
         .success()
+        .stdout(predicate::str::contains("Coral"))
         .stdout(predicate::str::contains(
-            "Loadout manages repo-local agent primitives",
+            "is a capability lifecycle manager for coding agents.",
         ))
-        .stdout(predicate::str::contains("loadout init"))
-        .stdout(predicate::str::contains("loadout add <primitive-path>"))
-        .stdout(predicate::str::contains("loadout --help"));
+        .stdout(predicate::str::contains("coral init"))
+        .stdout(predicate::str::contains("coral add <path>"))
+        .stdout(predicate::str::contains("coral --help"));
 }
 
 #[test]
@@ -59,15 +60,15 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .arg("init")
         .assert()
         .success()
-        .stdout(predicate::str::contains("initialized .loadout/lock.json"));
-    assert!(temp.path().join(".loadout").join("lock.json").exists());
+        .stdout(predicate::str::contains("initialized .coral/lock.json"));
+    assert!(temp.path().join(".coral").join("lock.json").exists());
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .args(["add", primitive.to_str().unwrap()])
         .assert()
@@ -76,7 +77,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
             "installed example -> .agents/skills/example/SKILL.md",
         ));
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .arg("list")
         .assert()
@@ -95,7 +96,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
     )
     .unwrap();
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .arg("list")
         .assert()
@@ -104,7 +105,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
             "example\t1.0.0\tmodified\t.agents/skills/example/SKILL.md",
         ));
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .args(["diff", "example"])
         .assert()
@@ -118,12 +119,12 @@ fn add_requires_init() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .args(["add", primitive.to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("run 'loadout init' first"));
+        .stderr(predicate::str::contains("run 'coral init' first"));
 }
 
 #[test]
@@ -139,12 +140,12 @@ fn add_refuses_to_overwrite_untracked_skill() {
     fs::create_dir_all(existing_skill.parent().unwrap()).unwrap();
     fs::write(existing_skill, "# Existing\n").unwrap();
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .arg("init")
         .assert()
         .success();
-    loadout()
+    coral()
         .current_dir(temp.path())
         .args(["add", primitive.to_str().unwrap()])
         .assert()
@@ -159,26 +160,26 @@ fn rejects_unsupported_target() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
     fs::write(
-        primitive.join("loadout.toml"),
+        primitive.join("coral.toml"),
         r#"id = "example"
 version = "1.0.0"
 kind = "skill"
 target = "claude-code"
-description = "Example primitive."
+description = "Example capability."
 files = ["src/SKILL.md"]
 "#,
     )
     .unwrap();
 
-    loadout()
+    coral()
         .current_dir(temp.path())
         .arg("init")
         .assert()
         .success();
-    loadout()
+    coral()
         .current_dir(temp.path())
         .args(["add", primitive.to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unsupported primitive target"));
+        .stderr(predicate::str::contains("unsupported capability target"));
 }
