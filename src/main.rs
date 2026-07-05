@@ -16,8 +16,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_diff, cmd_init, cmd_list, cmd_remove, cmd_status, cmd_target_add,
-    cmd_target_list, cmd_target_remove, cmd_update,
+    cmd_add, cmd_diff, cmd_init, cmd_list, cmd_outdated, cmd_remove, cmd_status,
+    cmd_target_add, cmd_target_list, cmd_target_remove, cmd_update,
 };
 use error::Result;
 
@@ -123,6 +123,9 @@ enum Command {
         force: bool,
     },
 
+    /// Show installed primitives with upstream update status.
+    Outdated,
+
     /// Manage harness targets.
     Target {
         #[command(subcommand)]
@@ -194,6 +197,7 @@ fn run() -> Result<()> {
             check,
             force,
         }) => cmd_update(&repo_root, &id, scope.as_deref(), check, force),
+        Some(Command::Outdated) => cmd_outdated(&repo_root),
         Some(Command::Target { action }) => match action {
             TargetCommand::List => cmd_target_list(&repo_root),
             TargetCommand::Add { id } => cmd_target_add(&repo_root, &id),
