@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Orbitron:wght@600&family=Alien+Block&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Alien+Block&display=swap");
 
 :root {
   --sl-font: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -99,6 +99,37 @@ nav.sidebar .sidebar-pane,
   border-color: var(--sl-color-hairline-shade);
 }
 
+.right-sidebar {
+  width: 21rem;
+}
+
+.right-sidebar-panel a,
+.right-sidebar-panel h2 {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.right-sidebar-panel a[aria-current=true] {
+  color: var(--sl-color-text-accent);
+  font-weight: 600;
+  border-left: 2px solid var(--sl-color-text-accent);
+  padding-left: 0.5rem;
+  margin-left: -0.5rem;
+}
+
+:root[data-theme='light'] .right-sidebar-panel a {
+  color: #64748b;
+}
+
+:root[data-theme='light'] .right-sidebar-panel a:hover {
+  color: var(--sl-color-text-accent);
+}
+
+:root[data-theme='light'] .right-sidebar-panel a[aria-current=true] {
+  color: var(--sl-color-text-accent);
+  background: transparent;
+}
+
 nav.sidebar a,
 nav.sidebar span.large,
 .right-sidebar-panel a,
@@ -110,11 +141,11 @@ nav.sidebar span.large,
 .sl-markdown-content td,
 .sl-markdown-content th {
   color: rgb(184, 178, 178);
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 400;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: 15px;
+  line-height: 26px;
 }
 
 nav.sidebar a:hover,
@@ -137,10 +168,25 @@ right-sidebar-panel h2,
 .sl-markdown-content h6 {
   color: rgb(242, 237, 237);
   font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-style: normal;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.sl-markdown-content h1 {
   font-size: 26px;
   line-height: 31px;
+}
+
+.sl-markdown-content h2 {
+  font-size: 18px;
+  line-height: 26px;
+}
+
+.sl-markdown-content h3,
+.sl-markdown-content h4,
+.sl-markdown-content h5,
+.sl-markdown-content h6 {
+  font-size: 14px;
+  line-height: 24px;
 }
 
 nav.sidebar ul.top-level > li > details > summary .group-label > span {
@@ -196,7 +242,8 @@ dialog[aria-label='Search'] {
 }
 
 :root[data-theme='light'] .sl-markdown-content pre {
-  background: #0b1120;
+  background: #f6f8fa;
+  border: 1px solid var(--sl-color-hairline);
 }
 
 .expressive-code .frame {
@@ -282,15 +329,18 @@ dialog[aria-label='Search'] {
   }
 }
 
-:root[data-theme='light'] nav.sidebar a,
-:root[data-theme='light'] nav.sidebar span.large,
-:root[data-theme='light'] .right-sidebar-panel a,
-:root[data-theme='light'] .right-sidebar-panel h2,
 :root[data-theme='light'] .page-description,
 :root[data-theme='light'] .sl-markdown-content,
 :root[data-theme='light'] .sl-markdown-content p,
 :root[data-theme='light'] .sl-markdown-content li,
 :root[data-theme='light'] .sl-markdown-content td,
 :root[data-theme='light'] .sl-markdown-content th {
+  color: #111111;
+}
+
+:root[data-theme='light'] nav.sidebar a,
+:root[data-theme='light'] nav.sidebar span.large,
+:root[data-theme='light'] .right-sidebar-panel a,
+:root[data-theme='light'] .right-sidebar-panel h2 {
   color: #111111;
 }

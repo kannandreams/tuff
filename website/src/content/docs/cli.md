@@ -219,6 +219,53 @@ coral target remove open-agents
 
 Removes all emitted files and MCP registrations for that target across all primitives.
 
+## `coral check`
+
+Validate installed capabilities for CI. Exits 1 on any failure.
+
+```sh
+coral check                    # check all capabilities
+coral check --json             # machine-readable JSON output
+coral check --ignore-failures  # report failures but exit 0
+```
+
+Example output:
+
+```
+✓ python-uv-default       skill      open-agents  ok
+✗ dirty-skill             skill      open-agents  modified (.agents/skills/dirty-skill/SKILL.md)
+```
+
+### GitHub Actions
+
+Add this to your project's `.github/workflows/coral-check.yml`:
+
+```yaml
+name: Coral Check
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build and install coral
+        run: cargo install --git https://github.com/kannandreams/coral
+
+      - name: Validate capabilities
+        run: coral check --json
+```
+
+Commit `.coral/coral-lock.json` and `.coral/baselines/` to your repo so `coral check`
+runs against the committed state. See the [lockfile reference](/concepts/lockfile) for
+what to commit.
+
 ## Scope
 
 Coral supports two scopes:
