@@ -1606,3 +1606,134 @@ fn check_json_output() {
         .success()
         .stdout(predicate::str::contains("\"valid\""));
 }
+
+#[test]
+fn import_single_directory() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join(".agents").join("skills").join("my-import");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Imported skill\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("imported my-import (skill, open-agents)"));
+
+    assert!(skill_dir.join("coral.toml").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("my-import"))
+        .stdout(predicate::str::contains("clean"));
+}
+
+#[test]
+fn import_dry_run_preview_only() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join(".agents").join("skills").join("dry-skill");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Dry\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("would import dry-skill"));
+
+    assert!(!skill_dir.join("coral.toml").exists());
+}
+
+#[test]
+fn import_skip_already_tracked() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join(".agents").join("skills").join("dup");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Dup\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skipped dup"));
+}
+
+#[test]
+fn import_override_replaces_entry() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join(".agents").join("skills").join("override");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Original\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .success();
+
+    // Override should succeed
+    coral()
+        .current_dir(temp.path())
+        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents", "--override"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("imported override"));
+}
+
+#[test]
+fn import_batch_scan() {
+    let temp = TempDir::new().unwrap();
+    let skill_a = temp.path().join(".agents").join("skills").join("batch-a");
+    let skill_b = temp.path().join(".agents").join("skills").join("batch-b");
+    fs::create_dir_all(&skill_a).unwrap();
+    fs::create_dir_all(&skill_b).unwrap();
+    fs::write(skill_a.join("SKILL.md"), "# A\n").unwrap();
+    fs::write(skill_b.join("SKILL.md"), "# B\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["import", "-t", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("batch-a"))
+        .stdout(predicate::str::contains("batch-b"));
+}
