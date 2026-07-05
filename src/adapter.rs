@@ -106,10 +106,10 @@ impl AdapterKind {
         }
     }
 
-    pub fn kinds_supported(&self) -> Vec<&'static str> {
+    pub fn kinds_supported(&self) -> &[&'static str] {
         match self {
-            Self::Codex => codex::SUPPORTED_KINDS.to_vec(),
-            Self::ClaudeCode => claude_code::SUPPORTED_KINDS.to_vec(),
+            Self::Codex => codex::SUPPORTED_KINDS,
+            Self::ClaudeCode => claude_code::SUPPORTED_KINDS,
         }
     }
 }

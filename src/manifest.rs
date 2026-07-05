@@ -72,7 +72,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
     validate_non_empty("kind", &manifest.kind)?;
     validate_non_empty("description", &manifest.description)?;
 
-    let _ = manifest.source_files()?;
+    manifest.source_files()?;
 
     Ok(manifest)
 }
