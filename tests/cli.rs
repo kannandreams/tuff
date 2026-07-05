@@ -1495,3 +1495,114 @@ fn diff_upstream_error_on_local_primitive() {
         .failure()
         .stderr(predicate::str::contains("upstream diff only available for git-sourced"));
 }
+
+#[test]
+fn check_clean_repo_reports_all_ok() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "check-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("✓"))
+        .stdout(predicate::str::contains("check-skill"))
+        .stdout(predicate::str::contains("ok"));
+}
+
+#[test]
+fn check_detects_modified_files() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "dirty-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(
+        temp.path().join(".agents").join("skills").join("dirty-skill").join("SKILL.md"),
+        "# Modified\n",
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("✗"))
+        .stdout(predicate::str::contains("modified"));
+}
+
+#[test]
+fn check_ignore_failures_exits_zero() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "dirty-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(
+        temp.path().join(".agents").join("skills").join("dirty-skill").join("SKILL.md"),
+        "# Modified\n",
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["check", "--ignore-failures"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("✗"));
+}
+
+#[test]
+fn check_json_output() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "json-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["check", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"valid\""));
+}

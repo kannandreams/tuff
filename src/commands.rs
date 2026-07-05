@@ -829,6 +829,32 @@ pub fn cmd_update(
     )
 }
 
+// ── Check ───────────────────────────────────────────────────────────────────
+
+pub fn cmd_check(repo_root: &Path, json: bool, ignore_failures: bool, _global: bool) -> Result<()> {
+    let outcome = crate::check::run_checks(repo_root)?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&outcome)?);
+    } else {
+        for r in &outcome.results {
+            let mark = if r.status == "ok" { "✓" } else { "✗" };
+            let extra = if !r.files.is_empty() {
+                format!(" ({})", r.files.join(", "))
+            } else {
+                String::new()
+            };
+            println!("{mark} {:<24} {:<10} {:<12} {}{}", r.id, r.capability_type, r.target, r.status, extra);
+        }
+    }
+
+    if !outcome.valid && !ignore_failures {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
 // ── Outdated ────────────────────────────────────────────────────────────────
 
 fn short_sha(v: &str) -> &str {

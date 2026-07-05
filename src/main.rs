@@ -1,5 +1,6 @@
 mod adapter;
 mod adapters;
+mod check;
 mod commands;
 mod config;
 mod diff;
@@ -16,7 +17,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_diff, cmd_init, cmd_list, cmd_outdated, cmd_remove, cmd_status,
+    cmd_add, cmd_check, cmd_diff, cmd_init, cmd_list, cmd_outdated, cmd_remove, cmd_status,
     cmd_target_add, cmd_target_list, cmd_target_remove, cmd_update,
 };
 use error::Result;
@@ -123,7 +124,22 @@ enum Command {
         force: bool,
     },
 
-    /// Show installed primitives with upstream update status.
+    /// Validate installed capabilities (CI mode).
+    Check {
+        /// Output results as JSON.
+        #[arg(long = "json")]
+        json: bool,
+
+        /// Report failures but exit with code 0.
+        #[arg(long = "ignore-failures")]
+        ignore_failures: bool,
+
+        /// Validate global scope only.
+        #[arg(long = "global")]
+        global: bool,
+    },
+
+    /// Show installed capabilities with upstream update status.
     Outdated,
 
     /// Manage harness targets.
@@ -197,6 +213,11 @@ fn run() -> Result<()> {
             check,
             force,
         }) => cmd_update(&repo_root, &id, scope.as_deref(), check, force),
+        Some(Command::Check {
+            json,
+            ignore_failures,
+            global,
+        }) => cmd_check(&repo_root, json, ignore_failures, global),
         Some(Command::Outdated) => cmd_outdated(&repo_root),
         Some(Command::Target { action }) => match action {
             TargetCommand::List => cmd_target_list(&repo_root),
