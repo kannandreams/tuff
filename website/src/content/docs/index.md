@@ -60,7 +60,7 @@ Coral currently supports:
 - install, list, status, diff, remove, and merge-aware updates
 - baseline capture, drift detection, three-way merge
 - project and global scope with deterministic resolution
-- MCP auto-registration for tool primitives
+- MCP auto-registration for tool capabilitys
 
 See the [roadmap](roadmap.md) for upcoming work.
 

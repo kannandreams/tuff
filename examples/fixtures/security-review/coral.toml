@@ -1,6 +1,6 @@
 id = "security-review"
 version = "1.0.0"
-primitive = "tool"
+type = "tool"
 description = "Scan a directory for common security vulnerabilities."
 files = ["index.js"]
 

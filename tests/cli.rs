@@ -59,7 +59,7 @@ fn make_primitive(root: &Path, primitive_id: &str) -> std::path::PathBuf {
         format!(
             r#"id = "{primitive_id}"
 version = "1.0.0"
-primitive = "skill"
+type = "skill"
 description = "Example capability."
 files = ["src/SKILL.md"]
 "#
@@ -86,7 +86,7 @@ fn make_tool_primitive(root: &Path, tool_id: &str) -> std::path::PathBuf {
         format!(
             r#"id = "{tool_id}"
 version = "1.0.0"
-primitive = "tool"
+type = "tool"
 description = "A test tool."
 files = ["run.sh"]
 
@@ -822,7 +822,7 @@ fn remove_primitive_cleans_up() {
         .args(["list", "--scope", "project"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("no primitives installed"));
+        .stdout(predicate::str::contains("no capabilities installed"));
 }
 
 #[test]
@@ -940,7 +940,7 @@ fn add_tool_rejects_invalid_schema() {
         primitive.join("coral.toml"),
         r#"id = "bad-tool"
 version = "1.0.0"
-primitive = "tool"
+type = "tool"
 description = "Bad tool."
 
 [parameters]
@@ -977,7 +977,7 @@ fn add_tool_rejects_path_traversal() {
         primitive.join("coral.toml"),
         r#"id = "bad-tool"
 version = "1.0.0"
-primitive = "tool"
+type = "tool"
 description = "Bad tool."
 
 [parameters]
@@ -1052,7 +1052,7 @@ fn list_filter_by_primitive_kind() {
 
     coral()
         .current_dir(temp.path())
-        .args(["list", "--primitive", "tool"])
+        .args(["list", "--type", "tool"])
         .assert()
         .success()
         .stdout(predicate::str::contains("my-tool"))
@@ -1060,7 +1060,7 @@ fn list_filter_by_primitive_kind() {
 
     coral()
         .current_dir(temp.path())
-        .args(["list", "--primitive", "skill"])
+        .args(["list", "--type", "skill"])
         .assert()
         .success()
         .stdout(predicate::str::contains("my-skill"))
@@ -1154,7 +1154,7 @@ fn make_hook_primitive(root: &Path, hook_id: &str) -> std::path::PathBuf {
         format!(
             r#"id = "{hook_id}"
 version = "1.0.0"
-primitive = "hook"
+type = "hook"
 description = "A test hook."
 
 [hook]
@@ -1209,7 +1209,7 @@ fn add_hook_rejects_invalid_event() {
         primitive.join("coral.toml"),
         r#"id = "bad-hook"
 version = "1.0.0"
-primitive = "hook"
+type = "hook"
 description = "Bad hook."
 
 [hook]
@@ -1241,7 +1241,7 @@ fn add_hook_existing_event_rejected_by_adapter() {
         primitive.join("coral.toml"),
         r#"id = "bad-hook"
 version = "1.0.0"
-primitive = "hook"
+type = "hook"
 description = "Bad hook."
 
 [hook]
@@ -1282,7 +1282,7 @@ fn hook_list_and_drift() {
 
     coral()
         .current_dir(temp.path())
-        .args(["list", "--primitive", "hook"])
+        .args(["list", "--type", "hook"])
         .assert()
         .success()
         .stdout(predicate::str::contains(

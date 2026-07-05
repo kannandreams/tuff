@@ -5,10 +5,11 @@ use serde::Deserialize;
 use crate::error::{CoralError, Result};
 
 #[derive(Debug, Deserialize)]
-pub struct PrimitiveManifest {
+pub struct CapabilityManifest {
     pub id: String,
     pub version: String,
-    pub primitive: String,
+    #[serde(rename = "type")]
+    pub capability_type: String,
     pub description: String,
     #[serde(default)]
     pub files: Vec<String>,
@@ -46,7 +47,7 @@ fn default_cwd() -> String {
     ".".to_string()
 }
 
-impl PrimitiveManifest {
+impl CapabilityManifest {
     pub fn source_files(&self) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
@@ -62,7 +63,7 @@ impl PrimitiveManifest {
             paths.push(path);
         }
 
-        if self.primitive == "tool" {
+        if self.capability_type == "tool" {
             if let Some(ref imp) = self.implementation {
                 let ep_path = self.root.join(&imp.entrypoint);
                 if !paths.contains(&ep_path) && ep_path.exists() {
@@ -100,7 +101,7 @@ fn validate_non_empty(field: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
+pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     let manifest_path = capability_dir.join("coral.toml");
     if !manifest_path.exists() {
         return Err(CoralError::new(format!(
@@ -109,31 +110,31 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
         )));
     }
 
-    let mut manifest: PrimitiveManifest =
+    let mut manifest: CapabilityManifest =
         toml::from_str(&std::fs::read_to_string(&manifest_path)?)?;
     manifest.root = capability_dir.to_path_buf();
 
     validate_non_empty("id", &manifest.id)?;
     validate_non_empty("version", &manifest.version)?;
-    validate_non_empty("primitive", &manifest.primitive)?;
+    validate_non_empty("type", &manifest.capability_type)?;
     validate_non_empty("description", &manifest.description)?;
 
-    match manifest.primitive.as_str() {
+    match manifest.capability_type.as_str() {
         "skill" => {
             if manifest.files.is_empty() {
-                return Err(CoralError::new("skill manifest 'files' must not be empty"));
+                return Err(CoralError::new("skill capability 'files' must not be empty"));
             }
             manifest.source_files()?;
         }
         "tool" => {
             if manifest.parameters.is_none() {
                 return Err(CoralError::new(
-                    "tool primitive requires a [parameters] section with JSON Schema",
+                    "tool capability requires a [parameters] section with JSON Schema",
                 ));
             }
             if manifest.implementation.is_none() {
                 return Err(CoralError::new(
-                    "tool primitive requires an [implementation] section",
+                    "tool capability requires an [implementation] section",
                 ));
             }
 
@@ -156,7 +157,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
         }
         "hook" => {
             let hook_cfg = manifest.hook.as_ref().ok_or_else(|| {
-                CoralError::new("hook primitive requires a [hook] section")
+                CoralError::new("hook capability requires a [hook] section")
             })?;
 
             if hook_cfg.event.trim().is_empty() {
@@ -179,7 +180,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
         }
         other => {
             return Err(CoralError::new(format!(
-                "unsupported primitive kind '{}'; supported: skill, tool, hook",
+                "unsupported capability type '{}'; supported: skill, tool, hook",
                 other
             )));
         }
@@ -188,14 +189,14 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
     Ok(manifest)
 }
 
-pub fn synthetic_manifest(skill_dir: &Path, name: &str, version: &str) -> Result<PrimitiveManifest> {
+pub fn synthetic_manifest(skill_dir: &Path, name: &str, version: &str) -> Result<CapabilityManifest> {
     let mut files = Vec::new();
     walk_skill_dir(skill_dir, "", &mut files)?;
 
-    Ok(PrimitiveManifest {
+    Ok(CapabilityManifest {
         id: name.to_string(),
         version: version.to_string(),
-        primitive: "skill".to_string(),
+        capability_type: "skill".to_string(),
         description: String::new(),
         files,
         parameters: None,

@@ -77,7 +77,7 @@ coral add https://github.com/owner/repo --hook <name> -t open-agents
 
 ## `coral list`
 
-Show installed primitives with scope, drift status, and path:
+Show installed capabilitys with scope, drift status, and path:
 
 ```sh
 coral list
@@ -90,12 +90,12 @@ coral list
 coral list --scope project
 coral list --scope global
 
-# By primitive kind
-coral list --primitive skill
-coral list --primitive tool
+# By capability type
+coral list --type skill
+coral list --type tool
 
 # Combine filters
-coral list --scope global --primitive tool
+coral list --scope global --type tool
 ```
 
 ### Status values
@@ -124,7 +124,7 @@ scan-tool          project  clean
 
 ## `coral outdated`
 
-Show all installed primitives and whether upstream updates are available.
+Show all installed capabilitys and whether upstream updates are available.
 Read-only — never modifies files.
 
 ```sh

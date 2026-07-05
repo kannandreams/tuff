@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use crate::adapter::{PlannedFile, ResolvedPrimitive};
+use crate::adapter::{PlannedFile, ResolvedCapability};
 use crate::error::{CoralError, Result};
 use crate::lockfile;
 
 pub const ID: &str = "open-agents";
 pub const DISPLAY_NAME: &str = "Open Agents";
-pub const SUPPORTED_PRIMITIVES: &[&str] = &["skill", "tool", "hook"];
+pub const SUPPORTED_TYPES: &[&str] = &["skill", "tool", "hook"];
 
 pub const SUPPORTED_AGENTS: &[&str] = &[
     "Codex", "Cursor", "OpenCode", "GitHub Copilot",
@@ -20,29 +20,29 @@ pub const SUPPORTED_EVENTS: &[&str] = &[
     "post_tool_execution",
 ];
 
-pub fn supports(primitive: &str) -> bool {
-    SUPPORTED_PRIMITIVES.contains(&primitive)
+pub fn supports(capability_type: &str) -> bool {
+    SUPPORTED_TYPES.contains(&capability_type)
 }
 
-pub fn plan(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    match primitive.primitive.as_str() {
-        "tool" => plan_tool(primitive, repo_root),
-        "hook" => plan_hook(primitive, repo_root),
-        _ => plan_skill(primitive, repo_root),
+pub fn plan(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
+    match capability.capability_type.as_str() {
+        "tool" => plan_tool(capability, repo_root),
+        "hook" => plan_hook(capability, repo_root),
+        _ => plan_skill(capability, repo_root),
     }
 }
 
-fn plan_skill(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    if primitive.source_files.is_empty() {
+fn plan_skill(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
+    if capability.source_files.is_empty() {
         return Err(CoralError::new("no source files to emit"));
     }
 
     let mut files = Vec::new();
-    for (rel_path, content) in &primitive.source_files {
+    for (rel_path, content) in &capability.source_files {
         let target_path = repo_root
             .join(".agents")
             .join("skills")
-            .join(&primitive.id)
+            .join(&capability.id)
             .join(rel_path);
 
         files.push(PlannedFile {
@@ -53,15 +53,15 @@ fn plan_skill(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<Pla
     Ok(files)
 }
 
-fn plan_tool(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
+fn plan_tool(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
     let mut files = Vec::new();
 
     // Copy source files
-    for (rel_path, content) in &primitive.source_files {
+    for (rel_path, content) in &capability.source_files {
         let target_path = repo_root
             .join(".agents")
             .join("tools")
-            .join(&primitive.id)
+            .join(&capability.id)
             .join(rel_path);
 
         files.push(PlannedFile {
@@ -71,11 +71,11 @@ fn plan_tool(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<Plan
     }
 
     // If no source files, ensure tool dir exists (empty dir will just be created)
-    if primitive.source_files.is_empty() {
+    if capability.source_files.is_empty() {
         let placeholder = repo_root
             .join(".agents")
             .join("tools")
-            .join(&primitive.id)
+            .join(&capability.id)
             .join(".gitkeep");
         files.push(PlannedFile {
             path: lockfile::relative_or_absolute_fs(&placeholder, repo_root),
@@ -86,15 +86,15 @@ fn plan_tool(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<Plan
     Ok(files)
 }
 
-fn plan_hook(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    let hook_cfg = primitive.hook.as_ref().ok_or_else(|| {
-        CoralError::new("hook primitive requires [hook] section")
+fn plan_hook(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
+    let hook_cfg = capability.hook.as_ref().ok_or_else(|| {
+        CoralError::new("hook capability requires [hook] section")
     })?;
 
     let target_path = repo_root
         .join(".agents")
         .join("hooks")
-        .join(&primitive.id)
+        .join(&capability.id)
         .join("hook.toml");
 
     let content = format!(

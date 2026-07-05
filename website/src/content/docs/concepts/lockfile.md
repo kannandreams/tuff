@@ -4,7 +4,7 @@ description: What Coral records in project state.
 ---
 
 Coral records state in the `.coral/` directory at the root of your project. The lockfile
-(`coral-lock.json`) tracks installed primitives, their versions, where they came from,
+(`coral-lock.json`) tracks installed capabilitys, their versions, where they came from,
 and the hashes needed for drift detection and diffs.
 
 ## Directory structure

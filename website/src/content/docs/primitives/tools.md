@@ -3,7 +3,7 @@ title: Tools
 description: Tools define executable capabilities an agent can invoke.
 ---
 
-A tool primitive represents an executable capability with a typed parameter contract. Unlike
+A tool capability represents an executable capability with a typed parameter contract. Unlike
 skills (which inject prose into agent context), tools can change files, call services, or
 run commands — and with that power comes stricter validation.
 
@@ -98,13 +98,13 @@ tool directory and its MCP entry.
 
 ```sh
 # Show only tools
-coral list --primitive tool
+coral list --type tool
 
 # Show only skills
-coral list --primitive skill
+coral list --type skill
 
 # Combine with scope filter
-coral list --primitive tool --scope global
+coral list --type tool --scope global
 ```
 
 ## Safety

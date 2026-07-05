@@ -29,9 +29,9 @@ and workflows belong in packs or in the projects that own them.
 | 1 | [Harness adapter abstraction](https://github.com/kannandreams/loadout/issues/2) | Planned |
 | 2 | [Override and scope resolution](https://github.com/kannandreams/loadout/issues/3) | Planned |
 | 3 | [Baseline diff and three-way merge lifecycle](https://github.com/kannandreams/loadout/issues/6) | Planned |
-| 4 | [Tool primitive type](https://github.com/kannandreams/loadout/issues/4) | Planned |
-| 5 | [Hook primitive type](https://github.com/kannandreams/loadout/issues/7) | Planned |
-| 6 | [Workflow primitive type](https://github.com/kannandreams/loadout/issues/8) | Planned |
+| 4 | [Tool capability type](https://github.com/kannandreams/loadout/issues/4) | Planned |
+| 5 | [Hook capability type](https://github.com/kannandreams/loadout/issues/7) | Planned |
+| 6 | [Workflow capability type](https://github.com/kannandreams/loadout/issues/8) | Planned |
 | 7 | [Pack and registry distribution model](https://github.com/kannandreams/loadout/issues/9) | Planned |
 | 8 | [Lightweight update checks](https://github.com/kannandreams/loadout/issues/10) | Planned |
 | 9 | [Validation and install-time safety framework](https://github.com/kannandreams/loadout/issues/11) | Planned |
