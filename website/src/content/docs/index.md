@@ -54,13 +54,15 @@ Coral calls a managed artifact (a skill, tool, hook, policy, or workflow) a prim
 
 Coral currently supports:
 
-- local filesystem capabilities
-- `primitive = "skill"`
-- `target = "codex"`
-- install, list, drift detection, and baseline diff
+- skills, tools, and hooks (`primitive = "skill" | "tool" | "hook"`)
+- local filesystem and git-backed capability installation
+- multi-harness output through adapters (`open-agents`, `claude`)
+- install, list, status, diff, remove, and merge-aware updates
+- baseline capture, drift detection, three-way merge
+- project and global scope with deterministic resolution
+- MCP auto-registration for tool primitives
 
-Remote packs, tools, hooks, workflows, multi-harness compilation, update checks,
-and merge behavior are tracked on the [roadmap](roadmap.md).
+See the [roadmap](roadmap.md) for upcoming work.
 
 ## Inspiration
 

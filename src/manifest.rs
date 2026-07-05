@@ -17,6 +17,8 @@ pub struct PrimitiveManifest {
     #[serde(default)]
     pub implementation: Option<ImplementationConfig>,
     #[serde(default)]
+    pub hook: Option<HookConfig>,
+    #[serde(default)]
     #[allow(dead_code)]
     pub targets: Vec<String>,
 
@@ -30,6 +32,18 @@ pub struct ImplementationConfig {
     pub entrypoint: String,
     #[serde(default)]
     pub runtime_deps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct HookConfig {
+    pub event: String,
+    pub command: String,
+    #[serde(default = "default_cwd")]
+    pub working_directory: String,
+}
+
+fn default_cwd() -> String {
+    ".".to_string()
 }
 
 impl PrimitiveManifest {
@@ -140,9 +154,32 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
                 manifest.source_files()?;
             }
         }
+        "hook" => {
+            let hook_cfg = manifest.hook.as_ref().ok_or_else(|| {
+                CoralError::new("hook primitive requires a [hook] section")
+            })?;
+
+            if hook_cfg.event.trim().is_empty() {
+                return Err(CoralError::new("hook 'event' must be a non-empty string"));
+            }
+            if hook_cfg.command.trim().is_empty() {
+                return Err(CoralError::new("hook 'command' must be a non-empty string"));
+            }
+
+            crate::tool::check_path_traversal(&hook_cfg.working_directory)?;
+
+            eprintln!(
+                "note: this hook runs '{}' on event '{}' — it will not be executed during install",
+                hook_cfg.command, hook_cfg.event
+            );
+
+            if !manifest.files.is_empty() {
+                manifest.source_files()?;
+            }
+        }
         other => {
             return Err(CoralError::new(format!(
-                "unsupported primitive kind '{}'; supported: skill, tool",
+                "unsupported primitive kind '{}'; supported: skill, tool, hook",
                 other
             )));
         }
@@ -163,6 +200,7 @@ pub fn synthetic_manifest(skill_dir: &Path, name: &str, version: &str) -> Result
         files,
         parameters: None,
         implementation: None,
+        hook: None,
         targets: Vec::new(),
         root: skill_dir.to_path_buf(),
     })

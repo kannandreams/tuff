@@ -6,20 +6,28 @@ use crate::lockfile;
 
 pub const ID: &str = "open-agents";
 pub const DISPLAY_NAME: &str = "Open Agents";
-pub const SUPPORTED_KINDS: &[&str] = &["skill", "tool"];
+pub const SUPPORTED_PRIMITIVES: &[&str] = &["skill", "tool", "hook"];
 
 pub const SUPPORTED_AGENTS: &[&str] = &[
     "Codex", "Cursor", "OpenCode", "GitHub Copilot",
     "Gemini CLI", "Roo", "Cline", "Windsurf",
 ];
 
+pub const SUPPORTED_EVENTS: &[&str] = &[
+    "before_finish",
+    "after_save",
+    "pre_tool_execution",
+    "post_tool_execution",
+];
+
 pub fn supports(primitive: &str) -> bool {
-    SUPPORTED_KINDS.contains(&primitive)
+    SUPPORTED_PRIMITIVES.contains(&primitive)
 }
 
 pub fn plan(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
     match primitive.primitive.as_str() {
         "tool" => plan_tool(primitive, repo_root),
+        "hook" => plan_hook(primitive, repo_root),
         _ => plan_skill(primitive, repo_root),
     }
 }
@@ -78,9 +86,32 @@ fn plan_tool(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<Plan
     Ok(files)
 }
 
+fn plan_hook(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
+    let hook_cfg = primitive.hook.as_ref().ok_or_else(|| {
+        CoralError::new("hook primitive requires [hook] section")
+    })?;
+
+    let target_path = repo_root
+        .join(".agents")
+        .join("hooks")
+        .join(&primitive.id)
+        .join("hook.toml");
+
+    let content = format!(
+        "event = \"{}\"\ncommand = \"{}\"\nworking_directory = \"{}\"\n",
+        hook_cfg.event, hook_cfg.command, hook_cfg.working_directory
+    );
+
+    Ok(vec![PlannedFile {
+        path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
+        content: content.into_bytes(),
+    }])
+}
+
 pub fn remove(primitive_id: &str, repo_root: &Path) -> Result<()> {
     remove_dir(repo_root, ".agents", "skills", primitive_id)?;
     remove_dir(repo_root, ".agents", "tools", primitive_id)?;
+    remove_dir(repo_root, ".agents", "hooks", primitive_id)?;
 
     // Clean MCP config
     let mcp_path = repo_root.join(".agents").join("mcp.json");

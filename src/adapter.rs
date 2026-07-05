@@ -28,6 +28,7 @@ pub struct ResolvedPrimitive {
     pub source_dir: PathBuf,
     pub parameters: Option<serde_json::Value>,
     pub implementation: Option<crate::manifest::ImplementationConfig>,
+    pub hook: Option<crate::manifest::HookConfig>,
 }
 
 pub fn resolve_primitive(manifest: &PrimitiveManifest) -> Result<ResolvedPrimitive> {
@@ -41,6 +42,7 @@ pub fn resolve_primitive(manifest: &PrimitiveManifest) -> Result<ResolvedPrimiti
         source_dir: manifest.root.clone(),
         parameters: manifest.parameters.clone(),
         implementation: manifest.implementation.clone(),
+        hook: manifest.hook.clone(),
     })
 }
 
@@ -114,8 +116,8 @@ impl AdapterKind {
 
     pub fn kinds_supported(&self) -> &[&'static str] {
         match self {
-            Self::OpenAgents => open_agents::SUPPORTED_KINDS,
-            Self::Claude => claude::SUPPORTED_KINDS,
+            Self::OpenAgents => open_agents::SUPPORTED_PRIMITIVES,
+            Self::Claude => claude::SUPPORTED_PRIMITIVES,
         }
     }
 
@@ -123,6 +125,13 @@ impl AdapterKind {
         match self {
             Self::OpenAgents => open_agents::SUPPORTED_AGENTS,
             Self::Claude => claude::SUPPORTED_AGENTS,
+        }
+    }
+
+    pub fn supported_events(&self) -> &[&'static str] {
+        match self {
+            Self::OpenAgents => open_agents::SUPPORTED_EVENTS,
+            Self::Claude => claude::SUPPORTED_EVENTS,
         }
     }
 }

@@ -3,13 +3,10 @@ title: Getting Started
 description: Initialize Coral state and install your first capability.
 ---
 
-This guide installs the `python-uv-default` sample fixture capability into a
-repository. The fixture demonstrates the engine lifecycle; it is not a bundled
-standard pack or a core product opinion.
+This guide installs the `python-uv-default` sample fixture into a project.
+The fixture demonstrates the engine lifecycle; it is not a bundled standard pack.
 
 ## 1. Initialize Coral state
-
-From the repository root:
 
 ```sh
 coral init
@@ -18,38 +15,31 @@ coral init
 This creates:
 
 ```text
-.coral/lock.json
+.coral/coral-lock.json
+.coral/config.json
 ```
 
-Initial contents:
-
-```json
-{
-  "version": 1,
-  "primitives": {}
-}
-```
-
-`coral init` does not install anything. It only prepares the repository so
-Coral can record installed capabilities later.
-
-## 2. Add a capability
-
-Install the sample fixture capability:
+## 2. Install a capability
 
 ```sh
-coral add examples/fixtures/python-uv-default
+# Skill (local)
+coral add examples/fixtures/python-uv-default -t open-agents
+
+# Skill (git)
+coral add https://github.com/owner/repo --skill python-uv-default -t open-agents
+
+# Tool
+coral add examples/fixtures/security-review -t claude
+
+# Hook
+coral add examples/fixtures/pre-commit-lint -t open-agents
+
+# Global scope
+coral add examples/fixtures/python-uv-default -t open-agents --global
 ```
 
-This writes:
-
-```text
-.agents/skills/python-uv-default/SKILL.md
-.coral/baselines/python-uv-default/SKILL.md
-```
-
-The lockfile records the capability version, source path, installed target path,
-baseline hash, and installed hash.
+This writes emitted files to the target harness directory and records baselines
+under `.coral/baselines/`.
 
 ## 3. List installed capabilities
 
@@ -57,23 +47,29 @@ baseline hash, and installed hash.
 coral list
 ```
 
-Expected output after a fresh install:
+Expected output:
 
-```text
-python-uv-default	0.1.0	clean	.agents/skills/python-uv-default/SKILL.md
+```
+python-uv-default  0.1.0   project   open-agents   clean   .agents/skills/python-uv-default/SKILL.md
 ```
 
-## 4. Edit the installed skill
+## 4. Check status
+
+```sh
+coral status
+```
+
+Shows per-primitive scope, drift, and override warnings.
+
+## 5. Edit and detect drift
 
 Edit the installed file:
 
-```text
+```
 .agents/skills/python-uv-default/SKILL.md
 ```
 
-Coral treats this as normal repository ownership, not an error.
-
-## 5. Check drift
+Then check:
 
 ```sh
 coral list
@@ -81,17 +77,29 @@ coral list
 
 The capability now reports `modified`.
 
-## 6. Show the baseline diff
+## 6. Show the diff
 
 ```sh
 coral diff python-uv-default
 ```
 
-The diff compares the installed skill against the baseline captured at install
-time.
+Compares the installed file against the baseline captured at install time.
 
-## Production use
+## 7. Update from git source
 
-For real projects, put capabilities in a project-owned directory or in a
-separate pack repository. Coral core should provide the lifecycle mechanics;
-your repo or pack should provide the content.
+```sh
+coral update python-uv-default --check   # dry run
+coral update python-uv-default            # merge or apply
+```
+
+## What to commit
+
+Commit `.coral/` and the emitted agent files together:
+
+```sh
+git add .coral/coral-lock.json .coral/config.json .coral/baselines/
+git add .agents/ .claude/
+```
+
+Your team then has the full lifecycle state without re-installing.
+See the [lockfile reference](/concepts/lockfile) for the complete directory structure.

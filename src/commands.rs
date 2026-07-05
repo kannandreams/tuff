@@ -42,6 +42,7 @@ pub fn cmd_add(
     target_ids: &[String],
     skill_name: Option<&str>,
     tool_name: Option<&str>,
+    hook_name: Option<&str>,
     global: bool,
 ) -> Result<()> {
     let (scope, install_root) = if global {
@@ -61,6 +62,7 @@ pub fn cmd_add(
             target_ids,
             skill_name,
             tool_name,
+            hook_name,
             repo_root,
         );
     }
@@ -74,10 +76,11 @@ fn cmd_add_git(
     target_ids: &[String],
     skill_name: Option<&str>,
     tool_name: Option<&str>,
+    hook_name: Option<&str>,
     project_root: &Path,
 ) -> Result<()> {
-    let name = skill_name.or(tool_name).ok_or_else(|| {
-        CoralError::new("--skill or --tool is required when installing from a git URL")
+    let name = skill_name.or(tool_name).or(hook_name).ok_or_else(|| {
+        CoralError::new("--skill, --tool, or --hook is required when installing from a git URL")
     })?;
 
     let (cache_dir, clean_url) = git::clone_or_fetch(url)?;
@@ -152,6 +155,18 @@ fn install_primitive(
                 adapter.display_name(),
                 primitive.primitive
             )));
+        }
+        if primitive.primitive == "hook" {
+            if let Some(ref hook_cfg) = primitive.hook {
+                if !adapter.supported_events().contains(&hook_cfg.event.as_str()) {
+                    return Err(CoralError::new(format!(
+                        "{} does not support hook event '{}'. Supported events: {}",
+                        adapter.display_name(),
+                        hook_cfg.event,
+                        adapter.supported_events().join(", ")
+                    )));
+                }
+            }
         }
         adapters.push(adapter);
     }

@@ -6,17 +6,23 @@ use crate::lockfile;
 
 pub const ID: &str = "claude";
 pub const DISPLAY_NAME: &str = "Claude";
-pub const SUPPORTED_KINDS: &[&str] = &["skill", "tool"];
+pub const SUPPORTED_PRIMITIVES: &[&str] = &["skill", "tool", "hook"];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
 
+pub const SUPPORTED_EVENTS: &[&str] = &[
+    "before_finish",
+    "post_tool_execution",
+];
+
 pub fn supports(primitive: &str) -> bool {
-    SUPPORTED_KINDS.contains(&primitive)
+    SUPPORTED_PRIMITIVES.contains(&primitive)
 }
 
 pub fn plan(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
     match primitive.primitive.as_str() {
         "tool" => plan_tool(primitive, repo_root),
+        "hook" => plan_hook(primitive, repo_root),
         _ => plan_skill(primitive, repo_root),
     }
 }
@@ -73,9 +79,33 @@ fn plan_tool(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<Plan
     Ok(files)
 }
 
+fn plan_hook(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
+    let hook_cfg = primitive.hook.as_ref().ok_or_else(|| {
+        CoralError::new("hook primitive requires [hook] section")
+    })?;
+
+    let target_path = repo_root
+        .join(".claude")
+        .join("hooks")
+        .join(&primitive.id)
+        .join("hook.json");
+
+    let content = serde_json::json!({
+        "event": hook_cfg.event,
+        "command": hook_cfg.command,
+        "working_directory": hook_cfg.working_directory,
+    });
+
+    Ok(vec![PlannedFile {
+        path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
+        content: serde_json::to_string_pretty(&content)?.into_bytes(),
+    }])
+}
+
 pub fn remove(primitive_id: &str, repo_root: &Path) -> Result<()> {
     remove_dir(repo_root, ".claude", "skills", primitive_id)?;
     remove_dir(repo_root, ".claude", "tools", primitive_id)?;
+    remove_dir(repo_root, ".claude", "hooks", primitive_id)?;
 
     let mcp_path = repo_root.join(".mcp.json");
     super::mcp_remove_tool(repo_root, &mcp_path, primitive_id)?;

@@ -504,7 +504,7 @@ fn add_git_requires_skill_flag() {
         .args(["add", &repo_url, "--target", "open-agents"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--skill or --tool is required"));
+        .stderr(predicate::str::contains("--skill, --tool, or --hook is required"));
 }
 
 #[test]
@@ -1144,4 +1144,213 @@ fn remove_tool_cleans_mcp_entry() {
     let after: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
     assert!(after["mcpServers"]["scan-tool"].is_null());
+}
+
+fn make_hook_primitive(root: &Path, hook_id: &str) -> std::path::PathBuf {
+    let primitive = root.join("hook-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("coral.toml"),
+        format!(
+            r#"id = "{hook_id}"
+version = "1.0.0"
+primitive = "hook"
+description = "A test hook."
+
+[hook]
+event = "before_finish"
+command = "cargo test"
+working_directory = "."
+"#
+        ),
+    )
+    .unwrap();
+    primitive
+}
+
+#[test]
+fn add_hook_installs_and_emits() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive(temp.path(), "pre-commit");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed pre-commit (open-agents) -> .agents/hooks/pre-commit/hook.toml",
+        ))
+        .stderr(predicate::str::contains(
+            "this hook runs 'cargo test' on event 'before_finish'",
+        ));
+
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("hooks")
+        .join("pre-commit")
+        .join("hook.toml")
+        .exists());
+}
+
+#[test]
+fn add_hook_rejects_invalid_event() {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("bad-hook");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("coral.toml"),
+        r#"id = "bad-hook"
+version = "1.0.0"
+primitive = "hook"
+description = "Bad hook."
+
+[hook]
+event = ""
+command = "echo test"
+"#,
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("'event' must be a non-empty string"));
+}
+
+#[test]
+fn add_hook_existing_event_rejected_by_adapter() {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("bad-hook");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("coral.toml"),
+        r#"id = "bad-hook"
+version = "1.0.0"
+primitive = "hook"
+description = "Bad hook."
+
+[hook]
+event = "on_mars_landing"
+command = "echo hello"
+"#,
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--target", "claude"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("does not support hook event 'on_mars_landing'"));
+}
+
+#[test]
+fn hook_list_and_drift() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive(temp.path(), "pre-commit");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--primitive", "hook"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "pre-commit\t1.0.0\tproject\topen-agents\tclean\t.agents/hooks/pre-commit/hook.toml",
+        ));
+
+    fs::write(
+        temp.path()
+            .join(".agents")
+            .join("hooks")
+            .join("pre-commit")
+            .join("hook.toml"),
+        "event = \"after_save\"\ncommand = \"cargo test\"\n",
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "pre-commit\t1.0.0\tproject\topen-agents\tmodified\t",
+        ));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "pre-commit"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("-event = \"before_finish\""))
+        .stdout(predicate::str::contains("+event = \"after_save\""));
+}
+
+#[test]
+fn hook_remove_cleans_directory() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive(temp.path(), "pre-commit");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--target", "claude"])
+        .assert()
+        .success();
+
+    assert!(temp
+        .path()
+        .join(".claude")
+        .join("hooks")
+        .join("pre-commit")
+        .join("hook.json")
+        .exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["remove", "pre-commit"])
+        .assert()
+        .success();
+
+    assert!(!temp
+        .path()
+        .join(".claude")
+        .join("hooks")
+        .join("pre-commit")
+        .exists());
 }
