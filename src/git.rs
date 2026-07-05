@@ -213,3 +213,70 @@ fn dirs_home() -> Result<PathBuf> {
             .map_err(|_| CoralError::new("home directory not found"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_github_clean_url() {
+        assert!(is_git_url("https://github.com/owner/repo"));
+        assert!(is_git_url("http://github.com/owner/repo"));
+    }
+
+    #[test]
+    fn detect_github_tree_url() {
+        assert!(is_git_url("https://github.com/owner/repo/tree/main/skills"));
+    }
+
+    #[test]
+    fn detect_ssh_url() {
+        assert!(is_git_url("git@github.com:owner/repo.git"));
+    }
+
+    #[test]
+    fn detect_file_url() {
+        assert!(is_git_url("file:///path/to/repo"));
+    }
+
+    #[test]
+    fn reject_local_path() {
+        assert!(!is_git_url("./my-skill"));
+        assert!(!is_git_url("/absolute/path"));
+    }
+
+    #[test]
+    fn clean_github_tree_extracts_repo_and_branch() {
+        let (url, branch) = clean_git_url("https://github.com/owner/repo/tree/main/skills");
+        assert_eq!(url, "https://github.com/owner/repo");
+        assert_eq!(branch, Some("main".to_string()));
+    }
+
+    #[test]
+    fn clean_github_blob_extracts_repo_and_branch() {
+        let (url, branch) = clean_git_url("https://github.com/owner/repo/blob/main/README.md");
+        assert_eq!(url, "https://github.com/owner/repo");
+        assert_eq!(branch, Some("main".to_string()));
+    }
+
+    #[test]
+    fn clean_plain_url_passes_through() {
+        let (url, branch) = clean_git_url("https://github.com/vercel-labs/skills");
+        assert_eq!(url, "https://github.com/vercel-labs/skills");
+        assert_eq!(branch, None);
+    }
+
+    #[test]
+    fn clean_gitlab_tree_extracts_repo_and_branch() {
+        let (url, branch) = clean_git_url("https://gitlab.com/owner/repo/-/tree/main/src");
+        assert_eq!(url, "https://gitlab.com/owner/repo");
+        assert_eq!(branch, Some("main".to_string()));
+    }
+
+    #[test]
+    fn clean_file_url_passes_through() {
+        let (url, branch) = clean_git_url("file:///path/to/repo");
+        assert_eq!(url, "file:///path/to/repo");
+        assert_eq!(branch, None);
+    }
+}

@@ -4,6 +4,9 @@
 
 # Coral
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Coverage](https://img.shields.io/badge/coverage-79%25-brightgreen)](https://github.com/kannandreams/coral)
+
 Coral is a CLI for managing project-owned agent capabilities: skills, tools,
 hooks, and workflows that teams load into coding harnesses such as Codex,
 Claude, Cursor, and others.

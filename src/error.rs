@@ -36,3 +36,28 @@ impl From<toml::de::Error> for CoralError {
         Self(format!("invalid capability manifest TOML: {error}"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coral_error_displays_message() {
+        let err = CoralError::new("test error");
+        assert_eq!(format!("{}", err), "test error");
+    }
+
+    #[test]
+    fn coral_error_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err: CoralError = io_err.into();
+        assert!(format!("{}", err).contains("file not found"));
+    }
+
+    #[test]
+    fn coral_error_from_serde_json_error() {
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
+        let err: CoralError = json_err.into();
+        assert!(!format!("{}", err).is_empty());
+    }
+}

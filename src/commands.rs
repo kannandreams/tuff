@@ -1135,3 +1135,25 @@ fn home_dir() -> Result<std::path::PathBuf> {
 fn home_dir_opt() -> Option<std::path::PathBuf> {
     std::env::var("HOME").ok().map(std::path::PathBuf::from)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_sha_truncates_hex() {
+        let sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+        assert_eq!(short_sha(sha), "a1b2c3d");
+    }
+
+    #[test]
+    fn short_sha_keeps_short_strings() {
+        assert_eq!(short_sha("abc"), "abc");
+        assert_eq!(short_sha("1.0.0"), "1.0.0");
+    }
+
+    #[test]
+    fn short_sha_handles_non_hex_long_string() {
+        assert_eq!(short_sha("abcdefgh1234567890"), "abcdefgh1234567890");
+    }
+}

@@ -204,3 +204,124 @@ pub fn get_upstream_content(
     }
     Ok(std::fs::read_to_string(full_path)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_clean_local_upstream_changed_returns_none() {
+        assert!(three_way_merge("file.md", "original", "original", "modified upstream").is_none());
+    }
+
+    #[test]
+    fn merge_local_unchanged_returns_none_when_same() {
+        assert!(three_way_merge("file.md", "original", "original", "original").is_none());
+    }
+
+    #[test]
+    fn merge_conflict_both_changed_reports_conflicts() {
+        let report = three_way_merge(
+            "file.md",
+            "original",
+            "local change",
+            "upstream change",
+        );
+        assert!(report.is_some());
+        assert_eq!(report.unwrap().file_path, "file.md");
+    }
+
+    #[test]
+    fn merge_non_conflicting_changes_succeeds() {
+        let report = three_way_merge(
+            "file.md",
+            "line1\nline2\nline3\nline4",
+            "line1\nline2 local\nline3\nline4",
+            "line1\nline2\nline3\nline4 upstream",
+        );
+        assert!(report.is_none());
+    }
+
+    #[test]
+    fn diff_baseline_vs_local_shows_changes() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let base = tmp.path().join("base.md");
+        let local = tmp.path().join("local.md");
+        std::fs::write(&base, "hello world").unwrap();
+        std::fs::write(&local, "hello modified").unwrap();
+        let diff = diff_baseline_vs_local(&base, &local).unwrap();
+        assert!(diff.contains("-hello world"));
+        assert!(diff.contains("+hello modified"));
+    }
+
+    #[test]
+    fn diff_identical_files_returns_empty() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let base = tmp.path().join("base.md");
+        std::fs::write(&base, "same").unwrap();
+        let local = tmp.path().join("local.md");
+        std::fs::write(&local, "same").unwrap();
+        assert!(diff_baseline_vs_local(&base, &local).unwrap().is_empty());
+    }
+}
+
+    #[test]
+    fn merge_and_write_clean_local_upstream_changed_applies_upstream() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let base = tmp.path().join("base.md");
+        let local = tmp.path().join("local.md");
+        let upstream = tmp.path().join("upstream.md");
+        std::fs::write(&base, "original").unwrap();
+        std::fs::write(&local, "original").unwrap();
+        std::fs::write(&upstream, "new upstream version").unwrap();
+
+        let result = merge_and_write(&base, &local, &upstream).unwrap();
+        assert!(result.is_none());
+        assert_eq!(std::fs::read_to_string(&local).unwrap(), "new upstream version");
+    }
+
+    #[test]
+    fn merge_and_write_local_modified_upstream_unchanged_no_op() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let base = tmp.path().join("base.md");
+        let local = tmp.path().join("local.md");
+        let upstream = tmp.path().join("upstream.md");
+        std::fs::write(&base, "original").unwrap();
+        std::fs::write(&local, "local modified").unwrap();
+        std::fs::write(&upstream, "original").unwrap();
+
+        let result = merge_and_write(&base, &local, &upstream).unwrap();
+        assert!(result.is_none());
+        assert_eq!(std::fs::read_to_string(&local).unwrap(), "local modified");
+    }
+
+    #[test]
+    fn merge_and_write_local_and_upstream_identical_no_op() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let base = tmp.path().join("base.md");
+        let local = tmp.path().join("local.md");
+        let upstream = tmp.path().join("upstream.md");
+        std::fs::write(&base, "original").unwrap();
+        std::fs::write(&local, "changed").unwrap();
+        std::fs::write(&upstream, "changed").unwrap();
+
+        let result = merge_and_write(&base, &local, &upstream).unwrap();
+        assert!(result.is_none());
+        assert_eq!(std::fs::read_to_string(&local).unwrap(), "changed");
+    }
+
+    #[test]
+    fn merge_and_write_conflicting_changes_reports_conflict() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let base = tmp.path().join("base.md");
+        let local = tmp.path().join("local.md");
+        let upstream = tmp.path().join("upstream.md");
+        std::fs::write(&base, "original line\nshared line").unwrap();
+        std::fs::write(&local, "local edit\nshared line").unwrap();
+        std::fs::write(&upstream, "upstream edit\nshared line").unwrap();
+
+        let result = merge_and_write(&base, &local, &upstream).unwrap();
+        assert!(result.is_some());
+        // File should NOT be overwritten on conflict
+        assert_eq!(std::fs::read_to_string(&local).unwrap(), "local edit\nshared line");
+    }
