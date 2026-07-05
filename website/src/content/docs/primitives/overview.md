@@ -4,10 +4,10 @@ description: What Coral primitives are and how they fit together.
 ---
 
 Coral uses the term `primitive` for any managed agent-facing building block.
-A primitive defines some part of an agent's operating surface: what it knows, what it can do,
+A capability defines some part of an agent's operating surface: what it knows, what it can do,
 what rules it must obey, and what multi-step flows it should follow.
 
-Coral manages these primitive kinds:
+Coral manages these capability types:
 
 | Kind | Status | Description |
 |---|---|---|

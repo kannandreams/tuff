@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::{claude, open_agents};
 use crate::error::Result;
-use crate::manifest::PrimitiveManifest;
+use crate::manifest::CapabilityManifest;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmittedFile {
@@ -19,9 +19,9 @@ pub struct PlannedFile {
 }
 
 #[allow(dead_code)]
-pub struct ResolvedPrimitive {
+pub struct ResolvedCapability {
     pub id: String,
-    pub primitive: String,
+    pub capability_type: String,
     pub version: String,
     pub description: String,
     pub source_files: Vec<(String, Vec<u8>)>,
@@ -31,11 +31,11 @@ pub struct ResolvedPrimitive {
     pub hook: Option<crate::manifest::HookConfig>,
 }
 
-pub fn resolve_primitive(manifest: &PrimitiveManifest) -> Result<ResolvedPrimitive> {
+pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapability> {
     let source_files = manifest.read_source_contents_with_names()?;
-    Ok(ResolvedPrimitive {
+    Ok(ResolvedCapability {
         id: manifest.id.clone(),
-        primitive: manifest.primitive.clone(),
+        capability_type: manifest.capability_type.clone(),
         version: manifest.version.clone(),
         description: manifest.description.clone(),
         source_files,
@@ -81,21 +81,21 @@ impl AdapterKind {
         }
     }
 
-    pub fn supports(&self, primitive: &str) -> bool {
+    pub fn supports(&self, capability_type: &str) -> bool {
         match self {
-            Self::OpenAgents => open_agents::supports(primitive),
-            Self::Claude => claude::supports(primitive),
+            Self::OpenAgents => open_agents::supports(capability_type),
+            Self::Claude => claude::supports(capability_type),
         }
     }
 
     pub fn plan(
         &self,
-        primitive: &ResolvedPrimitive,
+        capability: &ResolvedCapability,
         repo_root: &Path,
     ) -> Result<Vec<PlannedFile>> {
         match self {
-            Self::OpenAgents => open_agents::plan(primitive, repo_root),
-            Self::Claude => claude::plan(primitive, repo_root),
+            Self::OpenAgents => open_agents::plan(capability, repo_root),
+            Self::Claude => claude::plan(capability, repo_root),
         }
     }
 
@@ -116,8 +116,8 @@ impl AdapterKind {
 
     pub fn kinds_supported(&self) -> &[&'static str] {
         match self {
-            Self::OpenAgents => open_agents::SUPPORTED_PRIMITIVES,
-            Self::Claude => claude::SUPPORTED_PRIMITIVES,
+            Self::OpenAgents => open_agents::SUPPORTED_TYPES,
+            Self::Claude => claude::SUPPORTED_TYPES,
         }
     }
 

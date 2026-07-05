@@ -1,6 +1,6 @@
 id = "pre-commit-lint"
 version = "1.0.0"
-primitive = "hook"
+type = "hook"
 description = "Run lint checks before the agent finishes a session."
 
 [hook]

@@ -3,7 +3,7 @@ title: Hooks
 description: Hooks define event-driven automation that runs at specific lifecycle moments.
 ---
 
-A hook primitive represents automation that runs at defined moments in an agent lifecycle.
+A hook capability represents automation that runs at defined moments in an agent lifecycle.
 Hooks are useful for validation, formatting, enforcement, and project-specific checks.
 
 Because hooks run automatically (triggered by the harness, never by Coral), Coral applies the
@@ -106,7 +106,7 @@ working_directory = "."
 ## Filtering
 
 ```sh
-coral list --primitive hook
+coral list --type hook
 ```
 
 ## Lifecycle

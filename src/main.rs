@@ -69,8 +69,8 @@ enum Command {
         #[arg(short = 's', long = "scope", default_value = "all")]
         scope: String,
 
-        /// Filter by primitive kind: skill, tool.
-        #[arg(short = 'p', long = "primitive")]
+        /// Filter by capability type: skill, tool, hook.
+        #[arg(short = 'p', long = "type")]
         kind: Option<String>,
     },
 

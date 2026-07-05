@@ -9,7 +9,7 @@ use tabled::{
 };
 
 use crate::{
-    adapter::{self, AdapterKind, resolve_primitive},
+    adapter::{self, AdapterKind, resolve_capability},
     config, git,
     error::{CoralError, Result},
     lockfile::{self, TargetLockEntry},
@@ -88,7 +88,7 @@ fn cmd_add_git(
     let skill_dir = git::discover_skill(&cache_dir, name)?;
 
     let manifest = manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?;
-    let primitive = resolve_primitive(&manifest)?;
+    let capability = resolve_capability(&manifest)?;
 
     if scope == Scope::Project {
         if let Some(warning) = resolver::check_collision(name, project_root, Some(&clean_url))? {
@@ -96,7 +96,7 @@ fn cmd_add_git(
         }
     }
 
-    install_primitive(install_root, scope, &primitive, &manifest, target_ids, Some(&SourceMetaInput {
+    install_capability(install_root, scope, &capability, &manifest, target_ids, Some(&SourceMetaInput {
         source_type: "git".to_string(),
         url: clean_url,
         source_ref: commit_sha.clone(),
@@ -112,16 +112,16 @@ fn cmd_add_local(
     project_root: &Path,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability);
-    let manifest = load_manifest(&capability_dir)?;
-    let primitive = resolve_primitive(&manifest)?;
+    let capability = load_manifest(&capability_dir)?;
+    let resolved = resolve_capability(&capability)?;
 
     if scope == Scope::Project {
-        if let Some(warning) = resolver::check_collision(&manifest.id, project_root, None)? {
+        if let Some(warning) = resolver::check_collision(&capability.id, project_root, None)? {
             eprintln!("{warning}");
         }
     }
 
-    install_primitive(install_root, scope, &primitive, &manifest, target_ids, None)
+    install_capability(install_root, scope, &resolved, &capability, target_ids, None)
 }
 
 struct SourceMetaInput {
@@ -131,11 +131,11 @@ struct SourceMetaInput {
     skill: String,
 }
 
-fn install_primitive(
+fn install_capability(
     install_root: &Path,
     scope: Scope,
-    primitive: &adapter::ResolvedPrimitive,
-    manifest: &manifest::PrimitiveManifest,
+    capability: &adapter::ResolvedCapability,
+    manifest: &manifest::CapabilityManifest,
     target_ids: &[String],
     source_meta: Option<&SourceMetaInput>,
 ) -> Result<()> {
@@ -149,15 +149,15 @@ fn install_primitive(
                 tid
             ))
         })?;
-        if !adapter.supports(&primitive.primitive) {
+        if !adapter.supports(&capability.capability_type) {
             return Err(CoralError::new(format!(
-                "{} does not yet support {} primitives",
+                "{} does not yet support {} capabilities",
                 adapter.display_name(),
-                primitive.primitive
+                capability.capability_type
             )));
         }
-        if primitive.primitive == "hook" {
-            if let Some(ref hook_cfg) = primitive.hook {
+        if capability.capability_type == "hook" {
+            if let Some(ref hook_cfg) = capability.hook {
                 if !adapter.supported_events().contains(&hook_cfg.event.as_str()) {
                     return Err(CoralError::new(format!(
                         "{} does not support hook event '{}'. Supported events: {}",
@@ -173,15 +173,15 @@ fn install_primitive(
 
     let mut plans: Vec<(AdapterKind, Vec<adapter::PlannedFile>)> = Vec::new();
     for adapter in &adapters {
-        let planned = adapter.plan(&primitive, install_root)?;
+        let planned = adapter.plan(&capability, install_root)?;
         plans.push((*adapter, planned));
     }
 
     let lockfile = lockfile::require_lockfile(install_root)?;
     for (adapter, planned_files) in &plans {
         let is_tracked = lockfile
-            .primitives
-            .get(&primitive.id)
+            .capabilities
+            .get(&capability.id)
             .and_then(|e| e.targets.get(adapter.id()))
             .is_some();
         if !is_tracked {
@@ -217,7 +217,7 @@ fn install_primitive(
 
             println!(
                 "installed {} ({}) -> {}",
-                primitive.id,
+                capability.id,
                 adapter.id(),
                 lockfile::relative_or_absolute_fs(&target_path, install_root)
             );
@@ -227,7 +227,7 @@ fn install_primitive(
             .join(".coral")
             .join("baselines")
             .join(adapter.id())
-            .join(&primitive.id);
+            .join(&capability.id);
         std::fs::create_dir_all(&baseline_dir)?;
 
         for planned in planned_files {
@@ -248,8 +248,8 @@ fn install_primitive(
     }
 
     // MCP registration for tool primitives
-    if primitive.primitive == "tool" {
-        if let Some(ref impl_cfg) = primitive.implementation {
+    if capability.capability_type == "tool" {
+        if let Some(ref impl_cfg) = capability.implementation {
             for adapter in &adapters {
                 let mcp_path = match adapter {
                     AdapterKind::OpenAgents => {
@@ -263,10 +263,10 @@ fn install_primitive(
                 let mcp_command = impl_cfg.language.clone();
                 let entrypoint_path = match adapter {
                     AdapterKind::OpenAgents => {
-                        format!(".agents/tools/{}/{}", primitive.id, impl_cfg.entrypoint)
+                        format!(".agents/tools/{}/{}", capability.id, impl_cfg.entrypoint)
                     }
                     AdapterKind::Claude => {
-                        format!(".claude/tools/{}/{}", primitive.id, impl_cfg.entrypoint)
+                        format!(".claude/tools/{}/{}", capability.id, impl_cfg.entrypoint)
                     }
                 };
                 let mcp_args = vec![entrypoint_path];
@@ -274,7 +274,7 @@ fn install_primitive(
                 crate::adapters::mcp_register_tool(
                     install_root,
                     &mcp_path,
-                    &primitive.id,
+                    &capability.id,
                     &mcp_command,
                     &mcp_args,
                 )?;
@@ -284,8 +284,8 @@ fn install_primitive(
 
     let mut lockfile = lockfile;
     let existing_targets = lockfile
-        .primitives
-        .get(&primitive.id)
+        .capabilities
+        .get(&capability.id)
         .map(|e| e.targets.clone())
         .unwrap_or_default();
 
@@ -300,11 +300,11 @@ fn install_primitive(
         lockfile::relative_or_absolute_fs(&manifest.root, install_root)
     };
 
-    lockfile.primitives.insert(
-        primitive.id.clone(),
-        lockfile::PrimitiveLockEntry {
-            primitive: primitive.primitive.clone(),
-            installed_version: primitive.version.clone(),
+    lockfile.capabilities.insert(
+        capability.id.clone(),
+        lockfile::CapabilityLockEntry {
+            capability_type: capability.capability_type.clone(),
+            installed_version: capability.version.clone(),
             source_path,
             targets: merged_targets,
             source: source_meta.map(|m| lockfile::SourceMetadata {
@@ -331,9 +331,9 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
 
     if show_project {
         if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
-            for (id, entry) in &lockfile.primitives {
+            for (id, entry) in &lockfile.capabilities {
                 if let Some(kind) = kind_filter {
-                    if entry.primitive != kind {
+                    if entry.capability_type != kind {
                         continue;
                     }
                 }
@@ -358,9 +358,9 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         if let Some(home) = home_dir_opt() {
             let lock_path = home.join(".coral").join("coral-lock.json");
             if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
-                for (id, entry) in &lockfile.primitives {
+                for (id, entry) in &lockfile.capabilities {
                     if let Some(kind) = kind_filter {
-                        if entry.primitive != kind {
+                        if entry.capability_type != kind {
                             continue;
                         }
                     }
@@ -383,7 +383,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
     }
 
     if rows.is_empty() {
-        println!("no primitives installed");
+        println!("no capabilities installed");
         return Ok(());
     }
 
@@ -404,7 +404,7 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
     let mut found_any = false;
 
     if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
-        for (id, entry) in &lockfile.primitives {
+        for (id, entry) in &lockfile.capabilities {
             let mut flags = Vec::new();
             for (_, target_entry) in &entry.targets {
                 for emitted in &target_entry.emitted_files {
@@ -435,7 +435,7 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
     if let Some(home) = home_dir_opt() {
         let lock_path = home.join(".coral").join("coral-lock.json");
         if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
-            for (id, entry) in &lockfile.primitives {
+            for (id, entry) in &lockfile.capabilities {
                 let mut flags = Vec::new();
                 for (_, target_entry) in &entry.targets {
                     for emitted in &target_entry.emitted_files {
@@ -448,7 +448,7 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
 
                 let is_shadowed = {
                     lockfile::require_lockfile(repo_root)
-                        .map(|plf| plf.primitives.contains_key(id))
+                        .map(|plf| plf.capabilities.contains_key(id))
                         .unwrap_or(false)
                 };
 
@@ -471,7 +471,7 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
     }
 
     if !found_any {
-        println!("no primitives installed");
+        println!("no capabilities installed");
     }
 
     Ok(())
@@ -537,7 +537,7 @@ pub fn cmd_diff(
 fn cmd_diff_upstream(
     scope_root: PathBuf,
     _capability_id: &str,
-    entry: &lockfile::PrimitiveLockEntry,
+    entry: &lockfile::CapabilityLockEntry,
     target: Option<&str>,
 ) -> Result<()> {
     let source = entry.source.as_ref().ok_or_else(|| {
@@ -621,7 +621,7 @@ pub fn cmd_remove(
     };
 
     let mut lockfile = lockfile::require_lockfile(&scope_root)?;
-    let entry = lockfile.primitives.remove(id).ok_or_else(|| {
+    let entry = lockfile.capabilities.remove(id).ok_or_else(|| {
         CoralError::new(format!("'{}' is not installed in {} scope", id, scope.as_str()))
     })?;
 
@@ -680,7 +680,7 @@ pub fn cmd_update(
             Scope::Global => home_dir()?,
         };
         let lf = lockfile::require_lockfile(&root)?;
-        let entry = lf.primitives.get(id).ok_or_else(|| {
+        let entry = lf.capabilities.get(id).ok_or_else(|| {
             CoralError::new(format!(
                 "'{}' is not installed in {} scope",
                 id,
@@ -705,7 +705,7 @@ pub fn cmd_update(
 
     let source = entry.source.as_ref().ok_or_else(|| {
         CoralError::new(
-            format!("'{}' is not a git-sourced primitive — update only works for git sources", id),
+            format!("'{}' is not a git-sourced capability — update only works for git sources", id),
         )
     })?;
 
@@ -721,12 +721,12 @@ pub fn cmd_update(
 
     if force {
         let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
-        let primitive = resolve_primitive(&manifest)?;
+        let capability = resolve_capability(&manifest)?;
         let target_ids: Vec<String> = entry.targets.keys().cloned().collect();
-        return install_primitive(
+        return install_capability(
             &scope_root,
             scope,
-            &primitive,
+            &capability,
             &manifest,
             &target_ids,
             Some(&SourceMetaInput {
@@ -811,10 +811,10 @@ pub fn cmd_update(
     }
 
     let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
-    let primitive = resolve_primitive(&manifest)?;
+    let primitive = resolve_capability(&manifest)?;
     let target_ids: Vec<String> = entry.targets.keys().cloned().collect();
 
-    install_primitive(
+    install_capability(
         &scope_root,
         scope,
         &primitive,
@@ -844,8 +844,8 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     struct OutdatedRow {
         #[tabled(rename = "ID")]
         id: String,
-        #[tabled(rename = "PRIMITIVE")]
-        primitive: String,
+        #[tabled(rename = "TYPE")]
+        capability_type: String,
         #[tabled(rename = "TARGET")]
         target: String,
         #[tabled(rename = "CURRENT")]
@@ -859,7 +859,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     let mut rows: Vec<OutdatedRow> = Vec::new();
 
     if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
-        for (id, entry) in &lockfile.primitives {
+        for (id, entry) in &lockfile.capabilities {
             for (target_id, _target_entry) in &entry.targets {
                 let (current, latest, status) = if let Some(src) = &entry.source {
                     let latest_sha = match git::clone_or_fetch(&src.url)
@@ -869,7 +869,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
                         Err(_) => {
                             rows.push(OutdatedRow {
                                 id: id.clone(),
-                                primitive: entry.primitive.clone(),
+                                capability_type: entry.capability_type.clone(),
                                 target: target_id.clone(),
                                 current: short_sha(&entry.installed_version).to_string(),
                                 latest: "unavailable".to_string(),
@@ -901,7 +901,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
 
                 rows.push(OutdatedRow {
                     id: id.clone(),
-                    primitive: entry.primitive.clone(),
+                    capability_type: entry.capability_type.clone(),
                     target: target_id.clone(),
                     current,
                     latest,
@@ -914,7 +914,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     if let Some(home) = home_dir_opt() {
         let lock_path = home.join(".coral").join("coral-lock.json");
         if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
-            for (id, entry) in &lockfile.primitives {
+            for (id, entry) in &lockfile.capabilities {
                 for (target_id, _target_entry) in &entry.targets {
                     let (current, latest, status) = if let Some(src) = &entry.source {
                         let latest_sha = match git::clone_or_fetch(&src.url)
@@ -924,7 +924,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
                             Err(_) => {
                                 rows.push(OutdatedRow {
                                     id: id.clone(),
-                                    primitive: entry.primitive.clone(),
+                                    capability_type: entry.capability_type.clone(),
                                     target: target_id.clone(),
                                     current: short_sha(&entry.installed_version)
                                         .to_string(),
@@ -957,7 +957,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
 
                     rows.push(OutdatedRow {
                         id: id.clone(),
-                        primitive: entry.primitive.clone(),
+                        capability_type: entry.capability_type.clone(),
                         target: target_id.clone(),
                         current,
                         latest,
@@ -969,7 +969,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     }
 
     if rows.is_empty() {
-        println!("no primitives installed");
+        println!("no capabilities installed");
         return Ok(());
     }
 
@@ -1084,7 +1084,7 @@ pub fn cmd_target_remove(repo_root: &Path, id: &str) -> Result<()> {
     let was_registered = config.targets.contains(&id.to_string());
 
     let mut lockfile = lockfile::require_lockfile(repo_root)?;
-    for (primitive_id, entry) in lockfile.primitives.iter() {
+    for (primitive_id, entry) in lockfile.capabilities.iter() {
         if entry.targets.contains_key(id) {
             adapter.remove(primitive_id, repo_root)?;
             let baseline_dir = repo_root
@@ -1098,7 +1098,7 @@ pub fn cmd_target_remove(repo_root: &Path, id: &str) -> Result<()> {
         }
     }
 
-    for entry in lockfile.primitives.values_mut() {
+    for entry in lockfile.capabilities.values_mut() {
         entry.targets.remove(id);
     }
 

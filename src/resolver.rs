@@ -56,15 +56,15 @@ pub fn read_lockfile(scope: Scope, repo_root: Option<&Path>) -> Result<Option<lo
 pub fn resolve_entry(
     id: &str,
     repo_root: &Path,
-) -> Result<Option<(Scope, lockfile::PrimitiveLockEntry)>> {
+) -> Result<Option<(Scope, lockfile::CapabilityLockEntry)>> {
     if let Some(project_lf) = read_lockfile(Scope::Project, Some(repo_root))? {
-        if let Some(entry) = project_lf.primitives.get(id) {
+        if let Some(entry) = project_lf.capabilities.get(id) {
             return Ok(Some((Scope::Project, entry.clone())));
         }
     }
 
     if let Some(global_lf) = read_lockfile(Scope::Global, None)? {
-        if let Some(entry) = global_lf.primitives.get(id) {
+        if let Some(entry) = global_lf.capabilities.get(id) {
             return Ok(Some((Scope::Global, entry.clone())));
         }
     }
@@ -77,11 +77,11 @@ pub fn overrides_global(
     repo_root: &Path,
 ) -> Result<bool> {
     let project_exists = read_lockfile(Scope::Project, Some(repo_root))?
-        .map(|lf| lf.primitives.contains_key(id))
+        .map(|lf| lf.capabilities.contains_key(id))
         .unwrap_or(false);
 
     let global_exists = read_lockfile(Scope::Global, None)?
-        .map(|lf| lf.primitives.contains_key(id))
+        .map(|lf| lf.capabilities.contains_key(id))
         .unwrap_or(false);
 
     Ok(project_exists && global_exists)
@@ -96,7 +96,7 @@ pub fn check_collision(
         return Ok(None);
     };
 
-    let Some(global_entry) = global_lf.primitives.get(id) else {
+    let Some(global_entry) = global_lf.capabilities.get(id) else {
         return Ok(None);
     };
 

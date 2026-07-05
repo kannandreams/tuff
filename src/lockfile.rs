@@ -16,12 +16,14 @@ pub const LOCKFILE_VERSION: u8 = 2;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lockfile {
     pub version: u8,
-    pub primitives: BTreeMap<String, PrimitiveLockEntry>,
+    #[serde(rename = "capabilities")]
+    pub capabilities: BTreeMap<String, CapabilityLockEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrimitiveLockEntry {
-    pub primitive: String,
+pub struct CapabilityLockEntry {
+    #[serde(rename = "type")]
+    pub capability_type: String,
     #[serde(rename = "installedVersion")]
     pub installed_version: String,
     #[serde(rename = "sourcePath")]
@@ -72,7 +74,7 @@ pub fn init_lockfile_at(lock_path: &Path) -> Result<()> {
             lock_path,
             &Lockfile {
                 version: LOCKFILE_VERSION,
-                primitives: BTreeMap::new(),
+                capabilities: BTreeMap::new(),
             },
         )?;
     }
@@ -145,7 +147,7 @@ pub fn diff_against_baseline(
     repo_root: &Path,
     primitive_id: &str,
     target_id: &str,
-    entry: &PrimitiveLockEntry,
+    entry: &CapabilityLockEntry,
 ) -> Result<String> {
     let target_entry = entry.targets.get(target_id).ok_or_else(|| {
         CoralError::new(format!(

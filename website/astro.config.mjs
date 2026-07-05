@@ -37,7 +37,7 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Primitives',
+          label: 'Capabilities',
           items: [
             { label: 'Overview', slug: 'primitives/overview' },
             { label: 'Primitive Format', slug: 'primitives/format' },
