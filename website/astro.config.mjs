@@ -20,7 +20,7 @@ export default defineConfig({
       },
       lastUpdated: true,
       expressiveCode: {
-        themes: ['github-dark'],
+        themes: ['github-dark', 'github-light'],
       },
       tableOfContents: {
         minHeadingLevel: 2,
