@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod display;
 mod error;
+mod git;
 mod lockfile;
 mod manifest;
 
@@ -36,6 +37,10 @@ enum Command {
         /// Target harness to emit for (repeatable).
         #[arg(short = 't', long = "target", required = true)]
         target: Vec<String>,
+
+        /// Skill name when installing from a git repository.
+        #[arg(short = 's', long = "skill")]
+        skill: Option<String>,
     },
 
     /// List installed capabilities.
@@ -90,7 +95,11 @@ fn run() -> Result<()> {
     match cli.command {
         None => Ok(display::print_welcome()),
         Some(Command::Init) => cmd_init(&repo_root),
-        Some(Command::Add { capability, target }) => cmd_add(&repo_root, &capability, &target),
+        Some(Command::Add {
+            capability,
+            target,
+            skill,
+        }) => cmd_add(&repo_root, &capability, &target, skill.as_deref()),
         Some(Command::List) => cmd_list(&repo_root),
         Some(Command::Diff {
             capability_id,

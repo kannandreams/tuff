@@ -1,2 +1,2 @@
-pub mod claude_code;
-pub mod codex;
+pub mod claude;
+pub mod open_agents;

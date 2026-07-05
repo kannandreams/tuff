@@ -20,12 +20,24 @@ pub struct Lockfile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrimitiveLockEntry {
-    pub kind: String,
+    pub primitive: String,
     #[serde(rename = "installedVersion")]
     pub installed_version: String,
     #[serde(rename = "sourcePath")]
     pub source_path: String,
     pub targets: BTreeMap<String, TargetLockEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceMetadata {
+    #[serde(rename = "type")]
+    pub source_type: String,
+    pub url: String,
+    #[serde(rename = "ref")]
+    pub source_ref: String,
+    pub skill: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,13 +49,13 @@ pub struct TargetLockEntry {
 }
 
 pub fn lockfile_path(repo_root: &Path) -> PathBuf {
-    repo_root.join(".coral").join("lock.json")
+    repo_root.join(".coral").join("coral-lock.json")
 }
 
 pub fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
     let coral_dir = repo_root.join(".coral");
     std::fs::create_dir_all(&coral_dir)?;
-    let lock_path = coral_dir.join("lock.json");
+    let lock_path = coral_dir.join("coral-lock.json");
     if !lock_path.exists() {
         write_lockfile(
             repo_root,
@@ -60,7 +72,7 @@ pub fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
     let lock_path = lockfile_path(repo_root);
     if !lock_path.exists() {
         return Err(CoralError::new(
-            ".coral/lock.json is missing; run 'coral init' first",
+            ".coral/coral-lock.json is missing; run 'coral init' first",
         ));
     }
 
