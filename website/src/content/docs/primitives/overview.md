@@ -13,6 +13,6 @@ Coral manages these primitive kinds:
 |---|---|---|
 | [skill](/primitives/skills) | **Implemented** | Prose instruction injected into agent context |
 | [tool](/primitives/tools) | **Implemented** | Executable capability with typed parameter contract |
-| hook | Roadmap | Actions triggered at specific lifecycle moments |
+| [hook](/primitives/hooks) | **Implemented** | Event-driven automation at lifecycle moments |
 | policy | Roadmap | Constraints and guardrails on agent behavior |
 | workflow | Roadmap | Multi-step processes composed from other primitives |

@@ -59,6 +59,12 @@ Install a tool from a git repository:
 coral add https://github.com/owner/repo --tool <name> -t claude
 ```
 
+Install a hook from a git repository:
+
+```sh
+coral add https://github.com/owner/repo --hook <name> -t open-agents
+```
+
 ### Flags
 
 | Flag | Description |
@@ -66,6 +72,7 @@ coral add https://github.com/owner/repo --tool <name> -t claude
 | `-t, --target <id>` | Target harness (required, repeatable) |
 | `-s, --skill <name>` | Skill name for git URLs |
 | `--tool <name>` | Tool name for git URLs |
+| `--hook <name>` | Hook name for git URLs |
 | `-g, --global` | Install to global scope (`~/.coral/`) |
 
 ## `coral list`

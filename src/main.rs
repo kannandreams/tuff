@@ -54,6 +54,10 @@ enum Command {
         #[arg(long = "tool")]
         tool: Option<String>,
 
+        /// Hook name when installing from a git repository.
+        #[arg(long = "hook")]
+        hook: Option<String>,
+
         /// Install to global scope (~/.coral/).
         #[arg(short = 'g', long = "global")]
         global: bool,
@@ -163,6 +167,7 @@ fn run() -> Result<()> {
             target,
             skill,
             tool,
+            hook,
             global,
         }) => cmd_add(
             &repo_root,
@@ -170,6 +175,7 @@ fn run() -> Result<()> {
             &target,
             skill.as_deref(),
             tool.as_deref(),
+            hook.as_deref(),
             global,
         ),
         Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),
