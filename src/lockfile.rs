@@ -1,0 +1,190 @@
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use similar::{ChangeTag, TextDiff};
+
+use crate::adapter::EmittedFile;
+use crate::error::{CoralError, Result};
+
+pub const LOCKFILE_VERSION: u8 = 2;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Lockfile {
+    pub version: u8,
+    pub primitives: BTreeMap<String, PrimitiveLockEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrimitiveLockEntry {
+    pub kind: String,
+    #[serde(rename = "installedVersion")]
+    pub installed_version: String,
+    #[serde(rename = "sourcePath")]
+    pub source_path: String,
+    pub targets: BTreeMap<String, TargetLockEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TargetLockEntry {
+    #[serde(rename = "baselineDir")]
+    pub baseline_dir: String,
+    #[serde(rename = "emittedFiles")]
+    pub emitted_files: Vec<EmittedFile>,
+}
+
+pub fn lockfile_path(repo_root: &Path) -> PathBuf {
+    repo_root.join(".coral").join("lock.json")
+}
+
+pub fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
+    let coral_dir = repo_root.join(".coral");
+    std::fs::create_dir_all(&coral_dir)?;
+    let lock_path = coral_dir.join("lock.json");
+    if !lock_path.exists() {
+        write_lockfile(
+            repo_root,
+            &Lockfile {
+                version: LOCKFILE_VERSION,
+                primitives: BTreeMap::new(),
+            },
+        )?;
+    }
+    Ok(lock_path)
+}
+
+pub fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
+    let lock_path = lockfile_path(repo_root);
+    if !lock_path.exists() {
+        return Err(CoralError::new(
+            ".coral/lock.json is missing; run 'coral init' first",
+        ));
+    }
+
+    let lockfile: Lockfile = serde_json::from_str(&std::fs::read_to_string(&lock_path)?)?;
+    if lockfile.version != LOCKFILE_VERSION {
+        return Err(CoralError::new(format!(
+            "unsupported lockfile version: {}",
+            lockfile.version
+        )));
+    }
+    Ok(lockfile)
+}
+
+pub fn write_lockfile(repo_root: &Path, lockfile: &Lockfile) -> Result<()> {
+    let lock_path = lockfile_path(repo_root);
+    if let Some(parent) = lock_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&lock_path, serde_json::to_string_pretty(lockfile)? + "\n")?;
+    Ok(())
+}
+
+pub fn hash_bytes(content: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content);
+    format!("{:x}", hasher.finalize())
+}
+
+pub fn drift_status(repo_root: &Path, emitted_file: &EmittedFile) -> &'static str {
+    let target_path = repo_root.join(&emitted_file.path);
+    if !target_path.exists() {
+        return "missing";
+    }
+
+    let Ok(content) = std::fs::read(&target_path) else {
+        return "missing";
+    };
+
+    if hash_bytes(&content) == emitted_file.hash {
+        "clean"
+    } else {
+        "modified"
+    }
+}
+
+pub fn diff_against_baseline(
+    repo_root: &Path,
+    primitive_id: &str,
+    target_id: &str,
+    entry: &PrimitiveLockEntry,
+) -> Result<String> {
+    let target_entry = entry.targets.get(target_id).ok_or_else(|| {
+        CoralError::new(format!(
+            "no target '{}' recorded for primitive '{}'",
+            target_id, primitive_id
+        ))
+    })?;
+
+    let baseline_dir = repo_root.join(&target_entry.baseline_dir);
+
+    let mut output = String::new();
+    for emitted in &target_entry.emitted_files {
+        let file_name = Path::new(&emitted.path)
+            .file_name()
+            .ok_or_else(|| {
+                CoralError::new(format!("invalid emitted file path: {}", emitted.path))
+            })?;
+        let baseline_path = baseline_dir.join(file_name);
+        let target_path = repo_root.join(&emitted.path);
+
+        if !baseline_path.exists() {
+            return Err(CoralError::new(format!(
+                "baseline file missing for '{}': {}",
+                primitive_id,
+                baseline_path.display()
+            )));
+        }
+        if !target_path.exists() {
+            return Err(CoralError::new(format!(
+                "installed file missing for '{}': {}",
+                primitive_id,
+                target_path.display()
+            )));
+        }
+
+        let baseline = std::fs::read_to_string(&baseline_path)?;
+        let target = std::fs::read_to_string(&target_path)?;
+        if baseline == target {
+            continue;
+        }
+
+        let diff = TextDiff::from_lines(&baseline, &target);
+        output.push_str(&format!(
+            "--- baseline/{target_id}/{primitive_id}/\n+++ {}\n",
+            emitted.path
+        ));
+        for group in diff.grouped_ops(3) {
+            for operation in group {
+                for change in diff.iter_changes(&operation) {
+                    let sign = match change.tag() {
+                        ChangeTag::Delete => "-",
+                        ChangeTag::Insert => "+",
+                        ChangeTag::Equal => " ",
+                    };
+                    output.push_str(sign);
+                    output.push_str(change.value());
+                }
+            }
+        }
+    }
+
+    Ok(output)
+}
+
+pub fn relative_or_absolute_fs(path: &Path, repo_root: &Path) -> String {
+    path.strip_prefix(repo_root)
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.to_string_lossy().to_string())
+}
+
+pub fn absolutize(repo_root: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        repo_root.join(path)
+    }
+}
