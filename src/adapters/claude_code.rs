@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::adapter::{PlannedFile, ResolvedPrimitive};
 use crate::error::{CoralError, Result};
+use crate::lockfile;
 
 pub const ID: &str = "claude-code";
 pub const DISPLAY_NAME: &str = "Claude Code";
@@ -25,7 +26,7 @@ pub fn plan(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<Plann
         .join("SKILL.md");
 
     Ok(vec![PlannedFile {
-        path: super::relative_path(&target_path, repo_root),
+        path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
         content,
     }])
 }
