@@ -225,3 +225,98 @@ pub fn absolutize(repo_root: &Path, path: &Path) -> PathBuf {
         repo_root.join(path)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn init_lockfile_at_creates_new_file() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("test-lock.json");
+        init_lockfile_at(&path).unwrap();
+        assert!(path.exists());
+
+        let lf = read_lockfile_at(&path).unwrap();
+        assert_eq!(lf.version, 2);
+        assert!(lf.capabilities.is_empty());
+    }
+
+    #[test]
+    fn read_lockfile_at_rejects_missing() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("nonexistent.json");
+        assert!(read_lockfile_at(&path).is_err());
+    }
+
+    #[test]
+    fn write_and_read_roundtrip() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("roundtrip.json");
+        let mut lf = Lockfile {
+            version: 2,
+            capabilities: BTreeMap::new(),
+        };
+        lf.capabilities.insert(
+            "test".into(),
+            CapabilityLockEntry {
+                capability_type: "skill".into(),
+                installed_version: "1.0".into(),
+                source_path: "".into(),
+                targets: BTreeMap::new(),
+                source: None,
+                scope: "project".into(),
+            },
+        );
+        write_lockfile_at(&path, &lf).unwrap();
+        let read = read_lockfile_at(&path).unwrap();
+        assert_eq!(read.capabilities.len(), 1);
+    }
+
+    #[test]
+    fn hash_bytes_produces_consistent_output() {
+        let h1 = hash_bytes(b"hello");
+        let h2 = hash_bytes(b"hello");
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64);
+        assert_ne!(h1, hash_bytes(b"world"));
+    }
+
+    #[test]
+    fn drift_status_reports_clean() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("test.md");
+        fs::write(&file, "content").unwrap();
+
+        let emitted = crate::adapter::EmittedFile {
+            path: file.file_name().unwrap().to_string_lossy().to_string(),
+            hash: hash_bytes(b"content"),
+        };
+        assert_eq!(drift_status(tmp.path(), &emitted), "clean");
+    }
+
+    #[test]
+    fn drift_status_reports_modified() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("test.md");
+        fs::write(&file, "different").unwrap();
+
+        let emitted = crate::adapter::EmittedFile {
+            path: file.file_name().unwrap().to_string_lossy().to_string(),
+            hash: hash_bytes(b"original"),
+        };
+        assert_eq!(drift_status(tmp.path(), &emitted), "modified");
+    }
+
+    #[test]
+    fn drift_status_reports_missing() {
+        let tmp = TempDir::new().unwrap();
+        let emitted = crate::adapter::EmittedFile {
+            path: "nonexistent.md".into(),
+            hash: "abc".into(),
+        };
+        assert_eq!(drift_status(tmp.path(), &emitted), "missing");
+    }
+}

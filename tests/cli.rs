@@ -1354,3 +1354,144 @@ fn hook_remove_cleans_directory() {
         .join("pre-commit")
         .exists());
 }
+
+#[test]
+fn outdated_reports_status() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "local-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("local-skill"))
+        .stdout(predicate::str::contains("up to date"));
+}
+
+#[test]
+fn target_add_already_registered_shows_message() {
+    let temp = TempDir::new().unwrap();
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["target", "add", "claude"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["target", "add", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already registered"));
+}
+
+#[test]
+fn remove_with_target_flag_only_removes_from_specified() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "target-test");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add", skill.to_str().unwrap(), "--target", "open-agents", "--target", "claude",
+        ])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["remove", "target-test", "-t", "open-agents"])
+        .assert()
+        .success();
+
+    // Claude files should still exist
+    assert!(temp.path().join(".claude").join("skills").join("target-test").join("SKILL.md").exists());
+    assert!(!temp.path().join(".agents").join("skills").join("target-test").join("SKILL.md").exists());
+}
+
+#[test]
+fn outdated_no_primitives_shows_message() {
+    let temp = TempDir::new().unwrap();
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no capabilities installed"));
+}
+
+#[test]
+fn diff_upstream_shows_no_changes_for_current_ref() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    let repo_url = format!("file://{}", repo.display());
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", &repo_url, "--target", "open-agents", "--skill", "test-skill"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "test-skill", "--upstream"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no upstream changes"));
+}
+
+#[test]
+fn diff_upstream_error_on_local_primitive() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "local-only");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "local-only", "--upstream"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("upstream diff only available for git-sourced"));
+}

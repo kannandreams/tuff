@@ -135,3 +135,39 @@ impl AdapterKind {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_id_returns_open_agents_for_codex_alias() {
+        assert_eq!(AdapterKind::from_id("codex"), Some(AdapterKind::OpenAgents));
+        assert_eq!(AdapterKind::from_id("open-agents"), Some(AdapterKind::OpenAgents));
+    }
+
+    #[test]
+    fn from_id_returns_claude_for_claude_code_alias() {
+        assert_eq!(AdapterKind::from_id("claude-code"), Some(AdapterKind::Claude));
+        assert_eq!(AdapterKind::from_id("claude"), Some(AdapterKind::Claude));
+    }
+
+    #[test]
+    fn from_id_returns_none_for_unknown() {
+        assert_eq!(AdapterKind::from_id("nonexistent"), None);
+    }
+
+    #[test]
+    fn all_returns_two_adapters() {
+        let all = AdapterKind::all();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn display_name_not_empty() {
+        for a in AdapterKind::all() {
+            assert!(!a.display_name().is_empty());
+            assert!(!a.id().is_empty());
+        }
+    }
+}

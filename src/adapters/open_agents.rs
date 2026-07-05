@@ -156,3 +156,27 @@ fn remove_dir(repo_root: &Path, base: &str, kind: &str, primitive_id: &str) -> R
 pub fn detect(repo_root: &Path) -> bool {
     repo_root.join(".agents").join("skills").exists()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supports_returns_true_for_known_types() {
+        assert!(supports("skill"));
+        assert!(supports("tool"));
+        assert!(supports("hook"));
+    }
+
+    #[test]
+    fn supports_returns_false_for_unknown() {
+        assert!(!supports("unknown"));
+        assert!(!supports("workflow"));
+    }
+
+    #[test]
+    fn id_and_display_name_are_not_empty() {
+        assert!(!ID.is_empty());
+        assert!(!DISPLAY_NAME.is_empty());
+    }
+}

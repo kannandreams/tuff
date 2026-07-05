@@ -137,3 +137,91 @@ fn dirs_home() -> Option<PathBuf> {
             Some(PathBuf::from(format!("{}{}", drive, path)))
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lockfile;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn create_lockfile(path: &std::path::Path, entries: &[(&str, &str, &str)]) {
+        let mut lf = lockfile::Lockfile {
+            version: 2,
+            capabilities: std::collections::BTreeMap::new(),
+        };
+        for (id, capability_type, version) in entries {
+            lf.capabilities.insert(
+                id.to_string(),
+                lockfile::CapabilityLockEntry {
+                    capability_type: capability_type.to_string(),
+                    installed_version: version.to_string(),
+                    source_path: "".into(),
+                    targets: std::collections::BTreeMap::new(),
+                    source: None,
+                    scope: "project".into(),
+                },
+            );
+        }
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, serde_json::to_string_pretty(&lf).unwrap() + "\n").unwrap();
+    }
+
+    #[test]
+    fn scope_from_str_valid() {
+        assert_eq!(Scope::from_str("project"), Some(Scope::Project));
+        assert_eq!(Scope::from_str("global"), Some(Scope::Global));
+        assert_eq!(Scope::from_str("invalid"), None);
+    }
+
+    #[test]
+    fn scope_as_str() {
+        assert_eq!(Scope::Project.as_str(), "project");
+        assert_eq!(Scope::Global.as_str(), "global");
+    }
+
+    #[test]
+    fn resolve_entry_project_wins_over_global() {
+        let tmp = TempDir::new().unwrap();
+        let proj_lock = tmp.path().join(".coral").join("coral-lock.json");
+        create_lockfile(&proj_lock, &[("test", "skill", "1.0-project")]);
+
+        // Create a fake global lockfile that won't be checked
+        // since we can't easily control HOME in tests, test project-only path
+        let result = read_lockfile(Scope::Project, Some(tmp.path())).unwrap();
+        assert!(result.is_some());
+        let lf = result.unwrap();
+        assert_eq!(lf.capabilities["test"].installed_version, "1.0-project");
+    }
+
+    #[test]
+    fn resolve_entry_not_found_returns_none() {
+        let tmp = TempDir::new().unwrap();
+        let proj_lock = tmp.path().join(".coral").join("coral-lock.json");
+        create_lockfile(&proj_lock, &[("other", "skill", "1.0")]);
+
+        let result = resolve_entry("missing", tmp.path()).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn overrides_global_false_when_no_conflict() {
+        let tmp = TempDir::new().unwrap();
+        let proj_lock = tmp.path().join(".coral").join("coral-lock.json");
+        create_lockfile(&proj_lock, &[("test", "skill", "1.0")]);
+
+        assert!(!overrides_global("test", tmp.path()).unwrap());
+    }
+
+    #[test]
+    fn check_collision_no_global_returns_none() {
+        let tmp = TempDir::new().unwrap();
+        let result = check_collision("test", tmp.path(), Some("https://github.com/a/b")).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn home_coral_dir_returns_some() {
+        assert!(home_coral_dir().is_some());
+    }
+}

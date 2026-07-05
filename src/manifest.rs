@@ -224,3 +224,137 @@ fn walk_skill_dir(base: &Path, prefix: &str, files: &mut Vec<String>) -> Result<
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn write_manifest(dir: &std::path::Path, content: &str) {
+        fs::write(dir.join("coral.toml"), content).unwrap();
+    }
+
+    #[test]
+    fn load_skill_manifest_succeeds() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("src")).unwrap();
+        fs::write(tmp.path().join("src").join("SKILL.md"), "# Skill").unwrap();
+        write_manifest(tmp.path(), r#"id = "test"
+version = "1.0.0"
+type = "skill"
+description = "A test skill"
+files = ["src/SKILL.md"]
+"#);
+        let m = load_manifest(tmp.path()).unwrap();
+        assert_eq!(m.id, "test");
+        assert_eq!(m.capability_type, "skill");
+    }
+
+    #[test]
+    fn load_tool_manifest_succeeds() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("run.sh"), "echo ok").unwrap();
+        write_manifest(tmp.path(), r#"id = "tool1"
+version = "1.0.0"
+type = "tool"
+description = "A test tool"
+files = ["run.sh"]
+
+[parameters]
+type = "object"
+required = ["x"]
+[parameters.properties.x]
+type = "string"
+description = "x"
+
+[implementation]
+language = "bash"
+entrypoint = "run.sh"
+"#);
+        let m = load_manifest(tmp.path()).unwrap();
+        assert_eq!(m.capability_type, "tool");
+        assert!(m.implementation.is_some());
+    }
+
+    #[test]
+    fn load_hook_manifest_succeeds() {
+        let tmp = TempDir::new().unwrap();
+        write_manifest(tmp.path(), r#"id = "hook1"
+version = "1.0.0"
+type = "hook"
+description = "A test hook"
+
+[hook]
+event = "before_finish"
+command = "cargo test"
+"#);
+        let m = load_manifest(tmp.path()).unwrap();
+        assert_eq!(m.capability_type, "hook");
+        assert!(m.hook.is_some());
+    }
+
+    #[test]
+    fn load_rejects_unsupported_type() {
+        let tmp = TempDir::new().unwrap();
+        write_manifest(tmp.path(), r#"id = "bad"
+version = "1.0.0"
+type = "unknown"
+description = "Bad"
+files = ["SKILL.md"]
+"#);
+        assert!(load_manifest(tmp.path()).is_err());
+    }
+
+    #[test]
+    fn load_rejects_missing_manifest() {
+        let tmp = TempDir::new().unwrap();
+        assert!(load_manifest(tmp.path()).is_err());
+    }
+
+    #[test]
+    fn source_files_resolves_paths() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("src")).unwrap();
+        fs::write(tmp.path().join("src").join("SKILL.md"), "skill").unwrap();
+        let m = CapabilityManifest {
+            id: "t".into(),
+            version: "1.0".into(),
+            capability_type: "skill".into(),
+            description: "desc".into(),
+            files: vec!["src/SKILL.md".into()],
+            parameters: None,
+            implementation: None,
+            hook: None,
+            targets: vec![],
+            root: tmp.path().to_path_buf(),
+        };
+        let files = m.source_files().unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("SKILL.md"));
+    }
+
+    #[test]
+    fn source_files_rejects_missing_file() {
+        let tmp = TempDir::new().unwrap();
+        let m = CapabilityManifest {
+            id: "t".into(),
+            version: "1.0".into(),
+            capability_type: "skill".into(),
+            description: "desc".into(),
+            files: vec!["src/MISSING.md".into()],
+            parameters: None,
+            implementation: None,
+            hook: None,
+            targets: vec![],
+            root: tmp.path().to_path_buf(),
+        };
+        assert!(m.source_files().is_err());
+    }
+
+    #[test]
+    fn validate_non_empty_rejects_empty() {
+        assert!(validate_non_empty("id", "").is_err());
+        assert!(validate_non_empty("id", "ok").is_ok());
+    }
+}
