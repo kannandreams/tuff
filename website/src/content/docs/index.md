@@ -10,7 +10,7 @@ description: Capability lifecycle management for coding agents.
     <span class="coral-dot coral-dot-green"></span>
   </div>
   <div class="coral-banner-frame">
-    <img src="/img/coral-readme-banner.png" alt="Coral banner" class="coral-banner-image" />
+    <img src="/img/coral-readme-banner.png?v=3" alt="Coral banner" class="coral-banner-image" />
   </div>
 </div>
 
