@@ -2,6 +2,7 @@ mod adapter;
 mod adapters;
 mod commands;
 mod config;
+mod diff;
 mod display;
 mod error;
 mod git;
@@ -80,6 +81,10 @@ enum Command {
         /// Target to diff (if not specified, diffs all targets).
         #[arg(short = 't', long = "target")]
         target: Option<String>,
+
+        /// Diff against latest upstream source instead of baseline.
+        #[arg(short = 'u', long = "upstream")]
+        upstream: bool,
     },
 
     /// Remove an installed primitive.
@@ -104,6 +109,14 @@ enum Command {
         /// Scope to update.
         #[arg(short = 's', long = "scope")]
         scope: Option<String>,
+
+        /// Dry run — show what would change without applying.
+        #[arg(long = "check")]
+        check: bool,
+
+        /// Force overwrite local changes with upstream.
+        #[arg(short = 'f', long = "force")]
+        force: bool,
     },
 
     /// Manage harness targets.
@@ -164,11 +177,17 @@ fn run() -> Result<()> {
         Some(Command::Diff {
             capability_id,
             target,
-        }) => cmd_diff(&repo_root, &capability_id, target.as_deref()),
+            upstream,
+        }) => cmd_diff(&repo_root, &capability_id, target.as_deref(), upstream),
         Some(Command::Remove { id, scope, target }) => {
             cmd_remove(&repo_root, &id, &scope, target.as_deref())
         }
-        Some(Command::Update { id, scope }) => cmd_update(&repo_root, &id, scope.as_deref()),
+        Some(Command::Update {
+            id,
+            scope,
+            check,
+            force,
+        }) => cmd_update(&repo_root, &id, scope.as_deref(), check, force),
         Some(Command::Target { action }) => match action {
             TargetCommand::List => cmd_target_list(&repo_root),
             TargetCommand::Add { id } => cmd_target_add(&repo_root, &id),

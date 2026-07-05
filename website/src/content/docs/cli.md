@@ -117,16 +117,17 @@ scan-tool          project  clean
 
 ## `coral diff`
 
-Show unified diff between baseline and installed files:
+Show unified diff between baseline and installed files, or compare against latest upstream:
 
 ```sh
+# Local changes against baseline
 coral diff <id>
 
-# Scope-aware — finds primitives in project or global scope
-coral diff python-uv-default
+# Upstream changes since last install (git-sourced only)
+coral diff <id> --upstream
 
 # Diff a specific target
-coral diff python-uv-default -t claude
+coral diff <id> -t claude
 ```
 
 ## `coral remove`
@@ -148,16 +149,23 @@ For tools, this also cleans the MCP configuration entry.
 
 ## `coral update`
 
-Update a git-sourced primitive to its latest version:
+Update a git-sourced primitive to its latest version. Performs a three-way merge
+between baseline, local, and upstream. See the [lifecycle docs](/concepts/lifecycle)
+for the merge behavior table.
 
 ```sh
+# Attempt three-way merge (default)
 coral update <id>
+
+# Dry run — show what would happen without applying
+coral update <id> --check
+
+# Force overwrite local changes with upstream
+coral update <id> --force
 
 # Explicit scope
 coral update <id> --scope global
 ```
-
-Re-fetches the git repository, compares the commit SHA, and re-emits if there's a new version.
 
 ## `coral target`
 

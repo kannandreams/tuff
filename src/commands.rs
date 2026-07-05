@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use tabled::{
@@ -464,7 +464,12 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
 
 // ── Diff ────────────────────────────────────────────────────────────────────
 
-pub fn cmd_diff(repo_root: &Path, capability_id: &str, target: Option<&str>) -> Result<()> {
+pub fn cmd_diff(
+    repo_root: &Path,
+    capability_id: &str,
+    target: Option<&str>,
+    upstream: bool,
+) -> Result<()> {
     let (scope, entry, scope_root) = match resolver::resolve_entry(capability_id, repo_root)? {
         Some((s, e)) => {
             let root = match s {
@@ -481,6 +486,10 @@ pub fn cmd_diff(repo_root: &Path, capability_id: &str, target: Option<&str>) -> 
     };
 
     let _ = scope;
+
+    if upstream {
+        return cmd_diff_upstream(scope_root, capability_id, &entry, target);
+    }
 
     let mut output = String::new();
 
@@ -507,6 +516,76 @@ pub fn cmd_diff(repo_root: &Path, capability_id: &str, target: Option<&str>) -> 
     }
 
     print!("{output}");
+    Ok(())
+}
+
+fn cmd_diff_upstream(
+    scope_root: PathBuf,
+    _capability_id: &str,
+    entry: &lockfile::PrimitiveLockEntry,
+    target: Option<&str>,
+) -> Result<()> {
+    let source = entry.source.as_ref().ok_or_else(|| {
+        CoralError::new("upstream diff only available for git-sourced primitives")
+    })?;
+
+    let (cache_dir, _) = git::clone_or_fetch(&source.url)?;
+    let mut output = String::new();
+
+    for (tid, target_entry) in &entry.targets {
+        if let Some(t) = target {
+            if tid != t {
+                continue;
+            }
+        }
+
+        let baseline_dir = scope_root.join(&target_entry.baseline_dir);
+        for emitted in &target_entry.emitted_files {
+            let file_name = std::path::Path::new(&emitted.path)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+
+            let upstream_content = crate::diff::get_upstream_content(
+                &cache_dir,
+                &source.skill,
+                &file_name,
+            )?;
+            let baseline_path = baseline_dir.join(file_name.as_ref());
+            let baseline_content = std::fs::read_to_string(&baseline_path)?;
+
+            if baseline_content == upstream_content {
+                continue;
+            }
+
+            output.push_str(&format!(
+                "--- baseline/{}\n+++ upstream/{}/{}\n",
+                file_name, tid, file_name
+            ));
+            let diff =
+                similar::TextDiff::from_lines(&baseline_content, &upstream_content);
+            for group in diff.grouped_ops(3) {
+                for operation in group {
+                    for change in diff.iter_changes(&operation) {
+                        let sign = match change.tag() {
+                            similar::ChangeTag::Delete => "-",
+                            similar::ChangeTag::Insert => "+",
+                            similar::ChangeTag::Equal => " ",
+                        };
+                        output.push_str(sign);
+                        output.push_str(change.value());
+                    }
+                }
+            }
+        }
+    }
+
+    if output.is_empty() {
+        println!("no upstream changes");
+    } else {
+        print!("{output}");
+    }
+
     Ok(())
 }
 
@@ -571,7 +650,13 @@ pub fn cmd_remove(
 
 // ── Update ──────────────────────────────────────────────────────────────────
 
-pub fn cmd_update(repo_root: &Path, id: &str, scope_str: Option<&str>) -> Result<()> {
+pub fn cmd_update(
+    repo_root: &Path,
+    id: &str,
+    scope_str: Option<&str>,
+    check: bool,
+    force: bool,
+) -> Result<()> {
     let (scope, entry, scope_root) = if let Some(s) = scope_str {
         let scope = resolver::Scope::from_str(s)
             .ok_or_else(|| CoralError::new(format!("invalid scope '{}'", s)))?;
@@ -598,19 +683,15 @@ pub fn cmd_update(repo_root: &Path, id: &str, scope_str: Option<&str>) -> Result
                 (s, e, root)
             }
             None => {
-                return Err(CoralError::new(format!(
-                    "'{}' is not installed",
-                    id
-                )));
+                return Err(CoralError::new(format!("'{}' is not installed", id)));
             }
         }
     };
 
     let source = entry.source.as_ref().ok_or_else(|| {
-        CoralError::new(format!(
-            "'{}' is not a git-sourced primitive — update only works for git sources",
-            id
-        ))
+        CoralError::new(
+            format!("'{}' is not a git-sourced primitive — update only works for git sources", id),
+        )
     })?;
 
     let (cache_dir, _clean_url) = git::clone_or_fetch(&source.url)?;
@@ -622,9 +703,100 @@ pub fn cmd_update(repo_root: &Path, id: &str, scope_str: Option<&str>) -> Result
     }
 
     let skill_dir = git::discover_skill(&cache_dir, &source.skill)?;
+
+    if force {
+        let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
+        let primitive = resolve_primitive(&manifest)?;
+        let target_ids: Vec<String> = entry.targets.keys().cloned().collect();
+        return install_primitive(
+            &scope_root,
+            scope,
+            &primitive,
+            &manifest,
+            &target_ids,
+            Some(&SourceMetaInput {
+                source_type: "git".to_string(),
+                url: source.url.clone(),
+                source_ref: latest_sha.clone(),
+                skill: source.skill.clone(),
+            }),
+        );
+    }
+
+    let mut all_clean = true;
+    let mut had_conflicts = false;
+    let mut would_overwrite = false;
+
+    for (_tid, target_entry) in &entry.targets {
+        let baseline_dir = scope_root.join(&target_entry.baseline_dir);
+        for emitted in &target_entry.emitted_files {
+            let file_name = std::path::Path::new(&emitted.path)
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+
+            let local_path = scope_root.join(&emitted.path);
+            let baseline_path = baseline_dir.join(&*file_name);
+            let upstream_path = skill_dir.join(&*file_name);
+
+            let local_content = std::fs::read_to_string(&local_path).unwrap_or_default();
+            let baseline_content = std::fs::read_to_string(&baseline_path).unwrap_or_default();
+            let upstream_content = std::fs::read_to_string(&upstream_path).unwrap_or_default();
+
+            if local_content == upstream_content {
+                continue;
+            }
+
+            let local_status = lockfile::drift_status(&scope_root, emitted);
+            if local_status != "clean" || local_content != baseline_content {
+                all_clean = false;
+                would_overwrite = true;
+            }
+
+            if !check {
+                let report = crate::diff::merge_and_write(
+                    &baseline_path,
+                    &local_path,
+                    &upstream_path,
+                )?;
+
+                if let Some(reports) = report {
+                    had_conflicts = true;
+                    for r in reports {
+                        for c in &r.conflicts {
+                            eprintln!("  ✗ {}: {}", r.file_path, c.description);
+                            eprintln!("    <<<<<< local\n{}\n    ======", c.local.trim());
+                            eprintln!("    {}\n    >>>>>> upstream", c.upstream.trim());
+                        }
+                    }
+                    eprintln!(
+                        "\n  To write conflict markers: coral update {} --write-conflicts",
+                        id
+                    );
+                }
+            }
+        }
+    }
+
+    if check {
+        if all_clean {
+            println!("'{}' can be updated cleanly (no local changes)", id);
+        } else if would_overwrite {
+            println!("'{}' has local changes — update would attempt three-way merge", id);
+        } else {
+            println!("'{}' is up to date", id);
+        }
+        return Ok(());
+    }
+
+    if had_conflicts {
+        return Err(CoralError::new(
+            "conflicts found — local files have not been modified. Resolve conflicts manually or use --force to overwrite.",
+        ));
+    }
+
     let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
     let primitive = resolve_primitive(&manifest)?;
-
     let target_ids: Vec<String> = entry.targets.keys().cloned().collect();
 
     install_primitive(
