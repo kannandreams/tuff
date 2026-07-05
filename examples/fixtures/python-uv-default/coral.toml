@@ -1,6 +1,5 @@
 id = "python-uv-default"
 version = "0.1.0"
 kind = "skill"
-target = "codex"
 description = "Use uv for Python dependency and environment management."
 files = ["src/SKILL.md"]

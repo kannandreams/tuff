@@ -1,0 +1,41 @@
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::Result;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CoralConfig {
+    pub targets: Vec<String>,
+}
+
+impl Default for CoralConfig {
+    fn default() -> Self {
+        Self { targets: vec![] }
+    }
+}
+
+fn config_path(repo_root: &Path) -> std::path::PathBuf {
+    repo_root.join(".coral").join("config.json")
+}
+
+pub fn read_config(repo_root: &Path) -> Result<CoralConfig> {
+    let path = config_path(repo_root);
+    if path.exists() {
+        let config: CoralConfig = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
+        Ok(config)
+    } else {
+        let default = CoralConfig::default();
+        write_config(repo_root, &default)?;
+        Ok(default)
+    }
+}
+
+pub fn write_config(repo_root: &Path, config: &CoralConfig) -> Result<()> {
+    let path = config_path(repo_root);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(config)? + "\n")?;
+    Ok(())
+}
