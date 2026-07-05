@@ -41,6 +41,7 @@ pub fn cmd_add(
     capability: &Path,
     target_ids: &[String],
     skill_name: Option<&str>,
+    tool_name: Option<&str>,
     global: bool,
 ) -> Result<()> {
     let (scope, install_root) = if global {
@@ -53,7 +54,15 @@ pub fn cmd_add(
     };
 
     if git::is_git_url(&capability.to_string_lossy()) {
-        return cmd_add_git(&install_root, scope, &capability.to_string_lossy(), target_ids, skill_name, repo_root);
+        return cmd_add_git(
+            &install_root,
+            scope,
+            &capability.to_string_lossy(),
+            target_ids,
+            skill_name,
+            tool_name,
+            repo_root,
+        );
     }
     cmd_add_local(&install_root, scope, capability, target_ids, repo_root)
 }
@@ -64,21 +73,22 @@ fn cmd_add_git(
     url: &str,
     target_ids: &[String],
     skill_name: Option<&str>,
+    tool_name: Option<&str>,
     project_root: &Path,
 ) -> Result<()> {
-    let skill_name = skill_name.ok_or_else(|| {
-        CoralError::new("--skill is required when installing from a git URL")
+    let name = skill_name.or(tool_name).ok_or_else(|| {
+        CoralError::new("--skill or --tool is required when installing from a git URL")
     })?;
 
     let (cache_dir, clean_url) = git::clone_or_fetch(url)?;
     let commit_sha = git::resolve_ref(&cache_dir)?;
-    let skill_dir = git::discover_skill(&cache_dir, skill_name)?;
+    let skill_dir = git::discover_skill(&cache_dir, name)?;
 
-    let manifest = manifest::synthetic_manifest(&skill_dir, skill_name, &commit_sha)?;
+    let manifest = manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?;
     let primitive = resolve_primitive(&manifest)?;
 
     if scope == Scope::Project {
-        if let Some(warning) = resolver::check_collision(skill_name, project_root, Some(&clean_url))? {
+        if let Some(warning) = resolver::check_collision(name, project_root, Some(&clean_url))? {
             eprintln!("{warning}");
         }
     }
@@ -87,7 +97,7 @@ fn cmd_add_git(
         source_type: "git".to_string(),
         url: clean_url,
         source_ref: commit_sha.clone(),
-        skill: skill_name.to_string(),
+        skill: name.to_string(),
     }))
 }
 
@@ -222,6 +232,41 @@ fn install_primitive(
         );
     }
 
+    // MCP registration for tool primitives
+    if primitive.primitive == "tool" {
+        if let Some(ref impl_cfg) = primitive.implementation {
+            for adapter in &adapters {
+                let mcp_path = match adapter {
+                    AdapterKind::OpenAgents => {
+                        install_root.join(".agents").join("mcp.json")
+                    }
+                    AdapterKind::Claude => {
+                        install_root.join(".mcp.json")
+                    }
+                };
+
+                let mcp_command = impl_cfg.language.clone();
+                let entrypoint_path = match adapter {
+                    AdapterKind::OpenAgents => {
+                        format!(".agents/tools/{}/{}", primitive.id, impl_cfg.entrypoint)
+                    }
+                    AdapterKind::Claude => {
+                        format!(".claude/tools/{}/{}", primitive.id, impl_cfg.entrypoint)
+                    }
+                };
+                let mcp_args = vec![entrypoint_path];
+
+                crate::adapters::mcp_register_tool(
+                    install_root,
+                    &mcp_path,
+                    &primitive.id,
+                    &mcp_command,
+                    &mcp_args,
+                )?;
+            }
+        }
+    }
+
     let mut lockfile = lockfile;
     let existing_targets = lockfile
         .primitives
@@ -263,7 +308,7 @@ fn install_primitive(
 
 // ── List ────────────────────────────────────────────────────────────────────
 
-pub fn cmd_list(repo_root: &Path, scope_filter: &str) -> Result<()> {
+pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>) -> Result<()> {
     let show_project = scope_filter == "all" || scope_filter == "project";
     let show_global = scope_filter == "all" || scope_filter == "global";
 
@@ -272,6 +317,11 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str) -> Result<()> {
     if show_project {
         if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
             for (id, entry) in &lockfile.primitives {
+                if let Some(kind) = kind_filter {
+                    if entry.primitive != kind {
+                        continue;
+                    }
+                }
                 for (target_id, target_entry) in &entry.targets {
                     for emitted in &target_entry.emitted_files {
                         let status = lockfile::drift_status(repo_root, emitted);
@@ -294,6 +344,11 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str) -> Result<()> {
             let lock_path = home.join(".coral").join("coral-lock.json");
             if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
                 for (id, entry) in &lockfile.primitives {
+                    if let Some(kind) = kind_filter {
+                        if entry.primitive != kind {
+                            continue;
+                        }
+                    }
                     for (target_id, target_entry) in &entry.targets {
                         for emitted in &target_entry.emitted_files {
                             let status = lockfile::drift_status(&home, emitted);

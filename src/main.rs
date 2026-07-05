@@ -8,6 +8,7 @@ mod git;
 mod lockfile;
 mod manifest;
 mod resolver;
+mod tool;
 
 use std::path::PathBuf;
 
@@ -48,6 +49,10 @@ enum Command {
         #[arg(short = 's', long = "skill")]
         skill: Option<String>,
 
+        /// Tool name when installing from a git repository.
+        #[arg(long = "tool")]
+        tool: Option<String>,
+
         /// Install to global scope (~/.coral/).
         #[arg(short = 'g', long = "global")]
         global: bool,
@@ -58,6 +63,10 @@ enum Command {
         /// Filter by scope: project, global, or all.
         #[arg(short = 's', long = "scope", default_value = "all")]
         scope: String,
+
+        /// Filter by primitive kind: skill, tool.
+        #[arg(short = 'p', long = "primitive")]
+        kind: Option<String>,
     },
 
     /// Show detailed status for installed primitives.
@@ -140,9 +149,17 @@ fn run() -> Result<()> {
             capability,
             target,
             skill,
+            tool,
             global,
-        }) => cmd_add(&repo_root, &capability, &target, skill.as_deref(), global),
-        Some(Command::List { scope }) => cmd_list(&repo_root, &scope),
+        }) => cmd_add(
+            &repo_root,
+            &capability,
+            &target,
+            skill.as_deref(),
+            tool.as_deref(),
+            global,
+        ),
+        Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),
         Some(Command::Status) => cmd_status(&repo_root),
         Some(Command::Diff {
             capability_id,

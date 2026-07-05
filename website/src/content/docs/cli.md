@@ -3,82 +3,195 @@ title: CLI Reference
 description: Command reference for the Coral CLI.
 ---
 
-Run commands from the repository root.
+Run commands from the repository root unless `--global` is specified.
 
 ## `coral`
 
-Show the ASCII banner and starter menu:
+Show the ASCII banner and quick-start menu:
 
 ```sh
 coral
 ```
 
-This is the friendly entry point for engineers trying the CLI for the first
-time. It does not mutate the repo.
-
 ## `coral init`
 
-Initialize Coral state:
+Initialize Coral state in the current directory:
 
 ```sh
 coral init
 ```
 
-Creates `.coral/lock.json` if it does not already exist.
-
-Initial contents:
-
-```json
-{
-  "version": 1,
-  "primitives": {}
-}
-```
-
-`coral init` does not install capabilities, create skills, or apply defaults.
-It only prepares the repository for lifecycle tracking. Commands that install
-or inspect capabilities use this lockfile as their source of Coral state.
-
-## `coral add <path>`
-
-Install a local capability:
+Initialize global scope (for primitives shared across all projects):
 
 ```sh
-coral add examples/fixtures/python-uv-default
+coral init --global
 ```
 
-This example uses a demo fixture from the Coral repo. Production capabilities
-should normally come from a user project directory or an external pack repo.
+Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global).
 
-For the current Codex target, this installs:
+## `coral add`
 
-```text
-.agents/skills/<id>/SKILL.md
+Install a capability from a local directory:
+
+```sh
+# Skill
+coral add ./my-skill -t open-agents
+
+# Tool
+coral add ./my-tool -t claude
+
+# Multiple targets
+coral add ./my-skill -t claude -t open-agents
+
+# Global scope
+coral add ./my-skill -t open-agents --global
 ```
 
-Coral refuses to overwrite an existing untracked skill at the same path.
+Install a skill from a git repository:
+
+```sh
+coral add https://github.com/owner/repo --skill <name> -t open-agents
+```
+
+Install a tool from a git repository:
+
+```sh
+coral add https://github.com/owner/repo --tool <name> -t claude
+```
+
+### Flags
+
+| Flag | Description |
+|---|---|
+| `-t, --target <id>` | Target harness (required, repeatable) |
+| `-s, --skill <name>` | Skill name for git URLs |
+| `--tool <name>` | Tool name for git URLs |
+| `-g, --global` | Install to global scope (`~/.coral/`) |
 
 ## `coral list`
 
-List installed capabilities:
+Show installed primitives with scope, drift status, and path:
 
 ```sh
 coral list
 ```
 
-Statuses:
-
-- `clean`: installed content matches the recorded installed hash
-- `modified`: installed content has changed locally
-- `missing`: installed target file no longer exists
-
-## `coral diff <id>`
-
-Show a unified diff between the recorded baseline and the installed artifact:
+### Filters
 
 ```sh
-coral diff python-uv-default
+# By scope
+coral list --scope project
+coral list --scope global
+
+# By primitive kind
+coral list --primitive skill
+coral list --primitive tool
+
+# Combine filters
+coral list --scope global --primitive tool
 ```
 
-If there are no local changes, the command exits successfully with no diff
-output.
+### Status values
+
+| Status | Meaning |
+|---|---|
+| `clean` | Installed content matches recorded hash |
+| `modified` | Installed content has local changes |
+| `missing` | Installed file no longer exists |
+
+## `coral status`
+
+Show per-primitive detail including scope, drift, and override warnings:
+
+```sh
+coral status
+```
+
+Example output:
+
+```
+python-uv-default  project  clean  [overrides global — won't receive global updates]
+commit-hygiene     global   clean
+scan-tool          project  clean
+```
+
+## `coral diff`
+
+Show unified diff between baseline and installed files:
+
+```sh
+coral diff <id>
+
+# Scope-aware — finds primitives in project or global scope
+coral diff python-uv-default
+
+# Diff a specific target
+coral diff python-uv-default -t claude
+```
+
+## `coral remove`
+
+Remove a primitive and clean up emitted files:
+
+```sh
+# Remove from project scope (default)
+coral remove <id>
+
+# Remove from global scope
+coral remove <id> --scope global
+
+# Remove from specific targets only
+coral remove <id> -t claude
+```
+
+For tools, this also cleans the MCP configuration entry.
+
+## `coral update`
+
+Update a git-sourced primitive to its latest version:
+
+```sh
+coral update <id>
+
+# Explicit scope
+coral update <id> --scope global
+```
+
+Re-fetches the git repository, compares the commit SHA, and re-emits if there's a new version.
+
+## `coral target`
+
+### List available and registered targets
+
+```sh
+coral target list
+```
+
+### Register a target
+
+```sh
+coral target add open-agents
+coral target add claude
+```
+
+Legacy aliases (`codex`, `claude-code`) are accepted and map to the current target names.
+
+### Remove a target
+
+```sh
+coral target remove open-agents
+```
+
+Removes all emitted files and MCP registrations for that target across all primitives.
+
+## Scope
+
+Coral supports two scopes:
+
+| Scope | Location | Use |
+|---|---|---|
+| `project` | `.coral/` in repo root | Shared with team via version control |
+| `global` | `~/.coral/` in home directory | Available across all projects |
+
+Resolution order: **project always wins**. If the same primitive exists at both scopes,
+the project copy shadows the global one. `coral status` flags shadowed primitives.

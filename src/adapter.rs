@@ -26,6 +26,8 @@ pub struct ResolvedPrimitive {
     pub description: String,
     pub source_files: Vec<(String, Vec<u8>)>,
     pub source_dir: PathBuf,
+    pub parameters: Option<serde_json::Value>,
+    pub implementation: Option<crate::manifest::ImplementationConfig>,
 }
 
 pub fn resolve_primitive(manifest: &PrimitiveManifest) -> Result<ResolvedPrimitive> {
@@ -37,6 +39,8 @@ pub fn resolve_primitive(manifest: &PrimitiveManifest) -> Result<ResolvedPrimiti
         description: manifest.description.clone(),
         source_files,
         source_dir: manifest.root.clone(),
+        parameters: manifest.parameters.clone(),
+        implementation: manifest.implementation.clone(),
     })
 }
 

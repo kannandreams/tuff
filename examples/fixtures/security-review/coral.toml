@@ -1,0 +1,23 @@
+id = "security-review"
+version = "1.0.0"
+primitive = "tool"
+description = "Scan a directory for common security vulnerabilities."
+files = ["index.js"]
+
+[parameters]
+type = "object"
+required = ["target_dir"]
+
+[parameters.properties.target_dir]
+type = "string"
+description = "Directory to scan"
+
+[parameters.properties.severity]
+type = "string"
+description = "Minimum severity to report (low, medium, high, critical)"
+enum = ["low", "medium", "high", "critical"]
+
+[implementation]
+language = "node"
+entrypoint = "index.js"
+runtime_deps = ["chalk"]
