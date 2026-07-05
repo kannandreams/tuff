@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Orbitron:wght@600&family=Alien+Block&display=swap");
 
 :root {
   --sl-font: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -83,8 +83,11 @@ body > .page > header a.site-title {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  font-weight: 600;
+  font-family: 'Alien Block', sans-serif;
+  font-weight: 400;
   text-transform: lowercase;
+  font-size: 1.4rem;
+  letter-spacing: 1px;
 }
 
 body > .page > header a.site-title img {
@@ -193,7 +196,39 @@ dialog[aria-label='Search'] {
 }
 
 :root[data-theme='light'] .sl-markdown-content pre {
-  background: #e2e8f0;
+  background: #0b1120;
+}
+
+.expressive-code .frame {
+  --ec-frame-background: transparent;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.expressive-code .frame .header,
+.expressive-code .frame .header::before,
+.expressive-code .frame .header::after {
+  display: none;
+}
+
+.expressive-code .frame pre {
+  border-radius: 8px;
+  border: 1px solid var(--sl-color-hairline);
+}
+
+.pagination-links a,
+.pagination-links span {
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+:root[data-theme='light'] .pagination-links a,
+:root[data-theme='light'] .pagination-links span {
+  color: #111111;
 }
 
 .sl-markdown-content code {

@@ -14,35 +14,57 @@ use crate::{
     error::{CoralError, Result},
     lockfile::{self, TargetLockEntry},
     manifest::{self, load_manifest},
+    resolver::{self, Scope},
 };
 
-pub fn cmd_init(repo_root: &Path) -> Result<()> {
-    let lock_path = lockfile::init_lockfile(repo_root)?;
-    let _ = config::read_config(repo_root)?;
-    println!(
-        "initialized {}",
-        lockfile::relative_or_absolute_fs(&lock_path, repo_root)
-    );
+pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
+    if global {
+        let home = home_dir()?;
+        let lock_path = home.join(".coral").join("coral-lock.json");
+        lockfile::init_lockfile_at(&lock_path)?;
+        println!("initialized ~/.coral/coral-lock.json");
+    } else {
+        let lock_path = lockfile::init_lockfile(repo_root)?;
+        let _ = config::read_config(repo_root)?;
+        println!(
+            "initialized {}",
+            lockfile::relative_or_absolute_fs(&lock_path, repo_root)
+        );
+    }
     Ok(())
 }
+
+// ── Add ─────────────────────────────────────────────────────────────────────
 
 pub fn cmd_add(
     repo_root: &Path,
     capability: &Path,
     target_ids: &[String],
     skill_name: Option<&str>,
+    global: bool,
 ) -> Result<()> {
+    let (scope, install_root) = if global {
+        let home = home_dir()?;
+        let lock_path = home.join(".coral").join("coral-lock.json");
+        lockfile::init_lockfile_at(&lock_path)?;
+        (Scope::Global, home)
+    } else {
+        (Scope::Project, repo_root.to_path_buf())
+    };
+
     if git::is_git_url(&capability.to_string_lossy()) {
-        return cmd_add_git(repo_root, &capability.to_string_lossy(), target_ids, skill_name);
+        return cmd_add_git(&install_root, scope, &capability.to_string_lossy(), target_ids, skill_name, repo_root);
     }
-    cmd_add_local(repo_root, capability, target_ids)
+    cmd_add_local(&install_root, scope, capability, target_ids, repo_root)
 }
 
 fn cmd_add_git(
-    repo_root: &Path,
+    install_root: &Path,
+    scope: Scope,
     url: &str,
     target_ids: &[String],
     skill_name: Option<&str>,
+    project_root: &Path,
 ) -> Result<()> {
     let skill_name = skill_name.ok_or_else(|| {
         CoralError::new("--skill is required when installing from a git URL")
@@ -55,7 +77,13 @@ fn cmd_add_git(
     let manifest = manifest::synthetic_manifest(&skill_dir, skill_name, &commit_sha)?;
     let primitive = resolve_primitive(&manifest)?;
 
-    install_primitive(repo_root, &primitive, &manifest, target_ids, Some(&SourceMetaInput {
+    if scope == Scope::Project {
+        if let Some(warning) = resolver::check_collision(skill_name, project_root, Some(&clean_url))? {
+            eprintln!("{warning}");
+        }
+    }
+
+    install_primitive(install_root, scope, &primitive, &manifest, target_ids, Some(&SourceMetaInput {
         source_type: "git".to_string(),
         url: clean_url,
         source_ref: commit_sha.clone(),
@@ -64,15 +92,23 @@ fn cmd_add_git(
 }
 
 fn cmd_add_local(
-    repo_root: &Path,
+    install_root: &Path,
+    scope: Scope,
     capability: &Path,
     target_ids: &[String],
+    project_root: &Path,
 ) -> Result<()> {
-    let capability_dir = lockfile::absolutize(repo_root, capability);
+    let capability_dir = lockfile::absolutize(install_root, capability);
     let manifest = load_manifest(&capability_dir)?;
     let primitive = resolve_primitive(&manifest)?;
 
-    install_primitive(repo_root, &primitive, &manifest, target_ids, None)
+    if scope == Scope::Project {
+        if let Some(warning) = resolver::check_collision(&manifest.id, project_root, None)? {
+            eprintln!("{warning}");
+        }
+    }
+
+    install_primitive(install_root, scope, &primitive, &manifest, target_ids, None)
 }
 
 struct SourceMetaInput {
@@ -83,7 +119,8 @@ struct SourceMetaInput {
 }
 
 fn install_primitive(
-    repo_root: &Path,
+    install_root: &Path,
+    scope: Scope,
     primitive: &adapter::ResolvedPrimitive,
     manifest: &manifest::PrimitiveManifest,
     target_ids: &[String],
@@ -111,11 +148,11 @@ fn install_primitive(
 
     let mut plans: Vec<(AdapterKind, Vec<adapter::PlannedFile>)> = Vec::new();
     for adapter in &adapters {
-        let planned = adapter.plan(&primitive, repo_root)?;
+        let planned = adapter.plan(&primitive, install_root)?;
         plans.push((*adapter, planned));
     }
 
-    let lockfile = lockfile::require_lockfile(repo_root)?;
+    let lockfile = lockfile::require_lockfile(install_root)?;
     for (adapter, planned_files) in &plans {
         let is_tracked = lockfile
             .primitives
@@ -124,11 +161,11 @@ fn install_primitive(
             .is_some();
         if !is_tracked {
             for f in planned_files {
-                let target_path = repo_root.join(&f.path);
+                let target_path = install_root.join(&f.path);
                 if target_path.exists() {
                     return Err(CoralError::new(format!(
                         "refusing to overwrite untracked file at {}; remove it or track it in Coral first",
-                        lockfile::relative_or_absolute_fs(&target_path, repo_root)
+                        lockfile::relative_or_absolute_fs(&target_path, install_root)
                     )));
                 }
             }
@@ -141,7 +178,7 @@ fn install_primitive(
         let mut emitted = Vec::new();
 
         for planned in planned_files {
-            let target_path = repo_root.join(&planned.path);
+            let target_path = install_root.join(&planned.path);
             if let Some(parent) = target_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
@@ -157,11 +194,11 @@ fn install_primitive(
                 "installed {} ({}) -> {}",
                 primitive.id,
                 adapter.id(),
-                lockfile::relative_or_absolute_fs(&target_path, repo_root)
+                lockfile::relative_or_absolute_fs(&target_path, install_root)
             );
         }
 
-        let baseline_dir = repo_root
+        let baseline_dir = install_root
             .join(".coral")
             .join("baselines")
             .join(adapter.id())
@@ -175,7 +212,7 @@ fn install_primitive(
             std::fs::write(baseline_dir.join(file_name), &planned.content)?;
         }
 
-        let baseline_rel = lockfile::relative_or_absolute_fs(&baseline_dir, repo_root);
+        let baseline_rel = lockfile::relative_or_absolute_fs(&baseline_dir, install_root);
         new_targets.insert(
             adapter.id().to_string(),
             TargetLockEntry {
@@ -200,7 +237,7 @@ fn install_primitive(
     let source_path = if is_git {
         String::new()
     } else {
-        lockfile::relative_or_absolute_fs(&manifest.root, repo_root)
+        lockfile::relative_or_absolute_fs(&manifest.root, install_root)
     };
 
     lockfile.primitives.insert(
@@ -216,54 +253,193 @@ fn install_primitive(
                 source_ref: m.source_ref.clone(),
                 skill: m.skill.clone(),
             }),
+            scope: scope.as_str().to_string(),
         },
     );
 
-    lockfile::write_lockfile(repo_root, &lockfile)?;
+    lockfile::write_lockfile(install_root, &lockfile)?;
     Ok(())
 }
 
-pub fn cmd_list(repo_root: &Path) -> Result<()> {
-    let lockfile = lockfile::require_lockfile(repo_root)?;
-    if lockfile.primitives.is_empty() {
+// ── List ────────────────────────────────────────────────────────────────────
+
+pub fn cmd_list(repo_root: &Path, scope_filter: &str) -> Result<()> {
+    let show_project = scope_filter == "all" || scope_filter == "project";
+    let show_global = scope_filter == "all" || scope_filter == "global";
+
+    let mut rows: Vec<(String, String, String, String, String, &'static str)> = Vec::new();
+
+    if show_project {
+        if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
+            for (id, entry) in &lockfile.primitives {
+                for (target_id, target_entry) in &entry.targets {
+                    for emitted in &target_entry.emitted_files {
+                        let status = lockfile::drift_status(repo_root, emitted);
+                        rows.push((
+                            id.clone(),
+                            entry.installed_version.clone(),
+                            "project".to_string(),
+                            target_id.clone(),
+                            emitted.path.clone(),
+                            status,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    if show_global {
+        if let Some(home) = home_dir_opt() {
+            let lock_path = home.join(".coral").join("coral-lock.json");
+            if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
+                for (id, entry) in &lockfile.primitives {
+                    for (target_id, target_entry) in &entry.targets {
+                        for emitted in &target_entry.emitted_files {
+                            let status = lockfile::drift_status(&home, emitted);
+                            rows.push((
+                                id.clone(),
+                                entry.installed_version.clone(),
+                                "global".to_string(),
+                                target_id.clone(),
+                                format!("~/{}", emitted.path),
+                                status,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if rows.is_empty() {
         println!("no primitives installed");
         return Ok(());
     }
 
-    for (id, entry) in &lockfile.primitives {
-        for (target_id, target_entry) in &entry.targets {
-            for emitted in &target_entry.emitted_files {
-                let status = lockfile::drift_status(repo_root, emitted);
-                println!(
-                    "{}\t{}\t{}\t{}\t{}",
-                    id, entry.installed_version, target_id, status, emitted.path
-                );
-            }
-        }
+    rows.sort_by(|a, b| a.2.cmp(&b.2).then_with(|| a.0.cmp(&b.0)));
+
+    for (id, version, scope, target, path, status) in &rows {
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{}",
+            id, version, scope, target, status, path
+        );
     }
     Ok(())
 }
 
+// ── Status ──────────────────────────────────────────────────────────────────
+
+pub fn cmd_status(repo_root: &Path) -> Result<()> {
+    let mut found_any = false;
+
+    if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
+        for (id, entry) in &lockfile.primitives {
+            let mut flags = Vec::new();
+            for (_, target_entry) in &entry.targets {
+                for emitted in &target_entry.emitted_files {
+                    let s = lockfile::drift_status(repo_root, emitted);
+                    if s != "clean" {
+                        flags.push(s);
+                    }
+                }
+            }
+
+            let override_warning = if resolver::overrides_global(id, repo_root).unwrap_or(false) {
+                " [overrides global — won't receive global updates]"
+            } else {
+                ""
+            };
+
+            let drift = if flags.is_empty() {
+                "clean".to_string()
+            } else {
+                flags.join(",")
+            };
+
+            println!("{id}  project  {drift}{override_warning}");
+            found_any = true;
+        }
+    }
+
+    if let Some(home) = home_dir_opt() {
+        let lock_path = home.join(".coral").join("coral-lock.json");
+        if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
+            for (id, entry) in &lockfile.primitives {
+                let mut flags = Vec::new();
+                for (_, target_entry) in &entry.targets {
+                    for emitted in &target_entry.emitted_files {
+                        let s = lockfile::drift_status(&home, emitted);
+                        if s != "clean" {
+                            flags.push(s);
+                        }
+                    }
+                }
+
+                let is_shadowed = {
+                    lockfile::require_lockfile(repo_root)
+                        .map(|plf| plf.primitives.contains_key(id))
+                        .unwrap_or(false)
+                };
+
+                let note = if is_shadowed {
+                    " [shadowed by project copy]"
+                } else {
+                    ""
+                };
+
+                let drift = if flags.is_empty() {
+                    "clean".to_string()
+                } else {
+                    flags.join(",")
+                };
+
+                println!("{id}  global   {drift}{note}");
+                found_any = true;
+            }
+        }
+    }
+
+    if !found_any {
+        println!("no primitives installed");
+    }
+
+    Ok(())
+}
+
+// ── Diff ────────────────────────────────────────────────────────────────────
+
 pub fn cmd_diff(repo_root: &Path, capability_id: &str, target: Option<&str>) -> Result<()> {
-    let lockfile = lockfile::require_lockfile(repo_root)?;
-    let entry = lockfile
-        .primitives
-        .get(capability_id)
-        .ok_or_else(|| CoralError::new(format!("capability is not installed: {capability_id}")))?;
+    let (scope, entry, scope_root) = match resolver::resolve_entry(capability_id, repo_root)? {
+        Some((s, e)) => {
+            let root = match s {
+                Scope::Project => repo_root.to_path_buf(),
+                Scope::Global => home_dir()?,
+            };
+            (s, e, root)
+        }
+        None => {
+            return Err(CoralError::new(format!(
+                "capability is not installed: {capability_id}"
+            )));
+        }
+    };
+
+    let _ = scope;
 
     let mut output = String::new();
 
     if let Some(tid) = target {
         output.push_str(&lockfile::diff_against_baseline(
-            repo_root,
+            &scope_root,
             capability_id,
             tid,
-            entry,
+            &entry,
         )?);
     } else {
         let mut first = true;
         for tid in entry.targets.keys() {
-            let diff = lockfile::diff_against_baseline(repo_root, capability_id, tid, entry)?;
+            let diff = lockfile::diff_against_baseline(&scope_root, capability_id, tid, &entry)?;
             if diff.is_empty() {
                 continue;
             }
@@ -279,6 +455,128 @@ pub fn cmd_diff(repo_root: &Path, capability_id: &str, target: Option<&str>) -> 
     Ok(())
 }
 
+// ── Remove ──────────────────────────────────────────────────────────────────
+
+pub fn cmd_remove(
+    repo_root: &Path,
+    id: &str,
+    scope_str: &str,
+    targets: Option<&[String]>,
+) -> Result<()> {
+    let scope = resolver::Scope::from_str(scope_str)
+        .ok_or_else(|| CoralError::new(format!("invalid scope '{}'", scope_str)))?;
+
+    let scope_root = match scope {
+        Scope::Project => repo_root.to_path_buf(),
+        Scope::Global => home_dir()?,
+    };
+
+    let mut lockfile = lockfile::require_lockfile(&scope_root)?;
+    let entry = lockfile.primitives.remove(id).ok_or_else(|| {
+        CoralError::new(format!("'{}' is not installed in {} scope", id, scope.as_str()))
+    })?;
+
+    let adapter_ids: Vec<String> = if let Some(tgts) = targets {
+        tgts.to_vec()
+    } else {
+        entry.targets.keys().cloned().collect()
+    };
+
+    for tid in &adapter_ids {
+        if let Some(adapter) = AdapterKind::from_id(tid) {
+            adapter.remove(id, &scope_root)?;
+
+            let baseline_dir = scope_root
+                .join(".coral")
+                .join("baselines")
+                .join(tid)
+                .join(id);
+            if baseline_dir.exists() {
+                std::fs::remove_dir_all(&baseline_dir)?;
+            }
+        }
+    }
+
+    lockfile::write_lockfile(&scope_root, &lockfile)?;
+    println!("removed '{}' from {} scope", id, scope.as_str());
+    Ok(())
+}
+
+// ── Update ──────────────────────────────────────────────────────────────────
+
+pub fn cmd_update(repo_root: &Path, id: &str, scope_str: Option<&str>) -> Result<()> {
+    let (scope, entry, scope_root) = if let Some(s) = scope_str {
+        let scope = resolver::Scope::from_str(s)
+            .ok_or_else(|| CoralError::new(format!("invalid scope '{}'", s)))?;
+        let root = match scope {
+            Scope::Project => repo_root.to_path_buf(),
+            Scope::Global => home_dir()?,
+        };
+        let lf = lockfile::require_lockfile(&root)?;
+        let entry = lf.primitives.get(id).ok_or_else(|| {
+            CoralError::new(format!(
+                "'{}' is not installed in {} scope",
+                id,
+                scope.as_str()
+            ))
+        })?;
+        (scope, entry.clone(), root)
+    } else {
+        match resolver::resolve_entry(id, repo_root)? {
+            Some((s, e)) => {
+                let root = match s {
+                    Scope::Project => repo_root.to_path_buf(),
+                    Scope::Global => home_dir()?,
+                };
+                (s, e, root)
+            }
+            None => {
+                return Err(CoralError::new(format!(
+                    "'{}' is not installed",
+                    id
+                )));
+            }
+        }
+    };
+
+    let source = entry.source.as_ref().ok_or_else(|| {
+        CoralError::new(format!(
+            "'{}' is not a git-sourced primitive — update only works for git sources",
+            id
+        ))
+    })?;
+
+    let (cache_dir, _clean_url) = git::clone_or_fetch(&source.url)?;
+    let latest_sha = git::resolve_ref(&cache_dir)?;
+
+    if latest_sha == entry.installed_version {
+        println!("'{}' is already up to date", id);
+        return Ok(());
+    }
+
+    let skill_dir = git::discover_skill(&cache_dir, &source.skill)?;
+    let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
+    let primitive = resolve_primitive(&manifest)?;
+
+    let target_ids: Vec<String> = entry.targets.keys().cloned().collect();
+
+    install_primitive(
+        &scope_root,
+        scope,
+        &primitive,
+        &manifest,
+        &target_ids,
+        Some(&SourceMetaInput {
+            source_type: "git".to_string(),
+            url: source.url.clone(),
+            source_ref: latest_sha.clone(),
+            skill: source.skill.clone(),
+        }),
+    )
+}
+
+// ── Target commands (unchanged) ─────────────────────────────────────────────
+
 pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
     #[derive(Tabled)]
     struct TargetRow {
@@ -293,10 +591,6 @@ pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
     let config = config::read_config(repo_root)?;
     let registered: std::collections::HashSet<&str> =
         config.targets.iter().map(|s| s.as_str()).collect();
-
-    let use_color = std::env::var_os("NO_COLOR").is_none();
-    let dim = if use_color { "\x1b[2m" } else { "" };
-    let reset = if use_color { "\x1b[0m" } else { "" };
 
     let rows: Vec<TargetRow> = AdapterKind::all()
         .iter()
@@ -324,9 +618,7 @@ pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
     println!("{table}");
 
     if registered.is_empty() {
-        println!(
-            "\n  {dim}*  = registered (use 'coral target add <id>' to register){reset}",
-        );
+        println!("\n  *  = registered (use 'coral target add <id>' to register)");
     }
     Ok(())
 }
@@ -407,4 +699,14 @@ pub fn cmd_target_remove(repo_root: &Path, id: &str) -> Result<()> {
         println!("removed target '{}'", adapter.id());
     }
     Ok(())
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+fn home_dir() -> Result<std::path::PathBuf> {
+    home_dir_opt().ok_or_else(|| CoralError::new("HOME environment variable not set"))
+}
+
+fn home_dir_opt() -> Option<std::path::PathBuf> {
+    std::env::var("HOME").ok().map(std::path::PathBuf::from)
 }
