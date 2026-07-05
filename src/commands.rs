@@ -531,6 +531,18 @@ pub fn cmd_remove(
         CoralError::new(format!("'{}' is not installed in {} scope", id, scope.as_str()))
     })?;
 
+    let mut modified = false;
+    for (_, target_entry) in &entry.targets {
+        for emitted in &target_entry.emitted_files {
+            if lockfile::drift_status(&scope_root, emitted) == "modified" {
+                modified = true;
+            }
+        }
+    }
+    if modified {
+        eprintln!("warning: '{}' has local modifications — removing will discard them", id);
+    }
+
     let adapter_ids: Vec<String> = if let Some(tgts) = targets {
         tgts.to_vec()
     } else {
