@@ -129,7 +129,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "example\t1.0.0\topen-agents\tclean\t.agents/skills/example/SKILL.md",
+            "example\t1.0.0\tproject\topen-agents\tclean\t.agents/skills/example/SKILL.md",
         ));
 
     fs::write(
@@ -148,7 +148,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "example\t1.0.0\topen-agents\tmodified\t.agents/skills/example/SKILL.md",
+            "example\t1.0.0\tproject\topen-agents\tmodified\t.agents/skills/example/SKILL.md",
         ));
 
     coral()
@@ -344,10 +344,10 @@ fn add_to_multiple_targets() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "example\t1.0.0\topen-agents\tclean\t.agents/skills/example/SKILL.md",
+            "example\t1.0.0\tproject\topen-agents\tclean\t.agents/skills/example/SKILL.md",
         ))
         .stdout(predicate::str::contains(
-            "example\t1.0.0\tclaude\tclean\t.claude/skills/example/SKILL.md",
+            "example\t1.0.0\tproject\tclaude\tclean\t.claude/skills/example/SKILL.md",
         ));
 
     // Diff with specific target
@@ -697,4 +697,175 @@ fn legacy_alias_claude_code_works() {
         .join("example")
         .join("SKILL.md")
         .exists());
+}
+
+#[test]
+fn add_global_creates_lockfile_and_emits_to_home() {
+    let temp = TempDir::new().unwrap();
+    let primitive = make_primitive(temp.path(), "global-skill");
+    let home_env = std::env::var("HOME").unwrap();
+    let home = std::path::Path::new(&home_env);
+
+    // Cleanup from previous runs
+    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
+    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents", "--global"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed global-skill (open-agents)",
+        ));
+
+    assert!(home.join(".coral").join("coral-lock.json").exists());
+
+    // Cleanup
+    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
+    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+}
+
+#[test]
+fn list_shows_scope_column() {
+    let temp = TempDir::new().unwrap();
+    let primitive = make_primitive(temp.path(), "example");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("project"))
+        .stdout(predicate::str::contains("example\t1.0.0\tproject\topen-agents\tclean\t"));
+}
+
+#[test]
+fn remove_primitive_cleans_up() {
+    let temp = TempDir::new().unwrap();
+    let primitive = make_primitive(temp.path(), "remove-test");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["remove", "remove-test"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed 'remove-test' from project scope"));
+
+    assert!(!temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("remove-test")
+        .join("SKILL.md")
+        .exists());
+
+    // Only check project scope is empty
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--scope", "project"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no primitives installed"));
+}
+
+#[test]
+fn status_shows_override_warning() {
+    let temp = TempDir::new().unwrap();
+    let primitive_a = make_primitive(temp.path(), "dup-override");
+    let home_env = std::env::var("HOME").unwrap();
+    let home = std::path::Path::new(&home_env);
+
+    // Cleanup from previous runs
+    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
+    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines").join("open-agents").join("dup-override"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive_a.to_str().unwrap(), "--target", "open-agents", "--global"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive_a.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dup-override"))
+        .stdout(predicate::str::contains("[overrides global"))
+        .stdout(predicate::str::contains("[shadowed by project copy]"));
+
+    // Cleanup
+    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
+    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+}
+
+#[test]
+fn update_git_skill_reports_up_to_date() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    let repo_url = format!("file://{}", repo.display());
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            &repo_url,
+            "--target",
+            "open-agents",
+            "--skill",
+            "test-skill",
+        ])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "test-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already up to date"));
 }

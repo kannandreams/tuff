@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    ffi::OsStr,
     path::{Path, PathBuf},
 };
 
@@ -28,6 +29,12 @@ pub struct PrimitiveLockEntry {
     pub targets: BTreeMap<String, TargetLockEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceMetadata>,
+    #[serde(default = "default_scope")]
+    pub scope: String,
+}
+
+fn default_scope() -> String {
+    "project".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,29 +61,41 @@ pub fn lockfile_path(repo_root: &Path) -> PathBuf {
 
 pub fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
     let coral_dir = repo_root.join(".coral");
-    std::fs::create_dir_all(&coral_dir)?;
     let lock_path = coral_dir.join("coral-lock.json");
+    init_lockfile_at(&lock_path)?;
+    Ok(lock_path)
+}
+
+pub fn init_lockfile_at(lock_path: &Path) -> Result<()> {
     if !lock_path.exists() {
-        write_lockfile(
-            repo_root,
+        write_lockfile_at(
+            lock_path,
             &Lockfile {
                 version: LOCKFILE_VERSION,
                 primitives: BTreeMap::new(),
             },
         )?;
     }
-    Ok(lock_path)
+    Ok(())
 }
 
 pub fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
     let lock_path = lockfile_path(repo_root);
-    if !lock_path.exists() {
-        return Err(CoralError::new(
-            ".coral/coral-lock.json is missing; run 'coral init' first",
-        ));
+    read_lockfile_at(&lock_path)
+}
+
+pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
+    if !path.exists() {
+        let parent = path.parent().unwrap_or(Path::new("."));
+        return Err(CoralError::new(format!(
+            "{} is missing; run 'coral init' first",
+            parent
+                .join(path.file_name().unwrap_or(OsStr::new("coral-lock.json")))
+                .display()
+        )));
     }
 
-    let lockfile: Lockfile = serde_json::from_str(&std::fs::read_to_string(&lock_path)?)?;
+    let lockfile: Lockfile = serde_json::from_str(&std::fs::read_to_string(path)?)?;
     if lockfile.version != LOCKFILE_VERSION {
         return Err(CoralError::new(format!(
             "unsupported lockfile version: {}",
@@ -88,10 +107,14 @@ pub fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
 
 pub fn write_lockfile(repo_root: &Path, lockfile: &Lockfile) -> Result<()> {
     let lock_path = lockfile_path(repo_root);
-    if let Some(parent) = lock_path.parent() {
+    write_lockfile_at(&lock_path, lockfile)
+}
+
+pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
+    if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&lock_path, serde_json::to_string_pretty(lockfile)? + "\n")?;
+    std::fs::write(path, serde_json::to_string_pretty(lockfile)? + "\n")?;
     Ok(())
 }
 
