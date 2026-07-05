@@ -19,6 +19,9 @@ export default defineConfig({
         baseUrl: 'https://github.com/kannandreams/loadout/blob/main/website/',
       },
       lastUpdated: true,
+      expressiveCode: {
+        themes: ['github-dark'],
+      },
       tableOfContents: {
         minHeadingLevel: 2,
         maxHeadingLevel: 3,
