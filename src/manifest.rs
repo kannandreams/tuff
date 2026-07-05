@@ -10,19 +10,32 @@ pub struct PrimitiveManifest {
     pub version: String,
     pub primitive: String,
     pub description: String,
+    #[serde(default)]
     pub files: Vec<String>,
+    #[serde(default)]
+    pub parameters: Option<serde_json::Value>,
+    #[serde(default)]
+    pub implementation: Option<ImplementationConfig>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub targets: Vec<String>,
 
     #[serde(skip)]
     pub root: PathBuf,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ImplementationConfig {
+    pub language: String,
+    pub entrypoint: String,
+    #[serde(default)]
+    pub runtime_deps: Vec<String>,
+}
+
 impl PrimitiveManifest {
     pub fn source_files(&self) -> Result<Vec<PathBuf>> {
-        if self.files.is_empty() {
-            return Err(CoralError::new("manifest 'files' must not be empty"));
-        }
-
         let mut paths = Vec::new();
+
         for f in &self.files {
             let clean = f.trim_start_matches("./");
             let path = self.root.join(clean);
@@ -34,6 +47,16 @@ impl PrimitiveManifest {
             }
             paths.push(path);
         }
+
+        if self.primitive == "tool" {
+            if let Some(ref imp) = self.implementation {
+                let ep_path = self.root.join(&imp.entrypoint);
+                if !paths.contains(&ep_path) && ep_path.exists() {
+                    paths.push(ep_path);
+                }
+            }
+        }
+
         Ok(paths)
     }
 
@@ -52,7 +75,6 @@ impl PrimitiveManifest {
             })
             .collect()
     }
-
 }
 
 fn validate_non_empty(field: &str, value: &str) -> Result<()> {
@@ -82,7 +104,49 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
     validate_non_empty("primitive", &manifest.primitive)?;
     validate_non_empty("description", &manifest.description)?;
 
-    manifest.source_files()?;
+    match manifest.primitive.as_str() {
+        "skill" => {
+            if manifest.files.is_empty() {
+                return Err(CoralError::new("skill manifest 'files' must not be empty"));
+            }
+            manifest.source_files()?;
+        }
+        "tool" => {
+            if manifest.parameters.is_none() {
+                return Err(CoralError::new(
+                    "tool primitive requires a [parameters] section with JSON Schema",
+                ));
+            }
+            if manifest.implementation.is_none() {
+                return Err(CoralError::new(
+                    "tool primitive requires an [implementation] section",
+                ));
+            }
+
+            let params = manifest.parameters.as_ref().unwrap();
+            crate::tool::validate_json_schema(params)?;
+
+            let impl_cfg = manifest.implementation.as_ref().unwrap();
+            crate::tool::validate_entrypoint(&manifest.root, &impl_cfg.entrypoint)?;
+
+            if !impl_cfg.runtime_deps.is_empty() {
+                eprintln!(
+                    "note: this tool requires runtime dependencies: {}",
+                    impl_cfg.runtime_deps.join(", ")
+                );
+            }
+
+            if !manifest.files.is_empty() {
+                manifest.source_files()?;
+            }
+        }
+        other => {
+            return Err(CoralError::new(format!(
+                "unsupported primitive kind '{}'; supported: skill, tool",
+                other
+            )));
+        }
+    }
 
     Ok(manifest)
 }
@@ -97,6 +161,9 @@ pub fn synthetic_manifest(skill_dir: &Path, name: &str, version: &str) -> Result
         primitive: "skill".to_string(),
         description: String::new(),
         files,
+        parameters: None,
+        implementation: None,
+        targets: Vec::new(),
         root: skill_dir.to_path_buf(),
     })
 }

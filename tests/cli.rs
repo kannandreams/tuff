@@ -78,6 +78,38 @@ fn coral() -> Command {
     Command::cargo_bin("coral").unwrap()
 }
 
+fn make_tool_primitive(root: &Path, tool_id: &str) -> std::path::PathBuf {
+    let primitive = root.join("tool-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("coral.toml"),
+        format!(
+            r#"id = "{tool_id}"
+version = "1.0.0"
+primitive = "tool"
+description = "A test tool."
+files = ["run.sh"]
+
+[parameters]
+type = "object"
+required = ["target"]
+
+[parameters.properties.target]
+type = "string"
+description = "The target to scan"
+
+[implementation]
+language = "bash"
+entrypoint = "run.sh"
+runtime_deps = ["curl"]
+"#
+        ),
+    )
+    .unwrap();
+    fs::write(primitive.join("run.sh"), "#!/bin/bash\necho \"scanning: $1\"\n").unwrap();
+    primitive
+}
+
 #[test]
 fn version_outputs_current_version() {
     coral()
@@ -472,7 +504,7 @@ fn add_git_requires_skill_flag() {
         .args(["add", &repo_url, "--target", "open-agents"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--skill is required"));
+        .stderr(predicate::str::contains("--skill or --tool is required"));
 }
 
 #[test]
@@ -868,4 +900,248 @@ fn update_git_skill_reports_up_to_date() {
         .assert()
         .success()
         .stdout(predicate::str::contains("already up to date"));
+}
+
+#[test]
+fn add_tool_installs_and_emits() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed scan-tool (open-agents) -> .agents/tools/scan-tool/run.sh",
+        ));
+
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("tools")
+        .join("scan-tool")
+        .join("run.sh")
+        .exists());
+}
+
+#[test]
+fn add_tool_rejects_invalid_schema() {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("bad-tool");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("coral.toml"),
+        r#"id = "bad-tool"
+version = "1.0.0"
+primitive = "tool"
+description = "Bad tool."
+
+[parameters]
+foo = "bar"
+
+[implementation]
+language = "bash"
+entrypoint = "run.sh"
+"#,
+    )
+    .unwrap();
+    fs::write(primitive.join("run.sh"), "echo test\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("parameters 'type' must be 'object'"));
+}
+
+#[test]
+fn add_tool_rejects_path_traversal() {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("bad-tool");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("coral.toml"),
+        r#"id = "bad-tool"
+version = "1.0.0"
+primitive = "tool"
+description = "Bad tool."
+
+[parameters]
+type = "object"
+required = ["x"]
+
+[parameters.properties.x]
+type = "string"
+description = "x"
+
+[implementation]
+language = "bash"
+entrypoint = "../etc/passwd"
+"#,
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("path traversal"));
+}
+
+#[test]
+fn add_tool_shows_runtime_deps() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("this tool requires runtime dependencies: curl"));
+}
+
+#[test]
+fn list_filter_by_primitive_kind() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "my-skill");
+    let tool = make_tool_primitive(temp.path(), "my-tool");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--primitive", "tool"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("my-tool"))
+        .stdout(predicate::str::contains("my-skill").not());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--primitive", "skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("my-skill"))
+        .stdout(predicate::str::contains("my-tool").not());
+}
+
+#[test]
+fn add_tool_multi_target_with_mcp() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            tool.to_str().unwrap(),
+            "--target",
+            "open-agents",
+            "--target",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("tools")
+        .join("scan-tool")
+        .join("run.sh")
+        .exists());
+    assert!(temp
+        .path()
+        .join(".claude")
+        .join("tools")
+        .join("scan-tool")
+        .join("run.sh")
+        .exists());
+
+    // Both MCP configs should exist
+    let agents_mcp = temp.path().join(".agents").join("mcp.json");
+    let claude_mcp = temp.path().join(".mcp.json");
+    assert!(agents_mcp.exists());
+    assert!(claude_mcp.exists());
+}
+
+#[test]
+fn remove_tool_cleans_mcp_entry() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap(), "--target", "claude"])
+        .assert()
+        .success();
+
+    let mcp_path = temp.path().join(".mcp.json");
+    assert!(mcp_path.exists());
+    let before: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    assert!(before["mcpServers"]["scan-tool"].is_object());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["remove", "scan-tool"])
+        .assert()
+        .success();
+
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    assert!(after["mcpServers"]["scan-tool"].is_null());
 }
