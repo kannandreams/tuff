@@ -4,31 +4,35 @@ use crate::adapter::{PlannedFile, ResolvedPrimitive};
 use crate::error::{CoralError, Result};
 use crate::lockfile;
 
-pub const ID: &str = "claude-code";
-pub const DISPLAY_NAME: &str = "Claude Code";
+pub const ID: &str = "claude";
+pub const DISPLAY_NAME: &str = "Claude";
 pub const SUPPORTED_KINDS: &[&str] = &["skill"];
 
-pub fn supports(kind: &str) -> bool {
-    SUPPORTED_KINDS.contains(&kind)
+pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
+
+pub fn supports(primitive: &str) -> bool {
+    SUPPORTED_KINDS.contains(&primitive)
 }
 
 pub fn plan(primitive: &ResolvedPrimitive, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    let content = primitive
-        .source_files
-        .first()
-        .ok_or_else(|| CoralError::new("no source files to emit"))?
-        .clone();
+    if primitive.source_files.is_empty() {
+        return Err(CoralError::new("no source files to emit"));
+    }
 
-    let target_path = repo_root
-        .join(".claude")
-        .join("skills")
-        .join(&primitive.id)
-        .join("SKILL.md");
+    let mut files = Vec::new();
+    for (rel_path, content) in &primitive.source_files {
+        let target_path = repo_root
+            .join(".claude")
+            .join("skills")
+            .join(&primitive.id)
+            .join(rel_path);
 
-    Ok(vec![PlannedFile {
-        path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
-        content,
-    }])
+        files.push(PlannedFile {
+            path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
+            content: content.clone(),
+        });
+    }
+    Ok(files)
 }
 
 pub fn remove(primitive_id: &str, repo_root: &Path) -> Result<()> {

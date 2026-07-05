@@ -117,7 +117,7 @@ pub fn print_welcome() {
         "Quick Start"
     );
     let rows = [
-        ("coral init", "Initialize .coral/lock.json"),
+        ("coral init", "Initialize .coral/coral-lock.json"),
         (
             "coral add <path> -t <target>",
             "Install a local capability to a harness",

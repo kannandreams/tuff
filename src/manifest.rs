@@ -8,7 +8,7 @@ use crate::error::{CoralError, Result};
 pub struct PrimitiveManifest {
     pub id: String,
     pub version: String,
-    pub kind: String,
+    pub primitive: String,
     pub description: String,
     pub files: Vec<String>,
 
@@ -37,12 +37,22 @@ impl PrimitiveManifest {
         Ok(paths)
     }
 
-    pub fn read_source_contents(&self) -> Result<Vec<Vec<u8>>> {
+    pub fn read_source_contents_with_names(&self) -> Result<Vec<(String, Vec<u8>)>> {
         self.source_files()?
             .iter()
-            .map(|p| std::fs::read(p).map_err(Into::into))
+            .map(|p| {
+                let rel = p
+                    .strip_prefix(&self.root)
+                    .unwrap_or(p)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let rel = rel.strip_prefix("src/").unwrap_or(&rel).to_string();
+                let content = std::fs::read(p)?;
+                Ok((rel, content))
+            })
             .collect()
     }
+
 }
 
 fn validate_non_empty(field: &str, value: &str) -> Result<()> {
@@ -69,10 +79,42 @@ pub fn load_manifest(capability_dir: &Path) -> Result<PrimitiveManifest> {
 
     validate_non_empty("id", &manifest.id)?;
     validate_non_empty("version", &manifest.version)?;
-    validate_non_empty("kind", &manifest.kind)?;
+    validate_non_empty("primitive", &manifest.primitive)?;
     validate_non_empty("description", &manifest.description)?;
 
     manifest.source_files()?;
 
     Ok(manifest)
+}
+
+pub fn synthetic_manifest(skill_dir: &Path, name: &str, version: &str) -> Result<PrimitiveManifest> {
+    let mut files = Vec::new();
+    walk_skill_dir(skill_dir, "", &mut files)?;
+
+    Ok(PrimitiveManifest {
+        id: name.to_string(),
+        version: version.to_string(),
+        primitive: "skill".to_string(),
+        description: String::new(),
+        files,
+        root: skill_dir.to_path_buf(),
+    })
+}
+
+fn walk_skill_dir(base: &Path, prefix: &str, files: &mut Vec<String>) -> Result<()> {
+    for entry in std::fs::read_dir(base)? {
+        let entry = entry?;
+        let path = entry.path();
+        let rel = if prefix.is_empty() {
+            entry.file_name().to_string_lossy().to_string()
+        } else {
+            format!("{}/{}", prefix, entry.file_name().to_string_lossy())
+        };
+        if path.is_dir() {
+            walk_skill_dir(&path, &rel, files)?;
+        } else {
+            files.push(rel);
+        }
+    }
+    Ok(())
 }

@@ -3,12 +3,17 @@ use std::{
     path::Path,
 };
 
+use tabled::{
+    settings::{object::Columns, Modify, Style, Width},
+    Table, Tabled,
+};
+
 use crate::{
     adapter::{self, AdapterKind, resolve_primitive},
-    config,
+    config, git,
     error::{CoralError, Result},
     lockfile::{self, TargetLockEntry},
-    manifest::load_manifest,
+    manifest::{self, load_manifest},
 };
 
 pub fn cmd_init(repo_root: &Path) -> Result<()> {
@@ -21,10 +26,70 @@ pub fn cmd_init(repo_root: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_add(repo_root: &Path, capability: &Path, target_ids: &[String]) -> Result<()> {
+pub fn cmd_add(
+    repo_root: &Path,
+    capability: &Path,
+    target_ids: &[String],
+    skill_name: Option<&str>,
+) -> Result<()> {
+    if git::is_git_url(&capability.to_string_lossy()) {
+        return cmd_add_git(repo_root, &capability.to_string_lossy(), target_ids, skill_name);
+    }
+    cmd_add_local(repo_root, capability, target_ids)
+}
+
+fn cmd_add_git(
+    repo_root: &Path,
+    url: &str,
+    target_ids: &[String],
+    skill_name: Option<&str>,
+) -> Result<()> {
+    let skill_name = skill_name.ok_or_else(|| {
+        CoralError::new("--skill is required when installing from a git URL")
+    })?;
+
+    let (cache_dir, clean_url) = git::clone_or_fetch(url)?;
+    let commit_sha = git::resolve_ref(&cache_dir)?;
+    let skill_dir = git::discover_skill(&cache_dir, skill_name)?;
+
+    let manifest = manifest::synthetic_manifest(&skill_dir, skill_name, &commit_sha)?;
+    let primitive = resolve_primitive(&manifest)?;
+
+    install_primitive(repo_root, &primitive, &manifest, target_ids, Some(&SourceMetaInput {
+        source_type: "git".to_string(),
+        url: clean_url,
+        source_ref: commit_sha.clone(),
+        skill: skill_name.to_string(),
+    }))
+}
+
+fn cmd_add_local(
+    repo_root: &Path,
+    capability: &Path,
+    target_ids: &[String],
+) -> Result<()> {
     let capability_dir = lockfile::absolutize(repo_root, capability);
     let manifest = load_manifest(&capability_dir)?;
     let primitive = resolve_primitive(&manifest)?;
+
+    install_primitive(repo_root, &primitive, &manifest, target_ids, None)
+}
+
+struct SourceMetaInput {
+    source_type: String,
+    url: String,
+    source_ref: String,
+    skill: String,
+}
+
+fn install_primitive(
+    repo_root: &Path,
+    primitive: &adapter::ResolvedPrimitive,
+    manifest: &manifest::PrimitiveManifest,
+    target_ids: &[String],
+    source_meta: Option<&SourceMetaInput>,
+) -> Result<()> {
+    let is_git = source_meta.is_some();
 
     let mut adapters = Vec::new();
     for tid in target_ids {
@@ -34,11 +99,11 @@ pub fn cmd_add(repo_root: &Path, capability: &Path, target_ids: &[String]) -> Re
                 tid
             ))
         })?;
-        if !adapter.supports(&primitive.kind) {
+        if !adapter.supports(&primitive.primitive) {
             return Err(CoralError::new(format!(
                 "{} does not yet support {} primitives",
                 adapter.display_name(),
-                primitive.kind
+                primitive.primitive
             )));
         }
         adapters.push(adapter);
@@ -132,13 +197,25 @@ pub fn cmd_add(repo_root: &Path, capability: &Path, target_ids: &[String]) -> Re
         merged_targets.insert(k, v);
     }
 
+    let source_path = if is_git {
+        String::new()
+    } else {
+        lockfile::relative_or_absolute_fs(&manifest.root, repo_root)
+    };
+
     lockfile.primitives.insert(
         primitive.id.clone(),
         lockfile::PrimitiveLockEntry {
-            kind: primitive.kind.clone(),
+            primitive: primitive.primitive.clone(),
             installed_version: primitive.version.clone(),
-            source_path: lockfile::relative_or_absolute_fs(&manifest.root, repo_root),
+            source_path,
             targets: merged_targets,
+            source: source_meta.map(|m| lockfile::SourceMetadata {
+                source_type: m.source_type.clone(),
+                url: m.url.clone(),
+                source_ref: m.source_ref.clone(),
+                skill: m.skill.clone(),
+            }),
         },
     );
 
@@ -203,28 +280,53 @@ pub fn cmd_diff(repo_root: &Path, capability_id: &str, target: Option<&str>) -> 
 }
 
 pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
+    #[derive(Tabled)]
+    struct TargetRow {
+        #[tabled(rename = "TARGET")]
+        target: String,
+        #[tabled(rename = "AGENTS SUPPORTED")]
+        agents: String,
+        #[tabled(rename = "PRIMITIVES")]
+        primitives: String,
+    }
+
     let config = config::read_config(repo_root)?;
     let registered: std::collections::HashSet<&str> =
         config.targets.iter().map(|s| s.as_str()).collect();
 
-    for adapter in AdapterKind::all() {
-        let registered_mark = if registered.contains(adapter.id()) {
-            " [registered]"
-        } else {
-            ""
-        };
-        let kinds = adapter.kinds_supported().join(", ");
-        println!(
-            "{:<20} {:<30} supports: {}{}",
-            adapter.id(),
-            adapter.display_name(),
-            kinds,
-            registered_mark
-        );
-    }
+    let use_color = std::env::var_os("NO_COLOR").is_none();
+    let dim = if use_color { "\x1b[2m" } else { "" };
+    let reset = if use_color { "\x1b[0m" } else { "" };
+
+    let rows: Vec<TargetRow> = AdapterKind::all()
+        .iter()
+        .map(|a| {
+            let target_label = if registered.contains(a.id()) {
+                format!("{} *", a.id())
+            } else {
+                a.id().to_string()
+            };
+            TargetRow {
+                target: target_label,
+                agents: a.supported_agents().join(", "),
+                primitives: a.kinds_supported().join(", "),
+            }
+        })
+        .collect();
+
+    let mut table = Table::new(rows);
+    table
+        .with(Style::modern())
+        .with(Modify::new(Columns::single(1)).with(
+            Width::wrap(40).keep_words(true),
+        ));
+
+    println!("{table}");
 
     if registered.is_empty() {
-        println!("\nNo targets registered. Use 'coral target add <id>' to register one.");
+        println!(
+            "\n  {dim}*  = registered (use 'coral target add <id>' to register){reset}",
+        );
     }
     Ok(())
 }
