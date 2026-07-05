@@ -17,8 +17,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_check, cmd_diff, cmd_init, cmd_list, cmd_outdated, cmd_remove, cmd_status,
-    cmd_target_add, cmd_target_list, cmd_target_remove, cmd_update,
+    cmd_add, cmd_check, cmd_diff, cmd_import, cmd_init, cmd_list, cmd_outdated,
+    cmd_remove, cmd_status, cmd_target_add, cmd_target_list, cmd_target_remove, cmd_update,
 };
 use error::Result;
 
@@ -124,6 +124,29 @@ enum Command {
         force: bool,
     },
 
+    /// Import existing agent assets into Coral management.
+    Import {
+        /// Path to an existing agent asset directory.
+        #[arg()]
+        path: Option<PathBuf>,
+
+        /// Target harness to import for (auto-inferred if path is under .agents/ or .claude/).
+        #[arg(short = 't', long = "target")]
+        target: Vec<String>,
+
+        /// Force capability type (auto-inferred from parent dir if omitted).
+        #[arg(long = "type")]
+        capability_type: Option<String>,
+
+        /// Preview what would be imported without making changes.
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+
+        /// Overwrite existing lockfile entry for the same id.
+        #[arg(long = "override")]
+        override_existing: bool,
+    },
+
     /// Validate installed capabilities (CI mode).
     Check {
         /// Output results as JSON.
@@ -181,6 +204,20 @@ fn run() -> Result<()> {
     match cli.command {
         None => Ok(display::print_welcome()),
         Some(Command::Init { global }) => cmd_init(&repo_root, global),
+        Some(Command::Import {
+            path,
+            target,
+            capability_type,
+            dry_run,
+            override_existing,
+        }) => cmd_import(
+            &repo_root,
+            path.as_deref(),
+            &target,
+            capability_type.as_deref(),
+            dry_run,
+            override_existing,
+        ),
         Some(Command::Add {
             capability,
             target,
