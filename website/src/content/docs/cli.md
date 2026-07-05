@@ -122,6 +122,26 @@ commit-hygiene     global   clean
 scan-tool          project  clean
 ```
 
+## `coral outdated`
+
+Show all installed primitives and whether upstream updates are available.
+Read-only — never modifies files.
+
+```sh
+coral outdated
+```
+
+Example output:
+
+```
+find-skills              skill      open-agents  2adcfe5    def5678    outdated
+pre-commit-lint          hook       open-agents  1.0.0      —          up to date
+security-review          tool       claude       abc1234    2adcfe5    outdated
+```
+
+For git-sourced primitives, `CURRENT` and `LATEST` show the 7-character commit SHA.
+For local primitives, `LATEST` shows `—` and status is always `up to date` or `modified source`.
+
 ## `coral diff`
 
 Show unified diff between baseline and installed files, or compare against latest upstream:

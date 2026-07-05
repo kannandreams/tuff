@@ -829,6 +829,177 @@ pub fn cmd_update(
     )
 }
 
+// ── Outdated ────────────────────────────────────────────────────────────────
+
+fn short_sha(v: &str) -> &str {
+    if v.len() >= 7 && v.chars().all(|c| c.is_ascii_hexdigit()) {
+        &v[..7]
+    } else {
+        v
+    }
+}
+
+pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
+    #[derive(Tabled)]
+    struct OutdatedRow {
+        #[tabled(rename = "ID")]
+        id: String,
+        #[tabled(rename = "PRIMITIVE")]
+        primitive: String,
+        #[tabled(rename = "TARGET")]
+        target: String,
+        #[tabled(rename = "CURRENT")]
+        current: String,
+        #[tabled(rename = "LATEST")]
+        latest: String,
+        #[tabled(rename = "STATUS")]
+        status: String,
+    }
+
+    let mut rows: Vec<OutdatedRow> = Vec::new();
+
+    if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
+        for (id, entry) in &lockfile.primitives {
+            for (target_id, _target_entry) in &entry.targets {
+                let (current, latest, status) = if let Some(src) = &entry.source {
+                    let latest_sha = match git::clone_or_fetch(&src.url)
+                        .and_then(|(d, _)| git::resolve_ref(&d))
+                    {
+                        Ok(sha) => sha,
+                        Err(_) => {
+                            rows.push(OutdatedRow {
+                                id: id.clone(),
+                                primitive: entry.primitive.clone(),
+                                target: target_id.clone(),
+                                current: short_sha(&entry.installed_version).to_string(),
+                                latest: "unavailable".to_string(),
+                                status: "error".to_string(),
+                            });
+                            continue;
+                        }
+                    };
+                    if latest_sha == entry.installed_version {
+                        (
+                            short_sha(&entry.installed_version).to_string(),
+                            short_sha(&latest_sha).to_string(),
+                            "up to date".to_string(),
+                        )
+                    } else {
+                        (
+                            short_sha(&entry.installed_version).to_string(),
+                            short_sha(&latest_sha).to_string(),
+                            "outdated".to_string(),
+                        )
+                    }
+                } else {
+                    (
+                        entry.installed_version.clone(),
+                        "—".to_string(),
+                        "up to date".to_string(),
+                    )
+                };
+
+                rows.push(OutdatedRow {
+                    id: id.clone(),
+                    primitive: entry.primitive.clone(),
+                    target: target_id.clone(),
+                    current,
+                    latest,
+                    status,
+                });
+            }
+        }
+    }
+
+    if let Some(home) = home_dir_opt() {
+        let lock_path = home.join(".coral").join("coral-lock.json");
+        if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
+            for (id, entry) in &lockfile.primitives {
+                for (target_id, _target_entry) in &entry.targets {
+                    let (current, latest, status) = if let Some(src) = &entry.source {
+                        let latest_sha = match git::clone_or_fetch(&src.url)
+                            .and_then(|(d, _)| git::resolve_ref(&d))
+                        {
+                            Ok(sha) => sha,
+                            Err(_) => {
+                                rows.push(OutdatedRow {
+                                    id: id.clone(),
+                                    primitive: entry.primitive.clone(),
+                                    target: target_id.clone(),
+                                    current: short_sha(&entry.installed_version)
+                                        .to_string(),
+                                    latest: "unavailable".to_string(),
+                                    status: "error".to_string(),
+                                });
+                                continue;
+                            }
+                        };
+                        if latest_sha == entry.installed_version {
+                            (
+                                short_sha(&entry.installed_version).to_string(),
+                                short_sha(&latest_sha).to_string(),
+                                "up to date".to_string(),
+                            )
+                        } else {
+                            (
+                                short_sha(&entry.installed_version).to_string(),
+                                short_sha(&latest_sha).to_string(),
+                                "outdated".to_string(),
+                            )
+                        }
+                    } else {
+                        (
+                            entry.installed_version.clone(),
+                            "—".to_string(),
+                            "up to date".to_string(),
+                        )
+                    };
+
+                    rows.push(OutdatedRow {
+                        id: id.clone(),
+                        primitive: entry.primitive.clone(),
+                        target: target_id.clone(),
+                        current,
+                        latest,
+                        status,
+                    });
+                }
+            }
+        }
+    }
+
+    if rows.is_empty() {
+        println!("no primitives installed");
+        return Ok(());
+    }
+
+    rows.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let use_color = std::env::var_os("NO_COLOR").is_none();
+    let green = if use_color { "\x1b[32m" } else { "" };
+    let red = if use_color { "\x1b[31m" } else { "" };
+    let reset = if use_color { "\x1b[0m" } else { "" };
+
+    let styled_rows: Vec<OutdatedRow> = rows
+        .into_iter()
+        .map(|r| {
+            let status = match r.status.as_str() {
+                "up to date" => format!("  {green}●{reset} {}", r.status),
+                "outdated" => format!("  {red}●{reset} {}", r.status),
+                "error" => format!("  {red}●{reset} {}", r.status),
+                _ => r.status,
+            };
+            OutdatedRow { status, ..r }
+        })
+        .collect();
+
+    let mut table = Table::new(styled_rows);
+    table.with(Style::modern());
+
+    println!("{table}");
+    Ok(())
+}
+
 // ── Target commands (unchanged) ─────────────────────────────────────────────
 
 pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
