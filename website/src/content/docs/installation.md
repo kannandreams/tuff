@@ -1,54 +1,55 @@
 ---
 title: Installation
-description: Install and run Coral from source.
+description: Install Coral on your machine.
 ---
 
-Coral is currently developed as a Rust CLI.
+## Quick install
+
+:::tabs
+:::tab curl
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh | sh
+```
+
+Downloads the latest release binary for your OS and architecture.
+
+:::
+
+:::tab cargo
+
+```sh
+cargo install --git https://github.com/kannandreams/coral
+```
+
+Builds from source. Requires Rust and Cargo.
+
+:::
+:::
+
+## Verify
+
+```sh
+coral --version
+coral
+```
+
+## Build from source
+
+```sh
+git clone https://github.com/kannandreams/coral
+cd coral
+cargo build --release
+./target/release/coral --version
+```
 
 ## Requirements
 
-- Rust and Cargo
-- Node 18 or newer
-- npm
+- **Rust** — `cargo` uses it directly. `curl` method pre-builds binaries so Rust isn't needed.
+- **Git** — required for `coral add` with git-backed skills/tools/hooks.
 
-For project command shortcuts, install `just` as well. The underlying Coral CLI
-commands can always be run directly through Cargo.
+## What's installed
 
-## Set up from source
-
-Clone the repository, then install dependencies:
-
-```sh
-cargo fetch
-npm ci
-```
-
-Verify the CLI entry point:
-
-```sh
-cargo run -- --help
-cargo run -- --version
-```
-
-Install the local binary from the checkout:
-
-```sh
-cargo install --path .
-coral --version
-```
-
-## Optional command runner
-
-If `just` is installed, use the project recipes:
-
-```sh
-just setup
-just check
-just run -- --help
-```
-
-## Package status
-
-Coral does not yet publish release binaries or a Homebrew formula. Until
-those exist, use the source checkout with `cargo run -- ...` or install locally
-with `cargo install --path .`.
+- `/usr/local/bin/coral` (curl method)
+- `~/.coral/cache/git/` — cloned repositories for skill discovery
+- `.coral/` — project-level state when you run `coral init`
