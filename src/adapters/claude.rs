@@ -6,7 +6,7 @@ use crate::lockfile;
 
 pub const ID: &str = "claude";
 pub const DISPLAY_NAME: &str = "Claude";
-pub const SUPPORTED_TYPES: &[&str] = &["skill", "tool", "hook"];
+pub const SUPPORTED_TYPES: &[&str] = &["skill", "tool", "hook", "workflow"];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
 
@@ -23,6 +23,7 @@ pub fn plan(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<Pla
     match capability.capability_type.as_str() {
         "tool" => plan_tool(capability, repo_root),
         "hook" => plan_hook(capability, repo_root),
+        "workflow" => plan_workflow(capability, repo_root),
         _ => plan_skill(capability, repo_root),
     }
 }
@@ -102,10 +103,39 @@ fn plan_hook(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<Pl
     }])
 }
 
+fn plan_workflow(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
+    let wf = capability.workflow.as_ref().ok_or_else(|| {
+        CoralError::new("workflow capability requires [[workflow.requires]] section")
+    })?;
+
+    let target_path = repo_root
+        .join(".claude")
+        .join("workflows")
+        .join(&capability.id)
+        .join("workflow.toml");
+
+    let mut content = format!(
+        "id = \"{}\"\nversion = \"{}\"\ntype = \"workflow\"\ndescription = \"{}\"\n",
+        capability.id, capability.version, capability.description
+    );
+    for req in &wf.requires {
+        content.push_str(&format!(
+            "[[workflow.requires]]\nid = \"{}\"\ntype = \"{}\"\n",
+            req.id, req.capability_type
+        ));
+    }
+
+    Ok(vec![PlannedFile {
+        path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
+        content: content.into_bytes(),
+    }])
+}
+
 pub fn remove(primitive_id: &str, repo_root: &Path) -> Result<()> {
     remove_dir(repo_root, ".claude", "skills", primitive_id)?;
     remove_dir(repo_root, ".claude", "tools", primitive_id)?;
     remove_dir(repo_root, ".claude", "hooks", primitive_id)?;
+    remove_dir(repo_root, ".claude", "workflows", primitive_id)?;
 
     let mcp_path = repo_root.join(".mcp.json");
     super::mcp_remove_tool(repo_root, &mcp_path, primitive_id)?;

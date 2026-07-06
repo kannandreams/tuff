@@ -816,13 +816,14 @@ fn remove_primitive_cleans_up() {
         .join("SKILL.md")
         .exists());
 
-    // Only check project scope is empty
+    // Only check project scope — coral-cli-guide remains from init
     coral()
         .current_dir(temp.path())
         .args(["list", "--scope", "project"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("no capabilities installed"));
+        .stdout(predicate::str::contains("coral-cli-guide"))
+        .stdout(predicate::str::contains("remove-test").not());
 }
 
 #[test]
@@ -1439,12 +1440,13 @@ fn outdated_no_primitives_shows_message() {
         .assert()
         .success();
 
+    // coral-cli-guide is auto-installed — verify it appears
     coral()
         .current_dir(temp.path())
         .arg("outdated")
         .assert()
         .success()
-        .stdout(predicate::str::contains("no capabilities installed"));
+        .stdout(predicate::str::contains("coral-cli-guide"));
 }
 
 #[test]
@@ -1736,4 +1738,174 @@ fn import_batch_scan() {
         .success()
         .stdout(predicate::str::contains("batch-a"))
         .stdout(predicate::str::contains("batch-b"));
+}
+
+fn make_workflow_primitive(root: &Path, wf_id: &str, req_ids: &[(&str, &str)]) -> std::path::PathBuf {
+    let primitive = root.join("wf-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    let mut content = format!(
+        r#"id = "{wf_id}"
+version = "1.0.0"
+type = "workflow"
+description = "A test workflow."
+"#
+    );
+    for (rid, rtype) in req_ids {
+        content.push_str(&format!(
+            "[[workflow.requires]]\nid = \"{rid}\"\ntype = \"{rtype}\"\n"
+        ));
+    }
+    fs::write(primitive.join("coral.toml"), content).unwrap();
+    primitive
+}
+
+#[test]
+fn add_workflow_installs_and_shows_deps() {
+    let temp = TempDir::new().unwrap();
+    let wf = make_workflow_primitive(temp.path(), "test-wf", &[
+        ("dep-a", "skill"),
+        ("dep-b", "tool"),
+    ]);
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", wf.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("installed test-wf (open-agents)"))
+        .stderr(predicate::str::contains("workflow 'test-wf' requires 2 capabilities"))
+        .stderr(predicate::str::contains("dep-a (skill)"))
+        .stderr(predicate::str::contains("dep-b (tool)"));
+
+    assert!(temp.path().join(".agents").join("workflows").join("test-wf").join("workflow.toml").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--type", "workflow"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test-wf"));
+}
+
+#[test]
+fn add_workflow_rejects_self_reference() {
+    let temp = TempDir::new().unwrap();
+    let wf_dir = temp.path().join("self-wf");
+    fs::create_dir_all(&wf_dir).unwrap();
+    fs::write(wf_dir.join("coral.toml"), r#"id = "self-wf"
+version = "1.0.0"
+type = "workflow"
+description = "Bad."
+
+[[workflow.requires]]
+id = "self-wf"
+type = "skill"
+"#).unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot require itself"));
+}
+
+#[test]
+fn add_workflow_rejects_empty_requires() {
+    let temp = TempDir::new().unwrap();
+    let wf_dir = temp.path().join("empty-wf");
+    fs::create_dir_all(&wf_dir).unwrap();
+    fs::write(wf_dir.join("coral.toml"), r#"id = "empty-wf"
+version = "1.0.0"
+type = "workflow"
+description = "Bad."
+
+[workflow]
+"#).unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid capability manifest TOML"));
+}
+
+#[test]
+fn add_workflow_rejects_duplicate_requires() {
+    let temp = TempDir::new().unwrap();
+    let wf_dir = temp.path().join("dup-wf");
+    fs::create_dir_all(&wf_dir).unwrap();
+    fs::write(wf_dir.join("coral.toml"), r#"id = "dup-wf"
+version = "1.0.0"
+type = "workflow"
+description = "Bad."
+
+[[workflow.requires]]
+id = "same"
+type = "skill"
+
+[[workflow.requires]]
+id = "same"
+type = "tool"
+"#).unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("duplicate requirement"));
+}
+
+#[test]
+fn status_shows_workflow_dependency_tree() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "dep-skill");
+    let wf = make_workflow_primitive(temp.path(), "parent-wf", &[("dep-skill", "skill")]);
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", wf.to_str().unwrap(), "--target", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("parent-wf"))
+        .stdout(predicate::str::contains("dep-skill"));
 }

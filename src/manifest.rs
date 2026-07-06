@@ -20,6 +20,8 @@ pub struct CapabilityManifest {
     #[serde(default)]
     pub hook: Option<HookConfig>,
     #[serde(default)]
+    pub workflow: Option<WorkflowConfig>,
+    #[serde(default)]
     #[allow(dead_code)]
     pub targets: Vec<String>,
 
@@ -41,6 +43,18 @@ pub struct HookConfig {
     pub command: String,
     #[serde(default = "default_cwd")]
     pub working_directory: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkflowConfig {
+    pub requires: Vec<Requirement>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Requirement {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub capability_type: String,
 }
 
 fn default_cwd() -> String {
@@ -178,9 +192,42 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
                 manifest.source_files()?;
             }
         }
+        "workflow" => {
+            let wf = manifest.workflow.as_ref().ok_or_else(|| {
+                CoralError::new("workflow capability requires a [[workflow.requires]] section")
+            })?;
+
+            if wf.requires.is_empty() {
+                return Err(CoralError::new("workflow 'requires' must have at least one entry"));
+            }
+
+            let mut seen = std::collections::HashSet::new();
+            for req in &wf.requires {
+                if req.id.trim().is_empty() {
+                    return Err(CoralError::new("workflow requirement 'id' must not be empty"));
+                }
+                if req.id == manifest.id {
+                    return Err(CoralError::new("workflow cannot require itself"));
+                }
+                if !seen.insert(&req.id) {
+                    return Err(CoralError::new(format!(
+                        "duplicate requirement '{}' in workflow",
+                        req.id
+                    )));
+                }
+            }
+
+            let names: Vec<_> = wf.requires.iter().map(|r| format!("{} ({})", r.id, r.capability_type)).collect();
+            eprintln!(
+                "note: workflow '{}' requires {} capabilities: {}",
+                manifest.id,
+                names.len(),
+                names.join(", ")
+            );
+        }
         other => {
             return Err(CoralError::new(format!(
-                "unsupported capability type '{}'; supported: skill, tool, hook",
+                "unsupported capability type '{}'; supported: skill, tool, hook, workflow",
                 other
             )));
         }
@@ -202,6 +249,7 @@ pub fn synthetic_manifest(skill_dir: &Path, name: &str, version: &str) -> Result
         parameters: None,
         implementation: None,
         hook: None,
+        workflow: None,
         targets: Vec::new(),
         root: skill_dir.to_path_buf(),
     })
@@ -326,6 +374,7 @@ files = ["SKILL.md"]
             parameters: None,
             implementation: None,
             hook: None,
+        workflow: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };
@@ -346,6 +395,7 @@ files = ["SKILL.md"]
             parameters: None,
             implementation: None,
             hook: None,
+        workflow: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };

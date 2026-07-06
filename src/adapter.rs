@@ -29,6 +29,7 @@ pub struct ResolvedCapability {
     pub parameters: Option<serde_json::Value>,
     pub implementation: Option<crate::manifest::ImplementationConfig>,
     pub hook: Option<crate::manifest::HookConfig>,
+    pub workflow: Option<crate::manifest::WorkflowConfig>,
 }
 
 pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapability> {
@@ -43,6 +44,7 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
         parameters: manifest.parameters.clone(),
         implementation: manifest.implementation.clone(),
         hook: manifest.hook.clone(),
+        workflow: manifest.workflow.clone(),
     })
 }
 

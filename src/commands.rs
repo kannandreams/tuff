@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+const CORAL_GUIDE_CONTENT: &str = include_str!("../assets/coral-cli-guide.md");
+
 use tabled::{
     settings::{object::Columns, Modify, Style, Width},
     Table, Tabled,
@@ -26,10 +28,69 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     } else {
         let lock_path = lockfile::init_lockfile(repo_root)?;
         let _ = config::read_config(repo_root)?;
+
+        // Scaffold agent directories (smart skip: only create missing ones)
+        for dir in &["skills", "tools", "hooks", "workflows"] {
+            let path = repo_root.join(".agents").join(dir);
+            if !path.exists() {
+                std::fs::create_dir_all(&path)?;
+            }
+        }
+
         println!(
             "initialized {}",
             lockfile::relative_or_absolute_fs(&lock_path, repo_root)
         );
+        println!("scaffolded .agents/ — place your capabilities here:");
+
+        // Install coral-cli-guide skill
+        let guide_path = repo_root.join(".agents").join("skills").join("coral-cli-guide");
+        if !guide_path.exists() {
+            std::fs::create_dir_all(&guide_path)?;
+            std::fs::write(guide_path.join("SKILL.md"), CORAL_GUIDE_CONTENT)?;
+
+            // Baseline
+            let baseline_dir = repo_root
+                .join(".coral")
+                .join("baselines")
+                .join("open-agents")
+                .join("coral-cli-guide");
+            std::fs::create_dir_all(&baseline_dir)?;
+            std::fs::write(baseline_dir.join("SKILL.md"), CORAL_GUIDE_CONTENT)?;
+
+            // Lockfile entry
+            let hash = lockfile::hash_bytes(CORAL_GUIDE_CONTENT.as_bytes());
+            let mut lf = lockfile::require_lockfile(repo_root).unwrap_or(lockfile::Lockfile {
+                version: lockfile::LOCKFILE_VERSION,
+                capabilities: BTreeMap::new(),
+            });
+
+            let mut targets = BTreeMap::new();
+            targets.insert(
+                "open-agents".to_string(),
+                lockfile::TargetLockEntry {
+                    baseline_dir: ".coral/baselines/open-agents/coral-cli-guide".into(),
+                    emitted_files: vec![adapter::EmittedFile {
+                        path: ".agents/skills/coral-cli-guide/SKILL.md".into(),
+                        hash,
+                    }],
+                },
+            );
+
+            lf.capabilities.insert(
+                "coral-cli-guide".into(),
+                lockfile::CapabilityLockEntry {
+                    capability_type: "skill".into(),
+                    installed_version: "0.1.0".into(),
+                    source_path: String::new(),
+                    targets,
+                    source: None,
+                    scope: "project".into(),
+                },
+            );
+
+            lockfile::write_lockfile(repo_root, &lf)?;
+        }
     }
     Ok(())
 }
@@ -428,6 +489,50 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
             };
 
             println!("{id}  project  {drift}{override_warning}");
+
+            if entry.capability_type == "workflow" && !entry.targets.is_empty() {
+                let (_, target_entry) = entry.targets.iter().next().unwrap();
+                for emitted in &target_entry.emitted_files {
+                    if let Ok(content) = std::fs::read_to_string(repo_root.join(&emitted.path)) {
+                        let mut requires = Vec::new();
+                        let mut current_id = String::new();
+                        for line in content.lines() {
+                            if line.starts_with("id = \"") && !line.contains("version") && !line.contains("description") && !line.contains("type") {
+                                current_id = line.trim_start_matches("id = \"").trim_end_matches('"').to_string();
+                            }
+                            if line.starts_with("type = \"") {
+                                let ctype = line.trim_start_matches("type = \"").trim_end_matches('"').to_string();
+                                if !current_id.is_empty() && ctype != "workflow" {
+                                    requires.push((current_id.clone(), ctype));
+                                    current_id.clear();
+                                }
+                            }
+                        }
+
+                        for (req_id, req_type) in &requires {
+                            let child_status = if let Ok(lf) = lockfile::require_lockfile(repo_root) {
+                                if let Some(child_entry) = lf.capabilities.get(req_id) {
+                                    let mut child_drift = Vec::new();
+                                    for (_, ct_entry) in &child_entry.targets {
+                                        for e in &ct_entry.emitted_files {
+                                            let s = lockfile::drift_status(repo_root, e);
+                                            if s != "clean" { child_drift.push(s); }
+                                        }
+                                    }
+                                    if child_drift.is_empty() { "clean".to_string() } else { child_drift.join(",") }
+                                } else {
+                                    "not installed".to_string()
+                                }
+                            } else {
+                                "unknown".to_string()
+                            };
+                            println!("  ├─ {req_id:<30} {req_type:<12} {child_status}");
+                        }
+                    }
+                    break;
+                }
+            }
+
             found_any = true;
         }
     }
@@ -943,6 +1048,7 @@ pub fn cmd_import(
             parameters: None,
             implementation: None,
             hook: None,
+            workflow: None,
             targets: vec![],
             root: dir.clone(),
         };
