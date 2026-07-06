@@ -51,6 +51,7 @@ export default defineConfig({
         {
           label: 'How Coral Works',
           items: [
+            { label: 'Development Lifecycle', slug: 'concepts/development-lifecycle' },
             { label: 'Lifecycle & Drift Detection', slug: 'concepts/lifecycle' },
             { label: 'Diffing & Updates', slug: 'concepts/diff-update' },
             { label: 'Scopes & Overrides', slug: 'concepts/scopes' },

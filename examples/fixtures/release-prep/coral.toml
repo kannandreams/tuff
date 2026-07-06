@@ -1,0 +1,16 @@
+id = "release-prep"
+version = "1.0.0"
+type = "workflow"
+description = "Pre-release checks and validation steps before cutting a release."
+
+[[workflow.requires]]
+id = "python-uv-default"
+type = "skill"
+
+[[workflow.requires]]
+id = "security-review"
+type = "tool"
+
+[[workflow.requires]]
+id = "pre-commit-lint"
+type = "hook"

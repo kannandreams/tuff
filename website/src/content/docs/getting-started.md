@@ -3,103 +3,76 @@ title: Getting Started
 description: Initialize Coral state and install your first capability.
 ---
 
-This guide installs the `python-uv-default` sample fixture into a project.
-The fixture demonstrates the engine lifecycle; it is not a bundled standard pack.
+This guide walks through setting up Coral and managing capabilities in a project.
 
-## 1. Initialize Coral state
+## 1. Initialize Coral
 
 ```sh
 coral init
 ```
 
-This creates:
+Creates `.coral/` state, scaffolds `.agents/` directories, and auto-installs
+`coral-cli-guide` — a reference skill your coding agent can read to learn coral commands.
 
-```text
-.coral/coral-lock.json
-.coral/config.json
-```
-
-## 2. Install a capability
+## 2. Register harness targets
 
 ```sh
-# Skill (local)
-coral add examples/fixtures/python-uv-default -t open-agents
-
-# Skill (git)
-coral add https://github.com/owner/repo --skill python-uv-default -t open-agents
-
-# Tool
-coral add examples/fixtures/security-review -t claude
-
-# Hook
-coral add examples/fixtures/pre-commit-lint -t open-agents
-
-# Global scope
-coral add examples/fixtures/python-uv-default -t open-agents --global
+coral target add open-agents
+coral target add claude
 ```
 
-This writes emitted files to the target harness directory and records baselines
-under `.coral/baselines/`.
+## 3. Create and track your first capability
 
-## 3. List installed capabilities
+```sh
+# Create a skill directly in the agent directory
+mkdir -p .agents/skills/my-skill
+cat > .agents/skills/my-skill/coral.toml << 'EOF'
+id = "my-skill"
+version = "1.0.0"
+type = "skill"
+description = "My first Coral-managed capability."
+files = ["SKILL.md"]
+EOF
+echo "# My Skill\n\nProject conventions go here." > .agents/skills/my-skill/SKILL.md
+
+# Track it with Coral (records baseline, no files copied — tracked in-place)
+coral import .agents/skills/my-skill -t open-agents
+```
+
+## 4. Inspect
 
 ```sh
 coral list
+# coral-cli-guide    0.1.0    project    open-agents    clean
+# my-skill           0.1.0    project    open-agents    clean
 ```
-
-Expected output:
-
-```
-python-uv-default  0.1.0   project   open-agents   clean   .agents/skills/python-uv-default/SKILL.md
-```
-
-## 4. Check status
-
-```sh
-coral status
-```
-
-Shows per-primitive scope, drift, and override warnings.
 
 ## 5. Edit and detect drift
 
-Edit the installed file:
-
-```
-.agents/skills/python-uv-default/SKILL.md
-```
-
-Then check:
+Edit `.agents/skills/my-skill/SKILL.md`, then:
 
 ```sh
 coral list
+# my-skill    0.1.0    project    open-agents    modified
+
+coral diff my-skill
+# shows what changed
 ```
 
-The capability now reports `modified`.
-
-## 6. Show the diff
+## 6. Install from git
 
 ```sh
-coral diff python-uv-default
+coral add https://github.com/pproenca/dot-skills --skill rust-implement -t open-agents
+coral outdated
+coral update rust-implement
 ```
 
-Compares the installed file against the baseline captured at install time.
-
-## 7. Update from git source
+## 7. CI validation
 
 ```sh
-coral update python-uv-default --check   # dry run
-coral update python-uv-default            # merge or apply
+coral check
+# ✓ coral-cli-guide    skill    open-agents    ok
+# ✓ my-skill           skill    open-agents    ok
 ```
 
-## What to commit
-
-Commit `.coral/` and the emitted agent files together:
-
-```sh
-git add .coral/coral-lock.json .coral/config.json .coral/baselines/
-git add .agents/ .claude/
-```
-
-Your team then has the full lifecycle state without re-installing.
-See the [lockfile reference](/concepts/lockfile) for the complete directory structure.
+See the [development lifecycle guide](/concepts/development-lifecycle) for full scenario walkthroughs.
