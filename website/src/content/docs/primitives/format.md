@@ -1,16 +1,17 @@
 ---
-title: Primitive Format
+title: coral.toml
 description: Manifest and file layout for Coral capabilities.
 ---
 
-A Coral capability is a directory with a `coral.toml` manifest and source
-files. The internal schema uses the term `primitive` because Coral will manage
-several artifact kinds through one lifecycle engine.
+Every Coral capability is described by a `coral.toml` manifest. The manifest
+declares the capability type, the files that belong to it, and enough metadata
+for Coral to track installs, validate structure, detect drift, and emit
+target-specific agent output.
 
-The current MVP supports only Codex skills.
-
-The examples below use `python-uv-default` as a fixture. It demonstrates the
-format; it is not a built-in default that Coral core applies automatically.
+The `type` field is the important discriminator. It tells Coral whether the
+directory should be treated as a skill, tool, hook, policy, or workflow while
+still using the same lifecycle commands: install, list, check, diff, update,
+and remove.
 
 ## Directory layout
 
@@ -26,8 +27,7 @@ python-uv-default/
 ```toml
 id = "python-uv-default"
 version = "0.1.0"
-kind = "skill"
-target = "codex"
+type = "skill"
 description = "Use uv for Python dependency and environment management."
 files = ["src/SKILL.md"]
 ```
@@ -35,36 +35,36 @@ files = ["src/SKILL.md"]
 ## Fields
 
 `id`
-: Stable capability identifier. For Codex skills, this becomes the skill
-  directory name under `.agents/skills/`.
+: Stable capability identifier. For skills, this becomes the skill directory
+  name in the target harness output.
 
 `version`
 : Capability version recorded in `.coral/lock.json`.
 
-`kind`
-: Must be `skill` in the current implementation.
-
-`target`
-: Must be `codex` in the current implementation.
+`type`
+: Capability type. Supported values include `skill`, `tool`, `hook`, and
+  `workflow`. Policies are part of the capability model, but may not be
+  available in every adapter yet.
 
 `description`
 : Human-readable capability summary.
 
 `files`
-: Must currently be `["src/SKILL.md"]`.
+: Source files managed as part of this capability.
 
 ## Installed output
 
-For `id = "python-uv-default"`, Coral installs:
+For a skill with `id = "python-uv-default"`, Coral installs:
 
 ```text
 .agents/skills/python-uv-default/SKILL.md
 ```
 
-It also stores the install-time baseline at:
+It also records an install-time baseline under `.coral/` so later edits can be
+reported as drift:
 
 ```text
-.coral/baselines/python-uv-default/SKILL.md
+.coral/baselines/open-agents/python-uv-default/
 ```
 
 ## Where capabilities should live

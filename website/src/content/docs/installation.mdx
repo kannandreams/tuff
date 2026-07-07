@@ -1,0 +1,69 @@
+---
+title: Installation
+description: Install Coral on your machine.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Quick install
+
+<Tabs syncKey="install-method">
+  <TabItem label="Homebrew">
+
+  ```sh
+  brew tap kannandreams/homebrew-coral
+  brew install coral
+  ```
+
+  Requires [Homebrew](https://brew.sh).
+
+  </TabItem>
+  <TabItem label="curl">
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh | sh
+  ```
+
+  Downloads the latest release binary for your OS and architecture.
+
+  </TabItem>
+  <TabItem label="cargo">
+
+  ```sh
+  cargo install --git https://github.com/kannandreams/coral
+  ```
+
+  Builds from source. Requires Rust and Cargo.
+
+  </TabItem>
+  <TabItem label="Build from source">
+
+  ```sh
+  git clone https://github.com/kannandreams/coral
+  cd coral
+  cargo build --release
+  ./target/release/coral --version
+  ```
+
+  Clone and build locally.
+
+  </TabItem>
+</Tabs>
+
+## Verify
+
+```sh
+coral --version
+coral
+```
+
+## Requirements
+
+- **Rust**: `cargo` and build methods use it directly. `curl` and `brew` methods install prebuilt binaries.
+- **Git**: required for `coral add` with git-backed capabilities.
+
+## What's installed
+
+- `/usr/local/bin/coral` (curl/brew methods)
+- `~/.coral/cache/git/`: cloned repositories for capability discovery
+- `.coral/`: project-level state when you run `coral init`
