@@ -1,8 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Alien+Block&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Alien+Block&display=swap");
 
 :root {
-  --sl-font: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --sl-font-system: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font-system: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-system-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   --sl-color-accent-low: #172554;
   --sl-color-accent: #38bdf8;
@@ -170,11 +170,11 @@ nav.sidebar span.large,
 .sl-markdown-content td,
 .sl-markdown-content th {
   color: var(--sl-color-text-secondary);
-  font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 400;
-  font-size: 15px;
-  line-height: 26px;
+  font-size: 16px;
+  line-height: 28px;
 }
 
 nav.sidebar a:hover,
@@ -203,7 +203,7 @@ nav.sidebar a[aria-current=true] {
 .sl-markdown-content h5,
 .sl-markdown-content h6 {
   color: var(--sl-color-text);
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-weight: 600;
 }
 
@@ -227,7 +227,7 @@ nav.sidebar a[aria-current=true] {
 
 nav.sidebar ul.top-level > li > details > summary .group-label > span {
   color: var(--sl-color-text);
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 700;
   font-size: 14px;
