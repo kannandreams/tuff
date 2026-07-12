@@ -18,8 +18,7 @@ follows the open Agents standard.
 
 Agent coding tools increasingly depend on capabilities: skills that teach an agent how
 to work in a project, tools it can call, hooks that run at key events, and workflows that
-compose them together. These capabilities govern what an agent can access, invoke, and is
-restricted from.
+compose them together. Together, they define how an agent works.
 
 Today these capabilities are either siloed on one engineer's machine, invisible to the
 rest of the team, or copied by hand across projects and left to drift silently.
@@ -27,17 +26,13 @@ rest of the team, or copied by hand across projects and left to drift silently.
 Coral treats each capability as something with a lifecycle: installed, tracked against a
 baseline, customized, checked for drift, and reconciled with upstream updates.
 
-## Where teams get stuck
-
-These are routine situations teams run into once agent capabilities start getting shared
-across repos, harnesses, and individual machines. The difference is usually not whether
-the capability exists, but whether its source, local edits, and update path are visible.
+These are common situations teams encounter as capabilities are shared across repositories, coding harnesses, and developer machines.
 
 | Problem context | What changes with Coral |
 |---|---|
 | A skill gets copied between projects and slowly diverges. | Coral records a baseline, so edits show up as drift instead of becoming invisible forks. |
 | A teammate finds a capability file but cannot tell where it came from. | The lockfile records source and version metadata, so provenance is explicit. |
-| One engineer's machine behaves differently because of hidden local setup. | Capabilities can live in the repo, so agent behavior is visible in version control. |
+| One engineer's machine behaves differently because of hidden local setup. | Capabilities can live in the repository or be managed globally, making project-specific behavior visible in version control while supporting shared global capabilities. |
 | A capability only works in one coding harness layout. | Coral maps the same managed capability into each supported harness through adapters. |
 | An upstream fix arrives after the local copy has been edited. | Updates use baseline, local, and upstream state together, so local customization is preserved where possible. |
 | A new project starts by copying whatever someone remembers. | Setup becomes a repeatable CLI step instead of tribal knowledge. |
