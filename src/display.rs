@@ -8,6 +8,43 @@ const WORDMARK_GRADIENT: [(f64, (u8, u8, u8)); 5] = [
     (1.00, (0, 206, 209)),
 ];
 
+struct Palette<'a> {
+    coral: &'a str,
+    pink: &'a str,
+    violet: &'a str,
+    cyan: &'a str,
+    mint: &'a str,
+    white: &'a str,
+    gray: &'a str,
+    reset: &'a str,
+}
+
+fn palette(use_color: bool) -> Palette<'static> {
+    if use_color {
+        Palette {
+            coral: "\x1b[38;2;255;122;89m",
+            pink: "\x1b[38;2;255;92;191m",
+            violet: "\x1b[38;2;178;108;255m",
+            cyan: "\x1b[38;2;57;208;255m",
+            mint: "\x1b[38;2;63;255;196m",
+            white: "\x1b[38;2;241;246;248m",
+            gray: "\x1b[38;2;143;153;166m",
+            reset: "\x1b[0m",
+        }
+    } else {
+        Palette {
+            coral: "",
+            pink: "",
+            violet: "",
+            cyan: "",
+            mint: "",
+            white: "",
+            gray: "",
+            reset: "",
+        }
+    }
+}
+
 fn lerp_u8(a: u8, b: u8, t: f64) -> u8 {
     (a as f64 + (b as f64 - a as f64) * t).round() as u8
 }
@@ -29,45 +66,7 @@ fn wordmark_color_at(t: f64) -> (u8, u8, u8) {
     WORDMARK_GRADIENT[WORDMARK_GRADIENT.len() - 1].1
 }
 
-pub fn print_welcome() {
-    let use_color = std::env::var_os("NO_COLOR").is_none();
-    let coral = if use_color {
-        "\x1b[38;2;255;122;89m"
-    } else {
-        ""
-    };
-    let pink = if use_color {
-        "\x1b[38;2;255;92;191m"
-    } else {
-        ""
-    };
-    let violet = if use_color {
-        "\x1b[38;2;178;108;255m"
-    } else {
-        ""
-    };
-    let cyan = if use_color {
-        "\x1b[38;2;57;208;255m"
-    } else {
-        ""
-    };
-    let mint = if use_color {
-        "\x1b[38;2;63;255;196m"
-    } else {
-        ""
-    };
-    let white = if use_color {
-        "\x1b[38;2;241;246;248m"
-    } else {
-        ""
-    };
-    let gray = if use_color {
-        "\x1b[38;2;143;153;166m"
-    } else {
-        ""
-    };
-    let reset = if use_color { "\x1b[0m" } else { "" };
-
+fn render_wordmark(use_color: bool) -> String {
     let logo_lines = CORAL_WORDMARK_ASCII
         .lines()
         .filter(|line| !line.is_empty())
@@ -98,71 +97,176 @@ pub fn print_welcome() {
             hero.push(ch);
         }
         if use_color {
-            hero.push_str(reset);
+            hero.push_str("\x1b[0m");
         }
         hero.push('\n');
     }
 
-    let gradient_divider = format!(
-        "{coral}{}{pink}{}{violet}{}{cyan}{}{mint}{}{reset}",
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-    );
+    hero
+}
 
-    let title = format!(
-        "{cyan}\u{2502}{reset} {mint}{:<84}{reset} {cyan}\u{2502}{reset}",
-        "Quick Start"
-    );
+fn render_divider(colors: &Palette<'_>) -> String {
+    format!(
+        "{c0}{}{c1}{}{c2}{}{c3}{}{c4}{}{reset}",
+        "\u{2500}".repeat(18),
+        "\u{2500}".repeat(18),
+        "\u{2500}".repeat(18),
+        "\u{2500}".repeat(18),
+        "\u{2500}".repeat(18),
+        c0 = colors.coral,
+        c1 = colors.pink,
+        c2 = colors.violet,
+        c3 = colors.cyan,
+        c4 = colors.mint,
+        reset = colors.reset,
+    )
+}
+
+fn render_quick_start(colors: &Palette<'_>) -> String {
     let rows = [
-        ("coral init", "Initialize .coral/ and .agents/ directories"),
-        (
-            "coral add <path> -t <target>",
-            "Install a capability to a harness",
-        ),
-        ("coral list", "Show installed capabilities and drift"),
-        ("coral diff <id>", "Compare local artifact to baseline"),
-        (
-            "coral target list",
-            "Show available and registered harness targets",
-        ),
+        ("coral init", "Initialize Coral state"),
+        ("coral add <path> -t <target>", "Install a capability"),
+        ("coral list", "Show installed capabilities"),
+        ("coral diff <id>", "Compare local changes to baseline"),
+        ("coral target list", "Show registered harness targets"),
         ("coral --help", "Show command reference"),
     ];
-    let mut quick_start = String::new();
-    let border = "\u{2500}".repeat(84);
-    quick_start.push_str(&format!(
-        "{cyan}\u{250c}{border}\u{2510}{reset}\n"
+
+    let left_width = rows.iter().map(|(left, _)| left.chars().count()).max().unwrap_or(0);
+    let right_width = rows
+        .iter()
+        .map(|(_, right)| right.chars().count())
+        .max()
+        .unwrap_or(0);
+    let inner_width = left_width + right_width + 5;
+    let title_width = inner_width.saturating_sub(2);
+    let title = "Quick Start";
+    let border = "\u{2500}".repeat(inner_width);
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{cyan}+{border}+{reset}\n",
+        cyan = colors.cyan,
+        reset = colors.reset
     ));
-    quick_start.push_str(&title);
-    quick_start.push('\n');
-    quick_start.push_str(&format!(
-        "{cyan}\u{251c}{border}\u{2524}{reset}\n"
+    out.push_str(&format!(
+        "{cyan}|{reset} {mint}{title:<title_width$}{reset} {cyan}|{reset}\n",
+        cyan = colors.cyan,
+        mint = colors.mint,
+        reset = colors.reset,
+        title = title,
+        title_width = title_width
     ));
+    out.push_str(&format!(
+        "{cyan}+{border}+{reset}\n",
+        cyan = colors.cyan,
+        reset = colors.reset
+    ));
+
     for (index, (left, right)) in rows.iter().enumerate() {
-        quick_start.push_str(&format!(
-            "{cyan}\u{2502}{reset} {coral}{:<38}{reset} {cyan}\u{2502}{reset} {gray}{:<43}{reset} {cyan}\u{2502}{reset}",
-            left, right
+        out.push_str(&format!(
+            "{cyan}|{reset} {coral}{left:<left_width$}{reset} {cyan}|{reset} {gray}{right:<right_width$}{reset} {cyan}|{reset}",
+            cyan = colors.cyan,
+            coral = colors.coral,
+            gray = colors.gray,
+            reset = colors.reset,
+            left = left,
+            right = right,
+            left_width = left_width,
+            right_width = right_width
         ));
         if index + 1 < rows.len() {
-            quick_start.push('\n');
+            out.push('\n');
         }
     }
-    quick_start.push('\n');
-    quick_start.push_str(&format!(
-        "{cyan}\u{2514}{border}\u{2518}{reset}"
+
+    out.push('\n');
+    out.push_str(&format!(
+        "{cyan}+{border}+{reset}",
+        cyan = colors.cyan,
+        reset = colors.reset
     ));
+    out
+}
 
-    println!(
-        r#"{hero}
-{gradient_divider}
-{coral}Coral{reset} {white}is a capability lifecycle manager for coding agents.{reset}
+fn render_tagline(colors: &Palette<'_>) -> String {
+    format!(
+        "{coral}Coral{reset} {white}is a capability lifecycle manager for coding agents.{reset}",
+        coral = colors.coral,
+        white = colors.white,
+        reset = colors.reset
+    )
+}
 
-{quick_start}
-"#,
+fn render_welcome(use_color: bool) -> String {
+    let colors = palette(use_color);
+    let hero = render_wordmark(use_color);
+    let divider = render_divider(&colors);
+    let quick_start = render_quick_start(&colors);
+    let tagline = render_tagline(&colors);
+
+    format!(
+        "{hero}\n{divider}\n{tagline}\n\n{quick_start}\n",
         hero = hero,
-        gradient_divider = gradient_divider,
-        quick_start = quick_start,
-    );
+        divider = divider,
+        tagline = tagline,
+        quick_start = quick_start
+    )
+}
+
+fn render_init_banner(use_color: bool) -> String {
+    let colors = palette(use_color);
+    let hero = render_wordmark(use_color);
+    let divider = render_divider(&colors);
+    let tagline = render_tagline(&colors);
+
+    format!(
+        "{hero}\n{divider}\n{tagline}\n",
+        hero = hero,
+        divider = divider,
+        tagline = tagline
+    )
+}
+
+pub fn print_welcome() {
+    let use_color = std::env::var_os("NO_COLOR").is_none();
+    print!("{}", render_welcome(use_color));
+}
+
+pub fn print_init_banner() {
+    let use_color = std::env::var_os("NO_COLOR").is_none();
+    print!("{}", render_init_banner(use_color));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quick_start_box_closes_each_row_without_color() {
+        let text = render_quick_start(&palette(false));
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(!lines.is_empty());
+        assert!(lines[0].starts_with('+'));
+        assert!(lines[0].ends_with('+'));
+        assert!(lines[1].starts_with('|'));
+        assert!(lines[1].ends_with('|'));
+        assert!(lines[2].starts_with('+'));
+        assert!(lines[2].ends_with('+'));
+        for line in &lines[3..lines.len() - 1] {
+            assert!(line.starts_with('|'));
+            assert!(line.ends_with('|'));
+        }
+        assert!(lines.last().unwrap().starts_with('+'));
+        assert!(lines.last().unwrap().ends_with('+'));
+    }
+
+    #[test]
+    fn init_banner_is_more_compact_than_full_welcome() {
+        let welcome = render_welcome(false);
+        let init = render_init_banner(false);
+        assert!(welcome.contains("Quick Start"));
+        assert!(!init.contains("Quick Start"));
+        assert!(init.contains("capability lifecycle manager"));
+    }
 }

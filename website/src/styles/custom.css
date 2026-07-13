@@ -1,8 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Alien+Block&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Alien+Block&display=swap");
 
 :root {
-  --sl-font: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --sl-font-system: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font-system: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-system-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   --sl-color-accent-low: #172554;
   --sl-color-accent: #38bdf8;
@@ -30,7 +30,7 @@
   --sl-sidebar-width: 19rem;
   --sl-content-width: 52rem;
   --sl-text-5xl: 2.625rem;
-  --sl-text-h1: 2.1875rem;
+  --sl-text-h1: 2.75rem;
   --sl-text-h2: 1.8125rem;
   --sl-text-h3: 1.5rem;
   --sl-line-height: 1.72;
@@ -170,7 +170,7 @@ nav.sidebar span.large,
 .sl-markdown-content td,
 .sl-markdown-content th {
   color: var(--sl-color-text-secondary);
-  font-family: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 400;
   font-size: 16px;
@@ -203,7 +203,7 @@ nav.sidebar a[aria-current=true] {
 .sl-markdown-content h5,
 .sl-markdown-content h6 {
   color: var(--sl-color-text);
-  font-family: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-weight: 600;
 }
 
@@ -227,7 +227,7 @@ nav.sidebar a[aria-current=true] {
 
 nav.sidebar ul.top-level > li > details > summary .group-label > span {
   color: var(--sl-color-text);
-  font-family: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 700;
   font-size: 14px;
@@ -257,6 +257,12 @@ nav.sidebar span.large,
 .page-description {
   font-size: 14px;
   line-height: 24px;
+}
+
+.page-description {
+  font-size: 1rem;
+  line-height: 1.65;
+  max-width: 42rem;
 }
 
 .sl-markdown-content table,
@@ -312,34 +318,6 @@ dialog[aria-label='Search'] {
 .sl-markdown-content code {
   font-weight: 500;
 }
-
-.coral-shell {
-  background: #0f172a;
-  border: 1px solid var(--sl-color-hairline-shade);
-  border-radius: 14px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
-  margin: 1rem 0 2.25rem;
-  overflow: hidden;
-}
-
-.coral-shell-chrome {
-  align-items: center;
-  border-bottom: 0.5px solid var(--sl-color-hairline-shade);
-  display: flex;
-  gap: 0.65rem;
-  padding: 0.85rem 1rem;
-}
-
-.coral-dot {
-  border-radius: 999px;
-  display: inline-block;
-  height: 0.8rem;
-  width: 0.8rem;
-}
-
-.coral-dot-red { background: #ff5f57; }
-.coral-dot-yellow { background: #febc2e; }
-.coral-dot-green { background: #28c840; }
 
 .coral-banner-frame {
   padding: 0.75rem;

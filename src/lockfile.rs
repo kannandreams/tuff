@@ -16,13 +16,13 @@ pub const LOCKFILE_VERSION: u8 = 2;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lockfile {
     pub version: u8,
-    #[serde(rename = "capabilities")]
+    #[serde(rename = "capabilities", alias = "primitives")]
     pub capabilities: BTreeMap<String, CapabilityLockEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityLockEntry {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", alias = "primitive")]
     pub capability_type: String,
     #[serde(rename = "installedVersion")]
     pub installed_version: String,
@@ -273,6 +273,34 @@ mod tests {
         write_lockfile_at(&path, &lf).unwrap();
         let read = read_lockfile_at(&path).unwrap();
         assert_eq!(read.capabilities.len(), 1);
+    }
+
+    #[test]
+    fn read_lockfile_accepts_legacy_primitives_schema() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("legacy-lock.json");
+        fs::write(
+            &path,
+            r#"{
+  "version": 2,
+  "primitives": {
+    "test": {
+      "primitive": "skill",
+      "installedVersion": "1.0",
+      "sourcePath": "examples/test",
+      "scope": "project",
+      "targets": {}
+    }
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let read = read_lockfile_at(&path).unwrap();
+        let entry = read.capabilities.get("test").unwrap();
+        assert_eq!(entry.capability_type, "skill");
+        assert_eq!(entry.installed_version, "1.0");
     }
 
     #[test]

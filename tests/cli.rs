@@ -160,9 +160,14 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "example\t1.0.0\tproject\topen-agents\tclean\t.agents/skills/example/SKILL.md",
-        ));
+        .stdout(predicate::str::contains("│ ID"))
+        .stdout(predicate::str::contains("example"))
+        .stdout(predicate::str::contains("skill"))
+        .stdout(predicate::str::contains("1.0.0"))
+        .stdout(predicate::str::contains("project"))
+        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains("clean"))
+        .stdout(predicate::str::contains(".agents/skills/example/SKILL.md"));
 
     fs::write(
         temp.path()
@@ -179,9 +184,9 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "example\t1.0.0\tproject\topen-agents\tmodified\t.agents/skills/example/SKILL.md",
-        ));
+        .stdout(predicate::str::contains("example"))
+        .stdout(predicate::str::contains("modified"))
+        .stdout(predicate::str::contains(".agents/skills/example/SKILL.md"));
 
     coral()
         .current_dir(temp.path())
@@ -375,12 +380,11 @@ fn add_to_multiple_targets() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "example\t1.0.0\tproject\topen-agents\tclean\t.agents/skills/example/SKILL.md",
-        ))
-        .stdout(predicate::str::contains(
-            "example\t1.0.0\tproject\tclaude\tclean\t.claude/skills/example/SKILL.md",
-        ));
+        .stdout(predicate::str::contains("example"))
+        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains(".agents/skills/example/SKILL.md"))
+        .stdout(predicate::str::contains("claude"))
+        .stdout(predicate::str::contains(".claude/skills/example/SKILL.md"));
 
     // Diff with specific target
     coral()
@@ -453,10 +457,8 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "test-skill\t",
-        ))
-        .stdout(predicate::str::contains("\tclean\t"));
+        .stdout(predicate::str::contains("test-skill"))
+        .stdout(predicate::str::contains("clean"));
 
     fs::write(
         temp.path()
@@ -473,10 +475,8 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "test-skill\t",
-        ))
-        .stdout(predicate::str::contains("\tmodified\t"));
+        .stdout(predicate::str::contains("test-skill"))
+        .stdout(predicate::str::contains("modified"));
 
     coral()
         .current_dir(temp.path())
@@ -782,7 +782,10 @@ fn list_shows_scope_column() {
         .assert()
         .success()
         .stdout(predicate::str::contains("project"))
-        .stdout(predicate::str::contains("example\t1.0.0\tproject\topen-agents\tclean\t"));
+        .stdout(predicate::str::contains("VERSION"))
+        .stdout(predicate::str::contains("example"))
+        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains("clean"));
 }
 
 #[test]
@@ -1286,9 +1289,9 @@ fn hook_list_and_drift() {
         .args(["list", "--type", "hook"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "pre-commit\t1.0.0\tproject\topen-agents\tclean\t.agents/hooks/pre-commit/hook.toml",
-        ));
+        .stdout(predicate::str::contains("pre-commit"))
+        .stdout(predicate::str::contains("hook"))
+        .stdout(predicate::str::contains(".agents/hooks/pre-commit/hook.toml"));
 
     fs::write(
         temp.path()
@@ -1305,9 +1308,8 @@ fn hook_list_and_drift() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "pre-commit\t1.0.0\tproject\topen-agents\tmodified\t",
-        ));
+        .stdout(predicate::str::contains("pre-commit"))
+        .stdout(predicate::str::contains("modified"));
 
     coral()
         .current_dir(temp.path())
@@ -1377,8 +1379,10 @@ fn outdated_reports_status() {
         .arg("outdated")
         .assert()
         .success()
+        .stdout(predicate::str::contains("│ ID"))
         .stdout(predicate::str::contains("local-skill"))
-        .stdout(predicate::str::contains("up to date"));
+        .stdout(predicate::str::contains("up to date"))
+        .stdout(predicate::str::contains("HEAD is now at").not());
 }
 
 #[test]
@@ -1637,7 +1641,63 @@ fn import_single_directory() {
         .assert()
         .success()
         .stdout(predicate::str::contains("my-import"))
+        .stdout(predicate::str::contains("skill"))
         .stdout(predicate::str::contains("clean"));
+}
+
+#[test]
+fn create_skill_scaffolds_importable_files() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "--skill", "my-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("created skill scaffold"))
+        .stdout(predicate::str::contains("coral import .agents/skills/my-skill -t <target>"));
+
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("my-skill")
+        .join("coral.toml")
+        .exists());
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("my-skill")
+        .join("SKILL.md")
+        .exists());
+}
+
+#[test]
+fn create_tool_scaffolds_executable_runner() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "--tool", "scan-tool"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("created tool scaffold"));
+
+    let run_sh = temp
+        .path()
+        .join(".agents")
+        .join("tools")
+        .join("scan-tool")
+        .join("run.sh");
+    assert!(run_sh.exists());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(run_sh).unwrap().permissions().mode();
+        assert_eq!(mode & 0o111, 0o111);
+    }
 }
 
 #[test]
@@ -1790,7 +1850,8 @@ fn add_workflow_installs_and_shows_deps() {
         .args(["list", "--type", "workflow"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("test-wf"));
+        .stdout(predicate::str::contains("test-wf"))
+        .stdout(predicate::str::contains("workflow"));
 }
 
 #[test]

@@ -23,8 +23,10 @@ compose them together. Together, they define how an agent works.
 Today these capabilities are either siloed on one engineer's machine, invisible to the
 rest of the team, or copied by hand across projects and left to drift silently.
 
-Coral treats each capability as something with a lifecycle: installed, tracked against a
-baseline, customized, checked for drift, and reconciled with upstream updates.
+- Coral treats each capability as something that can be installed, tracked, updated, and
+  checked for drift over time.
+- Coral manages the lifecycle and structure around a capability, while the capability
+  content itself can stay with the team or project that owns it.
 
 These are common situations teams encounter as capabilities are shared across repositories, coding harnesses, and developer machines.
 
@@ -76,16 +78,6 @@ and merge-aware update through `coral add`, `coral import`, `coral update`, and
 - `coral check` exits 1 on any failure: drift, missing files, invalid state.
 - `coral check --json` for machine-readable CI output.
 - Copy-paste [GitHub Actions workflow](/cli#coral-check) in the CLI reference.
-
-## Core idea
-
-Coral core is content-agnostic. It is the engine for manifests, install state,
-lockfiles, drift detection, diffs, validation, and harness adapters.
-
-The content itself belongs outside the core engine:
-- team capabilities can live in a company pack repository
-- project-specific capabilities can live in the project that owns them
-- optional starter packs can provide defaults without becoming core behavior
 
 ## Inspiration
 

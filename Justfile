@@ -33,3 +33,6 @@ docs-serve:
 
 docs-build:
     cd website && npm run build
+
+docs-assets:
+    ./scripts/generate-doc-screenshot.sh coral-welcome.png -- cargo run --quiet --

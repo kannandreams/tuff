@@ -64,6 +64,7 @@ export default defineConfig({
           label: 'Develop',
           items: [
             { label: 'Development', slug: 'development' },
+            { label: 'Credits', slug: 'credits' },
           ],
         },
       ],

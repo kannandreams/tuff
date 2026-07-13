@@ -17,8 +17,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_check, cmd_diff, cmd_import, cmd_init, cmd_list, cmd_outdated,
-    cmd_remove, cmd_status, cmd_target_add, cmd_target_list, cmd_target_remove, cmd_update,
+    cmd_add, cmd_check, cmd_create, cmd_diff, cmd_import, cmd_init, cmd_list,
+    cmd_outdated, cmd_remove, cmd_status, cmd_target_add, cmd_target_list,
+    cmd_target_remove, cmd_update,
 };
 use error::Result;
 
@@ -147,6 +148,25 @@ enum Command {
         override_existing: bool,
     },
 
+    /// Scaffold a new capability in .agents/.
+    Create {
+        /// Create a skill capability.
+        #[arg(long = "skill")]
+        skill: Option<String>,
+
+        /// Create a tool capability.
+        #[arg(long = "tool")]
+        tool: Option<String>,
+
+        /// Create a hook capability.
+        #[arg(long = "hook")]
+        hook: Option<String>,
+
+        /// Create a workflow capability.
+        #[arg(long = "workflow")]
+        workflow: Option<String>,
+    },
+
     /// Validate installed capabilities (CI mode).
     Check {
         /// Output results as JSON.
@@ -217,6 +237,18 @@ fn run() -> Result<()> {
             capability_type.as_deref(),
             dry_run,
             override_existing,
+        ),
+        Some(Command::Create {
+            skill,
+            tool,
+            hook,
+            workflow,
+        }) => cmd_create(
+            &repo_root,
+            skill.as_deref(),
+            tool.as_deref(),
+            hook.as_deref(),
+            workflow.as_deref(),
         ),
         Some(Command::Add {
             capability,

@@ -31,16 +31,8 @@ coral list
 Author a skill, track it, edit it, and manage drift — all in one directory.
 
 ```sh
-# 1. Create a skill directly in the agent directory
-mkdir -p .agents/skills/python-project
-cat > .agents/skills/python-project/coral.toml << 'EOF'
-id = "python-project"
-version = "1.0.0"
-type = "skill"
-description = "Python project conventions."
-files = ["SKILL.md"]
-EOF
-echo "# Python Project\nUse uv, ruff for linting." > .agents/skills/python-project/SKILL.md
+# 1. Scaffold a skill
+coral create --skill python-project
 
 # 2. Track it — records baseline + lockfile entry
 coral import .agents/skills/python-project -t open-agents
@@ -62,8 +54,12 @@ coral list
 coral diff python-project
 
 # 7. Accept changes (update baseline)
-coral update python-project --force
+coral import .agents/skills/python-project -t open-agents --override
 ```
+
+Use `--override` when the local edited version is now the source of truth and you want Coral to
+record a new baseline in place. `coral update` is the separate flow for git-sourced capabilities
+that need reconciliation with upstream.
 
 ## 3. Install and update from git
 
