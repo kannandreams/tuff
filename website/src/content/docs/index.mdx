@@ -1,0 +1,92 @@
+---
+title: Introduction
+description: Capability lifecycle management for coding agents.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<p align="center">
+  <img src="/img/coral-readme-banner.png?v=3" alt="Coral banner" class="coral-banner-image" />
+</p>
+
+**Coral** is a Rust-powered CLI for managing agent capabilities such as skills, tools, hooks,
+and workflows. It provides lifecycle tracking, drift detection, baseline diffs, and merge-aware
+updates. It works with Codex, Claude Code, Cursor, GitHub Copilot, and any agent harness that
+follows the open Agents standard.
+
+## Why Coral exists
+
+Agent coding tools increasingly depend on capabilities: skills that teach an agent how
+to work in a project, tools it can call, hooks that run at key events, and workflows that
+compose them together. Together, they define how an agent works.
+
+Today these capabilities are either siloed on one engineer's machine, invisible to the
+rest of the team, or copied by hand across projects and left to drift silently.
+
+- Coral treats each capability as something that can be installed, tracked, updated, and
+  checked for drift over time.
+- Coral manages the lifecycle and structure around a capability, while the capability
+  content itself can stay with the team or project that owns it.
+
+These are common situations teams encounter as capabilities are shared across repositories, coding harnesses, and developer machines.
+
+| Problem context | What changes with Coral |
+|---|---|
+| A skill gets copied between projects and slowly diverges. | Coral records a baseline, so edits show up as drift instead of becoming invisible forks. |
+| A teammate finds a capability file but cannot tell where it came from. | The lockfile records source and version metadata, so provenance is explicit. |
+| One engineer's machine behaves differently because of hidden local setup. | Capabilities can live in the repository or be managed globally, making project-specific behavior visible in version control while supporting shared global capabilities. |
+| A capability only works in one coding harness layout. | Coral maps the same managed capability into each supported harness through adapters. |
+| An upstream fix arrives after the local copy has been edited. | Updates use baseline, local, and upstream state together, so local customization is preserved where possible. |
+| A new project starts by copying whatever someone remembers. | Setup becomes a repeatable CLI step instead of tribal knowledge. |
+
+## Coral features
+
+### Capability manifest schema
+
+Every Coral capability is defined by a single `coral.toml` manifest with a `type` field:
+
+| `type` | Purpose |
+|---|---|
+| `skill` | Prose instruction injected into agent context |
+| `tool` | Executable with typed parameter contract (JSON Schema) |
+| `hook` | Event-driven automation (`before_finish`, `after_save`, etc.) |
+| `workflow` | Composable pattern bundling skills, tools, and hooks together |
+
+All four types share the same lifecycle: install, baseline, drift detection, diff,
+and merge-aware update through `coral add`, `coral import`, `coral update`, and
+`coral diff`.
+
+### Lifecycle management
+
+- **Install from anywhere**: local directories, git repositories, or adopt existing agent files with `coral import`. Capabilities are tracked in-place; no file copies are required.
+- **Drift detection**: every install records a pristine baseline. Any edit to an agent file becomes visible as `modified` in `coral list`.
+- **Three-way merge updates**: for git-sourced capabilities, `coral update` merges upstream changes with your local edits using `diffy`. Conflicts are reported with exact file paths and are never silently overwritten.
+
+### Multi-harness output
+
+- **Open Agents** (`.agents/`): serves Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, Roo, Cline, Windsurf. Skills: `SKILL.md`, tools: automatic MCP server registration, hooks: TOML config, workflows: dependency manifests.
+- **Claude Code** (`.claude/`): native directory format with JSON tool configs and MCP auto-registration.
+
+### Scope and team workflows
+
+- **Project scope**: `.coral/` committed to the repo, shared with the team via version control.
+- **Global scope**: `~/.coral/` for personal capabilities available across all projects.
+- Project always wins when both exist. `coral status` flags shadowed globals.
+
+### CI-ready validation
+
+- `coral check` exits 1 on any failure: drift, missing files, invalid state.
+- `coral check --json` for machine-readable CI output.
+- Copy-paste [GitHub Actions workflow](/cli#coral-check) in the CLI reference.
+
+## Inspiration
+
+<Aside type="note" title="Inspiration">
+  Coral is inspired by [skills.sh](https://skills.sh/) and the idea that reusable skills
+  should be easy to share, install, and use across coding agents.
+
+  That solves an important first step: making skills portable. Coral focuses on what
+  happens after a team starts depending on those skills in real projects: knowing where a
+  skill came from, how it changed, whether local edits are intentional, and how to load
+  it consistently into different coding harnesses.
+</Aside>

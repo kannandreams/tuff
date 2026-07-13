@@ -77,6 +77,16 @@ If `just` is installed:
 just docs-serve
 ```
 
+CLI screenshots used in the docs can be generated with:
+
+```sh
+just docs-assets
+```
+
+This uses `freeze` to capture real command output into `website/public/img/generated/`,
+so the same approach can be reused anywhere the docs benefit from a terminal screenshot
+instead of inline text.
+
 ## Project structure
 
 ```text

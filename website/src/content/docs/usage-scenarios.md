@@ -75,9 +75,10 @@ Different coding agents expect different file layouts. Coral should keep a
 single managed source model and compile or emit target-specific output:
 
 ```sh
-coral compile --target codex
-coral compile --target claude
+coral target add open-agents
+coral target add claude
 ```
 
-The current implementation only proves Codex skills. Future harness adapters
-should make target output explicit and reproducible.
+Harness adapters make target output explicit and reproducible. The same
+managed capability can be emitted into `.agents/` for Open Agents-compatible
+harnesses or `.claude/` for Claude Code.

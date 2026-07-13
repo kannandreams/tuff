@@ -1,0 +1,100 @@
+---
+title: Getting Started
+description: Initialize Coral state and install your first capability.
+---
+
+This guide walks through setting up Coral and managing capabilities in a project.
+
+Before you initialize anything, `coral` gives you a quick overview of the CLI:
+
+![Coral CLI welcome output](/img/generated/coral-welcome.png)
+
+## 1. Initialize Coral
+
+```sh
+coral init
+```
+
+Creates `.coral/` state, scaffolds `.agents/` directories, and auto-installs
+`coral-cli-guide` — a reference skill your coding agent can read to learn coral commands.
+
+## 2. Register harness targets
+
+```sh
+coral target add open-agents
+coral target add claude
+```
+
+## 3. Create and track your first capability
+
+```sh
+coral create --skill my-skill
+```
+
+Coral creates a valid starter scaffold in `.agents/skills/my-skill/` so you can edit the generated
+files instead of writing boilerplate from scratch.
+
+### Track it with Coral
+
+```sh
+coral import .agents/skills/my-skill -t open-agents
+```
+
+That records the baseline and starts tracking drift without copying the files somewhere else.
+
+## 4. Inspect what is installed
+
+```sh
+coral list
+```
+
+`coral list` now shows a table with the capability type, target, status, and path.
+
+## 5. Edit and detect drift
+
+```sh
+coral list
+coral diff my-skill
+```
+
+After you edit `.agents/skills/my-skill/SKILL.md`, `coral list` will show it as modified and
+`coral diff my-skill` will show the tracked changes.
+
+If the drift is intentional and you want Coral to treat the edited version as the new baseline,
+re-import that directory:
+
+```sh
+coral import .agents/skills/my-skill -t open-agents --override
+```
+
+Use that for local capabilities you own. Reserve `coral update` for git-sourced capabilities when
+you are reconciling with upstream changes.
+
+## 6. Install from git
+
+```sh
+coral add https://github.com/pproenca/dot-skills --skill rust-implement -t open-agents
+```
+
+Use this when the capability already lives in another repository and you want Coral to install and
+track it in your project.
+
+## 7. Check for updates
+
+```sh
+coral outdated
+coral update rust-implement
+```
+
+`coral outdated` compares tracked git-backed capabilities against their latest upstream revision,
+and `coral update` reconciles them when you are ready.
+
+## 8. CI validation
+
+```sh
+coral check
+# ✓ coral-cli-guide    skill    open-agents    ok
+# ✓ my-skill           skill    open-agents    ok
+```
+
+See the [development lifecycle guide](/concepts/development-lifecycle) for full scenario walkthroughs.

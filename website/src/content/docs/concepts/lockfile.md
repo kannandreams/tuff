@@ -4,14 +4,14 @@ description: What Coral records in project state.
 ---
 
 Coral records state in the `.coral/` directory at the root of your project. The lockfile
-(`coral-lock.json`) tracks installed capabilitys, their versions, where they came from,
+(`coral-lock.json`) tracks installed capabilities, their versions, where they came from,
 and the hashes needed for drift detection and diffs.
 
 ## Directory structure
 
 | File | Purpose | Commit to git? |
 |---|---|---|
-| `.coral/coral-lock.json` | Installed primitive state (id, version, targets, source, hashes) | Yes |
+| `.coral/coral-lock.json` | Installed capability state (id, version, targets, source, hashes) | Yes |
 | `.coral/config.json` | Registered harness targets (`coral target add`) | Yes |
 | `.coral/baselines/<target>/<id>/` | Pristine copies of installed files for diffing | Yes |
 | `~/.coral/coral-lock.json` | Global scope — personal, across all projects | No |
@@ -25,9 +25,9 @@ and `coral update` without re-installing anything.
 ```json
 {
   "version": 2,
-  "primitives": {
+  "capabilities": {
     "python-uv-default": {
-      "primitive": "skill",
+      "type": "skill",
       "installedVersion": "0.1.0",
       "sourcePath": "examples/fixtures/python-uv-default",
       "scope": "project",
@@ -47,11 +47,11 @@ and `coral update` without re-installing anything.
 }
 ```
 
-### Per-primitive fields
+### Per-capability fields
 
 | Field | Description |
 |---|---|
-| `primitive` | Kind — `"skill"`, `"tool"`, or `"hook"` |
+| `type` | Kind — `"skill"`, `"tool"`, `"hook"`, or `"workflow"` |
 | `installedVersion` | Semantic version or git commit SHA |
 | `sourcePath` | Local path to the capability directory (empty for git sources) |
 | `scope` | `"project"` or `"global"` |

@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -13,19 +14,167 @@ use tabled::{
 use crate::{
     adapter::{self, AdapterKind, resolve_capability},
     config, git,
+    display,
     error::{CoralError, Result},
     lockfile::{self, TargetLockEntry},
     manifest::{self, load_manifest},
     resolver::{self, Scope},
 };
 
+#[derive(Tabled)]
+struct ListRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "TYPE")]
+    capability_type: String,
+    #[tabled(rename = "VERSION")]
+    version: String,
+    #[tabled(rename = "SCOPE")]
+    scope: String,
+    #[tabled(rename = "TARGET")]
+    target: String,
+    #[tabled(rename = "STATUS")]
+    status: String,
+    #[tabled(rename = "PATH")]
+    path: String,
+}
+
+#[derive(Tabled)]
+struct OutdatedRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "TYPE")]
+    capability_type: String,
+    #[tabled(rename = "TARGET")]
+    target: String,
+    #[tabled(rename = "CURRENT")]
+    current: String,
+    #[tabled(rename = "LATEST")]
+    latest: String,
+    #[tabled(rename = "STATUS")]
+    status: String,
+}
+
+fn use_color() -> bool {
+    std::env::var_os("NO_COLOR").is_none()
+}
+
+fn paint(text: &str, code: &str) -> String {
+    if use_color() {
+        format!("\x1b[{code}m{text}\x1b[0m")
+    } else {
+        text.to_string()
+    }
+}
+
+fn style_drift_status(status: &str) -> String {
+    match status {
+        "clean" => format!("{} {}", paint("✓", "32"), paint("clean", "32")),
+        "modified" => format!("{} {}", paint("●", "33"), paint("modified", "33")),
+        "missing" => format!("{} {}", paint("✗", "31"), paint("missing", "31")),
+        "error" => format!("{} {}", paint("✗", "31"), paint("error", "31")),
+        other => other.to_string(),
+    }
+}
+
+fn style_outdated_status(status: &str) -> String {
+    match status {
+        "up to date" => format!("{} {}", paint("✓", "32"), paint("up to date", "32")),
+        "outdated" => format!("{} {}", paint("●", "33"), paint("outdated", "33")),
+        "error" => format!("{} {}", paint("✗", "31"), paint("error", "31")),
+        other => other.to_string(),
+    }
+}
+
+fn visible_width(text: &str) -> usize {
+    let mut width = 0usize;
+    let mut chars = text.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                let _ = chars.next();
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        width += 1;
+    }
+
+    width
+}
+
+fn pad_cell(text: &str, width: usize) -> String {
+    let padding = width.saturating_sub(visible_width(text));
+    format!("{text}{}", " ".repeat(padding))
+}
+
+fn border(left: char, join: char, right: char, widths: &[usize]) -> String {
+    let mut line = String::new();
+    line.push(left);
+    for (index, width) in widths.iter().enumerate() {
+        line.push_str(&"─".repeat(width + 2));
+        if index + 1 == widths.len() {
+            line.push(right);
+        } else {
+            line.push(join);
+        }
+    }
+    line
+}
+
+fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let mut widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
+    for row in rows {
+        for (index, cell) in row.iter().enumerate() {
+            widths[index] = widths[index].max(visible_width(cell));
+        }
+    }
+
+    let mut out = String::new();
+    out.push_str(&border('┌', '┬', '┐', &widths));
+    out.push('\n');
+
+    out.push('│');
+    for (index, header) in headers.iter().enumerate() {
+        out.push(' ');
+        out.push_str(&pad_cell(header, widths[index]));
+        out.push(' ');
+        out.push('│');
+    }
+    out.push('\n');
+
+    out.push_str(&border('├', '┼', '┤', &widths));
+    out.push('\n');
+
+    for row in rows {
+        out.push('│');
+        for (index, cell) in row.iter().enumerate() {
+            out.push(' ');
+            out.push_str(&pad_cell(cell, widths[index]));
+            out.push(' ');
+            out.push('│');
+        }
+        out.push('\n');
+    }
+
+    out.push_str(&border('└', '┴', '┘', &widths));
+    out
+}
+
 pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {
+        display::print_init_banner();
         let home = home_dir()?;
         let lock_path = home.join(".coral").join("coral-lock.json");
         lockfile::init_lockfile_at(&lock_path)?;
         println!("initialized ~/.coral/coral-lock.json");
     } else {
+        display::print_init_banner();
         let lock_path = lockfile::init_lockfile(repo_root)?;
         let _ = config::read_config(repo_root)?;
 
@@ -92,6 +241,185 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             lockfile::write_lockfile(repo_root, &lf)?;
         }
     }
+    Ok(())
+}
+
+pub fn cmd_create(
+    repo_root: &Path,
+    skill: Option<&str>,
+    tool: Option<&str>,
+    hook: Option<&str>,
+    workflow: Option<&str>,
+) -> Result<()> {
+    let selections = [
+        ("skill", skill),
+        ("tool", tool),
+        ("hook", hook),
+        ("workflow", workflow),
+    ];
+    let chosen: Vec<_> = selections
+        .iter()
+        .filter_map(|(kind, value)| value.map(|name| (*kind, name)))
+        .collect();
+
+    if chosen.len() != 1 {
+        return Err(CoralError::new(
+            "choose exactly one scaffold target: --skill, --tool, --hook, or --workflow",
+        ));
+    }
+
+    let (kind, raw_name) = chosen[0];
+    let id = raw_name.trim();
+    if id.is_empty() {
+        return Err(CoralError::new("capability name must not be empty"));
+    }
+
+    let (relative_dir, files): (&str, Vec<(&str, String)>) = match kind {
+        "skill" => (
+            "skills",
+            vec![
+                (
+                    "coral.toml",
+                    format!(
+                        r#"id = "{id}"
+version = "0.1.0"
+type = "skill"
+description = "What this skill helps the agent do."
+files = ["SKILL.md"]
+"#
+                    ),
+                ),
+                (
+                    "SKILL.md",
+                    format!(
+                        r#"# {id}
+
+## Purpose
+
+Describe when the agent should use this skill.
+
+## Guidance
+
+- Add the key rules the agent should follow.
+- Add examples, constraints, and team conventions.
+"#
+                    ),
+                ),
+            ],
+        ),
+        "tool" => (
+            "tools",
+            vec![
+                (
+                    "coral.toml",
+                    format!(
+                        r#"id = "{id}"
+version = "0.1.0"
+type = "tool"
+description = "What this tool does for the agent."
+files = ["run.sh"]
+
+[parameters]
+type = "object"
+
+[parameters.properties.input]
+type = "string"
+description = "Input passed to the tool"
+
+[implementation]
+language = "bash"
+entrypoint = "run.sh"
+"#
+                    ),
+                ),
+                (
+                    "run.sh",
+                    r#"#!/usr/bin/env bash
+set -euo pipefail
+
+echo "replace with tool logic"
+"#
+                    .to_string(),
+                ),
+            ],
+        ),
+        "hook" => (
+            "hooks",
+            vec![(
+                "coral.toml",
+                format!(
+                    r#"id = "{id}"
+version = "0.1.0"
+type = "hook"
+description = "What this hook enforces."
+files = ["hook.toml"]
+
+[hook]
+event = "before_finish"
+command = "echo review hook"
+working_directory = "."
+"#
+                ),
+            ), (
+                "hook.toml",
+                "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string(),
+            )],
+        ),
+        "workflow" => (
+            "workflows",
+            vec![(
+                "coral.toml",
+                format!(
+                    r#"id = "{id}"
+version = "0.1.0"
+type = "workflow"
+description = "When the agent should run this workflow."
+files = ["workflow.toml"]
+
+[[workflow.requires]]
+id = "replace-me"
+type = "skill"
+"#
+                ),
+            ), (
+                "workflow.toml",
+                "name = \"replace-me\"\ndescription = \"Fill in the workflow steps here.\"\n".to_string(),
+            )],
+        ),
+        _ => unreachable!(),
+    };
+
+    let root = repo_root.join(".agents").join(relative_dir).join(id);
+    if root.exists() {
+        return Err(CoralError::new(format!(
+            "refusing to overwrite existing capability scaffold: {}",
+            lockfile::relative_or_absolute_fs(&root, repo_root)
+        )));
+    }
+
+    fs::create_dir_all(&root)?;
+    for (name, content) in files {
+        fs::write(root.join(name), content)?;
+    }
+
+    #[cfg(unix)]
+    if kind == "tool" {
+        use std::os::unix::fs::PermissionsExt;
+        let run_sh = root.join("run.sh");
+        let mut permissions = fs::metadata(&run_sh)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(run_sh, permissions)?;
+    }
+
+    println!(
+        "created {kind} scaffold at {}",
+        lockfile::relative_or_absolute_fs(&root, repo_root)
+    );
+    println!(
+        "next: edit the generated files, then run `coral import {} -t <target>`",
+        lockfile::relative_or_absolute_fs(&root, repo_root)
+    );
+
     Ok(())
 }
 
@@ -388,7 +716,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
     let show_project = scope_filter == "all" || scope_filter == "project";
     let show_global = scope_filter == "all" || scope_filter == "global";
 
-    let mut rows: Vec<(String, String, String, String, String, &'static str)> = Vec::new();
+    let mut rows: Vec<ListRow> = Vec::new();
 
     if show_project {
         if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
@@ -401,14 +729,15 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
                 for (target_id, target_entry) in &entry.targets {
                     for emitted in &target_entry.emitted_files {
                         let status = lockfile::drift_status(repo_root, emitted);
-                        rows.push((
-                            id.clone(),
-                            entry.installed_version.clone(),
-                            "project".to_string(),
-                            target_id.clone(),
-                            emitted.path.clone(),
-                            status,
-                        ));
+                        rows.push(ListRow {
+                            id: id.clone(),
+                            capability_type: entry.capability_type.clone(),
+                            version: short_sha(&entry.installed_version).to_string(),
+                            scope: "project".to_string(),
+                            target: target_id.clone(),
+                            status: style_drift_status(status),
+                            path: emitted.path.clone(),
+                        });
                     }
                 }
             }
@@ -428,14 +757,15 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
                     for (target_id, target_entry) in &entry.targets {
                         for emitted in &target_entry.emitted_files {
                             let status = lockfile::drift_status(&home, emitted);
-                            rows.push((
-                                id.clone(),
-                                entry.installed_version.clone(),
-                                "global".to_string(),
-                                target_id.clone(),
-                                format!("~/{}", emitted.path),
-                                status,
-                            ));
+                            rows.push(ListRow {
+                                id: id.clone(),
+                                capability_type: entry.capability_type.clone(),
+                                version: short_sha(&entry.installed_version).to_string(),
+                                scope: "global".to_string(),
+                                target: target_id.clone(),
+                                status: style_drift_status(status),
+                                path: format!("~/{}", emitted.path),
+                            });
                         }
                     }
                 }
@@ -448,14 +778,29 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         return Ok(());
     }
 
-    rows.sort_by(|a, b| a.2.cmp(&b.2).then_with(|| a.0.cmp(&b.0)));
+    rows.sort_by(|a, b| a.scope.cmp(&b.scope).then_with(|| a.id.cmp(&b.id)));
 
-    for (id, version, scope, target, path, status) in &rows {
-        println!(
-            "{}\t{}\t{}\t{}\t{}\t{}",
-            id, version, scope, target, status, path
-        );
-    }
+    let table_rows: Vec<Vec<String>> = rows
+        .into_iter()
+        .map(|row| {
+            vec![
+                row.id,
+                row.capability_type,
+                row.version,
+                row.scope,
+                row.target,
+                row.status,
+                row.path,
+            ]
+        })
+        .collect();
+    println!(
+        "{}",
+        render_table(
+            &["ID", "TYPE", "VERSION", "SCOPE", "TARGET", "STATUS", "PATH"],
+            &table_rows
+        )
+    );
     Ok(())
 }
 
@@ -1173,13 +1518,25 @@ pub fn cmd_check(repo_root: &Path, json: bool, ignore_failures: bool, _global: b
         println!("{}", serde_json::to_string_pretty(&outcome)?);
     } else {
         for r in &outcome.results {
-            let mark = if r.status == "ok" { "✓" } else { "✗" };
+            let mark = if r.status == "ok" {
+                paint("✓", "32")
+            } else {
+                paint("✗", "31")
+            };
+            let status = if r.status == "ok" {
+                paint("ok", "32")
+            } else {
+                paint(&r.status, "31")
+            };
             let extra = if !r.files.is_empty() {
                 format!(" ({})", r.files.join(", "))
             } else {
                 String::new()
             };
-            println!("{mark} {:<24} {:<10} {:<12} {}{}", r.id, r.capability_type, r.target, r.status, extra);
+            println!(
+                "{mark} {:<24} {:<10} {:<12} {}{}",
+                r.id, r.capability_type, r.target, status, extra
+            );
         }
     }
 
@@ -1201,22 +1558,6 @@ fn short_sha(v: &str) -> &str {
 }
 
 pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
-    #[derive(Tabled)]
-    struct OutdatedRow {
-        #[tabled(rename = "ID")]
-        id: String,
-        #[tabled(rename = "TYPE")]
-        capability_type: String,
-        #[tabled(rename = "TARGET")]
-        target: String,
-        #[tabled(rename = "CURRENT")]
-        current: String,
-        #[tabled(rename = "LATEST")]
-        latest: String,
-        #[tabled(rename = "STATUS")]
-        status: String,
-    }
-
     let mut rows: Vec<OutdatedRow> = Vec::new();
 
     if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
@@ -1336,28 +1677,35 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
 
     rows.sort_by(|a, b| a.id.cmp(&b.id));
 
-    let use_color = std::env::var_os("NO_COLOR").is_none();
-    let green = if use_color { "\x1b[32m" } else { "" };
-    let red = if use_color { "\x1b[31m" } else { "" };
-    let reset = if use_color { "\x1b[0m" } else { "" };
-
     let styled_rows: Vec<OutdatedRow> = rows
         .into_iter()
         .map(|r| {
-            let status = match r.status.as_str() {
-                "up to date" => format!("  {green}●{reset} {}", r.status),
-                "outdated" => format!("  {red}●{reset} {}", r.status),
-                "error" => format!("  {red}●{reset} {}", r.status),
-                _ => r.status,
-            };
+            let status = style_outdated_status(&r.status);
             OutdatedRow { status, ..r }
         })
         .collect();
 
-    let mut table = Table::new(styled_rows);
-    table.with(Style::modern());
+    let table_rows: Vec<Vec<String>> = styled_rows
+        .into_iter()
+        .map(|row| {
+            vec![
+                row.id,
+                row.capability_type,
+                row.target,
+                row.current,
+                row.latest,
+                row.status,
+            ]
+        })
+        .collect();
 
-    println!("{table}");
+    println!(
+        "{}",
+        render_table(
+            &["ID", "TYPE", "TARGET", "CURRENT", "LATEST", "STATUS"],
+            &table_rows
+        )
+    );
     Ok(())
 }
 

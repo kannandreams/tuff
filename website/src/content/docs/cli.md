@@ -106,6 +106,8 @@ coral list --scope global --type tool
 | `modified` | Installed content has local changes |
 | `missing` | Installed file no longer exists |
 
+`coral list` uses terminal colors when supported: clean is green, modified is amber, and missing is red.
+
 ## `coral status`
 
 Show per-primitive detail including scope, drift, and override warnings:
@@ -155,6 +157,13 @@ coral diff <id> --upstream
 
 # Diff a specific target
 coral diff <id> -t claude
+```
+
+If the local drift is intentional and should become the new tracked baseline, re-import the
+directory with `--override`:
+
+```sh
+coral import .agents/skills/my-skill -t open-agents --override
 ```
 
 ## `coral remove`

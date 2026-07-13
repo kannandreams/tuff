@@ -60,43 +60,48 @@ pub fn clone_or_fetch(raw_url: &str) -> Result<(PathBuf, String)> {
         .join(hash_url(&clean_url));
 
     if cache_dir.join(".git").exists() {
-        let status = Command::new("git")
-            .args(["fetch", "origin"])
-            .current_dir(&cache_dir)
-            .status()?;
-        if !status.success() {
-            return Err(CoralError::new(format!(
-                "git fetch failed for {}",
-                clean_url
-            )));
-        }
-
-        let status = Command::new("git")
-            .args(["reset", "--hard", "origin/HEAD"])
-            .current_dir(&cache_dir)
-            .status()?;
-        if !status.success() {
-            return Err(CoralError::new("git reset --hard failed"));
-        }
+        run_git(
+            Command::new("git")
+                .args(["fetch", "--quiet", "origin"])
+                .current_dir(&cache_dir),
+            &format!("git fetch failed for {clean_url}"),
+        )?;
+        run_git(
+            Command::new("git")
+                .args(["reset", "--hard", "--quiet", "origin/HEAD"])
+                .current_dir(&cache_dir),
+            "git reset --hard failed",
+        )?;
     } else {
         std::fs::create_dir_all(cache_dir.parent().unwrap())?;
 
         let mut cmd = Command::new("git");
-        cmd.args(["clone", "--depth", "1"]);
+        cmd.args(["clone", "--quiet", "--depth", "1"]);
         if let Some(ref b) = branch {
             cmd.args(["--branch", b]);
         }
         cmd.arg(&clean_url).arg(&cache_dir);
-        let status = cmd.status()?;
-        if !status.success() {
-            return Err(CoralError::new(format!(
-                "git clone failed for {}; is the repo accessible?",
-                clean_url
-            )));
-        }
+        run_git(
+            &mut cmd,
+            &format!("git clone failed for {clean_url}; is the repo accessible?"),
+        )?;
     }
 
     Ok((cache_dir, clean_url))
+}
+
+fn run_git(cmd: &mut Command, context: &str) -> Result<()> {
+    let output = cmd.output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if stderr.is_empty() {
+        Err(CoralError::new(context.to_string()))
+    } else {
+        Err(CoralError::new(format!("{context}: {stderr}")))
+    }
 }
 
 pub fn resolve_ref(repo: &Path) -> Result<String> {

@@ -12,11 +12,11 @@ export default defineConfig({
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/kannandreams/loadout',
+          href: 'https://github.com/kannandreams/coral',
         },
       ],
       editLink: {
-        baseUrl: 'https://github.com/kannandreams/loadout/blob/main/website/',
+        baseUrl: 'https://github.com/kannandreams/coral/blob/main/website/',
       },
       lastUpdated: true,
       expressiveCode: {
@@ -40,7 +40,7 @@ export default defineConfig({
           label: 'Capabilities',
           items: [
             { label: 'Overview', slug: 'primitives/overview' },
-            { label: 'Primitive Format', slug: 'primitives/format' },
+            { label: 'coral.toml', slug: 'primitives/format' },
             { label: 'Skills', slug: 'primitives/skills' },
             { label: 'Tools', slug: 'primitives/tools' },
             { label: 'Hooks', slug: 'primitives/hooks' },
@@ -49,8 +49,9 @@ export default defineConfig({
           ],
         },
         {
-          label: 'How Coral Works',
+          label: 'Concepts',
           items: [
+            { label: 'Usage Scenarios', slug: 'usage-scenarios' },
             { label: 'Development Lifecycle', slug: 'concepts/development-lifecycle' },
             { label: 'Lifecycle & Drift Detection', slug: 'concepts/lifecycle' },
             { label: 'Diffing & Updates', slug: 'concepts/diff-update' },
@@ -60,18 +61,10 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Product Model',
+          label: 'Develop',
           items: [
-            { label: 'Repository Model', slug: 'repository-model' },
-            { label: 'Usage Scenarios', slug: 'usage-scenarios' },
-          ],
-        },
-        {
-          label: 'Project',
-          items: [
-            { label: 'Roadmap', slug: 'roadmap' },
             { label: 'Development', slug: 'development' },
-            { label: 'Comparison: Vercel Skills', slug: 'comparison/vercel-skills' },
+            { label: 'Credits', slug: 'credits' },
           ],
         },
       ],
