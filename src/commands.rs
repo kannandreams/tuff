@@ -86,6 +86,86 @@ fn style_outdated_status(status: &str) -> String {
     }
 }
 
+fn visible_width(text: &str) -> usize {
+    let mut width = 0usize;
+    let mut chars = text.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                let _ = chars.next();
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        width += 1;
+    }
+
+    width
+}
+
+fn pad_cell(text: &str, width: usize) -> String {
+    let padding = width.saturating_sub(visible_width(text));
+    format!("{text}{}", " ".repeat(padding))
+}
+
+fn border(left: char, join: char, right: char, widths: &[usize]) -> String {
+    let mut line = String::new();
+    line.push(left);
+    for (index, width) in widths.iter().enumerate() {
+        line.push_str(&"─".repeat(width + 2));
+        if index + 1 == widths.len() {
+            line.push(right);
+        } else {
+            line.push(join);
+        }
+    }
+    line
+}
+
+fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let mut widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
+    for row in rows {
+        for (index, cell) in row.iter().enumerate() {
+            widths[index] = widths[index].max(visible_width(cell));
+        }
+    }
+
+    let mut out = String::new();
+    out.push_str(&border('┌', '┬', '┐', &widths));
+    out.push('\n');
+
+    out.push('│');
+    for (index, header) in headers.iter().enumerate() {
+        out.push(' ');
+        out.push_str(&pad_cell(header, widths[index]));
+        out.push(' ');
+        out.push('│');
+    }
+    out.push('\n');
+
+    out.push_str(&border('├', '┼', '┤', &widths));
+    out.push('\n');
+
+    for row in rows {
+        out.push('│');
+        for (index, cell) in row.iter().enumerate() {
+            out.push(' ');
+            out.push_str(&pad_cell(cell, widths[index]));
+            out.push(' ');
+            out.push('│');
+        }
+        out.push('\n');
+    }
+
+    out.push_str(&border('└', '┴', '┘', &widths));
+    out
+}
+
 pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {
         display::print_init_banner();
@@ -700,11 +780,27 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
 
     rows.sort_by(|a, b| a.scope.cmp(&b.scope).then_with(|| a.id.cmp(&b.id)));
 
-    let mut table = Table::new(rows);
-    table
-        .with(Style::rounded())
-        .with(Modify::new(Columns::single(6)).with(Width::wrap(42).keep_words(true)));
-    println!("{table}");
+    let table_rows: Vec<Vec<String>> = rows
+        .into_iter()
+        .map(|row| {
+            vec![
+                row.id,
+                row.capability_type,
+                row.version,
+                row.scope,
+                row.target,
+                row.status,
+                row.path,
+            ]
+        })
+        .collect();
+    println!(
+        "{}",
+        render_table(
+            &["ID", "TYPE", "VERSION", "SCOPE", "TARGET", "STATUS", "PATH"],
+            &table_rows
+        )
+    );
     Ok(())
 }
 
@@ -1589,10 +1685,27 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
         })
         .collect();
 
-    let mut table = Table::new(styled_rows);
-    table.with(Style::modern());
+    let table_rows: Vec<Vec<String>> = styled_rows
+        .into_iter()
+        .map(|row| {
+            vec![
+                row.id,
+                row.capability_type,
+                row.target,
+                row.current,
+                row.latest,
+                row.status,
+            ]
+        })
+        .collect();
 
-    println!("{table}");
+    println!(
+        "{}",
+        render_table(
+            &["ID", "TYPE", "TARGET", "CURRENT", "LATEST", "STATUS"],
+            &table_rows
+        )
+    );
     Ok(())
 }
 

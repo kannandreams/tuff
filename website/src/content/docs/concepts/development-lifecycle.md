@@ -3,6 +3,37 @@ title: Development Lifecycle
 description: How Coral fits into your daily workflow — from first-time setup to CI validation.
 ---
 
+## Guided flow
+
+<div class="lifecycle-flow">
+  <div class="lifecycle-node lifecycle-node--neutral">Capability created or installed</div>
+  <div class="lifecycle-connector lifecycle-connector--short"></div>
+  <div class="lifecycle-node lifecycle-node--neutral">Used in the repo</div>
+  <div class="lifecycle-branches">
+    <div class="lifecycle-branch">
+      <div class="lifecycle-node lifecycle-node--drift">Local file edited</div>
+      <div class="lifecycle-connector"></div>
+      <div class="lifecycle-node lifecycle-node--drift">
+        <strong>Drift detected</strong>
+        <span>`coral list` and `coral diff` compare against the recorded baseline</span>
+      </div>
+    </div>
+    <div class="lifecycle-branch">
+      <div class="lifecycle-node lifecycle-node--upstream">Upstream version changes</div>
+      <div class="lifecycle-connector"></div>
+      <div class="lifecycle-node lifecycle-node--upstream">
+        <strong>Update reviewed</strong>
+        <span>`coral outdated`, `coral diff --upstream`, then `coral update`</span>
+      </div>
+    </div>
+  </div>
+  <div class="lifecycle-connector lifecycle-connector--merge"></div>
+  <div class="lifecycle-node lifecycle-node--resolve">
+    <strong>Reviewed state recorded</strong>
+    <span>Local edits can be accepted with `coral import --override`; git-backed changes can be merged with `coral update`</span>
+  </div>
+</div>
+
 ## 1. First-time setup
 
 Setting up Coral in a new or existing project.
