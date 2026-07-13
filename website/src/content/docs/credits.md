@@ -9,7 +9,6 @@ agent capability space.
 ## Project inspiration
 
 - [skills.sh](https://skills.sh/) for the broader idea of reusable, shareable agent skills
-- [Open Agents](https://github.com/openai/open-agents) for the open harness layout Coral targets through adapters
 
 ## Documentation and docs UX
 

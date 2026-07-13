@@ -6,35 +6,35 @@ description: How Coral fits into your daily workflow — from first-time setup t
 ## Guided flow
 
 <div class="lifecycle-flow">
-  <div class="lifecycle-node lifecycle-node--neutral">Capability created or installed</div>
-  <div class="lifecycle-connector lifecycle-connector--short"></div>
-  <div class="lifecycle-node lifecycle-node--neutral">Used in the repo</div>
+  <div class="lifecycle-node lifecycle-node--neutral">
+    <strong>Capability enters the repo</strong>
+    <span>`coral create`, `coral import`, or `coral add` records the first baseline</span>
+  </div>
   <div class="lifecycle-branches">
-    <div class="lifecycle-branch">
-      <div class="lifecycle-node lifecycle-node--drift">Local file edited</div>
-      <div class="lifecycle-connector"></div>
+    <div class="lifecycle-track lifecycle-track--drift">
+      <div class="lifecycle-track-label">Local edits</div>
+      <div class="lifecycle-step">File changes in `.agents/` or `.claude/`</div>
       <div class="lifecycle-node lifecycle-node--drift">
         <strong>Drift detected</strong>
         <span>`coral list` and `coral diff` compare against the recorded baseline</span>
       </div>
     </div>
-    <div class="lifecycle-branch">
-      <div class="lifecycle-node lifecycle-node--upstream">Upstream version changes</div>
-      <div class="lifecycle-connector"></div>
+    <div class="lifecycle-track lifecycle-track--upstream">
+      <div class="lifecycle-track-label">Git source updates</div>
+      <div class="lifecycle-step">Upstream repository moves ahead</div>
       <div class="lifecycle-node lifecycle-node--upstream">
         <strong>Update reviewed</strong>
         <span>`coral outdated`, `coral diff --upstream`, then `coral update`</span>
       </div>
     </div>
   </div>
-  <div class="lifecycle-connector lifecycle-connector--merge"></div>
   <div class="lifecycle-node lifecycle-node--resolve">
     <strong>Reviewed state recorded</strong>
     <span>Local edits can be accepted with `coral import --override`; git-backed changes can be merged with `coral update`</span>
   </div>
 </div>
 
-## 1. First-time setup
+## Use Case: First-time setup
 
 Setting up Coral in a new or existing project.
 
@@ -57,7 +57,7 @@ coral list
 # coral-cli-guide    0.1.0    project    open-agents    clean
 ```
 
-## 2. Create and manage local capabilities
+## Use Case: Create and manage a local capability
 
 Author a skill, track it, edit it, and manage drift — all in one directory.
 
@@ -92,7 +92,7 @@ Use `--override` when the local edited version is now the source of truth and yo
 record a new baseline in place. `coral update` is the separate flow for git-sourced capabilities
 that need reconciliation with upstream.
 
-## 3. Install and update from git
+## Use Case: Install and update from git
 
 Install capabilities from shared repos, check for updates, and merge changes.
 
@@ -127,7 +127,7 @@ coral list
 # rust-implement         def5678    project    open-agents    modified
 ```
 
-## 4. Adopt Coral in an existing project
+## Use Case: Adopt Coral in an existing project
 
 Your repo already has agent files. Bring them under Coral management without moving anything.
 

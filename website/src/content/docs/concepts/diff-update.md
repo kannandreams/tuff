@@ -1,15 +1,124 @@
 ---
 title: Diffing & Updates
-description: How Coral compares installed state and why updates matter.
+description: How Coral shows local drift, compares upstream changes, and updates git-sourced capabilities.
 ---
 
-Coral already proves the first diffing loop by comparing installed content against a recorded baseline.
+Coral uses the recorded baseline in `.coral/baselines/` as the reference point for both local
+diffing and upstream-aware updates.
 
-The longer-term direction is broader:
+There are two distinct flows:
 
-- diff local installed state against baseline
-- detect upstream source changes
-- compare baseline, local, and upstream state together
-- preserve intentional local changes during updates
+- local drift against the recorded baseline
+- upstream changes for git-sourced capabilities
 
-That future merge/update behavior is one of Coral's most important product bets.
+## 1. Diff local changes
+
+Use this when a tracked file in `.agents/` or `.claude/` was edited in the repo.
+
+```sh
+coral list
+coral diff my-skill
+```
+
+Command behavior:
+
+- `coral list` shows whether the installed files are `clean`, `modified`, or `missing`
+- `coral diff <id>` shows the unified diff between the current file and the recorded baseline
+
+### Example
+
+```sh
+coral diff python-project
+--- baseline/open-agents/python-project/
++++ .agents/skills/python-project/SKILL.md
+@@ -1,2 +1,3 @@
+ # Python Project
+ Use uv, ruff for linting.
++Always run tests before pushing.
+```
+
+If that local change is now the new source of truth, accept it by re-importing the directory:
+
+```sh
+coral import .agents/skills/python-project -t open-agents --override
+```
+
+## 2. Diff upstream changes
+
+Use this when the capability was installed from a git source and you want to inspect what changed
+upstream since the last recorded baseline.
+
+```sh
+coral outdated
+coral diff rust-implement --upstream
+```
+
+### Example
+
+```sh
+coral outdated
+
+coral diff rust-implement --upstream
+--- baseline/SKILL.md
++++ upstream/open-agents/SKILL.md
+@@ -1,4 +1,5 @@
+ # Rust Implement
+ Follow the project conventions.
++Run clippy before opening a PR.
+```
+
+If nothing changed upstream, Coral prints:
+
+```sh
+no upstream changes
+```
+
+## 3. Preview an update
+
+For git-sourced capabilities, use `--check` before updating:
+
+```sh
+coral update rust-implement --check
+```
+
+You will see one of these outcomes:
+
+- `'rust-implement' can be updated cleanly (no local changes)`
+- `'rust-implement' has local changes — update would attempt three-way merge`
+- `'rust-implement' is up to date`
+
+## 4. Apply an update
+
+```sh
+coral update rust-implement
+```
+
+Current update behavior:
+
+- if local matches baseline and upstream changed, Coral applies upstream
+- if upstream matches baseline, Coral leaves local changes alone
+- if both local and upstream changed, Coral attempts a three-way merge
+- if merge conflicts remain, Coral reports them and keeps local files in place
+
+If you want to discard local changes and take upstream as-is:
+
+```sh
+coral update rust-implement --force
+```
+
+## Command reference
+
+| Command | Purpose |
+|---|---|
+| `coral diff <id>` | Local file changes against baseline |
+| `coral diff <id> --upstream` | Upstream changes against baseline |
+| `coral outdated` | Show whether git-sourced capabilities have newer upstream commits |
+| `coral update <id> --check` | Preview update behavior |
+| `coral update <id>` | Apply update using baseline-aware merge logic |
+| `coral update <id> --force` | Replace local files with upstream output |
+
+## Important distinction
+
+Use `coral import ... --override` when you are accepting local edits as the new baseline.
+
+Use `coral update` when the capability came from git and you are reconciling with upstream.

@@ -262,27 +262,59 @@ nav.sidebar span.large,
 .lifecycle-flow {
   display: grid;
   justify-items: center;
-  gap: 0.9rem;
+  gap: 1rem;
   margin: 1.75rem 0 2.5rem;
+  max-width: 56rem;
 }
 
 .lifecycle-branches {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.25rem 2rem;
+  gap: 1.25rem;
   width: 100%;
-  align-items: start;
+  align-items: stretch;
 }
 
-.lifecycle-branch {
+.lifecycle-track {
   display: grid;
+  grid-template-rows: 1.4rem minmax(4rem, auto) 1fr;
   justify-items: center;
-  gap: 0.85rem;
+  align-content: stretch;
+  gap: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 0.95rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.lifecycle-track-label {
+  align-self: center;
+  color: var(--sl-color-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.lifecycle-step {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  border-radius: 0.7rem;
+  border: 1px dashed rgba(148, 163, 184, 0.42);
+  padding: 0.75rem 0.9rem;
+  color: var(--sl-color-text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .lifecycle-node {
-  width: min(100%, 24rem);
-  border-radius: 1.15rem;
+  align-self: stretch;
+  width: min(100%, 28rem);
+  border-radius: 0.95rem;
   border: 1px solid rgba(255, 255, 255, 0.28);
   padding: 1.1rem 1.2rem;
   text-align: center;
@@ -329,21 +361,7 @@ nav.sidebar span.large,
 
 .lifecycle-node--resolve {
   background: linear-gradient(180deg, rgba(161, 98, 7, 0.42), rgba(133, 77, 14, 0.28));
-  width: min(100%, 34rem);
-}
-
-.lifecycle-connector {
-  width: 2px;
-  height: 1.5rem;
-  background: rgba(148, 163, 184, 0.55);
-}
-
-.lifecycle-connector--short {
-  height: 1rem;
-}
-
-.lifecycle-connector--merge {
-  height: 1.8rem;
+  width: min(100%, 38rem);
 }
 
 @media (max-width: 52rem) {

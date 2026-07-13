@@ -51,7 +51,7 @@ and `coral update` without re-installing anything.
 
 | Field | Description |
 |---|---|
-| `type` | Kind — `"skill"`, `"tool"`, `"hook"`, or `"workflow"` |
+| `type` | `"skill"`, `"tool"`, `"hook"`, or `"workflow"` |
 | `installedVersion` | Semantic version or git commit SHA |
 | `sourcePath` | Local path to the capability directory (empty for git sources) |
 | `scope` | `"project"` or `"global"` |
