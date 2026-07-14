@@ -1,4 +1,4 @@
-const CORAL_WORDMARK_ASCII: &str = include_str!("../assets/coral.txt");
+const CORAL_WORDMARK_ASCII: &str = include_str!("../assets/coral-alien-block.txt");
 
 const WORDMARK_GRADIENT: [(f64, (u8, u8, u8)); 5] = [
     (0.00, (255, 128, 0)),
@@ -268,5 +268,12 @@ mod tests {
         assert!(welcome.contains("Quick Start"));
         assert!(!init.contains("Quick Start"));
         assert!(init.contains("capability lifecycle manager"));
+    }
+
+    #[test]
+    fn wordmark_uses_alien_block_asset() {
+        let wordmark = render_wordmark(false);
+        assert!(wordmark.contains("▄▄"));
+        assert!(!wordmark.contains("██████   ██████  ██████"));
     }
 }
