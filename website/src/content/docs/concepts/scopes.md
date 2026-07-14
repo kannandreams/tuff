@@ -34,7 +34,7 @@ directory:
 
 Use it explicitly:
 
-```sh
+```sh frame="terminal"
 coral init --global
 coral add ./my-skill -t open-agents --global
 coral update my-skill --scope global
@@ -63,7 +63,7 @@ Coral surfaces this in status output:
 
 ## Example: project copy overrides global
 
-```sh
+```sh frame="terminal"
 # Install globally
 coral add ./company-review -t open-agents --global
 
@@ -89,7 +89,7 @@ This is especially useful when:
 
 ### Commands that default to project scope
 
-```sh
+```sh frame="terminal"
 coral add ./my-skill -t open-agents
 coral list
 coral diff my-skill
@@ -98,7 +98,7 @@ coral update my-skill
 
 ### Commands that can target global scope
 
-```sh
+```sh frame="terminal"
 coral add ./my-skill -t open-agents --global
 coral list --scope global
 coral remove my-skill --scope global

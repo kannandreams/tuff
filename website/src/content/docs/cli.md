@@ -9,7 +9,7 @@ Run commands from the repository root unless `--global` is specified.
 
 Show the ASCII banner and quick-start menu:
 
-```sh
+```sh frame="terminal"
 coral
 ```
 
@@ -17,13 +17,13 @@ coral
 
 Initialize Coral state in the current directory:
 
-```sh
+```sh frame="terminal"
 coral init
 ```
 
 Initialize global scope (for primitives shared across all projects):
 
-```sh
+```sh frame="terminal"
 coral init --global
 ```
 
@@ -33,7 +33,7 @@ Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global).
 
 Install a capability from a local directory:
 
-```sh
+```sh frame="terminal"
 # Skill
 coral add ./my-skill -t open-agents
 
@@ -49,19 +49,19 @@ coral add ./my-skill -t open-agents --global
 
 Install a skill from a git repository:
 
-```sh
+```sh frame="terminal"
 coral add https://github.com/owner/repo --skill <name> -t open-agents
 ```
 
 Install a tool from a git repository:
 
-```sh
+```sh frame="terminal"
 coral add https://github.com/owner/repo --tool <name> -t claude
 ```
 
 Install a hook from a git repository:
 
-```sh
+```sh frame="terminal"
 coral add https://github.com/owner/repo --hook <name> -t open-agents
 ```
 
@@ -79,13 +79,13 @@ coral add https://github.com/owner/repo --hook <name> -t open-agents
 
 Show installed capabilitys with scope, drift status, and path:
 
-```sh
+```sh frame="terminal"
 coral list
 ```
 
 ### Filters
 
-```sh
+```sh frame="terminal"
 # By scope
 coral list --scope project
 coral list --scope global
@@ -112,7 +112,7 @@ coral list --scope global --type tool
 
 Show per-primitive detail including scope, drift, and override warnings:
 
-```sh
+```sh frame="terminal"
 coral status
 ```
 
@@ -129,7 +129,7 @@ scan-tool          project  clean
 Show all installed capabilitys and whether upstream updates are available.
 Read-only — never modifies files.
 
-```sh
+```sh frame="terminal"
 coral outdated
 ```
 
@@ -148,7 +148,7 @@ For local primitives, `LATEST` shows `—` and status is always `up to date` or 
 
 Show unified diff between baseline and installed files, or compare against latest upstream:
 
-```sh
+```sh frame="terminal"
 # Local changes against baseline
 coral diff <id>
 
@@ -162,7 +162,7 @@ coral diff <id> -t claude
 If the local drift is intentional and should become the new tracked baseline, re-import the
 directory with `--override`:
 
-```sh
+```sh frame="terminal"
 coral import .agents/skills/my-skill -t open-agents --override
 ```
 
@@ -170,7 +170,7 @@ coral import .agents/skills/my-skill -t open-agents --override
 
 Remove a primitive and clean up emitted files:
 
-```sh
+```sh frame="terminal"
 # Remove from project scope (default)
 coral remove <id>
 
@@ -189,7 +189,7 @@ Update a git-sourced primitive to its latest version. Performs a three-way merge
 between baseline, local, and upstream. See the [lifecycle docs](/concepts/lifecycle)
 for the merge behavior table.
 
-```sh
+```sh frame="terminal"
 # Attempt three-way merge (default)
 coral update <id>
 
@@ -207,13 +207,13 @@ coral update <id> --scope global
 
 ### List available and registered targets
 
-```sh
+```sh frame="terminal"
 coral target list
 ```
 
 ### Register a target
 
-```sh
+```sh frame="terminal"
 coral target add open-agents
 coral target add claude
 ```
@@ -222,7 +222,7 @@ Legacy aliases (`codex`, `claude-code`) are accepted and map to the current targ
 
 ### Remove a target
 
-```sh
+```sh frame="terminal"
 coral target remove open-agents
 ```
 
@@ -232,7 +232,7 @@ Removes all emitted files and MCP registrations for that target across all capab
 
 Bring existing agent assets under Coral management without rewriting content.
 
-```sh
+```sh frame="terminal"
 # Import a single directory
 coral import .agents/skills/my-skill -t open-agents
 
@@ -285,7 +285,7 @@ Version defaults to `0.1.0` — edit the generated `coral.toml` to set a real ve
 
 Validate installed capabilities for CI. Exits 1 on any failure.
 
-```sh
+```sh frame="terminal"
 coral check                    # check all capabilities
 coral check --json             # machine-readable JSON output
 coral check --ignore-failures  # report failures but exit 0

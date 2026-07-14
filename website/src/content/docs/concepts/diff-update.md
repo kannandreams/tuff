@@ -15,7 +15,7 @@ There are two distinct flows:
 
 Use this when a tracked file in `.agents/` or `.claude/` was edited in the repo.
 
-```sh
+```sh frame="terminal"
 coral list
 coral diff my-skill
 ```
@@ -27,7 +27,7 @@ Command behavior:
 
 ### Example
 
-```sh
+```sh frame="terminal"
 coral diff python-project
 --- baseline/open-agents/python-project/
 +++ .agents/skills/python-project/SKILL.md
@@ -39,7 +39,7 @@ coral diff python-project
 
 If that local change is now the new source of truth, accept it by re-importing the directory:
 
-```sh
+```sh frame="terminal"
 coral import .agents/skills/python-project -t open-agents --override
 ```
 
@@ -48,14 +48,14 @@ coral import .agents/skills/python-project -t open-agents --override
 Use this when the capability was installed from a git source and you want to inspect what changed
 upstream since the last recorded baseline.
 
-```sh
+```sh frame="terminal"
 coral outdated
 coral diff rust-implement --upstream
 ```
 
 ### Example
 
-```sh
+```sh frame="terminal"
 coral outdated
 
 coral diff rust-implement --upstream
@@ -69,7 +69,7 @@ coral diff rust-implement --upstream
 
 If nothing changed upstream, Coral prints:
 
-```sh
+```sh frame="terminal"
 no upstream changes
 ```
 
@@ -77,7 +77,7 @@ no upstream changes
 
 For git-sourced capabilities, use `--check` before updating:
 
-```sh
+```sh frame="terminal"
 coral update rust-implement --check
 ```
 
@@ -89,7 +89,7 @@ You will see one of these outcomes:
 
 ## 4. Apply an update
 
-```sh
+```sh frame="terminal"
 coral update rust-implement
 ```
 
@@ -102,7 +102,7 @@ Current update behavior:
 
 If you want to discard local changes and take upstream as-is:
 
-```sh
+```sh frame="terminal"
 coral update rust-implement --force
 ```
 

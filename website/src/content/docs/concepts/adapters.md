@@ -94,7 +94,7 @@ events that adapter accepts.
 
 ## Commands
 
-```sh
+```sh frame="terminal"
 coral target list
 coral target add open-agents
 coral target add claude

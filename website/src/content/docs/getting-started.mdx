@@ -11,7 +11,7 @@ Before you initialize anything, `coral` gives you a quick overview of the CLI:
 
 ## 1. Initialize Coral
 
-```sh
+```sh frame="terminal"
 coral init
 ```
 
@@ -20,14 +20,14 @@ Creates `.coral/` state, scaffolds `.agents/` directories, and auto-installs
 
 ## 2. Register harness targets
 
-```sh
+```sh frame="terminal"
 coral target add open-agents
 coral target add claude
 ```
 
 ## 3. Create and track your first capability
 
-```sh
+```sh frame="terminal"
 coral create --skill my-skill
 ```
 
@@ -36,7 +36,7 @@ files instead of writing boilerplate from scratch.
 
 ### Track it with Coral
 
-```sh
+```sh frame="terminal"
 coral import .agents/skills/my-skill -t open-agents
 ```
 
@@ -44,7 +44,7 @@ That records the baseline and starts tracking drift without copying the files so
 
 ## 4. Inspect what is installed
 
-```sh
+```sh frame="terminal"
 coral list
 ```
 
@@ -52,7 +52,7 @@ coral list
 
 ## 5. Edit and detect drift
 
-```sh
+```sh frame="terminal"
 coral list
 coral diff my-skill
 ```
@@ -63,7 +63,7 @@ After you edit `.agents/skills/my-skill/SKILL.md`, `coral list` will show it as 
 If the drift is intentional and you want Coral to treat the edited version as the new baseline,
 re-import that directory:
 
-```sh
+```sh frame="terminal"
 coral import .agents/skills/my-skill -t open-agents --override
 ```
 
@@ -72,7 +72,7 @@ you are reconciling with upstream changes.
 
 ## 6. Install from git
 
-```sh
+```sh frame="terminal"
 coral add https://github.com/pproenca/dot-skills --skill rust-implement -t open-agents
 ```
 
@@ -81,7 +81,7 @@ track it in your project.
 
 ## 7. Check for updates
 
-```sh
+```sh frame="terminal"
 coral outdated
 coral update rust-implement
 ```
@@ -91,7 +91,7 @@ and `coral update` reconciles them when you are ready.
 
 ## 8. CI validation
 
-```sh
+```sh frame="terminal"
 coral check
 # ✓ coral-cli-guide    skill    open-agents    ok
 # ✓ my-skill           skill    open-agents    ok

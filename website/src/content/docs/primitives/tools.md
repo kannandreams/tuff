@@ -58,7 +58,7 @@ Every tool goes through these checks at `coral add` time:
 
 ## Installing a tool
 
-```sh
+```sh frame="terminal"
 # Local directory
 coral add ./my-tool -t claude
 
@@ -96,7 +96,7 @@ tool directory and its MCP entry.
 
 ## Filtering
 
-```sh
+```sh frame="terminal"
 # Show only tools
 coral list --type tool
 

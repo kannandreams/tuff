@@ -49,7 +49,7 @@ Each `[[workflow.requires]]` entry must have:
 
 ## Installing a workflow
 
-```sh
+```sh frame="terminal"
 $ coral add ./release-prep -t open-agents
 note: workflow 'release-prep' requires 3 capabilities:
   - python-uv-default (skill)
@@ -98,7 +98,7 @@ Workflows participate in the full Coral lifecycle — `coral list`, `coral diff`
 
 ## Example: feature-build workflow
 
-```sh
+```sh frame="terminal"
 # 1. Create the workflow
 mkdir feature-build
 cat > feature-build/coral.toml << 'EOF'

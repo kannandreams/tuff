@@ -58,7 +58,7 @@ list of supported event names.
 
 ## Installing a hook
 
-```sh
+```sh frame="terminal"
 # Local directory
 coral add ./pre-commit-lint -t open-agents
 
@@ -71,7 +71,7 @@ coral add ./pre-commit-lint -t open-agents -t claude
 
 Install-time validation:
 
-```sh
+```sh frame="terminal"
 $ coral add ./pre-commit-lint -t open-agents
 note: this hook runs 'cargo fmt --check && cargo clippy -- -D warnings'
       on event 'before_finish' — it will not be executed during install
@@ -105,7 +105,7 @@ working_directory = "."
 
 ## Filtering
 
-```sh
+```sh frame="terminal"
 coral list --type hook
 ```
 
@@ -114,7 +114,7 @@ coral list --type hook
 Hooks participate in the full Coral lifecycle — baseline capture, drift detection, diff,
 and merge-aware updates just like skills and tools.
 
-```sh
+```sh frame="terminal"
 $ coral diff pre-commit-lint
 --- baseline/open-agents/pre-commit-lint/
 +++ .agents/hooks/pre-commit-lint/hook.toml

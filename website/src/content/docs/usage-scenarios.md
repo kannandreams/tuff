@@ -22,7 +22,7 @@ company-agent-pack/
 
 Product teams install the capabilities they need:
 
-```sh
+```sh frame="terminal"
 coral init
 coral add https://github.com/company/company-agent-pack --capability rust-test-workflow
 coral list
@@ -59,7 +59,7 @@ or GitHub repositories, then bring them under Coral lifecycle tracking.
 
 The intended flow is:
 
-```sh
+```sh frame="terminal"
 coral import https://github.com/owner/repo --skill rust-implement
 coral list
 coral diff rust-implement
@@ -74,7 +74,7 @@ agent assets.
 Different coding agents expect different file layouts. Coral should keep a
 single managed source model and compile or emit target-specific output:
 
-```sh
+```sh frame="terminal"
 coral target add open-agents
 coral target add claude
 ```

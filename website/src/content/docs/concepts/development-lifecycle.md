@@ -38,7 +38,7 @@ description: How Coral fits into your daily workflow — from first-time setup t
 
 Setting up Coral in a new or existing project.
 
-```sh
+```sh frame="terminal"
 # Install coral
 curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh | sh
 
@@ -61,7 +61,7 @@ coral list
 
 Author a skill, track it, edit it, and manage drift — all in one directory.
 
-```sh
+```sh frame="terminal"
 # 1. Scaffold a skill
 coral create --skill python-project
 
@@ -96,7 +96,7 @@ that need reconciliation with upstream.
 
 Install capabilities from shared repos, check for updates, and merge changes.
 
-```sh
+```sh frame="terminal"
 # 1. Install a skill from a git repository
 coral add https://github.com/pproenca/dot-skills --skill rust-implement -t open-agents
 # installed rust-implement (open-agents) → .agents/skills/rust-implement/SKILL.md
@@ -131,7 +131,7 @@ coral list
 
 Your repo already has agent files. Bring them under Coral management without moving anything.
 
-```sh
+```sh frame="terminal"
 # Repo already has:
 #   .agents/skills/existing-skill/SKILL.md
 #   .agents/tools/scan-tool/index.js

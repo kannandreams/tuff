@@ -34,7 +34,7 @@ during emit.
 
 ## Installing a skill
 
-```sh
+```sh frame="terminal"
 # Local directory
 coral add ./my-skill -t open-agents
 

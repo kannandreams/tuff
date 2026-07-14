@@ -9,27 +9,27 @@ The Starlight/Astro docs use Node 18 or newer and npm.
 
 ## Setup
 
-```sh
+```sh frame="terminal"
 cargo fetch
 npm ci
 ```
 
 ## Run tests
 
-```sh
+```sh frame="terminal"
 cargo test
 ```
 
 ## Run lint
 
-```sh
+```sh frame="terminal"
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 ## Run all checks
 
-```sh
+```sh frame="terminal"
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
@@ -37,7 +37,7 @@ cargo test
 
 If `just` is installed:
 
-```sh
+```sh frame="terminal"
 just check
 ```
 
@@ -46,7 +46,7 @@ just check
 Use this flow to test Coral the way a user would: install the current checkout
 as a binary, move to a separate directory, and run `coral` directly.
 
-```sh
+```sh frame="terminal"
 cargo install --path .
 mkdir -p /tmp/coral-smoke
 cd /tmp/coral-smoke
@@ -61,25 +61,25 @@ from the current checkout.
 
 ## Build docs
 
-```sh
+```sh frame="terminal"
 npm run build
 ```
 
 ## Serve docs locally
 
-```sh
+```sh frame="terminal"
 npm run dev
 ```
 
 If `just` is installed:
 
-```sh
+```sh frame="terminal"
 just docs-serve
 ```
 
 CLI screenshots used in the docs can be generated with:
 
-```sh
+```sh frame="terminal"
 just docs-assets
 ```
 

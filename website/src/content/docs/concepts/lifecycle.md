@@ -64,7 +64,7 @@ When Coral compares local files against the recorded baseline, the common states
 
 For local capabilities, the typical flow is:
 
-```sh
+```sh frame="terminal"
 coral create --skill my-skill
 coral import .agents/skills/my-skill -t open-agents
 coral list
@@ -73,7 +73,7 @@ coral diff my-skill
 
 If the drift is intentional and should become the new baseline:
 
-```sh
+```sh frame="terminal"
 coral import .agents/skills/my-skill -t open-agents --override
 ```
 
@@ -81,7 +81,7 @@ coral import .agents/skills/my-skill -t open-agents --override
 
 For git-backed capabilities, Coral can compare baseline, local, and upstream together:
 
-```sh
+```sh frame="terminal"
 coral outdated
 coral diff rust-implement --upstream
 coral update rust-implement --check
@@ -102,7 +102,7 @@ The update path for git-sourced capabilities works like this:
 
 If you want to replace the local customized copy with upstream output, use:
 
-```sh
+```sh frame="terminal"
 coral update <id> --force
 ```
 

@@ -141,7 +141,7 @@ nav.sidebar .sidebar-pane,
   border-left-color: transparent;
   box-shadow: none;
   color: var(--sl-color-text-accent);
-  font-weight: 600;
+  font-weight: 400;
   padding-left: 0.75rem;
   margin-left: -0.75rem;
 }
@@ -157,6 +157,7 @@ nav.sidebar .sidebar-pane,
 :root[data-theme='light'] .right-sidebar-panel a[aria-current=true] {
   color: var(--sl-color-text-accent);
   background: transparent;
+  font-weight: 600;
 }
 
 nav.sidebar a,
@@ -179,7 +180,6 @@ nav.sidebar span.large,
 
 nav.sidebar a:hover,
 .right-sidebar-panel a:hover,
-.right-sidebar-panel a[aria-current=true],
 .sl-markdown-content a,
 .sl-markdown-content a code,
 body > .page > header a,
@@ -413,9 +413,45 @@ dialog[aria-label='Search'] {
   display: none;
 }
 
+.expressive-code .frame.is-terminal .header {
+  display: flex;
+}
+
+.expressive-code .frame.is-terminal .header::before,
+.expressive-code .frame.is-terminal .header::after {
+  display: block;
+}
+
+.expressive-code .frame.is-terminal {
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid var(--sl-color-hairline);
+}
+
+.expressive-code .frame.is-terminal .header {
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid var(--sl-color-hairline);
+  background: transparent;
+}
+
 .expressive-code .frame pre {
   border-radius: 8px;
   border: 1px solid var(--sl-color-hairline);
+}
+
+.expressive-code .frame.is-terminal pre {
+  border-radius: 0;
+  border: 0;
+  background: #24292e;
+}
+
+:root[data-theme='light'] .expressive-code .frame.is-terminal .header {
+  background: transparent;
+}
+
+:root[data-theme='light'] .expressive-code .frame.is-terminal pre {
+  background: #ffffff;
 }
 
 .pagination-links a,
