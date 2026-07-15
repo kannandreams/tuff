@@ -11,18 +11,18 @@ use similar::{ChangeTag, TextDiff};
 use crate::adapter::EmittedFile;
 use crate::error::{CoralError, Result};
 
-pub const LOCKFILE_VERSION: u8 = 2;
+pub const LOCKFILE_VERSION: u8 = 1;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lockfile {
     pub version: u8,
-    #[serde(rename = "capabilities", alias = "primitives")]
+    #[serde(rename = "capabilities")]
     pub capabilities: BTreeMap<String, CapabilityLockEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityLockEntry {
-    #[serde(rename = "type", alias = "primitive")]
+    #[serde(rename = "type")]
     pub capability_type: String,
     #[serde(rename = "installedVersion")]
     pub installed_version: String,
@@ -240,7 +240,7 @@ mod tests {
         assert!(path.exists());
 
         let lf = read_lockfile_at(&path).unwrap();
-        assert_eq!(lf.version, 2);
+        assert_eq!(lf.version, 1);
         assert!(lf.capabilities.is_empty());
     }
 
@@ -252,11 +252,29 @@ mod tests {
     }
 
     #[test]
+    fn read_lockfile_at_rejects_v2_schema() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("v2-lock.json");
+        fs::write(
+            &path,
+            r#"{
+  "version": 2,
+  "capabilities": {}
+}
+"#,
+        )
+        .unwrap();
+
+        let error = read_lockfile_at(&path).unwrap_err();
+        assert!(error.to_string().contains("unsupported lockfile version: 2"));
+    }
+
+    #[test]
     fn write_and_read_roundtrip() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("roundtrip.json");
         let mut lf = Lockfile {
-            version: 2,
+            version: 1,
             capabilities: BTreeMap::new(),
         };
         lf.capabilities.insert(
@@ -273,34 +291,6 @@ mod tests {
         write_lockfile_at(&path, &lf).unwrap();
         let read = read_lockfile_at(&path).unwrap();
         assert_eq!(read.capabilities.len(), 1);
-    }
-
-    #[test]
-    fn read_lockfile_accepts_legacy_primitives_schema() {
-        let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("legacy-lock.json");
-        fs::write(
-            &path,
-            r#"{
-  "version": 2,
-  "primitives": {
-    "test": {
-      "primitive": "skill",
-      "installedVersion": "1.0",
-      "sourcePath": "examples/test",
-      "scope": "project",
-      "targets": {}
-    }
-  }
-}
-"#,
-        )
-        .unwrap();
-
-        let read = read_lockfile_at(&path).unwrap();
-        let entry = read.capabilities.get("test").unwrap();
-        assert_eq!(entry.capability_type, "skill");
-        assert_eq!(entry.installed_version, "1.0");
     }
 
     #[test]

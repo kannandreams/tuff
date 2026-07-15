@@ -39,7 +39,7 @@ files = ["src/SKILL.md"]
   name in the target harness output.
 
 `version`
-: Capability version recorded in `.coral/lock.json`.
+: Capability version recorded in `.coral/coral-lock.json`.
 
 `type`
 : Capability type. Supported values include `skill`, `tool`, `hook`, and

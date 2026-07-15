@@ -24,7 +24,7 @@ and `coral update` without re-installing anything.
 
 ```json
 {
-  "version": 2,
+  "version": 1,
   "capabilities": {
     "python-uv-default": {
       "type": "skill",
