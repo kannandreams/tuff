@@ -3,7 +3,7 @@ title: Workflows
 description: Workflows compose skills, tools, and hooks into named operational patterns.
 ---
 
-A workflow capability declares a reusable pattern — it lists which skills, tools, and hooks
+A workflow capability declares a reusable pattern. It lists which skills, tools, and hooks
 should be installed together to support a specific workflow (e.g., "test-first Rust development").
 
 Workflows don't execute anything. They are declarative bundles that surface a checklist
@@ -93,7 +93,7 @@ their actual drift status (`clean`, `modified`).
 
 ## Lifecycle
 
-Workflows participate in the full Coral lifecycle — `coral list`, `coral diff`,
+Workflows participate in the full Coral lifecycle: `coral list`, `coral diff`,
 `coral check`, `coral remove`, and `coral outdated` all work.
 
 ## Example: feature-build workflow

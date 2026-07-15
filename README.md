@@ -55,11 +55,29 @@ npm run build
 
 Start with:
 
-- [Introduction](website/src/content/docs/index.md)
-- [Usage Scenarios](website/src/content/docs/usage-scenarios.md)
+- [Introduction](website/src/content/docs/index.mdx)
+- [When to Use Coral](website/src/content/docs/usage-scenarios.md)
 - [Skills.sh and Vercel Skills Comparison](website/src/content/docs/comparison/vercel-skills.md)
 
-## Install for local development
+## Install
+
+For the latest released version on macOS or Linux, use the install script:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh | sh
+```
+
+On macOS with Homebrew:
+
+```sh
+brew tap kannandreams/coral
+brew install coral
+```
+
+See the [latest GitHub release](https://github.com/kannandreams/coral/releases/latest)
+for release notes and platform artifacts.
+
+### Build from source
 
 From this repository:
 
@@ -137,19 +155,6 @@ just run -- --help
 ```
 
 End users should run `coral ...` directly.
-
-## Packaging direction
-
-For now, the supported development install is from a checkout:
-
-```sh
-cargo install --path .
-```
-
-Standalone release binaries and a Homebrew tap are planned after the CLI
-contract, lockfile format, and capability lifecycle have stabilized. Until
-then, the repository checkout and Cargo install path are the source of truth
-for running Coral locally.
 
 ## License
 

@@ -14,7 +14,7 @@ and the hashes needed for drift detection and diffs.
 | `.coral/coral-lock.json` | Installed capability state (id, version, targets, source, hashes) | Yes |
 | `.coral/config.json` | Registered harness targets (`coral target add`) | Yes |
 | `.coral/baselines/<target>/<id>/` | Pristine copies of installed files for diffing | Yes |
-| `~/.coral/coral-lock.json` | Global scope — personal, across all projects | No |
+| `~/.coral/coral-lock.json` | Global scope: personal, across all projects | No |
 | `~/.coral/cache/git/` | Cloned git repositories for skill discovery | No |
 
 Commit the project `.coral/` files so your team can run `coral list`, `coral diff`,
@@ -56,7 +56,7 @@ and `coral update` without re-installing anything.
 | `sourcePath` | Local path to the capability directory (empty for git sources) |
 | `scope` | `"project"` or `"global"` |
 | `targets` | Per-harness emitted files and baseline directory |
-| `source` | Git source metadata (`type`, `url`, `ref`, `skill`) — absent for local installs |
+| `source` | Git source metadata (`type`, `url`, `ref`, `skill`), absent for local installs |
 
 ### Per-target fields
 

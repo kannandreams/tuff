@@ -58,7 +58,7 @@ If both scopes contain the same capability id:
 
 Coral surfaces this in status output:
 
-- project entries can show: `[overrides global — won't receive global updates]`
+- project entries can show: `[overrides global: won't receive global updates]`
 - global entries can show: `[shadowed by project copy]`
 
 ## Example: project copy overrides global

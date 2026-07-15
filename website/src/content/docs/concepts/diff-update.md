@@ -84,7 +84,7 @@ coral update rust-implement --check
 You will see one of these outcomes:
 
 - `'rust-implement' can be updated cleanly (no local changes)`
-- `'rust-implement' has local changes — update would attempt three-way merge`
+- `'rust-implement' has local changes: update would attempt a three-way merge`
 - `'rust-implement' is up to date`
 
 ## 4. Apply an update
