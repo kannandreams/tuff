@@ -49,10 +49,10 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Concepts',
+          label: 'Workflows & Operations',
           items: [
-            { label: 'Usage Scenarios', slug: 'usage-scenarios' },
-            { label: 'Development Lifecycle', slug: 'concepts/development-lifecycle' },
+            { label: 'When to Use Coral', slug: 'usage-scenarios' },
+            { label: 'Use Cases Overview', slug: 'concepts/development-lifecycle' },
             { label: 'Lifecycle & Drift Detection', slug: 'concepts/lifecycle' },
             { label: 'Diffing & Updates', slug: 'concepts/diff-update' },
             { label: 'Scopes & Overrides', slug: 'concepts/scopes' },

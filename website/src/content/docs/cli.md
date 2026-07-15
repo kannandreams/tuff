@@ -77,7 +77,7 @@ coral add https://github.com/owner/repo --hook <name> -t open-agents
 
 ## `coral list`
 
-Show installed capabilitys with scope, drift status, and path:
+Show installed capabilities with scope, drift status, and path:
 
 ```sh frame="terminal"
 coral list
@@ -119,7 +119,7 @@ coral status
 Example output:
 
 ```
-python-uv-default  project  clean  [overrides global — won't receive global updates]
+python-uv-default  project  clean  [overrides global: won't receive global updates]
 commit-hygiene     global   clean
 scan-tool          project  clean
 ```
@@ -127,7 +127,7 @@ scan-tool          project  clean
 ## `coral outdated`
 
 Show all installed capabilitys and whether upstream updates are available.
-Read-only — never modifies files.
+Read-only; never modifies files.
 
 ```sh frame="terminal"
 coral outdated
@@ -137,12 +137,12 @@ Example output:
 
 ```
 find-skills              skill      open-agents  2adcfe5    def5678    outdated
-pre-commit-lint          hook       open-agents  1.0.0      —          up to date
+pre-commit-lint          hook       open-agents  1.0.0      none       up to date
 security-review          tool       claude       abc1234    2adcfe5    outdated
 ```
 
 For git-sourced primitives, `CURRENT` and `LATEST` show the 7-character commit SHA.
-For local primitives, `LATEST` shows `—` and status is always `up to date` or `modified source`.
+For local primitives, `LATEST` shows `none` and status is always `up to date` or `modified source`.
 
 ## `coral diff`
 
@@ -193,7 +193,7 @@ for the merge behavior table.
 # Attempt three-way merge (default)
 coral update <id>
 
-# Dry run — show what would happen without applying
+# Dry run: show what would happen without applying
 coral update <id> --check
 
 # Force overwrite local changes with upstream
@@ -236,7 +236,7 @@ Bring existing agent assets under Coral management without rewriting content.
 # Import a single directory
 coral import .agents/skills/my-skill -t open-agents
 
-# Batch scan — imports all skills, tools, and hooks
+# Batch scan: imports all skills, tools, and hooks
 coral import -t open-agents
 
 # Preview what would be imported
@@ -265,7 +265,7 @@ After coral import .agents/skills/python-uv -t open-agents:
         └── SKILL.md          ← baseline copy
 ```
 
-After import, the directory participates in the full lifecycle — `coral list`,
+After import, the directory participates in the full lifecycle. `coral list`,
 `coral diff`, `coral check`, and `coral update` all work without modifying
 your existing agent files.
 
@@ -278,7 +278,7 @@ If a directory is already in the lockfile, import skips it with a note. Use `--o
 :::
 
 :::tip[After import]
-Version defaults to `0.1.0` — edit the generated `coral.toml` to set a real version number and description. The generated manifest lives in your agent directory — commit it with the rest of your project.
+Version defaults to `0.1.0`. Edit the generated `coral.toml` to set a real version number and description. The generated manifest lives in your agent directory, so commit it with the rest of your project.
 :::
 
 ## `coral check`
@@ -298,7 +298,7 @@ Example output:
 ✗ dirty-skill             skill      open-agents  modified (.agents/skills/dirty-skill/SKILL.md)
 ```
 
-### GitHub Actions
+## CI with GitHub Actions
 
 Add this to your project's `.github/workflows/coral-check.yml`:
 

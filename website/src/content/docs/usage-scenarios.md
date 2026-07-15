@@ -1,6 +1,6 @@
 ---
-title: Usage Scenarios
-description: How teams can adopt and use Coral in practice.
+title: When to Use Coral
+description: Where Coral helps teams manage coding-agent capabilities.
 ---
 
 Coral is for teams that want agent capabilities to be managed like normal
@@ -24,7 +24,7 @@ Product teams install the capabilities they need:
 
 ```sh frame="terminal"
 coral init
-coral add https://github.com/company/company-agent-pack --capability rust-test-workflow
+coral add https://github.com/company/company-agent-pack --skill rust-test-workflow -t open-agents
 coral list
 ```
 
@@ -54,20 +54,19 @@ are better for team conventions.
 
 ## Adopting external skills
 
-Teams should be able to adopt useful skills from ecosystems such as skills.sh
-or GitHub repositories, then bring them under Coral lifecycle tracking.
+Teams can adopt useful skills from ecosystems such as skills.sh or GitHub
+repositories, then bring them under Coral lifecycle tracking.
 
 The intended flow is:
 
 ```sh frame="terminal"
-coral import https://github.com/owner/repo --skill rust-implement
+coral add https://github.com/owner/repo --skill rust-implement -t open-agents
 coral list
 coral diff rust-implement
 ```
 
-Import and remote-source behavior is still roadmap work, but it is an important
-adoption path because many teams already have copied or externally installed
-agent assets.
+Use `coral import` for local agent assets that already exist in a project. Use
+`coral add` for capabilities hosted in a git repository.
 
 ## Harness compilation
 

@@ -11,13 +11,30 @@ Coral is a CLI for managing project-owned agent capabilities: skills, tools,
 hooks, and workflows that teams load into coding harnesses such as Codex,
 Claude, Cursor, and others.
 
-This first implementation targets Codex-style skills installed at
-`.agents/skills/<id>/SKILL.md`.
+Coral keeps capability files in the project while tracking the metadata around
+them: source, version, target harness, scope, and a pristine install baseline.
+That makes local customization visible instead of turning it into an
+untracked copy.
 
-Coral core is intentionally content-agnostic. It is the engine for manifests,
-install state, drift detection, diffing, validation, and future harness
-adapters. Actual capability content should live in separate pack repositories
-or in the projects that own and customize it.
+The core is content-agnostic. Capability content can live in the repository
+that owns it or in a separate pack repository. Coral handles manifests,
+installation, validation, drift detection, diffs, updates, and target-specific
+emission. The current adapters include the shared `.agents/` layout and
+Claude-oriented output.
+
+## How the lifecycle works
+
+1. Create or import a capability.
+2. Install it for one or more harness targets.
+3. Coral records the emitted files and an install-time baseline under `.coral/`.
+4. Edit the project-owned files normally; `coral list`, `coral status`, and
+   `coral diff` report drift.
+5. Re-import intentional local changes or update git-sourced capabilities when
+   upstream changes are available.
+
+Project and global scopes are supported. Project capabilities take precedence
+when the same id exists in both scopes, and Coral reports that relationship in
+status output.
 
 ## Documentation
 
@@ -38,12 +55,29 @@ npm run build
 
 Start with:
 
-- [Introduction](website/src/content/docs/index.md)
-- [Usage Scenarios](website/src/content/docs/usage-scenarios.md)
-- [Roadmap](website/src/content/docs/roadmap.md)
+- [Introduction](website/src/content/docs/index.mdx)
+- [When to Use Coral](website/src/content/docs/usage-scenarios.md)
 - [Skills.sh and Vercel Skills Comparison](website/src/content/docs/comparison/vercel-skills.md)
 
-## Install for local development
+## Install
+
+For the latest released version on macOS or Linux, use the install script:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh | sh
+```
+
+On macOS with Homebrew:
+
+```sh
+brew tap kannandreams/coral
+brew install coral
+```
+
+See the [latest GitHub release](https://github.com/kannandreams/coral/releases/latest)
+for release notes and platform artifacts.
+
+### Build from source
 
 From this repository:
 
@@ -59,6 +93,9 @@ cargo install --path .
 coral --version
 ```
 
+The repository requires a recent Rust toolchain with Cargo. There is currently
+no dependency on a separately installed JavaScript runtime for the CLI itself.
+
 ## Test from another directory
 
 This is the closest local workflow to how an engineer would try Coral after
@@ -70,7 +107,8 @@ mkdir -p /tmp/coral-smoke
 cd /tmp/coral-smoke
 coral --version
 coral init
-coral add /absolute/path/to/coral/examples/fixtures/python-uv-default
+coral target add open-agents
+coral add /absolute/path/to/coral/examples/fixtures/python-uv-default -t open-agents
 coral list
 ```
 
@@ -86,18 +124,20 @@ just smoke-install
 coral
 coral --version
 coral init
-coral add examples/fixtures/python-uv-default
+coral target add open-agents
+coral add examples/fixtures/python-uv-default -t open-agents
 coral list
 coral diff python-uv-default
 ```
 
 Running `coral` with no arguments shows the terminal banner and starter menu.
 
-`coral init` only creates `.coral/lock.json` with empty primitive state. It
-does not install defaults or create skills.
+`coral init` creates `.coral/coral-lock.json`, scaffolds the standard `.agents/`
+directories, and installs the small `coral-cli-guide` reference skill. It does
+not install third-party capabilities or create a user skill for you.
 
-The CLI is implemented as a Rust binary crate and commits `Cargo.lock` for
-reproducible builds.
+The CLI is built from the Rust crate in this repository, and `Cargo.lock` is
+committed for reproducible builds.
 
 The `examples/fixtures/python-uv-default` primitive is a demo/test fixture, not
 a bundled standard pack. Production capabilities should live in separate pack
@@ -115,13 +155,6 @@ just run -- --help
 ```
 
 End users should run `coral ...` directly.
-
-## Packaging direction
-
-Coral is now Rust-first. The near-term install path is `cargo install --path .`
-for local development. Standalone release binaries and a Homebrew tap should
-come after the CLI contract, lockfile format, and capability lifecycle
-stabilize.
 
 ## License
 

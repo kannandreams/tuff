@@ -1,36 +1,36 @@
 ---
-title: Development Lifecycle
-description: How Coral fits into your daily workflow — from first-time setup to CI validation.
+title: Use Cases Overview
+description: How Coral supports common workflows, from first-time setup to CI validation.
 ---
 
-## Guided flow
+## Coral workflow
 
-<div class="lifecycle-flow">
+<div class="lifecycle-flow" aria-label="Coral capability workflow">
   <div class="lifecycle-node lifecycle-node--neutral">
-    <strong>Capability enters the repo</strong>
-    <span>`coral create`, `coral import`, or `coral add` records the first baseline</span>
+    <strong>Record a baseline</strong>
+    <span><code>coral create</code>, <code>coral import</code>, or <code>coral add</code> brings a capability under management.</span>
   </div>
   <div class="lifecycle-branches">
-    <div class="lifecycle-track lifecycle-track--drift">
-      <div class="lifecycle-track-label">Local edits</div>
-      <div class="lifecycle-step">File changes in `.agents/` or `.claude/`</div>
+    <section class="lifecycle-track lifecycle-track--drift" aria-label="Local changes">
+      <div class="lifecycle-track-label">Local changes</div>
+      <div class="lifecycle-step">Files change in <code>.agents/</code> or <code>.claude/</code>.</div>
       <div class="lifecycle-node lifecycle-node--drift">
-        <strong>Drift detected</strong>
-        <span>`coral list` and `coral diff` compare against the recorded baseline</span>
+        <strong>Review drift</strong>
+        <span><code>coral list</code> and <code>coral diff</code> compare the files with the recorded baseline.</span>
       </div>
-    </div>
-    <div class="lifecycle-track lifecycle-track--upstream">
-      <div class="lifecycle-track-label">Git source updates</div>
-      <div class="lifecycle-step">Upstream repository moves ahead</div>
+    </section>
+    <section class="lifecycle-track lifecycle-track--upstream" aria-label="Upstream changes">
+      <div class="lifecycle-track-label">Upstream changes</div>
+      <div class="lifecycle-step">A git-backed repository moves ahead.</div>
       <div class="lifecycle-node lifecycle-node--upstream">
-        <strong>Update reviewed</strong>
-        <span>`coral outdated`, `coral diff --upstream`, then `coral update`</span>
+        <strong>Review an update</strong>
+        <span><code>coral outdated</code>, <code>coral diff --upstream</code>, and <code>coral update</code> reconcile the change.</span>
       </div>
-    </div>
+    </section>
   </div>
   <div class="lifecycle-node lifecycle-node--resolve">
-    <strong>Reviewed state recorded</strong>
-    <span>Local edits can be accepted with `coral import --override`; git-backed changes can be merged with `coral update`</span>
+    <strong>Record the reviewed state</strong>
+    <span>Accept local edits with <code>coral import --override</code>, or merge git-backed changes with <code>coral update</code>.</span>
   </div>
 </div>
 
@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh 
 cd my-project
 coral init
 # → creates .coral/ state, scaffolds .agents/ directories
-# → auto-installs coral-cli-guide — your agent now knows coral commands
+# → auto-installs coral-cli-guide; your agent now knows Coral commands
 
 # Register harness targets
 coral target add open-agents
@@ -59,13 +59,13 @@ coral list
 
 ## Use Case: Create and manage a local capability
 
-Author a skill, track it, edit it, and manage drift — all in one directory.
+Author a skill, track it, edit it, and manage drift, all in one directory.
 
 ```sh frame="terminal"
 # 1. Scaffold a skill
 coral create --skill python-project
 
-# 2. Track it — records baseline + lockfile entry
+# 2. Track it: records the baseline and lockfile entry
 coral import .agents/skills/python-project -t open-agents
 # imported python-project (skill, open-agents)
 
@@ -140,7 +140,7 @@ Your repo already has agent files. Bring them under Coral management without mov
 # 1. Initialize Coral
 coral init
 # existing .agents/ directories stay untouched
-# .agents/workflows/ created (new — Coral introduces this)
+# .agents/workflows/ created (new: Coral introduces this)
 
 # 2. Register your targets
 coral target add open-agents
@@ -152,7 +152,7 @@ coral import -t open-agents -t claude
 # imported scan-tool (tool, open-agents)
 # imported claude-only (skill, claude)
 
-# 4. Verify — everything tracked, zero files moved
+# 4. Verify: everything tracked, zero files moved
 coral list
 # coral-cli-guide        0.1.0    project    open-agents    clean
 # existing-skill         0.1.0    project    open-agents    clean
@@ -175,8 +175,8 @@ coral check
 | `.agents/tools/` | Tool source files and coral.toml | Same |
 | `.agents/hooks/` | Hook source files and coral.toml | Same |
 | `.agents/workflows/` | Workflow source files and coral.toml | Same |
-| `.coral/` | State — lockfile, baselines, config | `coral init` |
+| `.coral/` | State: lockfile, baselines, and config | `coral init` |
 | `.claude/skills/` etc. | Claude-specific capabilities | `coral add` or you author |
 
 **One directory, one source of truth.** Agent files live in `.agents/` or `.claude/`.
-Coral tracks them in-place — no copies, no duplication.
+Coral tracks them in place, with no copies or duplication.

@@ -74,7 +74,7 @@ Install-time validation:
 ```sh frame="terminal"
 $ coral add ./pre-commit-lint -t open-agents
 note: this hook runs 'cargo fmt --check && cargo clippy -- -D warnings'
-      on event 'before_finish' — it will not be executed during install
+      on event 'before_finish': it will not be executed during install
 installed pre-commit-lint (open-agents) -> .agents/hooks/pre-commit-lint/hook.toml
 ```
 
@@ -111,7 +111,7 @@ coral list --type hook
 
 ## Lifecycle
 
-Hooks participate in the full Coral lifecycle — baseline capture, drift detection, diff,
+Hooks participate in the full Coral lifecycle: baseline capture, drift detection, diff,
 and merge-aware updates just like skills and tools.
 
 ```sh frame="terminal"
@@ -126,6 +126,6 @@ $ coral diff pre-commit-lint
 
 :::caution
 Hooks run automatically when triggered by the harness. They are never executed by
-Coral during install or update. Review `hook.command` carefully — a hook that
+Coral during install or update. Review `hook.command` carefully. A hook that
 modifies files or runs destructive commands affects every agent session.
 :::

@@ -5,7 +5,7 @@ description: Tools define executable capabilities an agent can invoke.
 
 A tool capability represents an executable capability with a typed parameter contract. Unlike
 skills (which inject prose into agent context), tools can change files, call services, or
-run commands — and with that power comes stricter validation.
+run commands, and with that power comes stricter validation.
 
 ## Manifest
 
@@ -15,7 +15,7 @@ id = "security-review"
 version = "1.0.0"
 primitive = "tool"
 description = "Scan a directory for security vulnerabilities"
-files = ["index.js"]                         # optional — entrypoint auto-included
+files = ["index.js"]                         # optional: entrypoint auto-included
 
 [parameters]
 type = "object"
@@ -36,7 +36,7 @@ runtime_deps = ["chalk", "@octokit/rest"]    # shown at install time, never auto
 | `id` | Yes | Stable identifier for the tool |
 | `version` | Yes | Semantic version |
 | `primitive` | Yes | Must be `"tool"` |
-| `description` | Yes | Shown to the agent — what the tool does and when to call it |
+| `description` | Yes | Shown to the agent: what the tool does and when to call it |
 | `files` | No | Source files to copy (entrypoint auto-added if present) |
 | `parameters` | Yes | JSON Schema object defining input contract |
 | `parameters.type` | Yes | Must be `"object"` |
@@ -51,10 +51,10 @@ runtime_deps = ["chalk", "@octokit/rest"]    # shown at install time, never auto
 
 Every tool goes through these checks at `coral add` time:
 
-1. **Schema validation** — `parameters` must be a valid JSON Schema with `type: object` and at least one property
-2. **Entrypoint validation** — `entrypoint` must resolve to an existing file, no path traversal (`../` or absolute paths rejected)
-3. **Dependencies displayed** — `runtime_deps` are shown in a note before install; never auto-installed
-4. **No execution** — installing a tool only writes files; the entrypoint is never run
+1. **Schema validation:** `parameters` must be a valid JSON Schema with `type: object` and at least one property
+2. **Entrypoint validation:** `entrypoint` must resolve to an existing file, with no path traversal (`../` or absolute paths rejected)
+3. **Dependencies displayed:** `runtime_deps` are shown in a note before install; they are never auto-installed
+4. **No execution:** installing a tool only writes files; the entrypoint is never run
 
 ## Installing a tool
 
@@ -76,7 +76,7 @@ coral add ./my-tool -t claude -t open-agents
 | `open-agents` | `.agents/tools/<id>/` | `.agents/mcp.json` |
 | `claude` | `.claude/tools/<id>/` | `.mcp.json` |
 
-The MCP config is generated automatically — the adapter reads `coral.toml`, translates parameters,
+The MCP config is generated automatically. The adapter reads `coral.toml`, translates parameters,
 writes a launch command pointing at the copied entrypoint, and read-merges it into the harness's
 native config:
 
