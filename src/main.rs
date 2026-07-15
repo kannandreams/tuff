@@ -17,9 +17,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_check, cmd_create, cmd_diff, cmd_import, cmd_init, cmd_list,
-    cmd_outdated, cmd_remove, cmd_status, cmd_target_add, cmd_target_list,
-    cmd_target_remove, cmd_update,
+    cmd_add, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_import, cmd_init, cmd_list,
+    cmd_outdated, cmd_status,
+    cmd_target_add, cmd_target_list, cmd_target_remove, cmd_untrack, cmd_update,
 };
 use error::Result;
 
@@ -93,18 +93,36 @@ enum Command {
         upstream: bool,
     },
 
-    /// Remove an installed primitive.
-    Remove {
-        /// Primitive id to remove.
+    /// Delete Coral-generated capability files.
+    Delete {
+        /// Capability id to delete.
         id: String,
 
-        /// Scope to remove from.
+        /// Scope to delete from.
         #[arg(short = 's', long = "scope", default_value = "project")]
         scope: String,
 
-        /// Target to remove from (if not specified, removes from all targets).
-        #[arg(short = 't', long = "target")]
-        target: Option<Vec<String>>,
+        /// Target to delete from (repeatable).
+        #[arg(short = 't', long = "target", required = true)]
+        target: Vec<String>,
+
+        /// Delete files even when they have local modifications.
+        #[arg(short = 'f', long = "force")]
+        force: bool,
+    },
+
+    /// Stop tracking a capability without deleting its agent files.
+    Untrack {
+        /// Capability id to untrack.
+        id: String,
+
+        /// Scope to untrack from.
+        #[arg(short = 's', long = "scope", default_value = "project")]
+        scope: String,
+
+        /// Target to untrack (repeatable).
+        #[arg(short = 't', long = "target", required = true)]
+        target: Vec<String>,
     },
 
     /// Update an installed primitive from its source.
@@ -203,7 +221,7 @@ enum TargetCommand {
         id: String,
     },
 
-    /// Unregister a target and remove all emitted files.
+    /// Unregister a target without changing installed capabilities.
     Remove {
         /// Target adapter id.
         id: String,
@@ -273,8 +291,14 @@ fn run() -> Result<()> {
             target,
             upstream,
         }) => cmd_diff(&repo_root, &capability_id, target.as_deref(), upstream),
-        Some(Command::Remove { id, scope, target }) => {
-            cmd_remove(&repo_root, &id, &scope, target.as_deref())
+        Some(Command::Delete {
+            id,
+            scope,
+            target,
+            force,
+        }) => cmd_delete(&repo_root, &id, &scope, &target, force),
+        Some(Command::Untrack { id, scope, target }) => {
+            cmd_untrack(&repo_root, &id, &scope, &target)
         }
         Some(Command::Update {
             id,

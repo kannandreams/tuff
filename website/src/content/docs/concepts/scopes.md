@@ -101,7 +101,8 @@ coral update my-skill
 ```sh frame="terminal"
 coral add ./my-skill -t open-agents --global
 coral list --scope global
-coral remove my-skill --scope global
+coral delete my-skill -t open-agents --scope global
+coral untrack my-skill -t open-agents --scope global
 coral update my-skill --scope global
 ```
 

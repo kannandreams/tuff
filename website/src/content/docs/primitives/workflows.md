@@ -94,7 +94,7 @@ their actual drift status (`clean`, `modified`).
 ## Lifecycle
 
 Workflows participate in the full Coral lifecycle: `coral list`, `coral diff`,
-`coral check`, `coral remove`, and `coral outdated` all work.
+`coral check`, `coral delete`, `coral untrack`, and `coral outdated` all work.
 
 ## Example: feature-build workflow
 

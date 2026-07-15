@@ -128,6 +128,7 @@ coral target add open-agents
 coral add examples/fixtures/python-uv-default -t open-agents
 coral list
 coral diff python-uv-default
+coral delete python-uv-default -t open-agents
 ```
 
 Running `coral` with no arguments shows the terminal banner and starter menu.
@@ -135,6 +136,11 @@ Running `coral` with no arguments shows the terminal banner and starter menu.
 `coral init` creates `.coral/coral-lock.json`, scaffolds the standard `.agents/`
 directories, and installs the small `coral-cli-guide` reference skill. It does
 not install third-party capabilities or create a user skill for you.
+
+Capability cleanup is explicit. Use `coral delete <id> -t <target>` for
+Coral-generated files, or `coral untrack <id> -t <target>` when the files should
+remain in place but no longer be managed by Coral. `coral target remove <target>`
+only unregisters a target and does not remove capabilities.
 
 The CLI is built from the Rust crate in this repository, and `Cargo.lock` is
 committed for reproducible builds.

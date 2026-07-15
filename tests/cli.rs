@@ -310,7 +310,7 @@ fn target_list_add_remove() {
             "installed example (open-agents) -> .agents/skills/example/SKILL.md",
         ));
 
-    // Remove open-agents target (should clean up emitted files)
+    // Unregister open-agents without changing installed capabilities
     coral()
         .current_dir(temp.path())
         .args(["target", "remove", "open-agents"])
@@ -318,14 +318,19 @@ fn target_list_add_remove() {
         .success()
         .stdout(predicate::str::contains("unregistered target 'open-agents'"));
 
-    // Emitted file should be cleaned up
-    assert!(!temp
+    assert!(temp
         .path()
         .join(".agents")
         .join("skills")
         .join("example")
         .join("SKILL.md")
         .exists());
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--scope", "project"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("example"));
 }
 
 #[test]
@@ -393,7 +398,7 @@ fn add_to_multiple_targets() {
         .assert()
         .success();
 
-    // Removing open-agents should keep claude files
+    // Unregistering open-agents should keep all capability files
     coral()
         .current_dir(temp.path())
         .args(["target", "remove", "open-agents"])
@@ -407,7 +412,7 @@ fn add_to_multiple_targets() {
         .join("example")
         .join("SKILL.md")
         .exists());
-    assert!(!temp
+    assert!(temp
         .path()
         .join(".agents")
         .join("skills")
@@ -789,7 +794,7 @@ fn list_shows_scope_column() {
 }
 
 #[test]
-fn remove_primitive_cleans_up() {
+fn delete_generated_capability_cleans_up() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "remove-test");
 
@@ -806,10 +811,10 @@ fn remove_primitive_cleans_up() {
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "remove-test"])
+        .args(["delete", "remove-test", "-t", "open-agents"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("removed 'remove-test' from project scope"));
+        .stdout(predicate::str::contains("deleted 'remove-test' from project scope"));
 
     assert!(!temp
         .path()
@@ -1141,7 +1146,7 @@ fn remove_tool_cleans_mcp_entry() {
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "scan-tool"])
+        .args(["delete", "scan-tool", "-t", "claude"])
         .assert()
         .success();
 
@@ -1321,7 +1326,7 @@ fn hook_list_and_drift() {
 }
 
 #[test]
-fn hook_remove_cleans_directory() {
+fn delete_generated_hook_cleans_directory() {
     let temp = TempDir::new().unwrap();
     let hook = make_hook_primitive(temp.path(), "pre-commit");
 
@@ -1346,7 +1351,7 @@ fn hook_remove_cleans_directory() {
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "pre-commit"])
+        .args(["delete", "pre-commit", "-t", "claude"])
         .assert()
         .success();
 
@@ -1407,7 +1412,7 @@ fn target_add_already_registered_shows_message() {
 }
 
 #[test]
-fn remove_with_target_flag_only_removes_from_specified() {
+fn delete_with_target_flag_only_removes_from_specified() {
     let temp = TempDir::new().unwrap();
     let skill = make_primitive(temp.path(), "target-test");
 
@@ -1426,13 +1431,20 @@ fn remove_with_target_flag_only_removes_from_specified() {
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "target-test", "-t", "open-agents"])
+        .args(["delete", "target-test", "-t", "open-agents"])
         .assert()
         .success();
 
     // Claude files should still exist
     assert!(temp.path().join(".claude").join("skills").join("target-test").join("SKILL.md").exists());
     assert!(!temp.path().join(".agents").join("skills").join("target-test").join("SKILL.md").exists());
+
+    let lockfile: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("coral-lock.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(lockfile["capabilities"]["target-test"]["targets"]["claude"].is_object());
+    assert!(lockfile["capabilities"]["target-test"]["targets"]["open-agents"].is_null());
 }
 
 #[test]
@@ -1643,6 +1655,99 @@ fn import_single_directory() {
         .stdout(predicate::str::contains("my-import"))
         .stdout(predicate::str::contains("skill"))
         .stdout(predicate::str::contains("clean"));
+}
+
+#[test]
+fn untrack_imported_capability_preserves_files() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join(".agents").join("skills").join("keep-me");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Keep me\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["delete", "keep-me", "-t", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("use 'coral untrack keep-me -t open-agents'"));
+    assert!(skill_dir.join("SKILL.md").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["untrack", "keep-me", "-t", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("untracked 'keep-me'"));
+
+    assert!(skill_dir.join("SKILL.md").exists());
+    assert!(skill_dir.join("coral.toml").exists());
+    assert!(!temp
+        .path()
+        .join(".coral")
+        .join("baselines")
+        .join("open-agents")
+        .join("keep-me")
+        .exists());
+}
+
+#[test]
+fn delete_requires_force_for_modified_generated_files() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "modified-delete");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(
+        temp.path().join(".agents").join("skills").join("modified-delete").join("SKILL.md"),
+        "# Local edit\n",
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["delete", "modified-delete", "-t", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("use --force to delete"));
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("modified-delete")
+        .join("SKILL.md")
+        .exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["delete", "modified-delete", "-t", "open-agents", "--force"])
+        .assert()
+        .success();
+    assert!(!temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("modified-delete")
+        .exists());
 }
 
 #[test]

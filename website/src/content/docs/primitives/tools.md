@@ -91,8 +91,9 @@ native config:
 }
 ```
 
-Multiple tools share a single `mcpServers` object. `coral remove` cleans up both the
-tool directory and its MCP entry.
+Multiple tools share a single `mcpServers` object. `coral delete` cleans up both
+Coral-generated tool directories and their MCP entries. `coral untrack` preserves
+the tool directory and MCP entry while removing Coral tracking.
 
 ## Filtering
 

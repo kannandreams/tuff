@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -223,6 +223,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                         path: ".agents/skills/coral-cli-guide/SKILL.md".into(),
                         hash,
                     }],
+                    ownership: lockfile::TargetOwnership::Generated,
                 },
             );
 
@@ -632,6 +633,7 @@ fn install_capability(
             TargetLockEntry {
                 baseline_dir: baseline_rel,
                 emitted_files: emitted,
+                ownership: lockfile::TargetOwnership::Generated,
             },
         );
     }
@@ -1054,62 +1056,150 @@ fn cmd_diff_upstream(
     Ok(())
 }
 
-// ── Remove ──────────────────────────────────────────────────────────────────
+// ── Delete / untrack ────────────────────────────────────────────────────────
 
-pub fn cmd_remove(
-    repo_root: &Path,
-    id: &str,
-    scope_str: &str,
-    targets: Option<&[String]>,
-) -> Result<()> {
+fn resolve_cleanup_scope(repo_root: &Path, scope_str: &str) -> Result<(Scope, PathBuf)> {
     let scope = resolver::Scope::from_str(scope_str)
         .ok_or_else(|| CoralError::new(format!("invalid scope '{}'", scope_str)))?;
-
     let scope_root = match scope {
         Scope::Project => repo_root.to_path_buf(),
         Scope::Global => home_dir()?,
     };
+    Ok((scope, scope_root))
+}
+
+fn canonical_cleanup_targets(targets: &[String]) -> Result<Vec<String>> {
+    let mut canonical = BTreeSet::new();
+    for target in targets {
+        let adapter = AdapterKind::from_id(target).ok_or_else(|| {
+            CoralError::new(format!(
+                "unknown target '{}'; use 'coral target list' to see available targets",
+                target
+            ))
+        })?;
+        canonical.insert(adapter.id().to_string());
+    }
+    Ok(canonical.into_iter().collect())
+}
+
+fn remove_target_tracking(
+    scope_root: &Path,
+    id: &str,
+    entry: &mut lockfile::CapabilityLockEntry,
+    target: &str,
+) -> Result<()> {
+    if let Some(target_entry) = entry.targets.remove(target) {
+        let baseline_dir = scope_root.join(&target_entry.baseline_dir);
+        if baseline_dir.exists() {
+            std::fs::remove_dir_all(baseline_dir)?;
+        }
+    } else {
+        return Err(CoralError::new(format!(
+            "'{}' is not tracked for target '{}'",
+            id, target
+        )));
+    }
+    Ok(())
+}
+
+pub fn cmd_delete(
+    repo_root: &Path,
+    id: &str,
+    scope_str: &str,
+    targets: &[String],
+    force: bool,
+) -> Result<()> {
+    let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
+    let target_ids = canonical_cleanup_targets(targets)?;
 
     let mut lockfile = lockfile::require_lockfile(&scope_root)?;
-    let entry = lockfile.capabilities.remove(id).ok_or_else(|| {
+    let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
         CoralError::new(format!("'{}' is not installed in {} scope", id, scope.as_str()))
     })?;
 
-    let mut modified = false;
-    for (_, target_entry) in &entry.targets {
-        for emitted in &target_entry.emitted_files {
-            if lockfile::drift_status(&scope_root, emitted) == "modified" {
-                modified = true;
-            }
+    for target in &target_ids {
+        let target_entry = entry.targets.get(target).ok_or_else(|| {
+            CoralError::new(format!(
+                "'{}' is not tracked for target '{}'",
+                id, target
+            ))
+        })?;
+
+        if target_entry.ownership == lockfile::TargetOwnership::Imported {
+            return Err(CoralError::new(format!(
+                "'{}' is imported for target '{}'; use 'coral untrack {} -t {}' instead",
+                id, target, id, target
+            )));
+        }
+
+        let modified = target_entry.emitted_files.iter().any(|emitted| {
+            lockfile::drift_status(&scope_root, emitted) == "modified"
+        });
+        if modified && !force {
+            return Err(CoralError::new(format!(
+                "'{}' has local modifications for target '{}'; use --force to delete",
+                id, target
+            )));
+        }
+        if modified {
+            eprintln!(
+                "warning: '{}' has local modifications for target '{}' - deleting them",
+                id, target
+            );
         }
     }
-    if modified {
-        eprintln!("warning: '{}' has local modifications — removing will discard them", id);
-    }
 
-    let adapter_ids: Vec<String> = if let Some(tgts) = targets {
-        tgts.to_vec()
-    } else {
-        entry.targets.keys().cloned().collect()
-    };
-
-    for tid in &adapter_ids {
-        if let Some(adapter) = AdapterKind::from_id(tid) {
+    for target in &target_ids {
+        if let Some(adapter) = AdapterKind::from_id(target) {
             adapter.remove(id, &scope_root)?;
+        }
+        remove_target_tracking(&scope_root, id, &mut entry, target)?;
+    }
 
-            let baseline_dir = scope_root
-                .join(".coral")
-                .join("baselines")
-                .join(tid)
-                .join(id);
-            if baseline_dir.exists() {
-                std::fs::remove_dir_all(&baseline_dir)?;
-            }
+    if entry.targets.is_empty() {
+        lockfile.capabilities.remove(id);
+    } else {
+        lockfile.capabilities.insert(id.to_string(), entry);
+    }
+    lockfile::write_lockfile(&scope_root, &lockfile)?;
+    println!("deleted '{}' from {} scope", id, scope.as_str());
+    Ok(())
+}
+
+pub fn cmd_untrack(
+    repo_root: &Path,
+    id: &str,
+    scope_str: &str,
+    targets: &[String],
+) -> Result<()> {
+    let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
+    let target_ids = canonical_cleanup_targets(targets)?;
+
+    let mut lockfile = lockfile::require_lockfile(&scope_root)?;
+    let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
+        CoralError::new(format!("'{}' is not installed in {} scope", id, scope.as_str()))
+    })?;
+
+    for target in &target_ids {
+        if !entry.targets.contains_key(target) {
+            return Err(CoralError::new(format!(
+                "'{}' is not tracked for target '{}'",
+                id, target
+            )));
         }
     }
 
+    for target in &target_ids {
+        remove_target_tracking(&scope_root, id, &mut entry, target)?;
+    }
+
+    if entry.targets.is_empty() {
+        lockfile.capabilities.remove(id);
+    } else {
+        lockfile.capabilities.insert(id.to_string(), entry);
+    }
     lockfile::write_lockfile(&scope_root, &lockfile)?;
-    println!("removed '{}' from {} scope", id, scope.as_str());
+    println!("untracked '{}' from {} scope", id, scope.as_str());
     Ok(())
 }
 
@@ -1435,6 +1525,7 @@ pub fn cmd_import(
                 lockfile::TargetLockEntry {
                     baseline_dir: baseline_rel,
                     emitted_files,
+                    ownership: lockfile::TargetOwnership::Imported,
                 },
             );
 
@@ -1766,12 +1857,12 @@ pub fn cmd_target_add(repo_root: &Path, id: &str) -> Result<()> {
     })?;
 
     let mut config = config::read_config(repo_root)?;
-    if config.targets.contains(&id.to_string()) {
+    if config.targets.contains(&adapter.id().to_string()) {
         println!("target '{}' is already registered", id);
         return Ok(());
     }
 
-    config.targets.push(id.to_string());
+    config.targets.push(adapter.id().to_string());
     config::write_config(repo_root, &config)?;
     println!(
         "registered target '{}' ({})",
@@ -1790,41 +1881,9 @@ pub fn cmd_target_remove(repo_root: &Path, id: &str) -> Result<()> {
     })?;
 
     let mut config = config::read_config(repo_root)?;
-    let was_registered = config.targets.contains(&id.to_string());
+    let was_registered = config.targets.contains(&adapter.id().to_string());
 
-    let mut lockfile = lockfile::require_lockfile(repo_root)?;
-    for (primitive_id, entry) in lockfile.capabilities.iter() {
-        if entry.targets.contains_key(id) {
-            adapter.remove(primitive_id, repo_root)?;
-            let baseline_dir = repo_root
-                .join(".coral")
-                .join("baselines")
-                .join(id)
-                .join(primitive_id);
-            if baseline_dir.exists() {
-                std::fs::remove_dir_all(&baseline_dir)?;
-            }
-        }
-    }
-
-    for entry in lockfile.capabilities.values_mut() {
-        entry.targets.remove(id);
-    }
-
-    let baseline_parent = repo_root.join(".coral").join("baselines").join(id);
-    if baseline_parent.exists() {
-        let is_empty = match std::fs::read_dir(&baseline_parent) {
-            Ok(mut rd) => rd.next().is_none(),
-            Err(_) => false,
-        };
-        if is_empty {
-            std::fs::remove_dir(&baseline_parent)?;
-        }
-    }
-
-    lockfile::write_lockfile(repo_root, &lockfile)?;
-
-    config.targets.retain(|t| t != id);
+    config.targets.retain(|t| t != adapter.id());
     config::write_config(repo_root, &config)?;
 
     if was_registered {

@@ -86,6 +86,9 @@ coral diff python-project
 
 # 7. Accept changes (update baseline)
 coral import .agents/skills/python-project -t open-agents --override
+
+# 8. Untrack the capability while keeping its files
+coral untrack python-project -t open-agents
 ```
 
 Use `--override` when the local edited version is now the source of truth and you want Coral to

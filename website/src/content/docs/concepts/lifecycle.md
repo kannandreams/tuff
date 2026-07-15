@@ -77,6 +77,28 @@ If the drift is intentional and should become the new baseline:
 coral import .agents/skills/my-skill -t open-agents --override
 ```
 
+## Cleanup
+
+Cleanup is explicit about file ownership. For a capability Coral installed by
+copying files into a target, delete only the generated target files:
+
+```sh frame="terminal"
+coral delete my-skill -t open-agents
+```
+
+For a capability imported from an existing `.agents/` or `.claude/` directory,
+remove Coral tracking without touching the files:
+
+```sh frame="terminal"
+coral untrack my-skill -t open-agents
+```
+
+Both commands require a target. `delete` refuses imported capabilities and
+requires `--force` for locally modified generated files. `untrack` removes the
+target lock entry and baseline while preserving the capability files,
+`coral.toml`, and MCP configuration. The original source directory is never
+deleted by `delete`.
+
 ## Git-sourced capability lifecycle
 
 For git-backed capabilities, Coral can compare baseline, local, and upstream together:
@@ -116,6 +138,8 @@ coral update <id> --force
 | `coral check` | Fail CI when tracked files drift |
 | `coral outdated` | Show whether git-sourced capabilities have newer revisions |
 | `coral update <id>` | Reconcile a git-sourced capability with upstream |
+| `coral delete <id> -t <target>` | Delete Coral-generated files for a target |
+| `coral untrack <id> -t <target>` | Remove tracking while preserving files |
 
 ## Capability Metadata
 

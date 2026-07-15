@@ -39,7 +39,8 @@ and `coral update` without re-installing anything.
               "path": ".agents/skills/python-uv-default/SKILL.md",
               "hash": "a1b2c3..."
             }
-          ]
+          ],
+          "ownership": "generated"
         }
       }
     }
@@ -64,6 +65,7 @@ and `coral update` without re-installing anything.
 |---|---|
 | `baselineDir` | Path to baseline file copies for this target |
 | `emittedFiles` | List of `{ path, hash }` for each file written by the adapter |
+| `ownership` | `generated` when Coral emitted the files, or `imported` when Coral tracks existing files |
 
 ## Config schema
 
@@ -74,3 +76,9 @@ and `coral update` without re-installing anything.
 ```
 
 Written by `coral target add <id>` and read by `coral target list`.
+
+Target registration is separate from capability tracking. `coral target remove`
+only unregisters a target; it does not change the lockfile or delete files.
+
+Use `coral delete <id> -t <target>` to delete Coral-generated files. Use
+`coral untrack <id> -t <target>` to remove tracking while preserving files.

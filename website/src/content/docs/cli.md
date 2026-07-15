@@ -166,22 +166,48 @@ directory with `--override`:
 coral import .agents/skills/my-skill -t open-agents --override
 ```
 
-## `coral remove`
+## `coral delete`
 
-Remove a primitive and clean up emitted files:
+Delete Coral-generated capability files for explicitly selected targets:
 
 ```sh frame="terminal"
-# Remove from project scope (default)
-coral remove <id>
+# Delete generated files for one target
+coral delete <id> -t open-agents
 
-# Remove from global scope
-coral remove <id> --scope global
+# Delete generated files for multiple targets
+coral delete <id> -t open-agents -t claude
 
-# Remove from specific targets only
-coral remove <id> -t claude
+# Delete from global scope
+coral delete <id> -t open-agents --scope global
+
+# Delete files with local modifications
+coral delete <id> -t open-agents --force
 ```
 
-For tools, this also cleans the MCP configuration entry.
+The target flag is required. `delete` removes emitted files, their baselines,
+and generated tool MCP entries. It never deletes the original capability source
+directory. Modified generated files require `--force`. Imported capabilities
+cannot be deleted; use `coral untrack` instead.
+
+## `coral untrack`
+
+Stop tracking a capability for explicitly selected targets while preserving its
+agent files and manifest:
+
+```sh frame="terminal"
+# Stop tracking an imported skill
+coral untrack my-skill -t open-agents
+
+# Stop tracking several targets
+coral untrack my-skill -t open-agents -t claude
+
+# Stop tracking a global capability
+coral untrack my-skill -t open-agents --scope global
+```
+
+`untrack` removes the selected lockfile entry and baseline. It preserves the
+capability files, `coral.toml`, source directories, and MCP configuration.
+The lockfile itself remains in place, even when it contains no capabilities.
 
 ## `coral update`
 
@@ -226,7 +252,10 @@ Legacy aliases (`codex`, `claude-code`) are accepted and map to the current targ
 coral target remove open-agents
 ```
 
-Removes all emitted files and MCP registrations for that target across all capabilities.
+Unregisters the target from the project configuration. It does not delete
+capabilities, emitted files, baselines, MCP registrations, or lockfile entries.
+Use `coral delete <id> -t <target>` or `coral untrack <id> -t <target>` for
+capability cleanup.
 
 ## `coral import`
 

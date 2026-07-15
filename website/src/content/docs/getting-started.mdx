@@ -89,7 +89,24 @@ coral update rust-implement
 `coral outdated` compares tracked git-backed capabilities against their latest upstream revision,
 and `coral update` reconciles them when you are ready.
 
-## 8. CI validation
+## 8. Clean up a capability
+
+Delete files Coral generated for a target:
+
+```sh frame="terminal"
+coral delete rust-implement -t open-agents
+```
+
+If the capability was imported from files you already owned, preserve those files and remove only
+Coral tracking:
+
+```sh frame="terminal"
+coral untrack my-skill -t open-agents
+```
+
+`coral target remove open-agents` only unregisters the target. It does not remove capabilities.
+
+## 9. CI validation
 
 ```sh frame="terminal"
 coral check
