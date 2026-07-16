@@ -1,14 +1,15 @@
 ---
 title: Diffing & Updates
-description: How Coral shows local drift, compares upstream changes, and updates git-sourced capabilities.
+description: How Coral shows local drift, accepts local baselines, and updates git-sourced capabilities.
 ---
 
 Coral uses the recorded baseline in `.coral/baselines/` as the reference point for both local
 diffing and upstream-aware updates.
 
-There are two distinct flows:
+There are three distinct flows:
 
 - local drift against the recorded baseline
+- local source changes for capabilities added from an external folder
 - upstream changes for git-sourced capabilities
 
 ## 1. Diff local changes
@@ -37,10 +38,10 @@ coral diff python-project
 +Always run tests before pushing.
 ```
 
-If that local change is now the new source of truth, accept it by re-importing the directory:
+If that local change is now the new source of truth, accept it as the new baseline:
 
 ```sh frame="terminal"
-coral import .agents/skills/python-project -t open-agents --override
+coral update python-project
 ```
 
 ## 2. Diff upstream changes
@@ -75,7 +76,8 @@ no upstream changes
 
 ## 3. Preview an update
 
-For git-sourced capabilities, use `--check` before updating:
+Use `--check` before updating. For in-place local capabilities it previews baseline promotion;
+for external local and git-sourced capabilities it previews source reconciliation:
 
 ```sh frame="terminal"
 coral update rust-implement --check
@@ -95,6 +97,8 @@ coral update rust-implement
 
 Current update behavior:
 
+- for local capabilities, Coral records the current files as the new baseline
+- for local capabilities added from an external source folder, Coral reloads from `sourcePath`
 - if local matches baseline and upstream changed, Coral applies upstream
 - if upstream matches baseline, Coral leaves local changes alone
 - if both local and upstream changed, Coral attempts a three-way merge
@@ -114,11 +118,11 @@ coral update rust-implement --force
 | `coral diff <id> --upstream` | Upstream changes against baseline |
 | `coral outdated` | Show whether git-sourced capabilities have newer upstream commits |
 | `coral update <id> --check` | Preview update behavior |
+| `coral update <id> -t <target>` | Update one recorded target |
 | `coral update <id>` | Apply update using baseline-aware merge logic |
-| `coral update <id> --force` | Replace local files with upstream output |
+| `coral update <id> --force` | Replace local files with recorded source output |
 
 ## Important distinction
 
-Use `coral import ... --override` when you are accepting local edits as the new baseline.
-
-Use `coral update` when the capability came from git and you are reconciling with upstream.
+Use `coral update` for local baseline promotion, external local source refreshes, and git-backed
+upstream reconciliation.

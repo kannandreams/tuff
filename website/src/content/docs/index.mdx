@@ -53,12 +53,12 @@ Every Coral capability is defined by a single `coral.toml` manifest with a `type
 | `workflow` | Composable pattern bundling skills, tools, and hooks together |
 
 All four types share the same lifecycle: install, baseline, drift detection, diff,
-and merge-aware update through `coral add`, `coral import`, `coral update`, and
+and merge-aware update through `coral create`, `coral add`, `coral update`, and
 `coral diff`.
 
 ### Lifecycle management
 
-- **Install from anywhere**: local directories, git repositories, or adopt existing agent files with `coral import`. Capabilities are tracked in-place; no file copies are required.
+- **Install from anywhere**: local directories, git repositories, or existing agent files already in `.agents/` or `.claude/` with `coral add`.
 - **Drift detection**: every install records a pristine baseline. Any edit to an agent file becomes visible as `modified` in `coral list`.
 - **Three-way merge updates**: for git-sourced capabilities, `coral update` merges upstream changes with your local edits using `diffy`. Conflicts are reported with exact file paths and are never silently overwritten.
 

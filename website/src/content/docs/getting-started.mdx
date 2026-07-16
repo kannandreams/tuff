@@ -42,6 +42,12 @@ coral create skill my-skill --target claude
 
 The command records the baseline and starts tracking drift without requiring a separate import.
 
+If your project already has a skill under `.agents/skills/`, add it in place:
+
+```sh frame="terminal"
+coral add .agents/skills/existing-skill -t open-agents
+```
+
 ## 4. Inspect what is installed
 
 ```sh frame="terminal"
@@ -61,14 +67,14 @@ After you edit `.agents/skills/my-skill/SKILL.md`, `coral list` will show it as 
 `coral diff my-skill` will show the tracked changes.
 
 If the drift is intentional and you want Coral to treat the edited version as the new baseline,
-re-import that directory:
+accept the local edits with `coral update`:
 
 ```sh frame="terminal"
-coral import .agents/skills/my-skill -t open-agents --override
+coral update my-skill
 ```
 
-Use that for local capabilities you own. Reserve `coral update` for git-sourced capabilities when
-you are reconciling with upstream changes.
+For a capability installed on multiple targets, use `-t/--target` to update only selected targets.
+For existing files that were added in place, later edits follow this same drift and update flow.
 
 ## 6. Install from git
 
@@ -97,7 +103,7 @@ Delete files Coral generated for a target:
 coral delete rust-implement -t open-agents
 ```
 
-If the capability was imported from files you already owned, preserve those files and remove only
+If the capability was added from files you already owned, preserve those files and remove only
 Coral tracking:
 
 ```sh frame="terminal"

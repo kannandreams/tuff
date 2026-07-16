@@ -65,8 +65,9 @@ coral list
 coral diff rust-implement
 ```
 
-Use `coral import` for local agent assets that already exist in a project. Use
-`coral add` for capabilities hosted in a git repository.
+Use `coral add .agents/skills/<id> -t open-agents` for local agent assets that
+already exist in a project. Use `coral add <git-url> --skill <id>` for
+capabilities hosted in a git repository.
 
 ## Harness compilation
 

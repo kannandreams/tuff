@@ -59,7 +59,8 @@ installed release-prep (open-agents) -> .agents/workflows/release-prep/workflow.
 ```
 
 Workflows install themselves but do **not** auto-install dependencies. Install the required
-capabilities separately (or use `coral import` if they already exist in your project).
+capabilities separately, or use `coral add <path> -t <target>` if they already exist in your
+project.
 
 ## Validation
 

@@ -7,7 +7,7 @@ Coral is built around capability lifecycle management, not just file installatio
 
 The core loop is:
 
-1. install or import a capability into a target
+1. create or add a capability into a target
 2. record the install-time baseline
 3. allow the repo to customize the emitted files
 4. detect drift relative to the recorded baseline
@@ -76,7 +76,7 @@ the scaffold under `.claude/` instead.
 If the drift is intentional and should become the new baseline:
 
 ```sh frame="terminal"
-coral import .agents/skills/my-skill -t open-agents --override
+coral update my-skill
 ```
 
 ## Cleanup
@@ -88,14 +88,14 @@ copying files into a target, delete only the generated target files:
 coral delete my-skill -t open-agents
 ```
 
-For a capability imported from an existing `.agents/` or `.claude/` directory,
+For a capability added from an existing `.agents/` or `.claude/` directory,
 remove Coral tracking without touching the files:
 
 ```sh frame="terminal"
 coral untrack my-skill -t open-agents
 ```
 
-Both commands require a target. `delete` refuses imported capabilities and
+Both commands require a target. `delete` refuses in-place added capabilities and
 requires `--force` for locally modified generated files. `untrack` removes the
 target lock entry and baseline while preserving the capability files,
 `coral.toml`, and MCP configuration. The original source directory is never
@@ -139,7 +139,7 @@ coral update <id> --force
 | `coral diff <id> --upstream` | Show upstream changes against baseline |
 | `coral check` | Fail CI when tracked files drift |
 | `coral outdated` | Show whether git-sourced capabilities have newer revisions |
-| `coral update <id>` | Reconcile a git-sourced capability with upstream |
+| `coral update <id>` | Accept local edits or reconcile git-backed changes |
 | `coral delete <id> -t <target>` | Delete Coral-generated files for a target |
 | `coral untrack <id> -t <target>` | Remove tracking while preserving files |
 

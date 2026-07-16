@@ -20,7 +20,7 @@ Project-scoped capabilities live in the repository and are tracked by files unde
 - `.coral/baselines/`
 - `.coral/config.json`
 
-This is the default scope for `coral add`, `coral import`, `coral list`, `coral diff`, and
+This is the default scope for `coral add`, `coral list`, `coral diff`, and
 `coral update`.
 
 ### Global scope

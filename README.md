@@ -24,13 +24,13 @@ Claude-oriented output.
 
 ## How the lifecycle works
 
-1. Create or import a capability.
-2. Install it for one or more harness targets.
+1. Create a new capability or add an existing one.
+2. Track it for one or more harness targets.
 3. Coral records the emitted files and an install-time baseline under `.coral/`.
 4. Edit the project-owned files normally; `coral list`, `coral status`, and
    `coral diff` report drift.
-5. Re-import intentional local changes or update git-sourced capabilities when
-   upstream changes are available.
+5. Use `coral update` to accept intentional local changes or refresh from the
+   recorded source.
 
 Project and global scopes are supported. Project capabilities take precedence
 when the same id exists in both scopes, and Coral reports that relationship in

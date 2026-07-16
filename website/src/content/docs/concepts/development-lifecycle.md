@@ -8,7 +8,7 @@ description: How Coral supports common workflows, from first-time setup to CI va
 <div class="lifecycle-flow" aria-label="Coral capability workflow">
   <div class="lifecycle-node lifecycle-node--neutral">
     <strong>Record a baseline</strong>
-    <span><code>coral create</code>, <code>coral import</code>, or <code>coral add</code> brings a capability under management.</span>
+    <span><code>coral create</code> or <code>coral add</code> brings a capability under management.</span>
   </div>
   <div class="lifecycle-branches">
     <section class="lifecycle-track lifecycle-track--drift" aria-label="Local changes">
@@ -30,7 +30,7 @@ description: How Coral supports common workflows, from first-time setup to CI va
   </div>
   <div class="lifecycle-node lifecycle-node--resolve">
     <strong>Record the reviewed state</strong>
-    <span>Accept local edits with <code>coral import --override</code>, or merge git-backed changes with <code>coral update</code>.</span>
+    <span>Accept local edits or merge git-backed changes with <code>coral update</code>.</span>
   </div>
 </div>
 
@@ -84,15 +84,16 @@ coral list
 coral diff python-project
 
 # 7. Accept changes (update baseline)
-coral import .agents/skills/python-project -t open-agents --override
+coral update python-project
 
 # 8. Untrack the capability while keeping its files
 coral untrack python-project -t open-agents
 ```
 
-Use `--override` when the local edited version is now the source of truth and you want Coral to
-record a new baseline in place. `coral update` is the separate flow for git-sourced capabilities
-that need reconciliation with upstream.
+Use `coral update` when the local edited version is now the source of truth and you want Coral to
+record a new baseline in place. For git-sourced capabilities, the same command reconciles local
+and upstream changes. For capabilities added from an external local folder, it reloads from the
+recorded source path.
 
 ## Use Case: Install and update from git
 
@@ -148,11 +149,13 @@ coral init
 coral target add open-agents
 coral target add claude
 
-# 3. Import everything in one command
-coral import -t open-agents -t claude
-# imported existing-skill (skill, open-agents)
-# imported scan-tool (tool, open-agents)
-# imported claude-only (skill, claude)
+# 3. Add the existing directories in place
+coral add .agents/skills/existing-skill -t open-agents
+coral add .agents/tools/scan-tool -t open-agents
+coral add .claude/skills/claude-only -t claude
+# added existing-skill (skill, open-agents) -> .agents/skills/existing-skill
+# added scan-tool (tool, open-agents) -> .agents/tools/scan-tool
+# added claude-only (skill, claude) -> .claude/skills/claude-only
 
 # 4. Verify: everything tracked, zero files moved
 coral list

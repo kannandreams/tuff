@@ -17,9 +17,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_import, cmd_init, cmd_list,
-    cmd_outdated, cmd_status,
-    cmd_target_add, cmd_target_list, cmd_target_remove, cmd_untrack, cmd_update,
+    cmd_add, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_init, cmd_list, cmd_outdated,
+    cmd_status, cmd_target_add, cmd_target_list, cmd_target_remove, cmd_untrack, cmd_update,
 };
 use error::Result;
 
@@ -125,9 +124,9 @@ enum Command {
         target: Vec<String>,
     },
 
-    /// Update an installed primitive from its source.
+    /// Reconcile an installed capability with its source or accept local edits.
     Update {
-        /// Primitive id to update.
+        /// Capability id to update.
         id: String,
 
         /// Scope to update.
@@ -138,32 +137,13 @@ enum Command {
         #[arg(long = "check")]
         check: bool,
 
-        /// Force overwrite local changes with upstream.
-        #[arg(short = 'f', long = "force")]
-        force: bool,
-    },
-
-    /// Import existing agent assets into Coral management.
-    Import {
-        /// Path to an existing agent asset directory.
-        #[arg()]
-        path: Option<PathBuf>,
-
-        /// Target harness to import for (auto-inferred if path is under .agents/ or .claude/).
+        /// Target harness to update (repeatable; defaults to all recorded targets).
         #[arg(short = 't', long = "target")]
         target: Vec<String>,
 
-        /// Force capability type (auto-inferred from parent dir if omitted).
-        #[arg(long = "type")]
-        capability_type: Option<String>,
-
-        /// Preview what would be imported without making changes.
-        #[arg(long = "dry-run")]
-        dry_run: bool,
-
-        /// Overwrite existing lockfile entry for the same id.
-        #[arg(long = "override")]
-        override_existing: bool,
+        /// Force overwrite local changes with upstream (Git sources only).
+        #[arg(short = 'f', long = "force")]
+        force: bool,
     },
 
     /// Create and track a new capability.
@@ -265,20 +245,6 @@ fn run() -> Result<()> {
     match cli.command {
         None => Ok(display::print_welcome()),
         Some(Command::Init { global }) => cmd_init(&repo_root, global),
-        Some(Command::Import {
-            path,
-            target,
-            capability_type,
-            dry_run,
-            override_existing,
-        }) => cmd_import(
-            &repo_root,
-            path.as_deref(),
-            &target,
-            capability_type.as_deref(),
-            dry_run,
-            override_existing,
-        ),
         Some(Command::Create { kind }) => match kind {
             CreateCommand::Skill { id, target } => cmd_create(&repo_root, "skill", &id, &target),
             CreateCommand::Tool { id, target } => cmd_create(&repo_root, "tool", &id, &target),
@@ -323,8 +289,9 @@ fn run() -> Result<()> {
             id,
             scope,
             check,
+            target,
             force,
-        }) => cmd_update(&repo_root, &id, scope.as_deref(), check, force),
+        }) => cmd_update(&repo_root, &id, scope.as_deref(), &target, check, force),
         Some(Command::Check {
             json,
             ignore_failures,
