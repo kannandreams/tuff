@@ -300,6 +300,8 @@ fn target_list_add_remove() {
         .success()
         .stdout(predicate::str::contains("registered target 'open-agents'"));
 
+    assert!(temp.path().join(".agents").is_dir());
+
     // Install a skill to open-agents
     coral()
         .current_dir(temp.path())
@@ -331,6 +333,26 @@ fn target_list_add_remove() {
         .assert()
         .success()
         .stdout(predicate::str::contains("example"));
+}
+
+#[test]
+fn target_add_claude_creates_project_directory() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["target", "add", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("registered target 'claude'"));
+
+    assert!(temp.path().join(".claude").is_dir());
 }
 
 #[test]
@@ -1403,12 +1425,14 @@ fn target_add_already_registered_shows_message() {
         .args(["target", "add", "claude"])
         .assert()
         .success();
+    fs::remove_dir(temp.path().join(".claude")).unwrap();
     coral()
         .current_dir(temp.path())
         .args(["target", "add", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains("already registered"));
+    assert!(temp.path().join(".claude").is_dir());
 }
 
 #[test]

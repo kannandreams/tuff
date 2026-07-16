@@ -7,7 +7,7 @@ Coral uses the term `capability` for any managed agent-facing building block. A 
 
 Coral manages these capability types:
 
-| Kind | Status | Description |
+| Capability | Status | Description |
 |---|---|---|
 | [skill](/primitives/skills) | **Implemented** | Prose instruction injected into agent context |
 | [tool](/primitives/tools) | **Implemented** | Executable capability with typed parameter contract |

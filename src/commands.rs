@@ -1857,6 +1857,7 @@ pub fn cmd_target_add(repo_root: &Path, id: &str) -> Result<()> {
     })?;
 
     let mut config = config::read_config(repo_root)?;
+    adapter.ensure_project_dir(repo_root)?;
     if config.targets.contains(&adapter.id().to_string()) {
         println!("target '{}' is already registered", id);
         return Ok(());

@@ -40,7 +40,7 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 ### Manage
 - `coral remove <id>` — remove a capability
 - `coral target list` — show available harness targets
-- `coral target add <id>` — register a target
+- `coral target add <id>` — register a target and initialize its project directory
 - `coral init --global` — initialize global scope (~/.coral/)
 
 ### Targets

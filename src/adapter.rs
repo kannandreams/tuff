@@ -69,6 +69,14 @@ impl AdapterKind {
         }
     }
 
+    pub fn ensure_project_dir(&self, repo_root: &Path) -> std::io::Result<()> {
+        let dir = match self {
+            Self::OpenAgents => repo_root.join(".agents"),
+            Self::Claude => repo_root.join(".claude"),
+        };
+        std::fs::create_dir_all(dir)
+    }
+
     pub fn all() -> Vec<Self> {
         vec![Self::OpenAgents, Self::Claude]
     }

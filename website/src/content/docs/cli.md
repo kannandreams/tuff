@@ -244,6 +244,9 @@ coral target add open-agents
 coral target add claude
 ```
 
+Registering a target also creates its project directory (`.agents/` or
+`.claude/`) if it does not already exist.
+
 Legacy aliases (`codex`, `claude-code`) are accepted and map to the current target names.
 
 ### Remove a target
