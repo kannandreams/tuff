@@ -50,7 +50,7 @@ Each `[[workflow.requires]]` entry must have:
 ## Installing a workflow
 
 ```sh frame="terminal"
-$ coral add ./release-prep -t open-agents
+$ coral add ./release-prep -a open-agents
 note: workflow 'release-prep' requires 3 capabilities:
   - python-uv-default (skill)
   - security-review (tool)
@@ -59,7 +59,7 @@ installed release-prep (open-agents) -> .agents/workflows/release-prep/workflow.
 ```
 
 Workflows install themselves but do **not** auto-install dependencies. Install the required
-capabilities separately, or use `coral add <path> -t <target>` if they already exist in your
+capabilities separately, or use `coral add <path> -a <agent>` if they already exist in your
 project.
 
 ## Validation
@@ -126,13 +126,13 @@ type = "tool"
 EOF
 
 # 2. Install the workflow
-coral add ./feature-build -t open-agents
+coral add ./feature-build -a open-agents
 
 # 3. Install the required capabilities
-coral add https://github.com/pproenca/dot-skills --skill rust-implement -t open-agents
-coral add https://github.com/pproenca/dot-skills --skill rust-write-tests -t open-agents
-coral add examples/fixtures/pre-commit-lint -t open-agents
-coral add examples/fixtures/security-review -t open-agents
+coral add https://github.com/pproenca/dot-skills --skill rust-implement -a open-agents
+coral add https://github.com/pproenca/dot-skills --skill rust-write-tests -a open-agents
+coral add examples/fixtures/pre-commit-lint -a open-agents
+coral add examples/fixtures/security-review -a open-agents
 
 # 4. Check status
 coral status

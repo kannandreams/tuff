@@ -1,9 +1,9 @@
 ---
 title: Harness Adapters
-description: How Coral maps one capability model into target-specific files and config.
+description: How Coral maps one capability model into agent-specific files and config.
 ---
 
-A harness adapter is the target-specific layer that turns one Coral capability into the files a
+A harness adapter is the agent-specific layer that turns one Coral capability into the files a
 particular coding environment expects.
 
 Coral manages capabilities in one common model:
@@ -34,30 +34,30 @@ Legacy aliases are also accepted:
 - `codex` resolves to `open-agents`
 - `claude-code` resolves to `claude`
 
-The same capability can be emitted differently depending on the target.
+The same capability can be emitted differently depending on the agent.
 
 ## Skills
 
-| Target | Emitted path |
+| Agent | Emitted path |
 |---|---|
 | `open-agents` | `.agents/skills/<id>/...` |
 | `claude` | `.claude/skills/<id>/...` |
 
 ## Tools
 
-| Target | Emitted path | MCP registration |
+| Agent | Emitted path | MCP registration |
 |---|---|---|
 | `open-agents` | `.agents/tools/<id>/...` | `.agents/mcp.json` |
 | `claude` | `.claude/tools/<id>/...` | `.mcp.json` |
 
-Coral writes the tool files and also registers the tool in the target's MCP config so the harness
+Coral writes the tool files and also registers the tool in the agent's MCP config so the harness
 can discover it.
 
 ## Hooks
 
 Hooks are where the adapter differences are most visible:
 
-| Target | Emitted path | Format |
+| Agent | Emitted path | Format |
 |---|---|---|
 | `open-agents` | `.agents/hooks/<id>/hook.toml` | TOML |
 | `claude` | `.claude/hooks/<id>/hook.json` | JSON |
@@ -95,7 +95,7 @@ events that adapter accepts.
 ## Commands
 
 ```sh frame="terminal"
-coral target list
-coral target add open-agents
-coral target add claude
+coral agent list
+coral agent add open-agents
+coral agent add claude
 ```

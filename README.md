@@ -12,20 +12,20 @@ hooks, and workflows that teams load into coding harnesses such as Codex,
 Claude, Cursor, and others.
 
 Coral keeps capability files in the project while tracking the metadata around
-them: source, version, target harness, scope, and a pristine install baseline.
+them: source, version, agent harness, scope, and a pristine install baseline.
 That makes local customization visible instead of turning it into an
 untracked copy.
 
 The core is content-agnostic. Capability content can live in the repository
 that owns it or in a separate pack repository. Coral handles manifests,
-installation, validation, drift detection, diffs, updates, and target-specific
+installation, validation, drift detection, diffs, updates, and agent-specific
 emission. The current adapters include the shared `.agents/` layout and
 Claude-oriented output.
 
 ## How the lifecycle works
 
 1. Create a new capability or add an existing one.
-2. Track it for one or more harness targets.
+2. Track it for one or more agent harnesses.
 3. Coral records the emitted files and an install-time baseline under `.coral/`.
 4. Edit the project-owned files normally; `coral list`, `coral status`, and
    `coral diff` report drift.
@@ -107,8 +107,8 @@ mkdir -p /tmp/coral-smoke
 cd /tmp/coral-smoke
 coral --version
 coral init
-coral target add open-agents
-coral add /absolute/path/to/coral/examples/fixtures/python-uv-default -t open-agents
+coral agent add open-agents
+coral add /absolute/path/to/coral/examples/fixtures/python-uv-default -a open-agents
 coral list
 ```
 
@@ -124,11 +124,11 @@ just smoke-install
 coral
 coral --version
 coral init
-coral target add open-agents
-coral add examples/fixtures/python-uv-default -t open-agents
+coral agent add open-agents
+coral add examples/fixtures/python-uv-default -a open-agents
 coral list
 coral diff python-uv-default
-coral delete python-uv-default -t open-agents
+coral delete python-uv-default -a open-agents
 ```
 
 Running `coral` with no arguments shows the terminal banner and starter menu.
@@ -137,10 +137,10 @@ Running `coral` with no arguments shows the terminal banner and starter menu.
 directories, and installs the small `coral-cli-guide` reference skill. It does
 not install third-party capabilities or create a user skill for you.
 
-Capability cleanup is explicit. Use `coral delete <id> -t <target>` for
-Coral-generated files, or `coral untrack <id> -t <target>` when the files should
-remain in place but no longer be managed by Coral. `coral target remove <target>`
-only unregisters a target and does not remove capabilities.
+Capability cleanup is explicit. Use `coral delete <id> -a <agent>` for
+Coral-generated files, or `coral untrack <id> -a <agent>` when the files should
+remain in place but no longer be managed by Coral. `coral agent remove <agent>`
+only unregisters an agent and does not remove capabilities.
 
 The CLI is built from the Rust crate in this repository, and `Cargo.lock` is
 committed for reproducible builds.

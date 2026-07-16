@@ -60,13 +60,13 @@ Every tool goes through these checks at `coral add` time:
 
 ```sh frame="terminal"
 # Local directory
-coral add ./my-tool -t claude
+coral add ./my-tool -a claude
 
 # Git repository (use --tool instead of --skill)
-coral add https://github.com/owner/repo --tool security-review -t claude
+coral add https://github.com/owner/repo --tool security-review -a claude
 
-# Multiple targets
-coral add ./my-tool -t claude -t open-agents
+# Multiple agents
+coral add ./my-tool -a claude -a open-agents
 ```
 
 ## Where files go

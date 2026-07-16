@@ -118,7 +118,7 @@ coral update rust-implement --force
 | `coral diff <id> --upstream` | Upstream changes against baseline |
 | `coral outdated` | Show whether git-sourced capabilities have newer upstream commits |
 | `coral update <id> --check` | Preview update behavior |
-| `coral update <id> -t <target>` | Update one recorded target |
+| `coral update <id> -a <agent>` | Update one recorded agent |
 | `coral update <id>` | Apply update using baseline-aware merge logic |
 | `coral update <id> --force` | Replace local files with recorded source output |
 

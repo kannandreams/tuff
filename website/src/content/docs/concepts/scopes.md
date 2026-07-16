@@ -36,7 +36,7 @@ Use it explicitly:
 
 ```sh frame="terminal"
 coral init --global
-coral add ./my-skill -t open-agents --global
+coral add ./my-skill -a open-agents --global
 coral update my-skill --scope global
 ```
 
@@ -65,10 +65,10 @@ Coral surfaces this in status output:
 
 ```sh frame="terminal"
 # Install globally
-coral add ./company-review -t open-agents --global
+coral add ./company-review -a open-agents --global
 
 # In a repo, install a project-specific copy with the same id
-coral add ./company-review-custom -t open-agents
+coral add ./company-review-custom -a open-agents
 
 coral status
 ```
@@ -90,7 +90,7 @@ This is especially useful when:
 ### Commands that default to project scope
 
 ```sh frame="terminal"
-coral add ./my-skill -t open-agents
+coral add ./my-skill -a open-agents
 coral list
 coral diff my-skill
 coral update my-skill
@@ -99,10 +99,10 @@ coral update my-skill
 ### Commands that can target global scope
 
 ```sh frame="terminal"
-coral add ./my-skill -t open-agents --global
+coral add ./my-skill -a open-agents --global
 coral list --scope global
-coral delete my-skill -t open-agents --scope global
-coral untrack my-skill -t open-agents --scope global
+coral delete my-skill -a open-agents --scope global
+coral untrack my-skill -a open-agents --scope global
 coral update my-skill --scope global
 ```
 

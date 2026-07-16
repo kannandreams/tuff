@@ -18,11 +18,11 @@ coral init
 Creates `.coral/` state, registers `open-agents`, scaffolds `.agents/` directories, and auto-installs
 `coral-cli-guide`, a reference skill your coding agent can read to learn Coral commands.
 
-## 2. Register harness targets
+## 2. Register agent harnesses
 
 ```sh frame="terminal"
-coral target add open-agents
-coral target add claude
+coral agent add open-agents
+coral agent add claude
 ```
 
 ## 3. Create and track your first capability
@@ -34,10 +34,10 @@ coral create skill my-skill
 Coral creates a valid starter scaffold in `.agents/skills/my-skill/` so you can edit the generated
 files instead of writing boilerplate from scratch.
 
-Use `--target claude` to scaffold and track under `.claude/` instead:
+Use `--agent claude` to scaffold and track under `.claude/` instead:
 
 ```sh frame="terminal"
-coral create skill my-skill --target claude
+coral create skill my-skill --agent claude
 ```
 
 The command records the baseline and starts tracking drift without requiring a separate import.
@@ -45,7 +45,7 @@ The command records the baseline and starts tracking drift without requiring a s
 If your project already has a skill under `.agents/skills/`, add it in place:
 
 ```sh frame="terminal"
-coral add .agents/skills/existing-skill -t open-agents
+coral add .agents/skills/existing-skill -a open-agents
 ```
 
 ## 4. Inspect what is installed
@@ -54,7 +54,7 @@ coral add .agents/skills/existing-skill -t open-agents
 coral list
 ```
 
-`coral list` now shows a table with the capability type, target, status, and path.
+`coral list` now shows a table with the capability type, agent, status, and path.
 
 ## 5. Edit and detect drift
 
@@ -73,13 +73,13 @@ accept the local edits with `coral update`:
 coral update my-skill
 ```
 
-For a capability installed on multiple targets, use `-t/--target` to update only selected targets.
+For a capability installed on multiple agents, use `-t/--agent` to update only selected agents.
 For existing files that were added in place, later edits follow this same drift and update flow.
 
 ## 6. Install from git
 
 ```sh frame="terminal"
-coral add https://github.com/pproenca/dot-skills --skill rust-implement -t open-agents
+coral add https://github.com/pproenca/dot-skills --skill rust-implement -a open-agents
 ```
 
 Use this when the capability already lives in another repository and you want Coral to install and
@@ -97,20 +97,20 @@ and `coral update` reconciles them when you are ready.
 
 ## 8. Clean up a capability
 
-Delete files Coral generated for a target:
+Delete files Coral generated for an agent:
 
 ```sh frame="terminal"
-coral delete rust-implement -t open-agents
+coral delete rust-implement -a open-agents
 ```
 
 If the capability was added from files you already owned, preserve those files and remove only
 Coral tracking:
 
 ```sh frame="terminal"
-coral untrack my-skill -t open-agents
+coral untrack my-skill -a open-agents
 ```
 
-`coral target remove open-agents` only unregisters the target. It does not remove capabilities.
+`coral agent remove open-agents` only unregisters the agent. It does not remove capabilities.
 
 ## 9. CI validation
 

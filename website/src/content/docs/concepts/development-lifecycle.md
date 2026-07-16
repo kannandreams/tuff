@@ -48,9 +48,9 @@ coral init
 # → creates .coral/ state, registers open-agents, and scaffolds .agents/ directories
 # → auto-installs coral-cli-guide; your agent now knows Coral commands
 
-# Register harness targets
-coral target add open-agents
-coral target add claude
+# Register agent harnesses
+coral agent add open-agents
+coral agent add claude
 
 # Verify
 coral list
@@ -87,7 +87,7 @@ coral diff python-project
 coral update python-project
 
 # 8. Untrack the capability while keeping its files
-coral untrack python-project -t open-agents
+coral untrack python-project -a open-agents
 ```
 
 Use `coral update` when the local edited version is now the source of truth and you want Coral to
@@ -101,7 +101,7 @@ Install capabilities from shared repos, check for updates, and merge changes.
 
 ```sh frame="terminal"
 # 1. Install a skill from a git repository
-coral add https://github.com/pproenca/dot-skills --skill rust-implement -t open-agents
+coral add https://github.com/pproenca/dot-skills --skill rust-implement -a open-agents
 # installed rust-implement (open-agents) → .agents/skills/rust-implement/SKILL.md
 
 # 2. Check installed capabilities
@@ -145,14 +145,14 @@ coral init
 # existing .agents/ directories stay untouched
 # .agents/workflows/ created (new: Coral introduces this)
 
-# 2. Register your targets
-coral target add open-agents
-coral target add claude
+# 2. Register your agents
+coral agent add open-agents
+coral agent add claude
 
 # 3. Add the existing directories in place
-coral add .agents/skills/existing-skill -t open-agents
-coral add .agents/tools/scan-tool -t open-agents
-coral add .claude/skills/claude-only -t claude
+coral add .agents/skills/existing-skill -a open-agents
+coral add .agents/tools/scan-tool -a open-agents
+coral add .claude/skills/claude-only -a claude
 # added existing-skill (skill, open-agents) -> .agents/skills/existing-skill
 # added scan-tool (tool, open-agents) -> .agents/tools/scan-tool
 # added claude-only (skill, claude) -> .claude/skills/claude-only

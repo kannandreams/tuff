@@ -12,7 +12,7 @@ and the hashes needed for drift detection and diffs.
 | File | Purpose | Commit to git? |
 |---|---|---|
 | `.coral/coral-lock.json` | Installed capability state (id, version, targets, source, hashes) | Yes |
-| `.coral/config.json` | Registered harness targets (`coral init`, `coral target add`, or `coral create`) | Yes |
+| `.coral/config.json` | Registered agent harnesses (`coral init`, `coral agent add`, or `coral create`) | Yes |
 | `.coral/baselines/<target>/<id>/` | Pristine copies of installed files for diffing | Yes |
 | `~/.coral/coral-lock.json` | Global scope: personal, across all projects | No |
 | `~/.coral/cache/git/` | Cloned git repositories for skill discovery | No |
@@ -63,7 +63,7 @@ and `coral update` without re-installing anything.
 
 | Field | Description |
 |---|---|
-| `baselineDir` | Path to baseline file copies for this target |
+| `baselineDir` | Path to baseline file copies for this agent |
 | `emittedFiles` | List of `{ path, hash }` for each file written by the adapter |
 | `ownership` | `generated` when Coral emitted the files, or `imported` when Coral tracks existing files |
 
@@ -75,11 +75,11 @@ and `coral update` without re-installing anything.
 }
 ```
 
-Initialized by `coral init`, updated by `coral target add <id>` or `coral create`,
-and read by `coral target list`.
+Initialized by `coral init`, updated by `coral agent add <id>` or `coral create`,
+and read by `coral agent list`.
 
-Target registration is separate from capability tracking. `coral target remove`
-only unregisters a target; it does not change the lockfile or delete files.
+Agent registration is separate from capability tracking. `coral agent remove`
+only unregisters an agent; it does not change the lockfile or delete files.
 
-Use `coral delete <id> -t <target>` to delete Coral-generated files. Use
-`coral untrack <id> -t <target>` to remove tracking while preserving files.
+Use `coral delete <id> -a <agent>` to delete Coral-generated files. Use
+`coral untrack <id> -a <agent>` to remove tracking while preserving files.

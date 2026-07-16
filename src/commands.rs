@@ -31,7 +31,7 @@ struct ListRow {
     version: String,
     #[tabled(rename = "SCOPE")]
     scope: String,
-    #[tabled(rename = "TARGET")]
+    #[tabled(rename = "AGENT")]
     target: String,
     #[tabled(rename = "STATUS")]
     status: String,
@@ -45,7 +45,7 @@ struct OutdatedRow {
     id: String,
     #[tabled(rename = "TYPE")]
     capability_type: String,
-    #[tabled(rename = "TARGET")]
+    #[tabled(rename = "AGENT")]
     target: String,
     #[tabled(rename = "CURRENT")]
     current: String,
@@ -265,7 +265,7 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
     for target in target_ids {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
             CoralError::new(format!(
-                "unknown target '{}'; use 'coral target list' to see available targets",
+                "unknown agent '{}'; use 'coral agent list' to see available agents",
                 target
             ))
         })?;
@@ -509,7 +509,7 @@ fn cmd_create_legacy(
 ) -> Result<()> {
     let adapter = AdapterKind::from_id(target).ok_or_else(|| {
         CoralError::new(format!(
-            "unknown target '{}'; use 'coral target list' to see available targets",
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
             target
         ))
     })?;
@@ -527,7 +527,7 @@ fn cmd_create_legacy(
 
     if chosen.len() != 1 {
         return Err(CoralError::new(
-            "choose exactly one scaffold target: --skill, --tool, --hook, or --workflow",
+            "choose exactly one scaffold type: --skill, --tool, --hook, or --workflow",
         ));
     }
 
@@ -909,7 +909,7 @@ fn adopt_capability_in_place(
     for target_id in target_ids {
         if target_id != inferred_target {
             return Err(CoralError::new(format!(
-                "{} is already in the '{}' target layout; use -t {}",
+                "{} is already in the '{}' agent layout; use -a {}",
                 lockfile::relative_or_absolute_fs(capability_dir, install_root),
                 inferred_target,
                 inferred_target
@@ -1015,7 +1015,7 @@ fn install_capability(
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
             CoralError::new(format!(
-                "unknown target '{}'; run 'coral target list' to see available targets",
+                "unknown agent '{}'; run 'coral agent list' to see available agents",
                 tid
             ))
         })?;
@@ -1278,7 +1278,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
     println!(
         "{}",
         render_table(
-            &["ID", "TYPE", "VERSION", "SCOPE", "TARGET", "STATUS", "PATH"],
+            &["ID", "TYPE", "VERSION", "SCOPE", "AGENT", "STATUS", "PATH"],
             &table_rows
         )
     );
@@ -1582,7 +1582,7 @@ fn canonical_cleanup_targets(targets: &[String]) -> Result<Vec<String>> {
     for target in targets {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
             CoralError::new(format!(
-                "unknown target '{}'; use 'coral target list' to see available targets",
+                "unknown agent '{}'; use 'coral agent list' to see available agents",
                 target
             ))
         })?;
@@ -1604,7 +1604,7 @@ fn remove_target_tracking(
         }
     } else {
         return Err(CoralError::new(format!(
-            "'{}' is not tracked for target '{}'",
+            "'{}' is not tracked for agent '{}'",
             id, target
         )));
     }
@@ -1632,12 +1632,12 @@ pub fn cmd_delete(
 
     for target in &target_ids {
         let target_entry = entry.targets.get(target).ok_or_else(|| {
-            CoralError::new(format!("'{}' is not tracked for target '{}'", id, target))
+            CoralError::new(format!("'{}' is not tracked for agent '{}'", id, target))
         })?;
 
         if target_entry.ownership == lockfile::TargetOwnership::Imported {
             return Err(CoralError::new(format!(
-                "'{}' is tracked in place for target '{}'; use 'coral untrack {} -t {}' instead",
+                "'{}' is tracked in place for agent '{}'; use 'coral untrack {} -a {}' instead",
                 id, target, id, target
             )));
         }
@@ -1648,13 +1648,13 @@ pub fn cmd_delete(
             .any(|emitted| lockfile::drift_status(&scope_root, emitted) == "modified");
         if modified && !force {
             return Err(CoralError::new(format!(
-                "'{}' has local modifications for target '{}'; use --force to delete",
+                "'{}' has local modifications for agent '{}'; use --force to delete",
                 id, target
             )));
         }
         if modified {
             eprintln!(
-                "warning: '{}' has local modifications for target '{}' - deleting them",
+                "warning: '{}' has local modifications for agent '{}' - deleting them",
                 id, target
             );
         }
@@ -1693,7 +1693,7 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
     for target in &target_ids {
         if !entry.targets.contains_key(target) {
             return Err(CoralError::new(format!(
-                "'{}' is not tracked for target '{}'",
+                "'{}' is not tracked for agent '{}'",
                 id, target
             )));
         }
@@ -1727,7 +1727,7 @@ fn select_update_targets(
     for target_id in requested {
         if !entry.targets.contains_key(target_id) {
             return Err(CoralError::new(format!(
-                "'{}' is not installed for target '{}'",
+                "'{}' is not installed for agent '{}'",
                 id, target_id
             )));
         }
@@ -1762,7 +1762,7 @@ fn update_local_baseline(
     for target_id in target_ids {
         let target_entry = entry.targets.get(target_id).ok_or_else(|| {
             CoralError::new(format!(
-                "'{}' is not installed for target '{}'",
+                "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
         })?;
@@ -1830,7 +1830,7 @@ fn update_local_baseline(
     for (target_id, path, _baseline_path, content) in updates {
         let target_entry = installed.targets.get_mut(&target_id).ok_or_else(|| {
             CoralError::new(format!(
-                "'{}' is not installed for target '{}'",
+                "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
         })?;
@@ -1885,7 +1885,7 @@ fn update_local_from_source(
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
             CoralError::new(format!(
-                "unknown target '{}'; run 'coral target list' to see available targets",
+                "unknown agent '{}'; run 'coral agent list' to see available agents",
                 tid
             ))
         })?;
@@ -1898,7 +1898,7 @@ fn update_local_from_source(
         let planned_files = adapter.plan(&capability, scope_root)?;
         let target_entry = entry.targets.get(adapter.id()).ok_or_else(|| {
             CoralError::new(format!(
-                "'{}' is not installed for target '{}'",
+                "'{}' is not installed for agent '{}'",
                 id,
                 adapter.id()
             ))
@@ -2034,7 +2034,7 @@ pub fn cmd_update(
     for target_id in &target_ids {
         let target_entry = entry.targets.get(target_id).ok_or_else(|| {
             CoralError::new(format!(
-                "'{}' is not installed for target '{}'",
+                "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
         })?;
@@ -2343,20 +2343,20 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     println!(
         "{}",
         render_table(
-            &["ID", "TYPE", "TARGET", "CURRENT", "LATEST", "STATUS"],
+            &["ID", "TYPE", "AGENT", "CURRENT", "LATEST", "STATUS"],
             &table_rows
         )
     );
     Ok(())
 }
 
-// ── Target commands (unchanged) ─────────────────────────────────────────────
+// ── Agent commands ──────────────────────────────────────────────────────────
 
-pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
+pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
     #[derive(Tabled)]
-    struct TargetRow {
-        #[tabled(rename = "TARGET")]
-        target: String,
+    struct AgentRow {
+        #[tabled(rename = "AGENT")]
+        agent: String,
         #[tabled(rename = "AGENTS SUPPORTED")]
         agents: String,
         #[tabled(rename = "PRIMITIVES")]
@@ -2367,16 +2367,16 @@ pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
     let registered: std::collections::HashSet<&str> =
         config.targets.iter().map(|s| s.as_str()).collect();
 
-    let rows: Vec<TargetRow> = AdapterKind::all()
+    let rows: Vec<AgentRow> = AdapterKind::all()
         .iter()
         .map(|a| {
-            let target_label = if registered.contains(a.id()) {
+            let agent_label = if registered.contains(a.id()) {
                 format!("{} *", a.id())
             } else {
                 a.id().to_string()
             };
-            TargetRow {
-                target: target_label,
+            AgentRow {
+                agent: agent_label,
                 agents: a.supported_agents().join(", "),
                 primitives: a.kinds_supported().join(", "),
             }
@@ -2391,16 +2391,16 @@ pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
     println!("{table}");
 
     println!(
-        "\n  {} = registered (use 'coral target add <id>' to register)",
+        "\n  {} = registered (use 'coral agent add <id>' to register)",
         paint("*", "32")
     );
     Ok(())
 }
 
-pub fn cmd_target_add(repo_root: &Path, id: &str) -> Result<()> {
+pub fn cmd_agent_add(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
         CoralError::new(format!(
-            "unknown target '{}'; use 'coral target list' to see available targets",
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
             id
         ))
     })?;
@@ -2408,24 +2408,24 @@ pub fn cmd_target_add(repo_root: &Path, id: &str) -> Result<()> {
     let mut config = config::read_config(repo_root)?;
     adapter.ensure_project_dir(repo_root)?;
     if config.targets.contains(&adapter.id().to_string()) {
-        println!("target '{}' is already registered", id);
+        println!("agent '{}' is already registered", id);
         return Ok(());
     }
 
     config.targets.push(adapter.id().to_string());
     config::write_config(repo_root, &config)?;
     println!(
-        "registered target '{}' ({})",
+        "registered agent '{}' ({})",
         adapter.id(),
         adapter.display_name()
     );
     Ok(())
 }
 
-pub fn cmd_target_remove(repo_root: &Path, id: &str) -> Result<()> {
+pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
         CoralError::new(format!(
-            "unknown target '{}'; use 'coral target list' to see available targets",
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
             id
         ))
     })?;
@@ -2437,9 +2437,9 @@ pub fn cmd_target_remove(repo_root: &Path, id: &str) -> Result<()> {
     config::write_config(repo_root, &config)?;
 
     if was_registered {
-        println!("unregistered target '{}'", adapter.id());
+        println!("unregistered agent '{}'", adapter.id());
     } else {
-        println!("removed target '{}'", adapter.id());
+        println!("removed agent '{}'", adapter.id());
     }
     Ok(())
 }

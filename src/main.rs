@@ -17,8 +17,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_init, cmd_list, cmd_outdated,
-    cmd_status, cmd_target_add, cmd_target_list, cmd_target_remove, cmd_untrack, cmd_update,
+    cmd_add, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_check, cmd_create, cmd_delete,
+    cmd_diff, cmd_init, cmd_list, cmd_outdated, cmd_status, cmd_untrack, cmd_update,
 };
 use error::Result;
 
@@ -43,9 +43,9 @@ enum Command {
         /// Path to a capability directory or git URL.
         capability: PathBuf,
 
-        /// Target harness to emit for (repeatable).
-        #[arg(short = 't', long = "target", required = true)]
-        target: Vec<String>,
+        /// Agent harness to emit for (repeatable).
+        #[arg(short = 'a', long = "agent", required = true)]
+        agent: Vec<String>,
 
         /// Skill name when installing from a git repository.
         #[arg(short = 's', long = "skill")]
@@ -83,9 +83,9 @@ enum Command {
         /// Installed capability id.
         capability_id: String,
 
-        /// Target to diff (if not specified, diffs all targets).
-        #[arg(short = 't', long = "target")]
-        target: Option<String>,
+        /// Agent to diff (if not specified, diffs all agents).
+        #[arg(short = 'a', long = "agent")]
+        agent: Option<String>,
 
         /// Diff against latest upstream source instead of baseline.
         #[arg(short = 'u', long = "upstream")]
@@ -101,9 +101,9 @@ enum Command {
         #[arg(short = 's', long = "scope", default_value = "project")]
         scope: String,
 
-        /// Target to delete from (repeatable).
-        #[arg(short = 't', long = "target", required = true)]
-        target: Vec<String>,
+        /// Agent to delete from (repeatable).
+        #[arg(short = 'a', long = "agent", required = true)]
+        agent: Vec<String>,
 
         /// Delete files even when they have local modifications.
         #[arg(short = 'f', long = "force")]
@@ -119,9 +119,9 @@ enum Command {
         #[arg(short = 's', long = "scope", default_value = "project")]
         scope: String,
 
-        /// Target to untrack (repeatable).
-        #[arg(short = 't', long = "target", required = true)]
-        target: Vec<String>,
+        /// Agent to untrack (repeatable).
+        #[arg(short = 'a', long = "agent", required = true)]
+        agent: Vec<String>,
     },
 
     /// Reconcile an installed capability with its source or accept local edits.
@@ -137,9 +137,9 @@ enum Command {
         #[arg(long = "check")]
         check: bool,
 
-        /// Target harness to update (repeatable; defaults to all recorded targets).
-        #[arg(short = 't', long = "target")]
-        target: Vec<String>,
+        /// Agent harness to update (repeatable; defaults to all recorded agents).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
 
         /// Force overwrite local changes with upstream (Git sources only).
         #[arg(short = 'f', long = "force")]
@@ -170,10 +170,10 @@ enum Command {
     /// Show installed capabilities with upstream update status.
     Outdated,
 
-    /// Manage harness targets.
-    Target {
+    /// Manage agent harnesses.
+    Agent {
         #[command(subcommand)]
-        action: TargetCommand,
+        action: AgentCommand,
     },
 }
 
@@ -183,50 +183,50 @@ enum CreateCommand {
     Skill {
         /// Capability id.
         id: String,
-        /// Target harnesses to scaffold for (repeatable).
-        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
-        target: Vec<String>,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
     },
     /// Create and track a tool.
     Tool {
         /// Capability id.
         id: String,
-        /// Target harnesses to scaffold for (repeatable).
-        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
-        target: Vec<String>,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
     },
     /// Create and track a hook.
     Hook {
         /// Capability id.
         id: String,
-        /// Target harnesses to scaffold for (repeatable).
-        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
-        target: Vec<String>,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
     },
     /// Create and track a workflow.
     Workflow {
         /// Capability id.
         id: String,
-        /// Target harnesses to scaffold for (repeatable).
-        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
-        target: Vec<String>,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
     },
 }
 
 #[derive(Subcommand)]
-enum TargetCommand {
-    /// List available and registered targets.
+enum AgentCommand {
+    /// List available and registered agents.
     List,
 
-    /// Register a target for this repo.
+    /// Register an agent for this repo.
     Add {
-        /// Target adapter id.
+        /// Agent adapter id.
         id: String,
     },
 
-    /// Unregister a target without changing installed capabilities.
+    /// Unregister an agent without changing installed capabilities.
     Remove {
-        /// Target adapter id.
+        /// Agent adapter id.
         id: String,
     },
 }
@@ -246,16 +246,16 @@ fn run() -> Result<()> {
         None => Ok(display::print_welcome()),
         Some(Command::Init { global }) => cmd_init(&repo_root, global),
         Some(Command::Create { kind }) => match kind {
-            CreateCommand::Skill { id, target } => cmd_create(&repo_root, "skill", &id, &target),
-            CreateCommand::Tool { id, target } => cmd_create(&repo_root, "tool", &id, &target),
-            CreateCommand::Hook { id, target } => cmd_create(&repo_root, "hook", &id, &target),
-            CreateCommand::Workflow { id, target } => {
-                cmd_create(&repo_root, "workflow", &id, &target)
+            CreateCommand::Skill { id, agent } => cmd_create(&repo_root, "skill", &id, &agent),
+            CreateCommand::Tool { id, agent } => cmd_create(&repo_root, "tool", &id, &agent),
+            CreateCommand::Hook { id, agent } => cmd_create(&repo_root, "hook", &id, &agent),
+            CreateCommand::Workflow { id, agent } => {
+                cmd_create(&repo_root, "workflow", &id, &agent)
             }
         },
         Some(Command::Add {
             capability,
-            target,
+            agent,
             skill,
             tool,
             hook,
@@ -263,7 +263,7 @@ fn run() -> Result<()> {
         }) => cmd_add(
             &repo_root,
             &capability,
-            &target,
+            &agent,
             skill.as_deref(),
             tool.as_deref(),
             hook.as_deref(),
@@ -273,35 +273,33 @@ fn run() -> Result<()> {
         Some(Command::Status) => cmd_status(&repo_root),
         Some(Command::Diff {
             capability_id,
-            target,
+            agent,
             upstream,
-        }) => cmd_diff(&repo_root, &capability_id, target.as_deref(), upstream),
+        }) => cmd_diff(&repo_root, &capability_id, agent.as_deref(), upstream),
         Some(Command::Delete {
             id,
             scope,
-            target,
+            agent,
             force,
-        }) => cmd_delete(&repo_root, &id, &scope, &target, force),
-        Some(Command::Untrack { id, scope, target }) => {
-            cmd_untrack(&repo_root, &id, &scope, &target)
-        }
+        }) => cmd_delete(&repo_root, &id, &scope, &agent, force),
+        Some(Command::Untrack { id, scope, agent }) => cmd_untrack(&repo_root, &id, &scope, &agent),
         Some(Command::Update {
             id,
             scope,
             check,
-            target,
+            agent,
             force,
-        }) => cmd_update(&repo_root, &id, scope.as_deref(), &target, check, force),
+        }) => cmd_update(&repo_root, &id, scope.as_deref(), &agent, check, force),
         Some(Command::Check {
             json,
             ignore_failures,
             global,
         }) => cmd_check(&repo_root, json, ignore_failures, global),
         Some(Command::Outdated) => cmd_outdated(&repo_root),
-        Some(Command::Target { action }) => match action {
-            TargetCommand::List => cmd_target_list(&repo_root),
-            TargetCommand::Add { id } => cmd_target_add(&repo_root, &id),
-            TargetCommand::Remove { id } => cmd_target_remove(&repo_root, &id),
+        Some(Command::Agent { action }) => match action {
+            AgentCommand::List => cmd_agent_list(&repo_root),
+            AgentCommand::Add { id } => cmd_agent_add(&repo_root, &id),
+            AgentCommand::Remove { id } => cmd_agent_remove(&repo_root, &id),
         },
     }
 }

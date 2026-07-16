@@ -92,11 +92,11 @@ files = ["run.sh"]
 
 [parameters]
 type = "object"
-required = ["target"]
+required = ["agent"]
 
-[parameters.properties.target]
+[parameters.properties.endpoint]
 type = "string"
-description = "The target to scan"
+description = "The endpoint to scan"
 
 [implementation]
 language = "bash"
@@ -154,12 +154,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
 
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -215,12 +210,7 @@ fn add_requires_init() {
 
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("run 'coral init' first"));
@@ -246,21 +236,44 @@ fn add_refuses_to_overwrite_untracked_skill() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("refusing to overwrite untracked"));
 }
 
 #[test]
-fn rejects_unknown_target() {
+fn rejects_unknown_agent() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--agent", "nonexistent"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown agent"));
+}
+
+#[test]
+fn old_target_command_is_removed() {
+    coral()
+        .args(["target", "list"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'target'"));
+}
+
+#[test]
+fn old_target_flags_are_removed() {
+    let temp = TempDir::new().unwrap();
+    let primitive = make_primitive(temp.path(), "old-target-flag");
 
     coral()
         .current_dir(temp.path())
@@ -274,15 +287,22 @@ fn rejects_unknown_target() {
             "add",
             primitive.to_str().unwrap(),
             "--target",
-            "nonexistent",
+            "open-agents",
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unknown target"));
+        .stderr(predicate::str::contains("unexpected argument '--target'"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument '-t'"));
 }
 
 #[test]
-fn target_list_add_remove() {
+fn agent_list_add_remove() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
 
@@ -295,7 +315,7 @@ fn target_list_add_remove() {
     // List available adapters
     coral()
         .current_dir(temp.path())
-        .args(["target", "list"])
+        .args(["agent", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("open-agents *"))
@@ -304,22 +324,17 @@ fn target_list_add_remove() {
     // Register Claude; Open Agents is registered by coral init.
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "claude"])
+        .args(["agent", "add", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("registered target 'claude'"));
+        .stdout(predicate::str::contains("registered agent 'claude'"));
 
     assert!(temp.path().join(".claude").is_dir());
 
     // Install a skill to open-agents
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -329,12 +344,10 @@ fn target_list_add_remove() {
     // Unregister open-agents without changing installed capabilities
     coral()
         .current_dir(temp.path())
-        .args(["target", "remove", "open-agents"])
+        .args(["agent", "remove", "open-agents"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "unregistered target 'open-agents'",
-        ));
+        .stdout(predicate::str::contains("unregistered agent 'open-agents'"));
 
     assert!(temp
         .path()
@@ -352,7 +365,7 @@ fn target_list_add_remove() {
 }
 
 #[test]
-fn target_add_claude_creates_project_directory() {
+fn agent_add_claude_creates_project_directory() {
     let temp = TempDir::new().unwrap();
 
     coral()
@@ -363,16 +376,16 @@ fn target_add_claude_creates_project_directory() {
 
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "claude"])
+        .args(["agent", "add", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("registered target 'claude'"));
+        .stdout(predicate::str::contains("registered agent 'claude'"));
 
     assert!(temp.path().join(".claude").is_dir());
 }
 
 #[test]
-fn add_to_multiple_targets() {
+fn add_to_multiple_agents() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
 
@@ -387,9 +400,9 @@ fn add_to_multiple_targets() {
         .args([
             "add",
             primitive.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
         ])
         .assert()
@@ -417,7 +430,7 @@ fn add_to_multiple_targets() {
         .join("SKILL.md")
         .exists());
 
-    // List should show both targets
+    // List should show both agents
     coral()
         .current_dir(temp.path())
         .arg("list")
@@ -429,17 +442,17 @@ fn add_to_multiple_targets() {
         .stdout(predicate::str::contains("claude"))
         .stdout(predicate::str::contains(".claude/skills/example/SKILL.md"));
 
-    // Diff with specific target
+    // Diff with specific agent
     coral()
         .current_dir(temp.path())
-        .args(["diff", "example", "--target", "open-agents"])
+        .args(["diff", "example", "--agent", "open-agents"])
         .assert()
         .success();
 
     // Unregistering open-agents should keep all capability files
     coral()
         .current_dir(temp.path())
-        .args(["target", "remove", "open-agents"])
+        .args(["agent", "remove", "open-agents"])
         .assert()
         .success();
 
@@ -476,7 +489,7 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "test-skill",
@@ -544,7 +557,7 @@ fn add_git_requires_skill_flag() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", &repo_url, "--target", "open-agents"])
+        .args(["add", &repo_url, "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -569,7 +582,7 @@ fn add_git_missing_skill_reports_error() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "nonexistent",
@@ -580,7 +593,7 @@ fn add_git_missing_skill_reports_error() {
 }
 
 #[test]
-fn add_git_skill_multi_target() {
+fn add_git_skill_multi_agent() {
     let temp = TempDir::new().unwrap();
     let repo = make_git_skill_repo(temp.path());
     let repo_url = format!("file://{}", repo.display());
@@ -596,9 +609,9 @@ fn add_git_skill_multi_target() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
             "--skill",
             "test-skill",
@@ -687,7 +700,7 @@ fn add_git_subfolder_skill() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "security/security-review",
@@ -721,7 +734,7 @@ fn legacy_alias_codex_works() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "codex"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "codex"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -750,12 +763,7 @@ fn legacy_alias_claude_code_works() {
 
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "claude-code",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "claude-code"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -788,7 +796,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
         .args([
             "add",
             primitive.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
             "--global",
         ])
@@ -818,12 +826,7 @@ fn list_shows_scope_column() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -851,18 +854,13 @@ fn delete_generated_capability_cleans_up() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
     coral()
         .current_dir(temp.path())
-        .args(["delete", "remove-test", "-t", "open-agents"])
+        .args(["delete", "remove-test", "-a", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -909,7 +907,7 @@ fn status_shows_override_warning() {
         .args([
             "add",
             primitive_a.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
             "--global",
         ])
@@ -926,7 +924,7 @@ fn status_shows_override_warning() {
         .args([
             "add",
             primitive_a.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
         ])
         .assert()
@@ -964,7 +962,7 @@ fn update_git_skill_reports_up_to_date() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "test-skill",
@@ -993,7 +991,7 @@ fn add_tool_installs_and_emits() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1040,12 +1038,7 @@ entrypoint = "run.sh"
 
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -1088,12 +1081,7 @@ entrypoint = "../etc/passwd"
 
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("path traversal"));
@@ -1112,7 +1100,7 @@ fn add_tool_shows_runtime_deps() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stderr(predicate::str::contains(
@@ -1133,12 +1121,12 @@ fn list_filter_by_primitive_kind() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1160,7 +1148,7 @@ fn list_filter_by_primitive_kind() {
 }
 
 #[test]
-fn add_tool_multi_target_with_mcp() {
+fn add_tool_multi_agent_with_mcp() {
     let temp = TempDir::new().unwrap();
     let tool = make_tool_primitive(temp.path(), "scan-tool");
 
@@ -1175,9 +1163,9 @@ fn add_tool_multi_target_with_mcp() {
         .args([
             "add",
             tool.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
         ])
         .assert()
@@ -1217,7 +1205,7 @@ fn remove_tool_cleans_mcp_entry() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "claude"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "claude"])
         .assert()
         .success();
 
@@ -1229,7 +1217,7 @@ fn remove_tool_cleans_mcp_entry() {
 
     coral()
         .current_dir(temp.path())
-        .args(["delete", "scan-tool", "-t", "claude"])
+        .args(["delete", "scan-tool", "-a", "claude"])
         .assert()
         .success();
 
@@ -1273,7 +1261,7 @@ fn add_hook_installs_and_emits() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1318,12 +1306,7 @@ command = "echo test"
         .success();
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -1357,7 +1340,7 @@ command = "echo hello"
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "claude"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "claude"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -1377,7 +1360,7 @@ fn hook_list_and_drift() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1431,7 +1414,7 @@ fn delete_generated_hook_cleans_directory() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--target", "claude"])
+        .args(["add", hook.to_str().unwrap(), "--agent", "claude"])
         .assert()
         .success();
 
@@ -1445,7 +1428,7 @@ fn delete_generated_hook_cleans_directory() {
 
     coral()
         .current_dir(temp.path())
-        .args(["delete", "pre-commit", "-t", "claude"])
+        .args(["delete", "pre-commit", "-a", "claude"])
         .assert()
         .success();
 
@@ -1469,7 +1452,7 @@ fn outdated_reports_status() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1485,7 +1468,7 @@ fn outdated_reports_status() {
 }
 
 #[test]
-fn target_add_already_registered_shows_message() {
+fn agent_add_already_registered_shows_message() {
     let temp = TempDir::new().unwrap();
     coral()
         .current_dir(temp.path())
@@ -1494,13 +1477,13 @@ fn target_add_already_registered_shows_message() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "claude"])
+        .args(["agent", "add", "claude"])
         .assert()
         .success();
     fs::remove_dir(temp.path().join(".claude")).unwrap();
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "claude"])
+        .args(["agent", "add", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains("already registered"));
@@ -1508,7 +1491,7 @@ fn target_add_already_registered_shows_message() {
 }
 
 #[test]
-fn delete_with_target_flag_only_removes_from_specified() {
+fn delete_with_agent_flag_only_removes_from_specified() {
     let temp = TempDir::new().unwrap();
     let skill = make_primitive(temp.path(), "target-test");
 
@@ -1522,9 +1505,9 @@ fn delete_with_target_flag_only_removes_from_specified() {
         .args([
             "add",
             skill.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
         ])
         .assert()
@@ -1532,7 +1515,7 @@ fn delete_with_target_flag_only_removes_from_specified() {
 
     coral()
         .current_dir(temp.path())
-        .args(["delete", "target-test", "-t", "open-agents"])
+        .args(["delete", "target-test", "-a", "open-agents"])
         .assert()
         .success();
 
@@ -1594,7 +1577,7 @@ fn diff_upstream_shows_no_changes_for_current_ref() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "test-skill",
@@ -1622,7 +1605,7 @@ fn diff_upstream_error_on_local_primitive() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1648,7 +1631,7 @@ fn check_clean_repo_reports_all_ok() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1674,7 +1657,7 @@ fn check_detects_modified_files() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1709,7 +1692,7 @@ fn check_ignore_failures_exits_zero() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1743,7 +1726,7 @@ fn check_json_output() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1756,7 +1739,7 @@ fn check_json_output() {
 }
 
 #[test]
-fn add_adopts_existing_target_directory() {
+fn add_adopts_existing_agent_directory() {
     let temp = TempDir::new().unwrap();
     let skill_dir = temp.path().join(".agents").join("skills").join("my-skill");
     fs::create_dir_all(&skill_dir).unwrap();
@@ -1770,7 +1753,7 @@ fn add_adopts_existing_target_directory() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1803,13 +1786,13 @@ fn untrack_in_place_capability_preserves_files() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
 
     coral()
         .current_dir(temp.path())
-        .args(["delete", "keep-me", "-t", "open-agents"])
+        .args(["delete", "keep-me", "-a", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("tracked in place"));
@@ -1817,7 +1800,7 @@ fn untrack_in_place_capability_preserves_files() {
 
     coral()
         .current_dir(temp.path())
-        .args(["untrack", "keep-me", "-t", "open-agents"])
+        .args(["untrack", "keep-me", "-a", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains("untracked 'keep-me'"));
@@ -1845,7 +1828,7 @@ fn delete_requires_force_for_modified_generated_files() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
 
@@ -1861,7 +1844,7 @@ fn delete_requires_force_for_modified_generated_files() {
 
     coral()
         .current_dir(temp.path())
-        .args(["delete", "modified-delete", "-t", "open-agents"])
+        .args(["delete", "modified-delete", "-a", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("use --force to delete"));
@@ -1875,7 +1858,7 @@ fn delete_requires_force_for_modified_generated_files() {
 
     coral()
         .current_dir(temp.path())
-        .args(["delete", "modified-delete", "-t", "open-agents", "--force"])
+        .args(["delete", "modified-delete", "-a", "open-agents", "--force"])
         .assert()
         .success();
     assert!(!temp
@@ -1926,12 +1909,12 @@ fn create_skill_scaffolds_importable_files() {
 }
 
 #[test]
-fn create_skill_can_target_claude() {
+fn create_skill_can_select_claude_agent() {
     let temp = TempDir::new().unwrap();
 
     coral()
         .current_dir(temp.path())
-        .args(["create", "skill", "my-skill", "--target", "claude"])
+        .args(["create", "skill", "my-skill", "--agent", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -2021,7 +2004,7 @@ fn update_accepts_adopted_local_edits() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
 
@@ -2053,7 +2036,7 @@ fn update_reloads_external_local_source() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", source.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", source.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
 
@@ -2089,7 +2072,7 @@ fn update_reloads_external_local_source() {
 }
 
 #[test]
-fn update_local_can_select_one_target() {
+fn update_local_can_select_one_agent() {
     let temp = TempDir::new().unwrap();
     let open_agents = temp
         .path()
@@ -2110,9 +2093,9 @@ fn update_local_can_select_one_target() {
             "create",
             "skill",
             "multi-skill",
-            "-t",
+            "-a",
             "open-agents",
-            "-t",
+            "-a",
             "claude",
         ])
         .assert()
@@ -2122,19 +2105,19 @@ fn update_local_can_select_one_target() {
     fs::write(&claude, "# Claude edit\n").unwrap();
     coral()
         .current_dir(temp.path())
-        .args(["update", "multi-skill", "-t", "open-agents"])
+        .args(["update", "multi-skill", "-a", "open-agents"])
         .assert()
         .success();
 
     coral()
         .current_dir(temp.path())
-        .args(["diff", "multi-skill", "-t", "open-agents"])
+        .args(["diff", "multi-skill", "-a", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::is_empty());
     coral()
         .current_dir(temp.path())
-        .args(["diff", "multi-skill", "-t", "claude"])
+        .args(["diff", "multi-skill", "-a", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Claude edit"));
@@ -2183,7 +2166,7 @@ fn update_local_rejects_force_and_missing_files_without_partial_changes() {
 }
 
 #[test]
-fn create_supports_multiple_targets_and_tracks_each_output() {
+fn create_supports_multiple_agents_and_tracks_each_output() {
     let temp = TempDir::new().unwrap();
 
     coral()
@@ -2192,9 +2175,9 @@ fn create_supports_multiple_targets_and_tracks_each_output() {
             "create",
             "skill",
             "multi-skill",
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
         ])
         .assert()
@@ -2221,7 +2204,7 @@ fn create_generates_adapter_specific_hook_files() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["create", "hook", "claude-hook", "--target", "claude"])
+        .args(["create", "hook", "claude-hook", "--agent", "claude"])
         .assert()
         .success();
 
@@ -2297,7 +2280,7 @@ fn import_command_is_removed() {
 }
 
 #[test]
-fn add_rejects_already_tracked_target_directory() {
+fn add_rejects_already_tracked_agent_directory() {
     let temp = TempDir::new().unwrap();
     let skill_dir = temp.path().join(".agents").join("skills").join("dup");
     fs::create_dir_all(&skill_dir).unwrap();
@@ -2310,20 +2293,20 @@ fn add_rejects_already_tracked_target_directory() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
 
     coral()
         .current_dir(temp.path())
-        .args(["add", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("already tracked"));
 }
 
 #[test]
-fn add_target_directory_requires_matching_target() {
+fn add_agent_directory_requires_matching_agent() {
     let temp = TempDir::new().unwrap();
     let skill_dir = temp
         .path()
@@ -2341,14 +2324,14 @@ fn add_target_directory_requires_matching_target() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", skill_dir.to_str().unwrap(), "-t", "claude"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "claude"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("use -t open-agents"));
+        .stderr(predicate::str::contains("use -a open-agents"));
 }
 
 #[test]
-fn add_does_not_batch_scan_target_directories() {
+fn add_does_not_batch_scan_agent_directories() {
     let temp = TempDir::new().unwrap();
 
     coral()
@@ -2358,7 +2341,7 @@ fn add_does_not_batch_scan_target_directories() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", "-t", "open-agents"])
+        .args(["add", "-a", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("required"));
@@ -2404,7 +2387,7 @@ fn add_workflow_installs_and_shows_deps() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains("installed test-wf (open-agents)"))
@@ -2457,7 +2440,7 @@ type = "skill"
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot require itself"));
@@ -2487,7 +2470,7 @@ description = "Bad."
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid capability manifest TOML"));
@@ -2523,7 +2506,7 @@ type = "tool"
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("duplicate requirement"));
@@ -2542,12 +2525,12 @@ fn status_shows_workflow_dependency_tree() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 

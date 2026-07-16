@@ -12,12 +12,12 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 ## Available Commands
 
 ### Install
-- `coral add <path> -t <target>` — install a local capability
-- `coral add .agents/skills/<id> -t open-agents` — track existing agent files in place
-- `coral add <git-url> --skill <name> -t <target>` — install from git
-- `coral add <git-url> --tool <name> -t <target>` — install tool from git
-- `coral add <git-url> --hook <name> -t <target>` — install hook from git
-- `coral create <type> <id> -t <target>` — create and track a capability
+- `coral add <path> -a <agent>` — install a local capability
+- `coral add .agents/skills/<id> -a open-agents` — track existing agent files in place
+- `coral add <git-url> --skill <name> -a <agent>` — install from git
+- `coral add <git-url> --tool <name> -a <agent>` — install tool from git
+- `coral add <git-url> --hook <name> -a <agent>` — install hook from git
+- `coral create <type> <id> -a <agent>` — create and track a capability
 
 ### Inspect
 - `coral list` — show all installed capabilities with drift status
@@ -31,7 +31,7 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 ### Update & Merge
 - `coral update <id> --check` — preview local baseline promotion or upstream changes
 - `coral update <id>` — accept local edits or reconcile with upstream
-- `coral update <id> -t <target>` — update one recorded target
+- `coral update <id> -a <agent>` — update one recorded agent
 - `coral update <id> --force` — overwrite local changes with source output
 
 ### CI & Validation
@@ -40,11 +40,11 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 
 ### Manage
 - `coral remove <id>` — remove a capability
-- `coral target list` — show available harness targets
-- `coral target add <id>` — register a target and initialize its project directory
+- `coral agent list` — show available agent harnesses
+- `coral agent add <id>` — register an agent and initialize its project directory
 - `coral init --global` — initialize global scope (~/.coral/)
 
-### Targets
+### Agents
 - `open-agents` — Codex, Cursor, OpenCode, Copilot, Gemini CLI, Roo, Cline
 - `claude` — Claude Code
 
@@ -69,7 +69,7 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 ## Quick Cheat Sheet
 ```
 coral init                          # initialize repo and register open-agents
-coral add <path> -t open-agents     # install capability
+coral add <path> -a open-agents     # install capability
 coral list                          # check drift
 coral diff <id>                     # see what changed
 coral check                         # CI validation
