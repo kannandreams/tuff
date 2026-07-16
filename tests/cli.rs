@@ -289,18 +289,18 @@ fn target_list_add_remove() {
         .args(["target", "list"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains("open-agents *"))
         .stdout(predicate::str::contains("claude"));
 
-    // Register open-agents
+    // Register Claude; Open Agents is registered by coral init.
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "open-agents"])
+        .args(["target", "add", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("registered target 'open-agents'"));
+        .stdout(predicate::str::contains("registered target 'claude'"));
 
-    assert!(temp.path().join(".agents").is_dir());
+    assert!(temp.path().join(".claude").is_dir());
 
     // Install a skill to open-agents
     coral()
@@ -1780,11 +1780,13 @@ fn create_skill_scaffolds_importable_files() {
 
     coral()
         .current_dir(temp.path())
-        .args(["create", "--skill", "my-skill"])
+        .args(["create", "skill", "my-skill"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("created skill scaffold"))
-        .stdout(predicate::str::contains("coral import .agents/skills/my-skill -t <target>"));
+        .stdout(predicate::str::contains("created and tracked skill 'my-skill'"))
+        .stdout(predicate::str::contains(
+            "coral list",
+        ));
 
     assert!(temp
         .path()
@@ -1800,6 +1802,114 @@ fn create_skill_scaffolds_importable_files() {
         .join("my-skill")
         .join("SKILL.md")
         .exists());
+    assert!(temp.path().join(".coral").join("coral-lock.json").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--scope", "project"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("my-skill"))
+        .stdout(predicate::str::contains("clean"));
+}
+
+#[test]
+fn create_skill_can_target_claude() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "my-skill", "--target", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "created and tracked skill 'my-skill' (claude)",
+        ))
+        .stdout(predicate::str::contains(
+            ".claude/skills/my-skill/SKILL.md",
+        ));
+
+    assert!(temp
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join("my-skill")
+        .join("SKILL.md")
+        .exists());
+
+    let config: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config["targets"][0], "claude");
+}
+
+#[test]
+fn create_supports_multiple_targets_and_tracks_each_output() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "create",
+            "skill",
+            "multi-skill",
+            "--target",
+            "open-agents",
+            "--target",
+            "claude",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(open-agents)"))
+        .stdout(predicate::str::contains("(claude)"));
+
+    let lockfile: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("coral-lock.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(lockfile["capabilities"]["multi-skill"]["targets"]["open-agents"].is_object());
+    assert!(lockfile["capabilities"]["multi-skill"]["targets"]["claude"].is_object());
+}
+
+#[test]
+fn create_generates_adapter_specific_hook_files() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "hook", "agents-hook"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "hook", "claude-hook", "--target", "claude"])
+        .assert()
+        .success();
+
+    assert!(temp
+        .path()
+        .join(".agents/hooks/agents-hook/hook.toml")
+        .exists());
+    let claude_hook = temp
+        .path()
+        .join(".claude/hooks/claude-hook/hook.json");
+    assert!(claude_hook.exists());
+    let hook: serde_json::Value = serde_json::from_str(&fs::read_to_string(claude_hook).unwrap())
+        .unwrap();
+    assert_eq!(hook["event"], "before_finish");
+}
+
+#[test]
+fn create_rejects_legacy_flag_syntax() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "--skill", "legacy-skill"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
 }
 
 #[test]
@@ -1808,10 +1918,10 @@ fn create_tool_scaffolds_executable_runner() {
 
     coral()
         .current_dir(temp.path())
-        .args(["create", "--tool", "scan-tool"])
+        .args(["create", "tool", "scan-tool"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("created tool scaffold"));
+        .stdout(predicate::str::contains("created and tracked tool 'scan-tool'"));
 
     let run_sh = temp
         .path()
@@ -1820,6 +1930,7 @@ fn create_tool_scaffolds_executable_runner() {
         .join("scan-tool")
         .join("run.sh");
     assert!(run_sh.exists());
+    assert!(temp.path().join(".agents").join("mcp.json").exists());
 
     #[cfg(unix)]
     {

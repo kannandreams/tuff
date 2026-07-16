@@ -166,23 +166,10 @@ enum Command {
         override_existing: bool,
     },
 
-    /// Scaffold a new capability in .agents/.
+    /// Create and track a new capability.
     Create {
-        /// Create a skill capability.
-        #[arg(long = "skill")]
-        skill: Option<String>,
-
-        /// Create a tool capability.
-        #[arg(long = "tool")]
-        tool: Option<String>,
-
-        /// Create a hook capability.
-        #[arg(long = "hook")]
-        hook: Option<String>,
-
-        /// Create a workflow capability.
-        #[arg(long = "workflow")]
-        workflow: Option<String>,
+        #[command(subcommand)]
+        kind: CreateCommand,
     },
 
     /// Validate installed capabilities (CI mode).
@@ -207,6 +194,42 @@ enum Command {
     Target {
         #[command(subcommand)]
         action: TargetCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CreateCommand {
+    /// Create and track a skill.
+    Skill {
+        /// Capability id.
+        id: String,
+        /// Target harnesses to scaffold for (repeatable).
+        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
+        target: Vec<String>,
+    },
+    /// Create and track a tool.
+    Tool {
+        /// Capability id.
+        id: String,
+        /// Target harnesses to scaffold for (repeatable).
+        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
+        target: Vec<String>,
+    },
+    /// Create and track a hook.
+    Hook {
+        /// Capability id.
+        id: String,
+        /// Target harnesses to scaffold for (repeatable).
+        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
+        target: Vec<String>,
+    },
+    /// Create and track a workflow.
+    Workflow {
+        /// Capability id.
+        id: String,
+        /// Target harnesses to scaffold for (repeatable).
+        #[arg(short = 't', long = "target", default_values = ["open-agents"])]
+        target: Vec<String>,
     },
 }
 
@@ -256,18 +279,14 @@ fn run() -> Result<()> {
             dry_run,
             override_existing,
         ),
-        Some(Command::Create {
-            skill,
-            tool,
-            hook,
-            workflow,
-        }) => cmd_create(
-            &repo_root,
-            skill.as_deref(),
-            tool.as_deref(),
-            hook.as_deref(),
-            workflow.as_deref(),
-        ),
+        Some(Command::Create { kind }) => match kind {
+            CreateCommand::Skill { id, target } => cmd_create(&repo_root, "skill", &id, &target),
+            CreateCommand::Tool { id, target } => cmd_create(&repo_root, "tool", &id, &target),
+            CreateCommand::Hook { id, target } => cmd_create(&repo_root, "hook", &id, &target),
+            CreateCommand::Workflow { id, target } => {
+                cmd_create(&repo_root, "workflow", &id, &target)
+            }
+        },
         Some(Command::Add {
             capability,
             target,

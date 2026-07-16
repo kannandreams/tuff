@@ -16,6 +16,7 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 - `coral add <git-url> --skill <name> -t <target>` — install from git
 - `coral add <git-url> --tool <name> -t <target>` — install tool from git
 - `coral add <git-url> --hook <name> -t <target>` — install hook from git
+- `coral create <type> <id> -t <target>` — create and track a capability
 - `coral import <path> -t <target>` — track existing agent files
 - `coral import -t <target>` — import all existing capabilities
 
@@ -67,7 +68,7 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 
 ## Quick Cheat Sheet
 ```
-coral init                          # initialize repo
+coral init                          # initialize repo and register open-agents
 coral add <path> -t open-agents     # install capability
 coral list                          # check drift
 coral diff <id>                     # see what changed

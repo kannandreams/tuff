@@ -176,7 +176,11 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     } else {
         display::print_init_banner();
         let lock_path = lockfile::init_lockfile(repo_root)?;
-        let _ = config::read_config(repo_root)?;
+        let mut config = config::read_config(repo_root)?;
+        if !config.targets.iter().any(|target| target == "open-agents") {
+            config.targets.push("open-agents".to_string());
+            config::write_config(repo_root, &config)?;
+        }
 
         // Scaffold agent directories (smart skip: only create missing ones)
         for dir in &["skills", "tools", "hooks", "workflows"] {
@@ -247,11 +251,281 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
 
 pub fn cmd_create(
     repo_root: &Path,
+    kind: &str,
+    raw_id: &str,
+    target_ids: &[String],
+) -> Result<()> {
+    if !matches!(kind, "skill" | "tool" | "hook" | "workflow") {
+        return Err(CoralError::new(format!("unknown capability type '{kind}'")));
+    }
+    let id = raw_id.trim();
+    if id.is_empty() {
+        return Err(CoralError::new("capability name must not be empty"));
+    }
+
+    let mut adapters = Vec::new();
+    for target in target_ids {
+        let adapter = AdapterKind::from_id(target).ok_or_else(|| {
+            CoralError::new(format!(
+                "unknown target '{}'; use 'coral target list' to see available targets",
+                target
+            ))
+        })?;
+        if !adapter.supports(kind) {
+            return Err(CoralError::new(format!(
+                "{} does not yet support {} capabilities",
+                adapter.display_name(),
+                kind
+            )));
+        }
+        if !adapters.contains(&adapter) {
+            adapters.push(adapter);
+        }
+    }
+
+    let lock_path = lockfile::lockfile_path(repo_root);
+    let mut coral_lock = if lock_path.exists() {
+        lockfile::read_lockfile_at(&lock_path)?
+    } else {
+        lockfile::Lockfile {
+            version: lockfile::LOCKFILE_VERSION,
+            capabilities: BTreeMap::new(),
+        }
+    };
+    if coral_lock.capabilities.contains_key(id) {
+        return Err(CoralError::new(format!(
+            "capability '{}' is already tracked; choose another id",
+            id
+        )));
+    }
+
+    let mut plans = Vec::new();
+    for adapter in &adapters {
+        let (relative_dir, files) = create_scaffold_files(kind, id, *adapter)?;
+        let root = repo_root
+            .join(adapter_project_dir(*adapter))
+            .join(relative_dir)
+            .join(id);
+        if root.exists() {
+            return Err(CoralError::new(format!(
+                "refusing to overwrite existing capability scaffold: {}",
+                lockfile::relative_or_absolute_fs(&root, repo_root)
+            )));
+        }
+        plans.push((*adapter, root, files));
+    }
+
+    let mut config = config::read_config(repo_root)?;
+    let mut target_entries = BTreeMap::new();
+    let source_path = plans
+        .first()
+        .map(|(_, root, _)| lockfile::relative_or_absolute_fs(root, repo_root))
+        .unwrap_or_default();
+
+    for (adapter, root, files) in &plans {
+        fs::create_dir_all(root)?;
+        for (name, content) in files {
+            fs::write(root.join(name), content)?;
+        }
+
+        #[cfg(unix)]
+        if kind == "tool" {
+            use std::os::unix::fs::PermissionsExt;
+            let run_sh = root.join("run.sh");
+            let mut permissions = fs::metadata(&run_sh)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(run_sh, permissions)?;
+        }
+
+        let baseline_dir = repo_root
+            .join(".coral")
+            .join("baselines")
+            .join(adapter.id())
+            .join(id);
+        let mut emitted_files = Vec::new();
+        for (name, content) in files {
+            if *name == "coral.toml" {
+                continue;
+            }
+            let target_path = root.join(name);
+            let baseline_path = baseline_dir.join(name);
+            if let Some(parent) = baseline_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&baseline_path, content)?;
+            emitted_files.push(adapter::EmittedFile {
+                path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
+                hash: lockfile::hash_bytes(content.as_bytes()),
+            });
+        }
+
+        target_entries.insert(
+            adapter.id().to_string(),
+            TargetLockEntry {
+                baseline_dir: lockfile::relative_or_absolute_fs(&baseline_dir, repo_root),
+                emitted_files,
+                ownership: lockfile::TargetOwnership::Generated,
+            },
+        );
+        if !config.targets.iter().any(|target| target == adapter.id()) {
+            config.targets.push(adapter.id().to_string());
+        }
+
+        for (name, _) in files {
+            if *name != "coral.toml" {
+                println!(
+                    "created and tracked {} '{}' ({}) -> {}",
+                    kind,
+                    id,
+                    adapter.id(),
+                    lockfile::relative_or_absolute_fs(&root.join(name), repo_root)
+                );
+            }
+        }
+
+        if kind == "tool" {
+            let mcp_path = match adapter {
+                AdapterKind::OpenAgents => repo_root.join(".agents").join("mcp.json"),
+                AdapterKind::Claude => repo_root.join(".mcp.json"),
+            };
+            let entrypoint = format!(
+                "{}/tools/{}/run.sh",
+                adapter_project_dir(*adapter),
+                id
+            );
+            crate::adapters::mcp_register_tool(
+                repo_root,
+                &mcp_path,
+                id,
+                "bash",
+                &[entrypoint],
+            )?;
+        }
+    }
+
+    coral_lock.capabilities.insert(
+        id.to_string(),
+        lockfile::CapabilityLockEntry {
+            capability_type: kind.to_string(),
+            installed_version: "0.1.0".to_string(),
+            source_path,
+            targets: target_entries,
+            source: None,
+            scope: "project".to_string(),
+        },
+    );
+    config::write_config(repo_root, &config)?;
+    lockfile::write_lockfile(repo_root, &coral_lock)?;
+    println!("next: edit the generated files, then run `coral list` or `coral diff {id}`");
+    Ok(())
+}
+
+fn adapter_project_dir(adapter: AdapterKind) -> &'static str {
+    match adapter {
+        AdapterKind::OpenAgents => ".agents",
+        AdapterKind::Claude => ".claude",
+    }
+}
+
+fn create_scaffold_files(
+    kind: &str,
+    id: &str,
+    adapter: AdapterKind,
+) -> Result<(&'static str, Vec<(&'static str, String)>)> {
+    let files = match kind {
+        "skill" => vec![
+            (
+                "coral.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"skill\"\ndescription = \"What this skill helps the agent do.\"\nfiles = [\"SKILL.md\"]\n"
+                ),
+            ),
+            (
+                "SKILL.md",
+                format!(
+                    "# {id}\n\n## Purpose\n\nDescribe when the agent should use this skill.\n\n## Guidance\n\n- Add the key rules the agent should follow.\n- Add examples, constraints, and team conventions.\n"
+                ),
+            ),
+        ],
+        "tool" => vec![
+            (
+                "coral.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"tool\"\ndescription = \"What this tool does for the agent.\"\nfiles = [\"run.sh\"]\n\n[parameters]\ntype = \"object\"\n\n[parameters.properties.input]\ntype = \"string\"\ndescription = \"Input passed to the tool\"\n\n[implementation]\nlanguage = \"bash\"\nentrypoint = \"run.sh\"\n"
+                ),
+            ),
+            (
+                "run.sh",
+                "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n".to_string(),
+            ),
+        ],
+        "hook" => {
+            let file = match adapter {
+                AdapterKind::OpenAgents => "hook.toml",
+                AdapterKind::Claude => "hook.json",
+            };
+            let content = match adapter {
+                AdapterKind::OpenAgents => {
+                    "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string()
+                }
+                AdapterKind::Claude => serde_json::to_string_pretty(&serde_json::json!({
+                    "event": "before_finish",
+                    "command": "echo review hook",
+                    "working_directory": "."
+                }))? + "\n",
+            };
+            vec![
+                (
+                    "coral.toml",
+                    format!(
+                        "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"hook\"\ndescription = \"What this hook enforces.\"\nfiles = [\"{file}\"]\n\n[hook]\nevent = \"before_finish\"\ncommand = \"echo review hook\"\nworking_directory = \".\"\n"
+                    ),
+                ),
+                (file, content),
+            ]
+        }
+        "workflow" => vec![
+            (
+                "coral.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\nfiles = [\"workflow.toml\"]\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
+                ),
+            ),
+            (
+                "workflow.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
+                ),
+            ),
+        ],
+        _ => unreachable!(),
+    };
+    let relative_dir = match kind {
+        "skill" => "skills",
+        "tool" => "tools",
+        "hook" => "hooks",
+        "workflow" => "workflows",
+        _ => unreachable!(),
+    };
+    Ok((relative_dir, files))
+}
+
+#[allow(dead_code)]
+fn cmd_create_legacy(
+    repo_root: &Path,
     skill: Option<&str>,
     tool: Option<&str>,
     hook: Option<&str>,
     workflow: Option<&str>,
+    target: &str,
 ) -> Result<()> {
+    let adapter = AdapterKind::from_id(target).ok_or_else(|| {
+        CoralError::new(format!(
+            "unknown target '{}'; use 'coral target list' to see available targets",
+            target
+        ))
+    })?;
+
     let selections = [
         ("skill", skill),
         ("tool", tool),
@@ -390,7 +664,12 @@ type = "skill"
         _ => unreachable!(),
     };
 
-    let root = repo_root.join(".agents").join(relative_dir).join(id);
+    let target_root = match adapter {
+        AdapterKind::OpenAgents => ".agents",
+        AdapterKind::Claude => ".claude",
+    };
+    let canonical_target = adapter.id();
+    let root = repo_root.join(target_root).join(relative_dir).join(id);
     if root.exists() {
         return Err(CoralError::new(format!(
             "refusing to overwrite existing capability scaffold: {}",
@@ -417,8 +696,9 @@ type = "skill"
         lockfile::relative_or_absolute_fs(&root, repo_root)
     );
     println!(
-        "next: edit the generated files, then run `coral import {} -t <target>`",
-        lockfile::relative_or_absolute_fs(&root, repo_root)
+        "next: edit the generated files, then run `coral import {} -t {}`",
+        lockfile::relative_or_absolute_fs(&root, repo_root),
+        canonical_target
     );
 
     Ok(())
@@ -982,7 +1262,7 @@ pub fn cmd_diff(
         }
     }
 
-    print!("{output}");
+    print!("{}", style_diff(&output));
     Ok(())
 }
 
@@ -1050,10 +1330,27 @@ fn cmd_diff_upstream(
     if output.is_empty() {
         println!("no upstream changes");
     } else {
-        print!("{output}");
+        print!("{}", style_diff(&output));
     }
 
     Ok(())
+}
+
+fn style_diff(diff: &str) -> String {
+    diff.split_inclusive('\n')
+        .map(|line| {
+            let code = if line.starts_with("+++") || line.starts_with("---") {
+                "36"
+            } else if line.starts_with('+') {
+                "32"
+            } else if line.starts_with('-') {
+                "31"
+            } else {
+                return line.to_string();
+            };
+            paint(line, code)
+        })
+        .collect()
 }
 
 // ── Delete / untrack ────────────────────────────────────────────────────────
@@ -1842,9 +2139,10 @@ pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
 
     println!("{table}");
 
-    if registered.is_empty() {
-        println!("\n  *  = registered (use 'coral target add <id>' to register)");
-    }
+    println!(
+        "\n  {} = registered (use 'coral target add <id>' to register)",
+        paint("*", "32")
+    );
     Ok(())
 }
 

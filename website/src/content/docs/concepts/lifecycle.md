@@ -65,11 +65,13 @@ When Coral compares local files against the recorded baseline, the common states
 For local capabilities, the typical flow is:
 
 ```sh frame="terminal"
-coral create --skill my-skill
-coral import .agents/skills/my-skill -t open-agents
+coral create skill my-skill
 coral list
 coral diff my-skill
 ```
+
+Creation initializes tracking automatically. Pass `--target claude` to create
+the scaffold under `.claude/` instead.
 
 If the drift is intentional and should become the new baseline:
 

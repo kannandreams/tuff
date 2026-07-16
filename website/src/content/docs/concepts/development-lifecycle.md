@@ -45,7 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh 
 # Initialize the project
 cd my-project
 coral init
-# → creates .coral/ state, scaffolds .agents/ directories
+# → creates .coral/ state, registers open-agents, and scaffolds .agents/ directories
 # → auto-installs coral-cli-guide; your agent now knows Coral commands
 
 # Register harness targets
@@ -63,11 +63,10 @@ Author a skill, track it, edit it, and manage drift, all in one directory.
 
 ```sh frame="terminal"
 # 1. Scaffold a skill
-coral create --skill python-project
+coral create skill python-project
 
-# 2. Track it: records the baseline and lockfile entry
-coral import .agents/skills/python-project -t open-agents
-# imported python-project (skill, open-agents)
+# 2. Coral has already recorded the baseline and lockfile entry
+# created and tracked python-project (open-agents)
 
 # 3. Your agent can now read it
 coral list

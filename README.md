@@ -133,7 +133,7 @@ coral delete python-uv-default -t open-agents
 
 Running `coral` with no arguments shows the terminal banner and starter menu.
 
-`coral init` creates `.coral/coral-lock.json`, scaffolds the standard `.agents/`
+`coral init` creates `.coral/coral-lock.json`, registers `open-agents`, and scaffolds the standard `.agents/`
 directories, and installs the small `coral-cli-guide` reference skill. It does
 not install third-party capabilities or create a user skill for you.
 

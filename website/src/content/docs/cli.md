@@ -27,7 +27,8 @@ Initialize global scope (for primitives shared across all projects):
 coral init --global
 ```
 
-Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global).
+Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global),
+scaffolds `.agents/`, and registers `open-agents` as the default project target.
 
 ## `coral add`
 
@@ -74,6 +75,22 @@ coral add https://github.com/owner/repo --hook <name> -t open-agents
 | `--tool <name>` | Tool name for git URLs |
 | `--hook <name>` | Hook name for git URLs |
 | `-g, --global` | Install to global scope (`~/.coral/`) |
+
+## `coral create`
+
+Create and track a new target-local capability:
+
+```sh frame="terminal"
+coral create skill my-skill
+coral create tool my-tool -t claude
+coral create hook review-hook -t open-agents -t claude
+coral create workflow release-flow -t claude
+```
+
+The capability type and id are positional. `-t, --target` is repeatable and
+defaults to `open-agents`. Creation initializes Coral state, registers the
+selected targets, writes adapter-valid files, and records the baseline. Use
+`coral import` only for agent files created outside Coral.
 
 ## `coral list`
 
@@ -166,6 +183,9 @@ directory with `--override`:
 coral import .agents/skills/my-skill -t open-agents --override
 ```
 
+When color is enabled, diff headers are cyan, additions are green, and deletions are red,
+matching the usual Git diff convention. Set `NO_COLOR=1` for plain output.
+
 ## `coral delete`
 
 Delete Coral-generated capability files for explicitly selected targets:
@@ -249,6 +269,8 @@ Registering a target also creates its project directory (`.agents/` or
 
 Legacy aliases (`codex`, `claude-code`) are accepted and map to the current target names.
 
+The `*` marker means the target is registered; the legend is shown below the table.
+
 ### Remove a target
 
 ```sh frame="terminal"
@@ -265,8 +287,8 @@ capability cleanup.
 Bring existing agent assets under Coral management without rewriting content.
 
 ```sh frame="terminal"
-# Import a single directory
-coral import .agents/skills/my-skill -t open-agents
+# Import a single directory created outside Coral
+coral import ./existing-agents/skills/my-skill -t open-agents
 
 # Batch scan: imports all skills, tools, and hooks
 coral import -t open-agents
@@ -274,8 +296,8 @@ coral import -t open-agents
 # Preview what would be imported
 coral import -t open-agents --dry-run
 
-# Overwrite existing lockfile entry
-coral import .agents/skills/my-skill -t open-agents --override
+# Overwrite an existing lockfile entry
+coral import ./existing-agents/skills/my-skill -t open-agents --override
 ```
 
 ### Before/after

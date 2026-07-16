@@ -15,7 +15,7 @@ Before you initialize anything, `coral` gives you a quick overview of the CLI:
 coral init
 ```
 
-Creates `.coral/` state, scaffolds `.agents/` directories, and auto-installs
+Creates `.coral/` state, registers `open-agents`, scaffolds `.agents/` directories, and auto-installs
 `coral-cli-guide`, a reference skill your coding agent can read to learn Coral commands.
 
 ## 2. Register harness targets
@@ -28,19 +28,19 @@ coral target add claude
 ## 3. Create and track your first capability
 
 ```sh frame="terminal"
-coral create --skill my-skill
+coral create skill my-skill
 ```
 
 Coral creates a valid starter scaffold in `.agents/skills/my-skill/` so you can edit the generated
 files instead of writing boilerplate from scratch.
 
-### Track it with Coral
+Use `--target claude` to scaffold and track under `.claude/` instead:
 
 ```sh frame="terminal"
-coral import .agents/skills/my-skill -t open-agents
+coral create skill my-skill --target claude
 ```
 
-That records the baseline and starts tracking drift without copying the files somewhere else.
+The command records the baseline and starts tracking drift without requiring a separate import.
 
 ## 4. Inspect what is installed
 

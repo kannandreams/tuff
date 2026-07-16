@@ -12,7 +12,7 @@ and the hashes needed for drift detection and diffs.
 | File | Purpose | Commit to git? |
 |---|---|---|
 | `.coral/coral-lock.json` | Installed capability state (id, version, targets, source, hashes) | Yes |
-| `.coral/config.json` | Registered harness targets (`coral target add`) | Yes |
+| `.coral/config.json` | Registered harness targets (`coral init`, `coral target add`, or `coral create`) | Yes |
 | `.coral/baselines/<target>/<id>/` | Pristine copies of installed files for diffing | Yes |
 | `~/.coral/coral-lock.json` | Global scope: personal, across all projects | No |
 | `~/.coral/cache/git/` | Cloned git repositories for skill discovery | No |
@@ -75,7 +75,8 @@ and `coral update` without re-installing anything.
 }
 ```
 
-Written by `coral target add <id>` and read by `coral target list`.
+Initialized by `coral init`, updated by `coral target add <id>` or `coral create`,
+and read by `coral target list`.
 
 Target registration is separate from capability tracking. `coral target remove`
 only unregisters a target; it does not change the lockfile or delete files.
