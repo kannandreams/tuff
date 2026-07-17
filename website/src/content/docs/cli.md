@@ -55,21 +55,16 @@ coral add .agents/skills/my-skill -a open-agents
 coral add .claude/skills/my-skill -a claude
 ```
 
-Install a skill from a git repository:
+Install from a git repository:
 
 ```sh frame="terminal"
+# Skill
 coral add https://github.com/owner/repo --skill <name> -a open-agents
-```
 
-Install a tool from a git repository:
-
-```sh frame="terminal"
+# Tool
 coral add https://github.com/owner/repo --tool <name> -a claude
-```
 
-Install a hook from a git repository:
-
-```sh frame="terminal"
+# Hook
 coral add https://github.com/owner/repo --hook <name> -a open-agents
 ```
 
@@ -77,7 +72,7 @@ coral add https://github.com/owner/repo --hook <name> -a open-agents
 
 | Flag | Description |
 |---|---|
-| `-t, --agent <id>` | Agent harness (required, repeatable) |
+| `-a, --agent <id>` | Agent harness (required, repeatable) |
 | `-s, --skill <name>` | Skill name for git URLs |
 | `--tool <name>` | Tool name for git URLs |
 | `--hook <name>` | Hook name for git URLs |
@@ -94,7 +89,7 @@ coral create hook review-hook -a open-agents -a claude
 coral create workflow release-flow -a claude
 ```
 
-The capability type and id are positional. `-t, --agent` is repeatable and
+The capability type and id are positional. `-a, --agent` is repeatable and
 defaults to `open-agents`. Creation initializes Coral state, registers the
 selected agents, writes adapter-valid files, and records the baseline. Use
 `coral add <path> -a <agent>` for agent files created outside Coral.
@@ -183,18 +178,32 @@ coral diff <id> --upstream
 coral diff <id> -a claude
 ```
 
-If the local drift is intentional and should become the new tracked baseline, accept it with
-`coral update`:
-
-```sh frame="terminal"
-coral update my-skill
-
-# Accept changes for one agent only
-coral update my-skill -a open-agents
-```
-
 When color is enabled, diff headers are cyan, additions are green, and deletions are red,
 matching the usual Git diff convention. Set `NO_COLOR=1` for plain output.
+
+## `coral update`
+
+Update a capability according to its recorded source. In-place local capabilities accept
+current edits as the new baseline; external local sources reload from `sourcePath`;
+Git-sourced capabilities perform a three-way merge between baseline, local, and upstream.
+See the [lifecycle docs](/concepts/lifecycle) for the merge behavior table.
+
+```sh frame="terminal"
+# Attempt three-way merge or accept intentional local edits
+coral update <id>
+
+# Dry run: show what would happen without applying
+coral update <id> --check
+
+# Update one agent (defaults to all recorded agents)
+coral update <id> -a <agent>
+
+# Force overwrite local changes with recorded source output
+coral update <id> --force
+
+# Explicit scope
+coral update <id> --scope global
+```
 
 ## `coral delete`
 
@@ -238,30 +247,6 @@ coral untrack my-skill -a open-agents --scope global
 `untrack` removes the selected lockfile entry and baseline. It preserves the
 capability files, `coral.toml`, source directories, and MCP configuration.
 The lockfile itself remains in place, even when it contains no capabilities.
-
-## `coral update`
-
-Update a capability according to its recorded source. In-place local capabilities accept
-current edits as the new baseline; external local sources reload from `sourcePath`;
-Git-sourced capabilities perform a three-way merge between baseline, local, and upstream.
-See the [lifecycle docs](/concepts/lifecycle) for the merge behavior table.
-
-```sh frame="terminal"
-# Attempt three-way merge (default)
-coral update <id>
-
-# Dry run: show what would happen without applying
-coral update <id> --check
-
-# Update one agent (defaults to all recorded agents)
-coral update <id> --agent <agent>
-
-# Force overwrite local changes with recorded source output
-coral update <id> --force
-
-# Explicit scope
-coral update <id> --scope global
-```
 
 ## `coral agent`
 
@@ -329,7 +314,7 @@ your existing agent files. Use `coral update <id>` to accept intentional local
 edits as the new baseline.
 
 :::tip[After add]
-Version defaults to `0.1.0`. Edit the generated `coral.toml` to set a real version number and description. The generated manifest lives in your agent directory, so commit it with the rest of your project.
+When Coral adopts existing agent files, it creates a minimal `coral.toml` beside them with version `0.1.0`. Treat that manifest as project-owned metadata: update the version and description when you know the right values, and commit it with the adopted agent files.
 :::
 
 ## `coral check`

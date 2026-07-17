@@ -41,9 +41,9 @@ batch-oriented command-line execution.
 - Use flags for orthogonal modifiers, configuration, filters, scope, and
   destinations.
 - Keep short flags consistent across commands. Reuse a short flag only when
-  its meaning is stable, such as `-t, --target`.
+  its meaning is stable, such as `-a, --agent`.
 - Decide cardinality explicitly: required, optional, defaulted, or repeatable.
-  Repeat selectors when the same operation can apply to multiple targets.
+  Repeat selectors when the same operation can apply to multiple agents.
 - Prefer one clear responsibility per command. A command that creates,
   installs, tracks, or adopts files must say which lifecycle transition it
   performs.
