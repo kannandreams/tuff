@@ -25,7 +25,7 @@ smoke-install:
     mkdir -p /tmp/coral-smoke
     cd /tmp/coral-smoke && coral --version
     cd /tmp/coral-smoke && coral init
-    cd /tmp/coral-smoke && coral add {{justfile_directory()}}/examples/fixtures/python-uv-default
+    cd /tmp/coral-smoke && coral add {{justfile_directory()}}/examples/skills/python-uv-default
     cd /tmp/coral-smoke && coral list
 
 docs-serve:

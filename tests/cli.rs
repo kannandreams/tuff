@@ -87,6 +87,13 @@ fn coral() -> Command {
     Command::cargo_bin("coral").unwrap()
 }
 
+fn test_fixture(name: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
+}
+
 fn make_tool_primitive(root: &Path, tool_id: &str) -> std::path::PathBuf {
     let primitive = root.join("tool-primitive");
     fs::create_dir_all(&primitive).unwrap();
@@ -130,6 +137,113 @@ fn version_outputs_current_version() {
         .assert()
         .success()
         .stdout(predicate::str::contains("coral 0.1.0"));
+}
+
+#[test]
+fn malformed_manifest_fixture_is_rejected() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("malformed-manifest").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("missing field `description`"));
+}
+
+#[test]
+fn legacy_lockfile_fixture_is_rejected() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    fs::copy(
+        test_fixture("legacy-lockfile").join("coral-lock.json"),
+        temp.path().join(".coral").join("coral-lock.json"),
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("duplicate-files").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported lockfile version: 2"));
+}
+
+#[test]
+fn duplicate_files_fixture_installs_one_emitted_file() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("duplicate-files").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+
+    let installed = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("duplicate-files")
+        .join("SKILL.md");
+    assert!(installed.exists());
+    assert_eq!(
+        fs::read_dir(installed.parent().unwrap()).unwrap().count(),
+        1
+    );
+}
+
+#[test]
+fn invalid_capability_fixture_is_rejected() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("invalid-capability").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported capability type"));
 }
 
 #[test]

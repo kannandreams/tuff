@@ -108,7 +108,7 @@ cd /tmp/coral-smoke
 coral --version
 coral init
 coral agent add open-agents
-coral add /absolute/path/to/coral/examples/fixtures/python-uv-default
+coral add /absolute/path/to/coral/examples/skills/python-uv-default
 coral list
 ```
 
@@ -125,7 +125,7 @@ coral
 coral --version
 coral init
 coral agent add open-agents
-coral add examples/fixtures/python-uv-default
+coral add examples/skills/python-uv-default
 coral list
 coral diff python-uv-default
 coral delete python-uv-default
@@ -150,9 +150,9 @@ Set the default project agent with `coral agent set-default <agent>`. Use
 The CLI is built from the Rust crate in this repository, and `Cargo.lock` is
 committed for reproducible builds.
 
-The `examples/fixtures/python-uv-default` primitive is a demo/test fixture, not
-a bundled standard pack. Production capabilities should live in separate pack
-repositories or in the repositories that use them.
+The `examples/skills/python-uv-default` capability is a local demonstration,
+not a bundled standard pack. Production capabilities should live in separate
+pack repositories or in the repositories that use them.
 
 ## Developer commands
 

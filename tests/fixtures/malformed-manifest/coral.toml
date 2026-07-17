@@ -1,0 +1,4 @@
+id = "malformed-manifest"
+version = "1.0.0"
+type = "skill"
+files = ["SKILL.md"]

@@ -1,0 +1,4 @@
+id = "invalid-capability"
+version = "1.0.0"
+type = "unknown"
+description = "A fixture with an unsupported capability type."

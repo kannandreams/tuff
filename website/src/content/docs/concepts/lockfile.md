@@ -29,7 +29,7 @@ and `coral update` without re-installing anything.
     "python-uv-default": {
       "type": "skill",
       "installedVersion": "0.1.0",
-      "sourcePath": "examples/fixtures/python-uv-default",
+      "sourcePath": "examples/skills/python-uv-default",
       "scope": "project",
       "targets": {
         "open-agents": {

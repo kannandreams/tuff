@@ -80,4 +80,6 @@ one of two places:
 - the user project that owns the capability
 - an external pack repository maintained by a person, team, or company
 
-Fixtures under `examples/fixtures` are for tests and documentation examples.
+Runnable capability examples live under `examples/<type>/`, such as
+`examples/skills/` and `examples/tools/`. Test-only inputs belong under
+`tests/fixtures/`.
