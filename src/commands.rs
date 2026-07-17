@@ -226,17 +226,10 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             std::fs::create_dir_all(&guide_path)?;
             std::fs::write(guide_path.join("SKILL.md"), CORAL_GUIDE_CONTENT)?;
 
-            // Baseline
-            let baseline_dir = repo_root
-                .join(".coral")
-                .join("baselines")
-                .join("open-agents")
-                .join("coral-cli-guide");
-            std::fs::create_dir_all(&baseline_dir)?;
-            std::fs::write(baseline_dir.join("SKILL.md"), CORAL_GUIDE_CONTENT)?;
-
             // Lockfile entry
             let hash = lockfile::hash_bytes(CORAL_GUIDE_CONTENT.as_bytes());
+            let baseline_hash =
+                lockfile::write_baseline_object(repo_root, CORAL_GUIDE_CONTENT.as_bytes())?;
             let mut lf = lockfile::require_lockfile(repo_root).unwrap_or(lockfile::Lockfile {
                 version: lockfile::LOCKFILE_VERSION,
                 capabilities: BTreeMap::new(),
@@ -246,10 +239,10 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             targets.insert(
                 "open-agents".to_string(),
                 lockfile::TargetLockEntry {
-                    baseline_dir: ".coral/baselines/open-agents/coral-cli-guide".into(),
                     emitted_files: vec![adapter::EmittedFile {
                         path: ".agents/skills/coral-cli-guide/SKILL.md".into(),
                         hash,
+                        baseline_hash,
                     }],
                     ownership: lockfile::TargetOwnership::Generated,
                 },
@@ -359,32 +352,23 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
             fs::set_permissions(run_sh, permissions)?;
         }
 
-        let baseline_dir = repo_root
-            .join(".coral")
-            .join("baselines")
-            .join(adapter.id())
-            .join(id);
         let mut emitted_files = Vec::new();
         for (name, content) in files {
             if *name == "coral.toml" {
                 continue;
             }
             let target_path = root.join(name);
-            let baseline_path = baseline_dir.join(name);
-            if let Some(parent) = baseline_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&baseline_path, content)?;
+            let baseline_hash = lockfile::write_baseline_object(repo_root, content.as_bytes())?;
             emitted_files.push(adapter::EmittedFile {
                 path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
                 hash: lockfile::hash_bytes(content.as_bytes()),
+                baseline_hash,
             });
         }
 
         target_entries.insert(
             adapter.id().to_string(),
             TargetLockEntry {
-                baseline_dir: lockfile::relative_or_absolute_fs(&baseline_dir, repo_root),
                 emitted_files,
                 ownership: lockfile::TargetOwnership::Generated,
             },
@@ -971,24 +955,13 @@ fn adopt_capability_in_place(
         )));
     }
 
-    let baseline_dir = install_root
-        .join(".coral")
-        .join("baselines")
-        .join(inferred_target)
-        .join(&capability.id);
-    fs::create_dir_all(&baseline_dir)?;
-
     let mut emitted_files = Vec::new();
     for (rel_path, content) in &capability.source_files {
         let file_path = capability_dir.join(rel_path);
-        let baseline_path = baseline_dir.join(rel_path);
-        if let Some(parent) = baseline_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&baseline_path, content)?;
         emitted_files.push(adapter::EmittedFile {
             path: relative_or_absolute_canonical(&file_path, install_root),
             hash: lockfile::hash_bytes(&fs::read(&file_path)?),
+            baseline_hash: lockfile::write_baseline_object(install_root, content)?,
         });
     }
 
@@ -996,7 +969,6 @@ fn adopt_capability_in_place(
     targets.insert(
         inferred_target.to_string(),
         lockfile::TargetLockEntry {
-            baseline_dir: lockfile::relative_or_absolute_fs(&baseline_dir, install_root),
             emitted_files,
             ownership: lockfile::TargetOwnership::Imported,
         },
@@ -1133,6 +1105,7 @@ fn install_capability(
             emitted.push(adapter::EmittedFile {
                 path: planned.path.clone(),
                 hash,
+                baseline_hash: lockfile::write_baseline_object(install_root, &planned.content)?,
             });
 
             if should_print_installed_file(capability, planned) {
@@ -1145,30 +1118,9 @@ fn install_capability(
             }
         }
 
-        let baseline_dir = install_root
-            .join(".coral")
-            .join("baselines")
-            .join(adapter.id())
-            .join(&capability.id);
-        std::fs::create_dir_all(&baseline_dir)?;
-
-        for planned in planned_files {
-            if is_generated_manifest_file(planned) {
-                continue;
-            }
-            let baseline_path =
-                baseline_dir.join(capability_relative_path(&planned.path, &capability.id));
-            if let Some(parent) = baseline_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(baseline_path, &planned.content)?;
-        }
-
-        let baseline_rel = lockfile::relative_or_absolute_fs(&baseline_dir, install_root);
         new_targets.insert(
             adapter.id().to_string(),
             TargetLockEntry {
-                baseline_dir: baseline_rel,
                 emitted_files: emitted,
                 ownership: lockfile::TargetOwnership::Generated,
             },
@@ -1263,6 +1215,7 @@ fn install_capability(
     );
 
     lockfile::write_lockfile(install_root, &lockfile)?;
+    lockfile::prune_unreferenced_baseline_objects(install_root, &lockfile)?;
     Ok(())
 }
 
@@ -2086,15 +2039,22 @@ fn cmd_diff_upstream(
             }
         }
 
-        let baseline_dir = scope_root.join(&target_entry.baseline_dir);
         for emitted in &target_entry.emitted_files {
             let rel_path = capability_relative_path(&emitted.path, &source.skill);
             let rel_display = rel_path.to_string_lossy();
 
             let upstream_content =
                 crate::diff::get_upstream_content(&cache_dir, &source.skill, &rel_display)?;
-            let baseline_path = baseline_dir.join(&rel_path);
-            let baseline_content = std::fs::read_to_string(&baseline_path)?;
+            let baseline_content = String::from_utf8(lockfile::read_baseline_object(
+                &scope_root,
+                &emitted.baseline_hash,
+            )?)
+            .map_err(|error| {
+                CoralError::new(format!(
+                    "baseline object is not valid UTF-8 for '{}': {}",
+                    emitted.path, error
+                ))
+            })?;
 
             if baseline_content == upstream_content {
                 continue;
@@ -2165,17 +2125,13 @@ fn remove_target_tracking(
     entry: &mut lockfile::CapabilityLockEntry,
     target: &str,
 ) -> Result<()> {
-    if let Some(target_entry) = entry.targets.remove(target) {
-        let baseline_dir = scope_root.join(&target_entry.baseline_dir);
-        if baseline_dir.exists() {
-            std::fs::remove_dir_all(baseline_dir)?;
-        }
-    } else {
+    if entry.targets.remove(target).is_none() {
         return Err(CoralError::new(format!(
             "'{}' is not tracked for agent '{}'",
             id, target
         )));
     }
+    let _ = scope_root;
     Ok(())
 }
 
@@ -2241,6 +2197,7 @@ pub fn cmd_delete(
         lockfile.capabilities.insert(id.to_string(), entry);
     }
     lockfile::write_lockfile(&scope_root, &lockfile)?;
+    lockfile::prune_unreferenced_baseline_objects(&scope_root, &lockfile)?;
     println!("deleted '{}' from {} scope", id, scope.as_str());
     Ok(())
 }
@@ -2277,6 +2234,7 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
         lockfile.capabilities.insert(id.to_string(), entry);
     }
     lockfile::write_lockfile(&scope_root, &lockfile)?;
+    lockfile::prune_unreferenced_baseline_objects(&scope_root, &lockfile)?;
     println!("untracked '{}' from {} scope", id, scope.as_str());
     Ok(())
 }
@@ -2324,28 +2282,12 @@ fn update_local_baseline(
                 )));
             }
 
-            let baseline_path = scope_root
-                .join(&target_entry.baseline_dir)
-                .join(capability_relative_path(&emitted.path, id));
-            if !baseline_path.is_file() {
-                return Err(CoralError::new(format!(
-                    "baseline file is missing for '{}': {}",
-                    id,
-                    baseline_path.display()
-                )));
-            }
-
             let content = fs::read(&local_path)?;
-            let baseline = fs::read(&baseline_path)?;
+            let baseline = lockfile::read_baseline_object(scope_root, &emitted.baseline_hash)?;
             if content != baseline {
                 changed_files += 1;
             }
-            updates.push((
-                target_id.clone(),
-                emitted.path.clone(),
-                baseline_path,
-                content,
-            ));
+            updates.push((target_id.clone(), emitted.path.clone(), content));
         }
     }
 
@@ -2361,19 +2303,12 @@ fn update_local_baseline(
         return Ok(());
     }
 
-    for (_target_id, _path, baseline_path, content) in &updates {
-        if let Some(parent) = baseline_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(baseline_path, content)?;
-    }
-
     let mut lockfile = lockfile;
     let installed = lockfile
         .capabilities
         .get_mut(id)
         .ok_or_else(|| CoralError::new(format!("'{}' is not installed", id)))?;
-    for (target_id, path, _baseline_path, content) in updates {
+    for (target_id, path, content) in updates {
         let target_entry = installed.targets.get_mut(&target_id).ok_or_else(|| {
             CoralError::new(format!(
                 "'{}' is not installed for agent '{}'",
@@ -2386,8 +2321,10 @@ fn update_local_baseline(
             .find(|emitted| emitted.path == path)
             .ok_or_else(|| CoralError::new(format!("tracked file disappeared: {}", path)))?;
         emitted.hash = lockfile::hash_bytes(&content);
+        emitted.baseline_hash = lockfile::write_baseline_object(scope_root, &content)?;
     }
     lockfile::write_lockfile(scope_root, &lockfile)?;
+    lockfile::prune_unreferenced_baseline_objects(scope_root, &lockfile)?;
 
     if changed_files == 0 {
         println!("'{}' is already up to date", id);
@@ -2584,16 +2521,23 @@ pub fn cmd_update(
                 id, target_id
             ))
         })?;
-        let baseline_dir = scope_root.join(&target_entry.baseline_dir);
         for emitted in &target_entry.emitted_files {
             let rel_path = capability_relative_path(&emitted.path, &source.skill);
 
             let local_path = scope_root.join(&emitted.path);
-            let baseline_path = baseline_dir.join(&rel_path);
             let upstream_path = skill_dir.join(&rel_path);
 
             let local_content = std::fs::read_to_string(&local_path).unwrap_or_default();
-            let baseline_content = std::fs::read_to_string(&baseline_path).unwrap_or_default();
+            let baseline_content = String::from_utf8(lockfile::read_baseline_object(
+                &scope_root,
+                &emitted.baseline_hash,
+            )?)
+            .map_err(|error| {
+                CoralError::new(format!(
+                    "baseline object is not valid UTF-8 for '{}': {}",
+                    emitted.path, error
+                ))
+            })?;
             let upstream_content = std::fs::read_to_string(&upstream_path).unwrap_or_default();
 
             if local_content == upstream_content {
@@ -2607,8 +2551,11 @@ pub fn cmd_update(
             }
 
             if !check {
-                let report =
-                    crate::diff::merge_and_write(&baseline_path, &local_path, &upstream_path)?;
+                let report = crate::diff::merge_with_baseline_content(
+                    &baseline_content,
+                    &local_path,
+                    &upstream_path,
+                )?;
 
                 if let Some(reports) = report {
                     had_conflicts = true;

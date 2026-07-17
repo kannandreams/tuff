@@ -3,8 +3,8 @@ title: Diffing & Updates
 description: How Coral shows local drift, accepts local baselines, and updates git-sourced capabilities.
 ---
 
-Coral uses the recorded baseline in `.coral/baselines/` as the reference point for both local
-diffing and upstream-aware updates.
+Coral uses the recorded baseline objects in `.coral/objects/` as the reference point for both
+local diffing and upstream-aware updates.
 
 This page explains the behavior behind the commands. See the [CLI Reference](/cli#coral-diff) for
 the complete command and flag syntax.

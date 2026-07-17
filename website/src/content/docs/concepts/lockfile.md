@@ -13,18 +13,19 @@ and the hashes needed for drift detection and diffs.
 |---|---|---|
 | `.coral/coral-lock.json` | Installed capability state (id, version, targets, source, hashes) | Yes |
 | `.coral/config.json` | Registered agent harnesses and the default agent | Yes |
-| `.coral/baselines/<target>/<id>/` | Pristine copies of installed files for diffing | Yes |
+| `.coral/objects/sha256/` | Immutable baseline objects used for drift and diffing | Yes |
 | `~/.coral/coral-lock.json` | Global scope: personal, across all projects | No |
 | `~/.coral/cache/git/` | Cloned git repositories for skill discovery | No |
 
 Commit the project `.coral/` files so your team can run `coral list`, `coral diff`,
-and `coral update` without re-installing anything.
+and `coral update` without re-installing anything. Do not edit `.coral/objects/`
+directly; update baselines with `coral update`.
 
 ## Lockfile schema
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "capabilities": {
     "python-uv-default": {
       "type": "skill",
@@ -33,11 +34,11 @@ and `coral update` without re-installing anything.
       "scope": "project",
       "targets": {
         "open-agents": {
-          "baselineDir": ".coral/baselines/open-agents/python-uv-default",
           "emittedFiles": [
             {
               "path": ".agents/skills/python-uv-default/SKILL.md",
-              "hash": "a1b2c3..."
+              "hash": "d4e5f6...",
+              "baselineHash": "a1b2c3..."
             }
           ],
           "ownership": "generated"
@@ -56,15 +57,14 @@ and `coral update` without re-installing anything.
 | `installedVersion` | Semantic version or git commit SHA |
 | `sourcePath` | Local path to the capability directory (empty for git sources) |
 | `scope` | `"project"` or `"global"` |
-| `targets` | Per-harness emitted files and baseline directory |
+| `targets` | Per-harness emitted files and ownership state |
 | `source` | Git source metadata (`type`, `url`, `ref`, `skill`), absent for local installs |
 
 ### Per-target fields
 
 | Field | Description |
 |---|---|
-| `baselineDir` | Path to baseline file copies for this agent |
-| `emittedFiles` | List of `{ path, hash }` for each file written by the adapter |
+| `emittedFiles` | List of `{ path, hash, baselineHash }` for each file written by the adapter |
 | `ownership` | `generated` when Coral emitted the files, or `imported` when Coral tracks existing files |
 
 ## Config schema

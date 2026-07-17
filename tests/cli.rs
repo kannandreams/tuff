@@ -94,6 +94,28 @@ fn test_fixture(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
+fn baseline_object_path(root: &Path, hash: &str) -> std::path::PathBuf {
+    root.join(".coral")
+        .join("objects")
+        .join("sha256")
+        .join(&hash[..2])
+        .join(&hash[2..])
+}
+
+fn baseline_content(root: &Path, capability: &str, agent: &str, emitted_path: &str) -> String {
+    let lockfile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(root.join(".coral/coral-lock.json")).unwrap())
+            .unwrap();
+    let emitted = lockfile["capabilities"][capability]["targets"][agent]["emittedFiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["path"].as_str() == Some(emitted_path))
+        .unwrap();
+    let hash = emitted["baselineHash"].as_str().unwrap();
+    fs::read_to_string(baseline_object_path(root, hash)).unwrap()
+}
+
 fn make_tool_primitive(root: &Path, tool_id: &str) -> std::path::PathBuf {
     let primitive = root.join("tool-primitive");
     fs::create_dir_all(&primitive).unwrap();
@@ -187,7 +209,7 @@ fn legacy_lockfile_fixture_is_rejected() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unsupported lockfile version: 2"));
+        .stderr(predicate::str::contains("unsupported lockfile version: 3"));
 }
 
 #[test]
@@ -1035,7 +1057,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
     // Cleanup from previous runs
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 
     coral()
         .current_dir(temp.path())
@@ -1057,7 +1079,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
     // Cleanup
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 }
 
 #[test]
@@ -1143,12 +1165,7 @@ fn status_shows_override_warning() {
     // Cleanup from previous runs
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
-    let _ = std::fs::remove_dir_all(
-        home.join(".coral")
-            .join("baselines")
-            .join("open-agents")
-            .join("dup-override"),
-    );
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 
     coral()
         .current_dir(temp.path())
@@ -1190,7 +1207,7 @@ fn status_shows_override_warning() {
     // Cleanup
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 }
 
 #[test]
@@ -2357,6 +2374,17 @@ fn untrack_in_place_capability_preserves_files() {
         .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
+    let tracked_content_hash = {
+        let lockfile: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(temp.path().join(".coral/coral-lock.json")).unwrap(),
+        )
+        .unwrap();
+        lockfile["capabilities"]["keep-me"]["targets"]["open-agents"]["emittedFiles"][0]
+            ["baselineHash"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
 
     coral()
         .current_dir(temp.path())
@@ -2375,15 +2403,7 @@ fn untrack_in_place_capability_preserves_files() {
 
     assert!(skill_dir.join("SKILL.md").exists());
     assert!(skill_dir.join("coral.toml").exists());
-    assert!(
-        !temp
-            .path()
-            .join(".coral")
-            .join("baselines")
-            .join("open-agents")
-            .join("keep-me")
-            .exists()
-    );
+    assert!(!baseline_object_path(temp.path(), &tracked_content_hash).exists());
 }
 
 #[test]
@@ -2732,14 +2752,15 @@ fn update_local_rejects_force_and_missing_files_without_partial_changes() {
         .failure()
         .stderr(predicate::str::contains("tracked file is missing"));
 
-    let baseline = temp
-        .path()
-        .join(".coral")
-        .join("baselines")
-        .join("open-agents")
-        .join("local-skill")
-        .join("SKILL.md");
-    assert!(!fs::read_to_string(baseline).unwrap().contains("Edited"));
+    assert!(
+        !baseline_content(
+            temp.path(),
+            "local-skill",
+            "open-agents",
+            ".agents/skills/local-skill/SKILL.md"
+        )
+        .contains("Edited")
+    );
 }
 
 #[test]

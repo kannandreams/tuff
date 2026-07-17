@@ -180,7 +180,7 @@ coral check
 | `.agents/tools/` | Tool source files and coral.toml | Same |
 | `.agents/hooks/` | Hook source files and coral.toml | Same |
 | `.agents/workflows/` | Workflow source files and coral.toml | Same |
-| `.coral/` | State: lockfile, baselines, and config | `coral init` |
+| `.coral/` | State: lockfile, baseline objects, and config | `coral init` |
 | `.claude/skills/` etc. | Claude-specific capabilities | `coral add` or you author |
 
 **One directory, one source of truth.** Agent files live in `.agents/` or `.claude/`.

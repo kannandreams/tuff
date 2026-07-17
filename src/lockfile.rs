@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsStr,
     path::{Path, PathBuf},
 };
@@ -11,7 +11,7 @@ use similar::{ChangeTag, TextDiff};
 use crate::adapter::EmittedFile;
 use crate::error::{CoralError, Result};
 
-pub const LOCKFILE_VERSION: u8 = 1;
+pub const LOCKFILE_VERSION: u8 = 2;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lockfile {
@@ -53,8 +53,6 @@ pub struct SourceMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetLockEntry {
-    #[serde(rename = "baselineDir")]
-    pub baseline_dir: String,
     #[serde(rename = "emittedFiles")]
     pub emitted_files: Vec<EmittedFile>,
     #[serde(default)]
@@ -138,6 +136,106 @@ pub fn hash_bytes(content: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+fn object_path_for_hash(repo_root: &Path, hash: &str) -> Result<PathBuf> {
+    if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(CoralError::new(format!("invalid baseline hash: {hash}")));
+    }
+    let (prefix, suffix) = hash.split_at(2);
+    Ok(repo_root
+        .join(".coral")
+        .join("objects")
+        .join("sha256")
+        .join(prefix)
+        .join(suffix))
+}
+
+pub fn write_baseline_object(repo_root: &Path, content: &[u8]) -> Result<String> {
+    let hash = hash_bytes(content);
+    let object_path = object_path_for_hash(repo_root, &hash)?;
+    if object_path.exists() {
+        let existing = std::fs::read(&object_path)?;
+        if existing != content {
+            return Err(CoralError::new(format!(
+                "baseline object hash collision or corruption: {}",
+                object_path.display()
+            )));
+        }
+        return Ok(hash);
+    }
+
+    if let Some(parent) = object_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(object_path, content)?;
+    Ok(hash)
+}
+
+pub fn read_baseline_object(repo_root: &Path, hash: &str) -> Result<Vec<u8>> {
+    let object_path = object_path_for_hash(repo_root, hash)?;
+    if !object_path.is_file() {
+        return Err(CoralError::new(format!(
+            "baseline object missing: {}",
+            object_path.display()
+        )));
+    }
+    let content = std::fs::read(&object_path)?;
+    let actual = hash_bytes(&content);
+    if actual != hash {
+        return Err(CoralError::new(format!(
+            "baseline object hash mismatch: {}",
+            object_path.display()
+        )));
+    }
+    Ok(content)
+}
+
+pub fn prune_unreferenced_baseline_objects(repo_root: &Path, lockfile: &Lockfile) -> Result<usize> {
+    let objects_root = repo_root.join(".coral").join("objects").join("sha256");
+    if !objects_root.exists() {
+        return Ok(0);
+    }
+
+    let referenced: BTreeSet<&str> = lockfile
+        .capabilities
+        .values()
+        .flat_map(|entry| entry.targets.values())
+        .flat_map(|target| target.emitted_files.iter())
+        .map(|emitted| emitted.baseline_hash.as_str())
+        .collect();
+
+    let mut removed = 0usize;
+    for prefix_entry in std::fs::read_dir(&objects_root)? {
+        let prefix_entry = prefix_entry?;
+        let prefix_path = prefix_entry.path();
+        if !prefix_path.is_dir() {
+            continue;
+        }
+        let Some(prefix) = prefix_path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        for object_entry in std::fs::read_dir(&prefix_path)? {
+            let object_entry = object_entry?;
+            let object_path = object_entry.path();
+            if !object_path.is_file() {
+                continue;
+            }
+            let Some(suffix) = object_path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            let hash = format!("{prefix}{suffix}");
+            if !referenced.contains(hash.as_str()) {
+                std::fs::remove_file(&object_path)?;
+                removed += 1;
+            }
+        }
+        if std::fs::read_dir(&prefix_path)?.next().is_none() {
+            std::fs::remove_dir(&prefix_path)?;
+        }
+    }
+
+    Ok(removed)
+}
+
 pub fn drift_status(repo_root: &Path, emitted_file: &EmittedFile) -> &'static str {
     let target_path = repo_root.join(&emitted_file.path);
     if !target_path.exists() {
@@ -168,21 +266,11 @@ pub fn diff_against_baseline(
         ))
     })?;
 
-    let baseline_dir = repo_root.join(&target_entry.baseline_dir);
-
     let mut output = String::new();
     for emitted in &target_entry.emitted_files {
         let rel_path = capability_relative_path(&emitted.path, primitive_id);
-        let baseline_path = baseline_dir.join(&rel_path);
         let target_path = repo_root.join(&emitted.path);
 
-        if !baseline_path.exists() {
-            return Err(CoralError::new(format!(
-                "baseline file missing for '{}': {}",
-                primitive_id,
-                baseline_path.display()
-            )));
-        }
         if !target_path.exists() {
             return Err(CoralError::new(format!(
                 "installed file missing for '{}': {}",
@@ -191,7 +279,13 @@ pub fn diff_against_baseline(
             )));
         }
 
-        let baseline = std::fs::read_to_string(&baseline_path)?;
+        let baseline = String::from_utf8(read_baseline_object(repo_root, &emitted.baseline_hash)?)
+            .map_err(|error| {
+                CoralError::new(format!(
+                    "baseline object is not valid UTF-8 for '{}': {}",
+                    primitive_id, error
+                ))
+            })?;
         let target = std::fs::read_to_string(&target_path)?;
         if baseline == target {
             continue;
@@ -272,7 +366,7 @@ mod tests {
         assert!(path.exists());
 
         let lf = read_lockfile_at(&path).unwrap();
-        assert_eq!(lf.version, 1);
+        assert_eq!(lf.version, 2);
         assert!(lf.capabilities.is_empty());
     }
 
@@ -284,13 +378,13 @@ mod tests {
     }
 
     #[test]
-    fn read_lockfile_at_rejects_v2_schema() {
+    fn read_lockfile_at_rejects_v3_schema() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("v2-lock.json");
+        let path = tmp.path().join("v3-lock.json");
         fs::write(
             &path,
             r#"{
-  "version": 2,
+  "version": 3,
   "capabilities": {}
 }
 "#,
@@ -301,7 +395,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("unsupported lockfile version: 2")
+                .contains("unsupported lockfile version: 3")
         );
     }
 
@@ -310,7 +404,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("roundtrip.json");
         let mut lf = Lockfile {
-            version: 1,
+            version: LOCKFILE_VERSION,
             capabilities: BTreeMap::new(),
         };
         lf.capabilities.insert(
@@ -337,7 +431,7 @@ mod tests {
         std::fs::write(
             &path,
             r#"{
-  "version": 1,
+  "version": 2,
   "capabilities": {
     "legacy": {
       "type": "skill",
@@ -345,7 +439,6 @@ mod tests {
       "sourcePath": "legacy",
       "targets": {
         "open-agents": {
-          "baselineDir": ".coral/baselines/open-agents/legacy",
           "emittedFiles": []
         }
       }
@@ -380,6 +473,7 @@ mod tests {
         let emitted = crate::adapter::EmittedFile {
             path: file.file_name().unwrap().to_string_lossy().to_string(),
             hash: hash_bytes(b"content"),
+            baseline_hash: hash_bytes(b"content"),
         };
         assert_eq!(drift_status(tmp.path(), &emitted), "clean");
     }
@@ -393,6 +487,7 @@ mod tests {
         let emitted = crate::adapter::EmittedFile {
             path: file.file_name().unwrap().to_string_lossy().to_string(),
             hash: hash_bytes(b"original"),
+            baseline_hash: hash_bytes(b"original"),
         };
         assert_eq!(drift_status(tmp.path(), &emitted), "modified");
     }
@@ -403,6 +498,7 @@ mod tests {
         let emitted = crate::adapter::EmittedFile {
             path: "nonexistent.md".into(),
             hash: "abc".into(),
+            baseline_hash: "abc".into(),
         };
         assert_eq!(drift_status(tmp.path(), &emitted), "missing");
     }
