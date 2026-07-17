@@ -5,7 +5,24 @@ description: Command reference for the Coral CLI.
 
 Run commands from the repository root unless `--global` is specified.
 
-## `coral`
+New to Coral? Start with the [Getting Started guide](/getting-started), then return here for the
+complete command and flag reference.
+
+## Command Groups
+
+| Group | Commands |
+|---|---|
+| Start | [`coral init`](#coral-init) |
+| Create or add capabilities | [`coral create`](#coral-create), [`coral add`](#coral-add) |
+| Inspect and generate | [`coral list`](#coral-list), [`coral status`](#coral-status), [`coral generate`](#coral-generate), [`coral outdated`](#coral-outdated) |
+| Diff and update | [`coral diff`](#coral-diff), [`coral update`](#coral-update) |
+| Validate in CI | [`coral check`](#coral-check) |
+| Clean up | [`coral delete`](#coral-delete), [`coral untrack`](#coral-untrack) |
+| Configure agents and scope | [`coral agent`](#coral-agent), [scope behavior](/concepts/scopes) |
+
+## Start
+
+### `coral`
 
 Show the ASCII banner and quick-start menu:
 
@@ -13,7 +30,7 @@ Show the ASCII banner and quick-start menu:
 coral
 ```
 
-## `coral init`
+### `coral init`
 
 Initialize Coral state in the current directory:
 
@@ -28,15 +45,35 @@ coral init --global
 ```
 
 Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global),
-scaffolds `.agents/`, and registers `open-agents` as the default project agent.
+scaffolds `.agents/`, and configures `open-agents` as the default agent.
 
-## `coral add`
+## Create or Add Capabilities
 
-Install a capability from a local directory:
+### `coral create`
+
+Create and track a new agent-local capability:
+
+```sh frame="terminal"
+coral create skill my-skill
+coral create tool my-tool -a claude
+coral create hook review-hook -a open-agents -a claude
+coral create workflow release-flow -a claude
+```
+
+The capability type and id are positional. `-a, --agent` is optional and
+repeatable. When omitted, Coral uses the configured default agent. Creation
+initializes Coral state, registers the selected agents, writes adapter-valid
+files, and records the baseline. Use `-a <agent>` when creating for a
+different agent.
+
+### `coral add`
+
+Install a capability from a local directory. The agent defaults to the
+configured project agent:
 
 ```sh frame="terminal"
 # Skill
-coral add ./my-skill -a open-agents
+coral add ./my-skill
 
 # Tool
 coral add ./my-tool -a claude
@@ -44,8 +81,8 @@ coral add ./my-tool -a claude
 # Multiple agents
 coral add ./my-skill -a claude -a open-agents
 
-# Global scope
-coral add ./my-skill -a open-agents --global
+# Global scope, using the global default agent
+coral add ./my-skill --global
 ```
 
 Add existing agent files in place:
@@ -68,220 +105,22 @@ coral add https://github.com/owner/repo --tool <name> -a claude
 coral add https://github.com/owner/repo --hook <name> -a open-agents
 ```
 
-### Flags
+For git-sourced skills, Coral installs the selected skill's `SKILL.md` and
+generates a local `coral.toml` beside it. If the upstream skill includes
+supporting files, Coral can track them internally while `coral add` and
+`coral list` keep the display collapsed to the skill entrypoint.
+
+#### Flags
 
 | Flag | Description |
 |---|---|
-| `-a, --agent <id>` | Agent harness (required, repeatable) |
+| `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
 | `-s, --skill <name>` | Skill name for git URLs |
 | `--tool <name>` | Tool name for git URLs |
 | `--hook <name>` | Hook name for git URLs |
 | `-g, --global` | Install to global scope (`~/.coral/`) |
 
-## `coral create`
-
-Create and track a new agent-local capability:
-
-```sh frame="terminal"
-coral create skill my-skill
-coral create tool my-tool -a claude
-coral create hook review-hook -a open-agents -a claude
-coral create workflow release-flow -a claude
-```
-
-The capability type and id are positional. `-a, --agent` is repeatable and
-defaults to `open-agents`. Creation initializes Coral state, registers the
-selected agents, writes adapter-valid files, and records the baseline. Use
-`coral add <path> -a <agent>` for agent files created outside Coral.
-
-## `coral list`
-
-Show installed capabilities with scope, drift status, and path:
-
-```sh frame="terminal"
-coral list
-```
-
-### Filters
-
-```sh frame="terminal"
-# By scope
-coral list --scope project
-coral list --scope global
-
-# By capability type
-coral list --type skill
-coral list --type tool
-
-# Combine filters
-coral list --scope global --type tool
-```
-
-### Status values
-
-| Status | Meaning |
-|---|---|
-| `clean` | Installed content matches recorded hash |
-| `modified` | Installed content has local changes |
-| `missing` | Installed file no longer exists |
-
-`coral list` uses terminal colors when supported: clean is green, modified is amber, and missing is red.
-
-## `coral status`
-
-Show per-primitive detail including scope, drift, and override warnings:
-
-```sh frame="terminal"
-coral status
-```
-
-Example output:
-
-```
-python-uv-default  project  clean  [overrides global: won't receive global updates]
-commit-hygiene     global   clean
-scan-tool          project  clean
-```
-
-## `coral outdated`
-
-Show all installed capabilitys and whether upstream updates are available.
-Read-only; never modifies files.
-
-```sh frame="terminal"
-coral outdated
-```
-
-Example output:
-
-```
-find-skills              skill      open-agents  2adcfe5    def5678    outdated
-pre-commit-lint          hook       open-agents  1.0.0      none       up to date
-security-review          tool       claude       abc1234    2adcfe5    outdated
-```
-
-For git-sourced primitives, `CURRENT` and `LATEST` show the 7-character commit SHA.
-For local primitives, `LATEST` shows `none` and status is always `up to date` or `modified source`.
-
-## `coral diff`
-
-Show unified diff between baseline and installed files, or compare against latest upstream:
-
-```sh frame="terminal"
-# Local changes against baseline
-coral diff <id>
-
-# Upstream changes since last install (git-sourced only)
-coral diff <id> --upstream
-
-# Diff a specific agent
-coral diff <id> -a claude
-```
-
-When color is enabled, diff headers are cyan, additions are green, and deletions are red,
-matching the usual Git diff convention. Set `NO_COLOR=1` for plain output.
-
-## `coral update`
-
-Update a capability according to its recorded source. In-place local capabilities accept
-current edits as the new baseline; external local sources reload from `sourcePath`;
-Git-sourced capabilities perform a three-way merge between baseline, local, and upstream.
-See the [lifecycle docs](/concepts/lifecycle) for the merge behavior table.
-
-```sh frame="terminal"
-# Attempt three-way merge or accept intentional local edits
-coral update <id>
-
-# Dry run: show what would happen without applying
-coral update <id> --check
-
-# Update one agent (defaults to all recorded agents)
-coral update <id> -a <agent>
-
-# Force overwrite local changes with recorded source output
-coral update <id> --force
-
-# Explicit scope
-coral update <id> --scope global
-```
-
-## `coral delete`
-
-Delete Coral-generated capability files for explicitly selected agents:
-
-```sh frame="terminal"
-# Delete generated files for one agent
-coral delete <id> -a open-agents
-
-# Delete generated files for multiple agents
-coral delete <id> -a open-agents -a claude
-
-# Delete from global scope
-coral delete <id> -a open-agents --scope global
-
-# Delete files with local modifications
-coral delete <id> -a open-agents --force
-```
-
-The agent flag is required. `delete` removes emitted files, their baselines,
-and generated tool MCP entries. It never deletes the original capability source
-directory. Modified generated files require `--force`. In-place added capabilities
-cannot be deleted; use `coral untrack` instead.
-
-## `coral untrack`
-
-Stop tracking a capability for explicitly selected agents while preserving its
-agent files and manifest:
-
-```sh frame="terminal"
-# Stop tracking an in-place added skill
-coral untrack my-skill -a open-agents
-
-# Stop tracking several agents
-coral untrack my-skill -a open-agents -a claude
-
-# Stop tracking a global capability
-coral untrack my-skill -a open-agents --scope global
-```
-
-`untrack` removes the selected lockfile entry and baseline. It preserves the
-capability files, `coral.toml`, source directories, and MCP configuration.
-The lockfile itself remains in place, even when it contains no capabilities.
-
-## `coral agent`
-
-### List available and registered agents
-
-```sh frame="terminal"
-coral agent list
-```
-
-### Register an agent
-
-```sh frame="terminal"
-coral agent add open-agents
-coral agent add claude
-```
-
-Registering an agent also creates its project directory (`.agents/` or
-`.claude/`) if it does not already exist.
-
-Legacy aliases (`codex`, `claude-code`) are accepted and map to the current agent names.
-
-The `*` marker means the agent is registered; the legend is shown below the table.
-
-### Remove an agent
-
-```sh frame="terminal"
-coral agent remove open-agents
-```
-
-Unregisters the agent from the project configuration. It does not delete
-capabilities, emitted files, baselines, MCP registrations, or lockfile entries.
-Use `coral delete <id> -a <agent>` or `coral untrack <id> -a <agent>` for
-capability cleanup.
-
-## Adding Existing Agent Files
+### Adding Existing Agent Files
 
 Bring existing agent assets under Coral management without rewriting content:
 
@@ -289,9 +128,9 @@ Bring existing agent assets under Coral management without rewriting content:
 coral add .agents/skills/python-uv -a open-agents
 ```
 
-### Before/after
+#### Before/after
 
-```
+```text
 Before add:
 .agents/skills/python-uv/
   └── SKILL.md                ← existing, unmanaged
@@ -317,7 +156,161 @@ edits as the new baseline.
 When Coral adopts existing agent files, it creates a minimal `coral.toml` beside them with version `0.1.0`. Treat that manifest as project-owned metadata: update the version and description when you know the right values, and commit it with the adopted agent files.
 :::
 
-## `coral check`
+## Inspect and Generate
+
+### `coral list`
+
+Show installed capabilities with scope, drift status, and path:
+
+```sh frame="terminal"
+coral list
+```
+
+#### Filters
+
+```sh frame="terminal"
+# By scope
+coral list --scope project
+coral list --scope global
+
+# By capability type
+coral list --type skill
+coral list --type tool
+
+# Combine filters
+coral list --scope global --type tool
+```
+
+#### Status values
+
+| Status | Meaning |
+|---|---|
+| `clean` | Installed content matches recorded hash |
+| `modified` | Installed content has local changes |
+| `missing` | Installed file no longer exists |
+
+`coral list` uses terminal colors when supported: clean is green, modified is amber, and missing is red.
+
+### `coral status`
+
+Show per-primitive detail including scope, drift, and override warnings:
+
+```sh frame="terminal"
+coral status
+```
+
+Example output:
+
+```text
+python-uv-default  project  clean  [overrides global: won't receive global updates]
+commit-hygiene     global   clean
+scan-tool          project  clean
+```
+
+### `coral generate`
+
+Generate derived Coral artifacts from tracked project state:
+
+```sh frame="terminal"
+# Agent-facing capability index
+coral generate index -a open-agents
+coral generate index -a claude
+
+# Custom index path
+coral generate index -a open-agents --output docs/CAPABILITIES.md
+
+# Human-readable project report
+coral generate report
+coral generate report --output docs/coral-report.md
+```
+
+`coral generate index` writes the default index for the selected agent:
+
+| Agent | Default output |
+|---|---|
+| `open-agents` | `.agents/CAPABILITIES.md` |
+| `claude` | `.claude/CAPABILITIES.md` |
+
+The generated index is intended for agent context. Point `AGENTS.md`,
+`CLAUDE.md`, or equivalent agent instructions at the generated
+`CAPABILITIES.md` file when you want the agent to see a compact inventory of
+tracked capabilities.
+
+`coral generate report` writes `.coral/reports/coral-report.md` by default.
+The report includes installed capabilities, agents, source type, emitted paths,
+and clean/modified/missing status summaries.
+
+Generated files are derived output. The source of truth remains each
+capability's `coral.toml` manifest plus `.coral/coral-lock.json` tracking
+state.
+
+### `coral outdated`
+
+Show all installed capabilitys and whether upstream updates are available.
+Read-only; never modifies files.
+
+```sh frame="terminal"
+coral outdated
+```
+
+Example output:
+
+```text
+find-skills              skill      open-agents  2adcfe5    def5678    outdated
+pre-commit-lint          hook       open-agents  1.0.0      none       up to date
+security-review          tool       claude       abc1234    2adcfe5    outdated
+```
+
+For git-sourced primitives, `CURRENT` and `LATEST` show the 7-character commit SHA.
+For local primitives, `LATEST` shows `none` and status is always `up to date` or `modified source`.
+
+## Diff and Update
+
+### `coral diff`
+
+Show unified diff between baseline and installed files, or compare against latest upstream:
+
+```sh frame="terminal"
+# Local changes against baseline
+coral diff <id>
+
+# Upstream changes since last install (git-sourced only)
+coral diff <id> --upstream
+
+# Diff a specific agent
+coral diff <id> -a claude
+```
+
+When color is enabled, diff headers are cyan, additions are green, and deletions are red,
+matching the usual Git diff convention. Set `NO_COLOR=1` for plain output.
+
+### `coral update`
+
+Update a capability according to its recorded source. In-place local capabilities accept
+current edits as the new baseline; external local sources reload from `sourcePath`;
+Git-sourced capabilities perform a three-way merge between baseline, local, and upstream.
+See the [lifecycle docs](/concepts/lifecycle) for the merge behavior table.
+
+```sh frame="terminal"
+# Update the configured default agent
+coral update <id>
+
+# Dry run: show what would happen without applying
+coral update <id> --check
+
+# Update a specific agent instead
+coral update <id> -a <agent>
+
+# Force overwrite local changes with recorded source output
+coral update <id> --force
+
+# Explicit scope
+coral update <id> --scope global
+```
+
+## Validate in CI
+
+### `coral check`
 
 Validate installed capabilities for CI. Exits 1 on any failure.
 
@@ -329,12 +322,12 @@ coral check --ignore-failures  # report failures but exit 0
 
 Example output:
 
-```
+```text
 ✓ python-uv-default       skill      open-agents  ok
 ✗ dirty-skill             skill      open-agents  modified (.agents/skills/dirty-skill/SKILL.md)
 ```
 
-## CI with GitHub Actions
+### CI with GitHub Actions
 
 Add this to your project's `.github/workflows/coral-check.yml`:
 
@@ -364,7 +357,105 @@ Commit `.coral/coral-lock.json` and `.coral/baselines/` to your repo so `coral c
 runs against the committed state. See the [lockfile reference](/concepts/lockfile) for
 what to commit.
 
-## Scope
+## Clean Up
+
+### `coral delete`
+
+Delete Coral-generated capability files for explicitly selected agents:
+
+```sh frame="terminal"
+# Delete generated files for one agent
+coral delete <id> -a open-agents
+
+# Delete generated files for multiple agents
+coral delete <id> -a open-agents -a claude
+
+# Delete from global scope
+coral delete <id> -a open-agents --scope global
+
+# Delete files with local modifications
+coral delete <id> -a open-agents --force
+```
+
+When `-a/--agent` is omitted, `delete` uses the configured agent. It removes emitted files, their baselines,
+and generated tool MCP entries. It never deletes the original capability source
+directory. Modified generated files require `--force`. In-place added capabilities
+cannot be deleted; use `coral untrack` instead.
+
+### `coral untrack`
+
+Stop tracking a capability for explicitly selected agents while preserving its
+agent files and manifest:
+
+```sh frame="terminal"
+# Stop tracking an in-place added skill for the default agent
+coral untrack my-skill
+
+# Stop tracking several agents
+coral untrack my-skill -a open-agents -a claude
+
+# Stop tracking a global capability
+coral untrack my-skill -a open-agents --scope global
+```
+
+`untrack` removes the selected lockfile entry and baseline. It preserves the
+capability files, `coral.toml`, source directories, and MCP configuration.
+The lockfile itself remains in place, even when it contains no capabilities.
+
+## Configure Agents and Scope
+
+### `coral agent`
+
+#### Configure the default agent
+
+```sh frame="terminal"
+# Project default
+coral agent set-default open-agents
+
+# Global default
+coral agent set-default claude --global
+```
+
+Commands that accept `-a/--agent` use this value when the flag is omitted.
+An explicit agent flag always overrides the default, and repeated flags still
+apply an operation to multiple agents.
+
+#### List available and registered agents
+
+```sh frame="terminal"
+coral agent list
+
+# Show the global default
+coral agent list --global
+```
+
+#### Register an agent
+
+```sh frame="terminal"
+coral agent add open-agents
+coral agent add claude
+```
+
+Registering an agent also creates its project directory (`.agents/` or
+`.claude/`) if it does not already exist.
+
+Legacy aliases (`codex`, `claude-code`) are accepted and map to the current agent names.
+
+The `*` marker means the agent is registered. The `DEFAULT` column shows which
+agent is selected when `-a/--agent` is omitted.
+
+#### Remove an agent
+
+```sh frame="terminal"
+coral agent remove open-agents
+```
+
+Unregisters the agent from the project configuration. It does not delete
+capabilities, emitted files, baselines, MCP registrations, or lockfile entries.
+Use `coral delete <id>` or `coral untrack <id>` for the configured default
+agent. Pass `-a <agent>` when selecting a different agent.
+
+### Scope
 
 Coral supports two scopes:
 

@@ -7,12 +7,12 @@ use std::{
 const CORAL_GUIDE_CONTENT: &str = include_str!("../assets/coral-cli-guide.md");
 
 use tabled::{
-    settings::{object::Columns, Modify, Style, Width},
     Table, Tabled,
+    settings::{Modify, Style, Width, object::Columns},
 };
 
 use crate::{
-    adapter::{self, resolve_capability, AdapterKind},
+    adapter::{self, AdapterKind, resolve_capability},
     config, display,
     error::{CoralError, Result},
     git,
@@ -37,6 +37,19 @@ struct ListRow {
     status: String,
     #[tabled(rename = "PATH")]
     path: String,
+}
+
+#[derive(Clone)]
+struct InventoryRow {
+    id: String,
+    capability_type: String,
+    version: String,
+    scope: String,
+    target: String,
+    status: String,
+    path: String,
+    description: String,
+    source_type: String,
 }
 
 #[derive(Tabled)]
@@ -172,6 +185,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
         let home = home_dir()?;
         let lock_path = home.join(".coral").join("coral-lock.json");
         lockfile::init_lockfile_at(&lock_path)?;
+        let _ = config::read_config(&home)?;
         println!("initialized ~/.coral/coral-lock.json");
     } else {
         display::print_init_banner();
@@ -239,6 +253,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                 lockfile::CapabilityLockEntry {
                     capability_type: "skill".into(),
                     installed_version: "0.1.0".into(),
+                    description: "Guide for using Coral CLI commands inside this repository."
+                        .into(),
                     source_path: String::new(),
                     targets,
                     source: None,
@@ -261,8 +277,9 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
         return Err(CoralError::new("capability name must not be empty"));
     }
 
+    let target_ids = resolve_agent_selection(repo_root, target_ids)?;
     let mut adapters = Vec::new();
-    for target in target_ids {
+    for target in &target_ids {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
             CoralError::new(format!(
                 "unknown agent '{}'; use 'coral agent list' to see available agents",
@@ -396,6 +413,7 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
         lockfile::CapabilityLockEntry {
             capability_type: kind.to_string(),
             installed_version: "0.1.0".to_string(),
+            description: default_capability_description(kind).to_string(),
             source_path,
             targets: target_entries,
             source: None,
@@ -412,6 +430,16 @@ fn adapter_project_dir(adapter: AdapterKind) -> &'static str {
     match adapter {
         AdapterKind::OpenAgents => ".agents",
         AdapterKind::Claude => ".claude",
+    }
+}
+
+fn default_capability_description(kind: &str) -> &'static str {
+    match kind {
+        "skill" => "What this skill helps the agent do.",
+        "tool" => "What this tool does for the agent.",
+        "hook" => "What this hook enforces.",
+        "workflow" => "When the agent should run this workflow.",
+        _ => "",
     }
 }
 
@@ -444,7 +472,8 @@ fn create_scaffold_files(
             ),
             (
                 "run.sh",
-                "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n".to_string(),
+                "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n"
+                    .to_string(),
             ),
         ],
         "hook" => {
@@ -456,11 +485,13 @@ fn create_scaffold_files(
                 AdapterKind::OpenAgents => {
                     "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string()
                 }
-                AdapterKind::Claude => serde_json::to_string_pretty(&serde_json::json!({
-                    "event": "before_finish",
-                    "command": "echo review hook",
-                    "working_directory": "."
-                }))? + "\n",
+                AdapterKind::Claude => {
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "event": "before_finish",
+                        "command": "echo review hook",
+                        "working_directory": "."
+                    }))? + "\n"
+                }
             };
             vec![
                 (
@@ -718,20 +749,21 @@ pub fn cmd_add(
     } else {
         (Scope::Project, repo_root.to_path_buf())
     };
+    let target_ids = resolve_agent_selection(&install_root, target_ids)?;
 
     if git::is_git_url(&capability.to_string_lossy()) {
         return cmd_add_git(
             &install_root,
             scope,
             &capability.to_string_lossy(),
-            target_ids,
+            &target_ids,
             skill_name,
             tool_name,
             hook_name,
             repo_root,
         );
     }
-    cmd_add_local(&install_root, scope, capability, target_ids, repo_root)
+    cmd_add_local(&install_root, scope, capability, &target_ids, repo_root)
 }
 
 fn cmd_add_git(
@@ -977,6 +1009,7 @@ fn adopt_capability_in_place(
         lockfile::CapabilityLockEntry {
             capability_type: capability.capability_type.clone(),
             installed_version: capability.version.clone(),
+            description: capability.description.clone(),
             source_path: relative_or_absolute_canonical(capability_dir, install_root),
             targets,
             source: None,
@@ -1046,7 +1079,14 @@ fn install_capability(
 
     let mut plans: Vec<(AdapterKind, Vec<adapter::PlannedFile>)> = Vec::new();
     for adapter in &adapters {
-        let planned = adapter.plan(&capability, install_root)?;
+        let mut planned = adapter.plan(&capability, install_root)?;
+        if is_git && capability.capability_type == "skill" {
+            planned.push(generated_git_manifest_file(
+                *adapter,
+                install_root,
+                capability,
+            ));
+        }
         plans.push((*adapter, planned));
     }
 
@@ -1082,18 +1122,24 @@ fn install_capability(
             }
             std::fs::write(&target_path, &planned.content)?;
 
+            if is_generated_manifest_file(planned) {
+                continue;
+            }
+
             let hash = lockfile::hash_bytes(&planned.content);
             emitted.push(adapter::EmittedFile {
                 path: planned.path.clone(),
                 hash,
             });
 
-            println!(
-                "installed {} ({}) -> {}",
-                capability.id,
-                adapter.id(),
-                lockfile::relative_or_absolute_fs(&target_path, install_root)
-            );
+            if should_print_installed_file(capability, planned) {
+                println!(
+                    "installed {} ({}) -> {}",
+                    capability.id,
+                    adapter.id(),
+                    lockfile::relative_or_absolute_fs(&target_path, install_root)
+                );
+            }
         }
 
         let baseline_dir = install_root
@@ -1104,10 +1150,15 @@ fn install_capability(
         std::fs::create_dir_all(&baseline_dir)?;
 
         for planned in planned_files {
-            let file_name = Path::new(&planned.path)
-                .file_name()
-                .expect("emitted file should have a name");
-            std::fs::write(baseline_dir.join(file_name), &planned.content)?;
+            if is_generated_manifest_file(planned) {
+                continue;
+            }
+            let baseline_path =
+                baseline_dir.join(capability_relative_path(&planned.path, &capability.id));
+            if let Some(parent) = baseline_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(baseline_path, &planned.content)?;
         }
 
         let baseline_rel = lockfile::relative_or_absolute_fs(&baseline_dir, install_root);
@@ -1175,6 +1226,7 @@ fn install_capability(
         lockfile::CapabilityLockEntry {
             capability_type: capability.capability_type.clone(),
             installed_version: capability.version.clone(),
+            description: capability.description.clone(),
             source_path,
             targets: merged_targets,
             source: source_meta.map(|m| lockfile::SourceMetadata {
@@ -1191,37 +1243,188 @@ fn install_capability(
     Ok(())
 }
 
+fn generated_git_manifest_file(
+    adapter: AdapterKind,
+    install_root: &Path,
+    capability: &adapter::ResolvedCapability,
+) -> adapter::PlannedFile {
+    let dir = match adapter {
+        AdapterKind::OpenAgents => install_root.join(".agents").join("skills"),
+        AdapterKind::Claude => install_root.join(".claude").join("skills"),
+    };
+    let path = dir.join(&capability.id).join("coral.toml");
+    let description = if capability.description.trim().is_empty() {
+        "Installed from git source."
+    } else {
+        &capability.description
+    };
+    let content = format!(
+        "# Generated by coral add\nid = \"{}\"\nversion = \"{}\"\ntype = \"skill\"\ndescription = \"{}\"\nfiles = [{}]\n",
+        toml_escape(&capability.id),
+        toml_escape(&capability.version),
+        toml_escape(description),
+        capability
+            .source_files
+            .iter()
+            .map(|(name, _)| format!("\"{}\"", toml_escape(name)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    adapter::PlannedFile {
+        path: lockfile::relative_or_absolute_fs(&path, install_root),
+        content: content.into_bytes(),
+    }
+}
+
+fn is_generated_manifest_file(planned: &adapter::PlannedFile) -> bool {
+    Path::new(&planned.path).file_name() == Some(std::ffi::OsStr::new("coral.toml"))
+}
+
+fn should_print_installed_file(
+    capability: &adapter::ResolvedCapability,
+    planned: &adapter::PlannedFile,
+) -> bool {
+    if capability.capability_type != "skill" {
+        return true;
+    }
+    Path::new(&planned.path).file_name() == Some(std::ffi::OsStr::new("SKILL.md"))
+}
+
+fn toml_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn capability_relative_path(path: &str, capability_id: &str) -> PathBuf {
+    for base in [
+        ".agents/skills",
+        ".claude/skills",
+        ".agents/tools",
+        ".claude/tools",
+        ".agents/hooks",
+        ".claude/hooks",
+        ".agents/workflows",
+        ".claude/workflows",
+    ] {
+        let prefix = format!("{base}/{capability_id}/");
+        if let Some(rel) = path.strip_prefix(&prefix) {
+            return PathBuf::from(rel);
+        }
+    }
+
+    Path::new(path)
+        .file_name()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(path))
+}
+
 // ── List ────────────────────────────────────────────────────────────────────
+
+fn collect_lockfile_inventory(
+    root: &Path,
+    lockfile: &lockfile::Lockfile,
+    scope: &str,
+    path_prefix: Option<&str>,
+    kind_filter: Option<&str>,
+) -> Vec<InventoryRow> {
+    let mut rows = Vec::new();
+
+    for (id, entry) in &lockfile.capabilities {
+        if let Some(kind) = kind_filter {
+            if entry.capability_type != kind {
+                continue;
+            }
+        }
+
+        let description = capability_description(root, entry);
+        let source_type = capability_source_type(entry).to_string();
+
+        for (target_id, target_entry) in &entry.targets {
+            for emitted in &target_entry.emitted_files {
+                let status = lockfile::drift_status(root, emitted);
+                let path = match path_prefix {
+                    Some(prefix) => format!("{prefix}{}", emitted.path),
+                    None => emitted.path.clone(),
+                };
+                rows.push(InventoryRow {
+                    id: id.clone(),
+                    capability_type: entry.capability_type.clone(),
+                    version: short_sha(&entry.installed_version).to_string(),
+                    scope: scope.to_string(),
+                    target: target_id.clone(),
+                    status: status.to_string(),
+                    path,
+                    description: description.clone(),
+                    source_type: source_type.clone(),
+                });
+            }
+        }
+    }
+
+    rows
+}
+
+fn capability_description(root: &Path, entry: &lockfile::CapabilityLockEntry) -> String {
+    if !entry.description.trim().is_empty() {
+        return entry.description.clone();
+    }
+
+    if entry.source_path.trim().is_empty() {
+        return String::new();
+    }
+
+    let source_path = Path::new(&entry.source_path);
+    let capability_dir = if source_path.is_absolute() {
+        source_path.to_path_buf()
+    } else {
+        root.join(source_path)
+    };
+
+    load_manifest(&capability_dir)
+        .map(|manifest| manifest.description)
+        .unwrap_or_default()
+}
+
+fn capability_source_type(entry: &lockfile::CapabilityLockEntry) -> &'static str {
+    if let Some(source) = &entry.source {
+        if source.source_type == "git" {
+            return "git";
+        }
+    }
+
+    if entry.source_path.trim().is_empty() {
+        "local"
+    } else {
+        "local"
+    }
+}
+
+fn project_inventory(repo_root: &Path, kind_filter: Option<&str>) -> Result<Vec<InventoryRow>> {
+    let lockfile = lockfile::require_lockfile(repo_root)?;
+    Ok(collect_lockfile_inventory(
+        repo_root,
+        &lockfile,
+        "project",
+        None,
+        kind_filter,
+    ))
+}
 
 pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>) -> Result<()> {
     let show_project = scope_filter == "all" || scope_filter == "project";
     let show_global = scope_filter == "all" || scope_filter == "global";
 
-    let mut rows: Vec<ListRow> = Vec::new();
+    let mut inventory: Vec<InventoryRow> = Vec::new();
 
     if show_project {
         if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
-            for (id, entry) in &lockfile.capabilities {
-                if let Some(kind) = kind_filter {
-                    if entry.capability_type != kind {
-                        continue;
-                    }
-                }
-                for (target_id, target_entry) in &entry.targets {
-                    for emitted in &target_entry.emitted_files {
-                        let status = lockfile::drift_status(repo_root, emitted);
-                        rows.push(ListRow {
-                            id: id.clone(),
-                            capability_type: entry.capability_type.clone(),
-                            version: short_sha(&entry.installed_version).to_string(),
-                            scope: "project".to_string(),
-                            target: target_id.clone(),
-                            status: style_drift_status(status),
-                            path: emitted.path.clone(),
-                        });
-                    }
-                }
-            }
+            inventory.extend(collect_lockfile_inventory(
+                repo_root,
+                &lockfile,
+                "project",
+                None,
+                kind_filter,
+            ));
         }
     }
 
@@ -1229,36 +1432,23 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         if let Some(home) = home_dir_opt() {
             let lock_path = home.join(".coral").join("coral-lock.json");
             if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
-                for (id, entry) in &lockfile.capabilities {
-                    if let Some(kind) = kind_filter {
-                        if entry.capability_type != kind {
-                            continue;
-                        }
-                    }
-                    for (target_id, target_entry) in &entry.targets {
-                        for emitted in &target_entry.emitted_files {
-                            let status = lockfile::drift_status(&home, emitted);
-                            rows.push(ListRow {
-                                id: id.clone(),
-                                capability_type: entry.capability_type.clone(),
-                                version: short_sha(&entry.installed_version).to_string(),
-                                scope: "global".to_string(),
-                                target: target_id.clone(),
-                                status: style_drift_status(status),
-                                path: format!("~/{}", emitted.path),
-                            });
-                        }
-                    }
-                }
+                inventory.extend(collect_lockfile_inventory(
+                    &home,
+                    &lockfile,
+                    "global",
+                    Some("~/"),
+                    kind_filter,
+                ));
             }
         }
     }
 
-    if rows.is_empty() {
+    if inventory.is_empty() {
         println!("no capabilities installed");
         return Ok(());
     }
 
+    let mut rows = collapse_inventory_for_list(inventory);
     rows.sort_by(|a, b| a.scope.cmp(&b.scope).then_with(|| a.id.cmp(&b.id)));
 
     let table_rows: Vec<Vec<String>> = rows
@@ -1283,6 +1473,339 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         )
     );
     Ok(())
+}
+
+fn collapse_inventory_for_list(inventory: Vec<InventoryRow>) -> Vec<ListRow> {
+    let mut grouped: BTreeMap<(String, String, String), Vec<InventoryRow>> = BTreeMap::new();
+    for row in inventory {
+        grouped
+            .entry((row.scope.clone(), row.id.clone(), row.target.clone()))
+            .or_default()
+            .push(row);
+    }
+
+    grouped
+        .into_values()
+        .map(|mut rows| {
+            rows.sort_by(|a, b| a.path.cmp(&b.path));
+            let first = rows[0].clone();
+            let status = aggregate_status(&rows);
+            let path = display_path_for_rows(&rows);
+            ListRow {
+                id: first.id,
+                capability_type: first.capability_type,
+                version: first.version,
+                scope: first.scope,
+                target: first.target,
+                status: style_drift_status(status),
+                path,
+            }
+        })
+        .collect()
+}
+
+fn aggregate_status(rows: &[InventoryRow]) -> &'static str {
+    if rows.iter().any(|row| row.status == "missing") {
+        "missing"
+    } else if rows.iter().any(|row| row.status == "modified") {
+        "modified"
+    } else {
+        "clean"
+    }
+}
+
+fn display_path_for_rows(rows: &[InventoryRow]) -> String {
+    let primary = rows
+        .iter()
+        .find(|row| Path::new(&row.path).file_name() == Some(std::ffi::OsStr::new("SKILL.md")))
+        .unwrap_or(&rows[0]);
+
+    if rows.len() > 1 {
+        format!("{} (+{} files)", primary.path, rows.len() - 1)
+    } else {
+        primary.path.clone()
+    }
+}
+
+// ── Generate ────────────────────────────────────────────────────────────────
+
+pub fn cmd_generate_index(
+    repo_root: &Path,
+    agent: Option<&str>,
+    output: Option<&Path>,
+) -> Result<()> {
+    let requested = agent
+        .map(|value| vec![value.to_string()])
+        .unwrap_or_default();
+    let selected = resolve_agent_selection(repo_root, &requested)?;
+    let adapter = AdapterKind::from_id(&selected[0]).ok_or_else(|| {
+        CoralError::new(format!(
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
+            selected[0]
+        ))
+    })?;
+    let canonical_agent = adapter.id();
+
+    let mut rows: Vec<InventoryRow> = project_inventory(repo_root, None)?
+        .into_iter()
+        .filter(|row| row.target == canonical_agent)
+        .collect();
+    rows.sort_by(|a, b| {
+        a.capability_type
+            .cmp(&b.capability_type)
+            .then_with(|| a.id.cmp(&b.id))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+
+    let output_path = output
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_index_path(repo_root, adapter));
+    write_generated_file(&output_path, &render_index_markdown(adapter, &rows))?;
+    println!(
+        "generated index for {} -> {}",
+        canonical_agent,
+        lockfile::relative_or_absolute_fs(&output_path, repo_root)
+    );
+    Ok(())
+}
+
+pub fn cmd_generate_report(repo_root: &Path, output: Option<&Path>) -> Result<()> {
+    let mut rows = project_inventory(repo_root, None)?;
+    rows.sort_by(|a, b| {
+        a.target
+            .cmp(&b.target)
+            .then_with(|| a.capability_type.cmp(&b.capability_type))
+            .then_with(|| a.id.cmp(&b.id))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+
+    let output_path = output.map(Path::to_path_buf).unwrap_or_else(|| {
+        repo_root
+            .join(".coral")
+            .join("reports")
+            .join("coral-report.md")
+    });
+    write_generated_file(&output_path, &render_report_markdown(&rows))?;
+    println!(
+        "generated report -> {}",
+        lockfile::relative_or_absolute_fs(&output_path, repo_root)
+    );
+    Ok(())
+}
+
+fn default_index_path(repo_root: &Path, adapter: AdapterKind) -> PathBuf {
+    match adapter {
+        AdapterKind::OpenAgents => repo_root.join(".agents").join("CAPABILITIES.md"),
+        AdapterKind::Claude => repo_root.join(".claude").join("CAPABILITIES.md"),
+    }
+}
+
+fn write_generated_file(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, content)?;
+    Ok(())
+}
+
+fn render_index_markdown(adapter: AdapterKind, rows: &[InventoryRow]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "# Capability Index: {}\n\n",
+        adapter.display_name()
+    ));
+    out.push_str("Generated by Coral from tracked project capabilities.\n\n");
+
+    if rows.is_empty() {
+        out.push_str("No capabilities are currently tracked for this agent.\n");
+        return out;
+    }
+
+    for capability_type in ordered_capability_types(rows) {
+        let type_rows: Vec<&InventoryRow> = rows
+            .iter()
+            .filter(|row| row.capability_type == capability_type)
+            .collect();
+        out.push_str(&format!(
+            "## {}\n\n",
+            capability_type_heading(&capability_type)
+        ));
+        for group in group_capability_rows(type_rows) {
+            write_capability_markdown(&mut out, &group);
+        }
+    }
+
+    out
+}
+
+fn render_report_markdown(rows: &[InventoryRow]) -> String {
+    let mut out = String::new();
+    out.push_str("# Coral Report\n\n");
+    out.push_str("Generated by Coral from project tracking state.\n\n");
+
+    let capability_count = rows
+        .iter()
+        .map(|row| (&row.id, &row.target))
+        .collect::<BTreeSet<_>>()
+        .len();
+    let clean = rows.iter().filter(|row| row.status == "clean").count();
+    let modified = rows.iter().filter(|row| row.status == "modified").count();
+    let missing = rows.iter().filter(|row| row.status == "missing").count();
+
+    out.push_str("## Summary\n\n");
+    out.push_str(&format!("- Capabilities: {capability_count}\n"));
+    out.push_str(&format!("- Tracked files: {}\n", rows.len()));
+    out.push_str(&format!("- Clean files: {clean}\n"));
+    out.push_str(&format!("- Modified files: {modified}\n"));
+    out.push_str(&format!("- Missing files: {missing}\n\n"));
+
+    if rows.is_empty() {
+        out.push_str("No project capabilities are currently tracked.\n");
+        return out;
+    }
+
+    out.push_str("## Agents\n\n");
+    for agent in ordered_agents(rows) {
+        let agent_rows: Vec<&InventoryRow> =
+            rows.iter().filter(|row| row.target == agent).collect();
+        let agent_clean = agent_rows
+            .iter()
+            .filter(|row| row.status == "clean")
+            .count();
+        let agent_modified = agent_rows
+            .iter()
+            .filter(|row| row.status == "modified")
+            .count();
+        let agent_missing = agent_rows
+            .iter()
+            .filter(|row| row.status == "missing")
+            .count();
+        out.push_str(&format!(
+            "- `{}`: {} files, {} clean, {} modified, {} missing\n",
+            markdown_escape(&agent),
+            agent_rows.len(),
+            agent_clean,
+            agent_modified,
+            agent_missing
+        ));
+    }
+    out.push('\n');
+
+    out.push_str("## Capabilities\n\n");
+    for group in group_capability_rows(rows.iter().collect()) {
+        write_capability_markdown(&mut out, &group);
+    }
+
+    out
+}
+
+struct CapabilityGroup<'a> {
+    id: &'a str,
+    capability_type: &'a str,
+    version: &'a str,
+    target: &'a str,
+    scope: &'a str,
+    description: &'a str,
+    source_type: &'a str,
+    status: &'a str,
+    paths: Vec<&'a str>,
+}
+
+fn group_capability_rows(rows: Vec<&InventoryRow>) -> Vec<CapabilityGroup<'_>> {
+    let mut grouped: BTreeMap<(&str, &str, &str), Vec<&InventoryRow>> = BTreeMap::new();
+    for row in rows {
+        grouped
+            .entry((&row.id, &row.target, &row.capability_type))
+            .or_default()
+            .push(row);
+    }
+
+    grouped
+        .into_values()
+        .map(|mut rows| {
+            rows.sort_by(|a, b| a.path.cmp(&b.path));
+            let first = rows[0];
+            let status = if rows.iter().any(|row| row.status == "missing") {
+                "missing"
+            } else if rows.iter().any(|row| row.status == "modified") {
+                "modified"
+            } else {
+                "clean"
+            };
+            CapabilityGroup {
+                id: &first.id,
+                capability_type: &first.capability_type,
+                version: &first.version,
+                target: &first.target,
+                scope: &first.scope,
+                description: &first.description,
+                source_type: &first.source_type,
+                status,
+                paths: rows.iter().map(|row| row.path.as_str()).collect(),
+            }
+        })
+        .collect()
+}
+
+fn write_capability_markdown(out: &mut String, group: &CapabilityGroup<'_>) {
+    out.push_str(&format!(
+        "- `{}` ({}, version `{}`) - `{}`\n",
+        markdown_escape(group.id),
+        markdown_escape(group.capability_type),
+        markdown_escape(group.version),
+        markdown_escape(group.status)
+    ));
+    if !group.description.trim().is_empty() {
+        out.push_str(&format!(
+            "  - Description: {}\n",
+            markdown_escape(group.description)
+        ));
+    }
+    out.push_str(&format!(
+        "  - Agent: `{}`; scope: `{}`; source: `{}`\n",
+        markdown_escape(group.target),
+        markdown_escape(group.scope),
+        markdown_escape(group.source_type)
+    ));
+    for path in &group.paths {
+        out.push_str(&format!("  - Path: `{}`\n", markdown_escape(path)));
+    }
+    out.push('\n');
+}
+
+fn ordered_capability_types(rows: &[InventoryRow]) -> Vec<String> {
+    let mut remaining: BTreeSet<String> =
+        rows.iter().map(|row| row.capability_type.clone()).collect();
+    let mut ordered = Vec::new();
+    for capability_type in ["skill", "tool", "hook", "workflow"] {
+        if remaining.remove(capability_type) {
+            ordered.push(capability_type.to_string());
+        }
+    }
+    ordered.extend(remaining);
+    ordered
+}
+
+fn ordered_agents(rows: &[InventoryRow]) -> Vec<String> {
+    rows.iter()
+        .map(|row| row.target.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn capability_type_heading(capability_type: &str) -> String {
+    match capability_type {
+        "skill" => "Skills".to_string(),
+        "tool" => "Tools".to_string(),
+        "hook" => "Hooks".to_string(),
+        "workflow" => "Workflows".to_string(),
+        other => format!("{other}s"),
+    }
+}
+
+fn markdown_escape(value: &str) -> String {
+    value.replace('|', "\\|")
 }
 
 // ── Status ──────────────────────────────────────────────────────────────────
@@ -1450,13 +1973,24 @@ pub fn cmd_diff(
 
     let _ = scope;
 
+    let requested = target
+        .map(|value| vec![value.to_string()])
+        .unwrap_or_default();
+    let selected_targets = resolve_agent_selection(&scope_root, &requested)?;
+
     if upstream {
-        return cmd_diff_upstream(scope_root, capability_id, &entry, target);
+        return cmd_diff_upstream(
+            scope_root,
+            capability_id,
+            &entry,
+            selected_targets.first().map(String::as_str),
+        );
     }
 
     let mut output = String::new();
 
-    if let Some(tid) = target {
+    if selected_targets.len() == 1 {
+        let tid = &selected_targets[0];
         output.push_str(&lockfile::diff_against_baseline(
             &scope_root,
             capability_id,
@@ -1465,7 +1999,7 @@ pub fn cmd_diff(
         )?);
     } else {
         let mut first = true;
-        for tid in entry.targets.keys() {
+        for tid in &selected_targets {
             let diff = lockfile::diff_against_baseline(&scope_root, capability_id, tid, &entry)?;
             if diff.is_empty() {
                 continue;
@@ -1504,14 +2038,12 @@ fn cmd_diff_upstream(
 
         let baseline_dir = scope_root.join(&target_entry.baseline_dir);
         for emitted in &target_entry.emitted_files {
-            let file_name = std::path::Path::new(&emitted.path)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy();
+            let rel_path = capability_relative_path(&emitted.path, &source.skill);
+            let rel_display = rel_path.to_string_lossy();
 
             let upstream_content =
-                crate::diff::get_upstream_content(&cache_dir, &source.skill, &file_name)?;
-            let baseline_path = baseline_dir.join(file_name.as_ref());
+                crate::diff::get_upstream_content(&cache_dir, &source.skill, &rel_display)?;
+            let baseline_path = baseline_dir.join(&rel_path);
             let baseline_content = std::fs::read_to_string(&baseline_path)?;
 
             if baseline_content == upstream_content {
@@ -1520,7 +2052,7 @@ fn cmd_diff_upstream(
 
             output.push_str(&format!(
                 "--- baseline/{}\n+++ upstream/{}/{}\n",
-                file_name, tid, file_name
+                rel_display, tid, rel_display
             ));
             let diff = similar::TextDiff::from_lines(&baseline_content, &upstream_content);
             for group in diff.grouped_ops(3) {
@@ -1577,20 +2109,6 @@ fn resolve_cleanup_scope(repo_root: &Path, scope_str: &str) -> Result<(Scope, Pa
     Ok((scope, scope_root))
 }
 
-fn canonical_cleanup_targets(targets: &[String]) -> Result<Vec<String>> {
-    let mut canonical = BTreeSet::new();
-    for target in targets {
-        let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-            CoralError::new(format!(
-                "unknown agent '{}'; use 'coral agent list' to see available agents",
-                target
-            ))
-        })?;
-        canonical.insert(adapter.id().to_string());
-    }
-    Ok(canonical.into_iter().collect())
-}
-
 fn remove_target_tracking(
     scope_root: &Path,
     id: &str,
@@ -1619,7 +2137,7 @@ pub fn cmd_delete(
     force: bool,
 ) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = canonical_cleanup_targets(targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets)?;
 
     let mut lockfile = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
@@ -1679,7 +2197,7 @@ pub fn cmd_delete(
 
 pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[String]) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = canonical_cleanup_targets(targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets)?;
 
     let mut lockfile = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
@@ -1714,27 +2232,6 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
 }
 
 // ── Update ──────────────────────────────────────────────────────────────────
-
-fn select_update_targets(
-    id: &str,
-    entry: &lockfile::CapabilityLockEntry,
-    requested: &[String],
-) -> Result<Vec<String>> {
-    if requested.is_empty() {
-        return Ok(entry.targets.keys().cloned().collect());
-    }
-
-    for target_id in requested {
-        if !entry.targets.contains_key(target_id) {
-            return Err(CoralError::new(format!(
-                "'{}' is not installed for agent '{}'",
-                id, target_id
-            )));
-        }
-    }
-
-    Ok(requested.to_vec())
-}
 
 fn update_local_baseline(
     scope_root: &Path,
@@ -1777,10 +2274,9 @@ fn update_local_baseline(
                 )));
             }
 
-            let file_name = Path::new(&emitted.path).file_name().ok_or_else(|| {
-                CoralError::new(format!("invalid emitted file path: {}", emitted.path))
-            })?;
-            let baseline_path = scope_root.join(&target_entry.baseline_dir).join(file_name);
+            let baseline_path = scope_root
+                .join(&target_entry.baseline_dir)
+                .join(capability_relative_path(&emitted.path, id));
             if !baseline_path.is_file() {
                 return Err(CoralError::new(format!(
                     "baseline file is missing for '{}': {}",
@@ -1987,7 +2483,7 @@ pub fn cmd_update(
         }
     };
 
-    let target_ids = select_update_targets(id, &entry, requested_targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, requested_targets)?;
 
     if entry.source.is_none() && is_in_place_source_path(&entry.source_path) {
         return update_local_baseline(&scope_root, id, &target_ids, check, force);
@@ -2040,14 +2536,11 @@ pub fn cmd_update(
         })?;
         let baseline_dir = scope_root.join(&target_entry.baseline_dir);
         for emitted in &target_entry.emitted_files {
-            let file_name = std::path::Path::new(&emitted.path)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy();
+            let rel_path = capability_relative_path(&emitted.path, &source.skill);
 
             let local_path = scope_root.join(&emitted.path);
-            let baseline_path = baseline_dir.join(&*file_name);
-            let upstream_path = skill_dir.join(&*file_name);
+            let baseline_path = baseline_dir.join(&rel_path);
+            let upstream_path = skill_dir.join(&rel_path);
 
             let local_content = std::fs::read_to_string(&local_path).unwrap_or_default();
             let baseline_content = std::fs::read_to_string(&baseline_path).unwrap_or_default();
@@ -2352,7 +2845,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
 
 // ── Agent commands ──────────────────────────────────────────────────────────
 
-pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
+pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
     #[derive(Tabled)]
     struct AgentRow {
         #[tabled(rename = "AGENT")]
@@ -2361,9 +2854,16 @@ pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
         agents: String,
         #[tabled(rename = "PRIMITIVES")]
         primitives: String,
+        #[tabled(rename = "DEFAULT")]
+        default: String,
     }
 
-    let config = config::read_config(repo_root)?;
+    let config_root = if global {
+        home_dir()?
+    } else {
+        repo_root.to_path_buf()
+    };
+    let config = config::read_config(&config_root)?;
     let registered: std::collections::HashSet<&str> =
         config.targets.iter().map(|s| s.as_str()).collect();
 
@@ -2379,6 +2879,11 @@ pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
                 agent: agent_label,
                 agents: a.supported_agents().join(", "),
                 primitives: a.kinds_supported().join(", "),
+                default: if config.default_agent == a.id() {
+                    "yes".to_string()
+                } else {
+                    String::new()
+                },
             }
         })
         .collect();
@@ -2393,6 +2898,10 @@ pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
     println!(
         "\n  {} = registered (use 'coral agent add <id>' to register)",
         paint("*", "32")
+    );
+    println!(
+        "  DEFAULT = selected when --agent is omitted ({})",
+        if global { "global" } else { "project" }
     );
     Ok(())
 }
@@ -2444,7 +2953,52 @@ pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn cmd_agent_set_default(repo_root: &Path, id: &str, global: bool) -> Result<()> {
+    let adapter = AdapterKind::from_id(id).ok_or_else(|| {
+        CoralError::new(format!(
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
+            id
+        ))
+    })?;
+    let config_root = if global {
+        home_dir()?
+    } else {
+        repo_root.to_path_buf()
+    };
+    let mut config = config::read_config(&config_root)?;
+    config.default_agent = adapter.id().to_string();
+    config::write_config(&config_root, &config)?;
+    println!(
+        "set default agent '{}' ({})",
+        adapter.id(),
+        if global { "global" } else { "project" }
+    );
+    Ok(())
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+fn resolve_agent_selection(root: &Path, requested: &[String]) -> Result<Vec<String>> {
+    let values = if requested.is_empty() {
+        vec![config::read_config(root)?.default_agent]
+    } else {
+        requested.to_vec()
+    };
+
+    let mut selected = Vec::new();
+    for value in values {
+        let adapter = AdapterKind::from_id(&value).ok_or_else(|| {
+            CoralError::new(format!(
+                "unknown agent '{}'; use 'coral agent list' to see available agents",
+                value
+            ))
+        })?;
+        if !selected.iter().any(|existing| existing == adapter.id()) {
+            selected.push(adapter.id().to_string());
+        }
+    }
+    Ok(selected)
+}
 
 fn home_dir() -> Result<std::path::PathBuf> {
     home_dir_opt().ok_or_else(|| CoralError::new("HOME environment variable not set"))

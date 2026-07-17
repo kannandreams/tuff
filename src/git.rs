@@ -39,7 +39,9 @@ fn clean_git_url(raw: &str) -> (String, Option<String>) {
     }
 
     if host == "gitlab.com" || host.ends_with(".gitlab.com") {
-        if segments.len() >= 5 && segments[2] == "-" && (segments[3] == "tree" || segments[3] == "blob")
+        if segments.len() >= 5
+            && segments[2] == "-"
+            && (segments[3] == "tree" || segments[3] == "blob")
         {
             let clean = format!("https://{}/{}/{}", host, segments[0], segments[1]);
             return (clean, Some(segments[4].to_string()));

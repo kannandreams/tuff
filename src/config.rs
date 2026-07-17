@@ -4,14 +4,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
+pub const DEFAULT_AGENT: &str = "open-agents";
+
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CoralConfig {
     pub targets: Vec<String>,
+    #[serde(rename = "defaultAgent", alias = "default_agent")]
+    pub default_agent: String,
 }
 
 impl Default for CoralConfig {
     fn default() -> Self {
-        Self { targets: vec![] }
+        Self {
+            targets: vec![],
+            default_agent: DEFAULT_AGENT.to_string(),
+        }
     }
 }
 

@@ -108,7 +108,7 @@ cd /tmp/coral-smoke
 coral --version
 coral init
 coral agent add open-agents
-coral add /absolute/path/to/coral/examples/fixtures/python-uv-default -a open-agents
+coral add /absolute/path/to/coral/examples/fixtures/python-uv-default
 coral list
 ```
 
@@ -125,22 +125,27 @@ coral
 coral --version
 coral init
 coral agent add open-agents
-coral add examples/fixtures/python-uv-default -a open-agents
+coral add examples/fixtures/python-uv-default
 coral list
 coral diff python-uv-default
-coral delete python-uv-default -a open-agents
+coral delete python-uv-default
 ```
 
 Running `coral` with no arguments shows the terminal banner and starter menu.
 
-`coral init` creates `.coral/coral-lock.json`, registers `open-agents`, and scaffolds the standard `.agents/`
+`coral init` creates `.coral/coral-lock.json`, configures `open-agents` as the default, registers it, and scaffolds the standard `.agents/`
 directories, and installs the small `coral-cli-guide` reference skill. It does
 not install third-party capabilities or create a user skill for you.
 
-Capability cleanup is explicit. Use `coral delete <id> -a <agent>` for
-Coral-generated files, or `coral untrack <id> -a <agent>` when the files should
-remain in place but no longer be managed by Coral. `coral agent remove <agent>`
+Capability cleanup is explicit. Use `coral delete <id>` for the configured
+default agent, or `coral delete <id> -a <agent>` for a specific agent. Use
+`coral untrack <id>` when the files should remain in place but no longer be
+managed by Coral. `coral agent remove <agent>`
 only unregisters an agent and does not remove capabilities.
+
+Set the default project agent with `coral agent set-default <agent>`. Use
+`--global` to configure the default used by global operations. Explicit
+`-a/--agent` values always override the default.
 
 The CLI is built from the Rust crate in this repository, and `Cargo.lock` is
 committed for reproducible builds.

@@ -7,9 +7,18 @@ use tempfile::TempDir;
 fn make_git_skill_repo(root: &Path) -> std::path::PathBuf {
     let repo = root.join("skill-repo");
     fs::create_dir_all(repo.join("skills").join("test-skill")).unwrap();
+    fs::create_dir_all(repo.join("skills").join("test-skill").join("references")).unwrap();
     fs::write(
         repo.join("skills").join("test-skill").join("SKILL.md"),
         "# Test Skill\n\nHello from git-installed skill.\n",
+    )
+    .unwrap();
+    fs::write(
+        repo.join("skills")
+            .join("test-skill")
+            .join("references")
+            .join("extra.md"),
+        "# Extra reference\n",
     )
     .unwrap();
 
@@ -349,13 +358,14 @@ fn agent_list_add_remove() {
         .success()
         .stdout(predicate::str::contains("unregistered agent 'open-agents'"));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("example")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("example")
+            .join("SKILL.md")
+            .exists()
+    );
     coral()
         .current_dir(temp.path())
         .args(["list", "--scope", "project"])
@@ -382,6 +392,110 @@ fn agent_add_claude_creates_project_directory() {
         .stdout(predicate::str::contains("registered agent 'claude'"));
 
     assert!(temp.path().join(".claude").is_dir());
+}
+
+#[test]
+fn configured_default_agent_is_used_when_agent_is_omitted() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["agent", "set-default", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("set default agent 'claude'"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "defaulted-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "created and tracked skill 'defaulted-skill' (claude)",
+        ));
+
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("defaulted-skill")
+            .join("SKILL.md")
+            .exists()
+    );
+    assert!(
+        !temp
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("defaulted-skill")
+            .exists()
+    );
+
+    let config: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config["defaultAgent"], "claude");
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "create",
+            "skill",
+            "explicit-open-agents",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "created and tracked skill 'explicit-open-agents' (open-agents)",
+        ));
+}
+
+#[test]
+fn global_default_agent_is_used_for_global_add() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let primitive = make_primitive(project.path(), "global-defaulted");
+
+    coral()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["init", "--global"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["agent", "set-default", "claude", "--global"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", primitive.to_str().unwrap(), "--global"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed global-defaulted (claude)",
+        ));
+
+    assert!(
+        home.path()
+            .join(".claude")
+            .join("skills")
+            .join("global-defaulted")
+            .join("SKILL.md")
+            .exists()
+    );
 }
 
 #[test]
@@ -415,20 +529,22 @@ fn add_to_multiple_agents() {
         ));
 
     // Both files should exist
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("example")
-        .join("SKILL.md")
-        .exists());
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("skills")
-        .join("example")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("example")
+            .join("SKILL.md")
+            .exists()
+    );
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("example")
+            .join("SKILL.md")
+            .exists()
+    );
 
     // List should show both agents
     coral()
@@ -456,20 +572,22 @@ fn add_to_multiple_agents() {
         .assert()
         .success();
 
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("skills")
-        .join("example")
-        .join("SKILL.md")
-        .exists());
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("example")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("example")
+            .join("SKILL.md")
+            .exists()
+    );
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("example")
+            .join("SKILL.md")
+            .exists()
+    );
 }
 
 #[test]
@@ -498,15 +616,21 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .success()
         .stdout(predicate::str::contains(
             "installed test-skill (open-agents) -> .agents/skills/test-skill/SKILL.md",
-        ));
+        ))
+        .stdout(predicate::str::contains("references/extra.md").not());
 
-    assert!(temp
+    let installed_dir = temp
         .path()
         .join(".agents")
         .join("skills")
-        .join("test-skill")
-        .join("SKILL.md")
-        .exists());
+        .join("test-skill");
+    assert!(installed_dir.join("SKILL.md").exists());
+    assert!(installed_dir.join("coral.toml").exists());
+    assert!(installed_dir.join("references").join("extra.md").exists());
+    let generated_manifest = fs::read_to_string(installed_dir.join("coral.toml")).unwrap();
+    assert!(generated_manifest.contains("id = \"test-skill\""));
+    assert!(generated_manifest.contains("\"SKILL.md\""));
+    assert!(generated_manifest.contains("\"references/extra.md\""));
 
     coral()
         .current_dir(temp.path())
@@ -514,7 +638,8 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .assert()
         .success()
         .stdout(predicate::str::contains("test-skill"))
-        .stdout(predicate::str::contains("clean"));
+        .stdout(predicate::str::contains("clean"))
+        .stdout(predicate::str::contains("references/extra.md").not());
 
     fs::write(
         temp.path()
@@ -625,20 +750,22 @@ fn add_git_skill_multi_agent() {
             "installed test-skill (claude) -> .claude/skills/test-skill/SKILL.md",
         ));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("test-skill")
-        .join("SKILL.md")
-        .exists());
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("skills")
-        .join("test-skill")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("test-skill")
+            .join("SKILL.md")
+            .exists()
+    );
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("test-skill")
+            .join("SKILL.md")
+            .exists()
+    );
 }
 
 #[test]
@@ -711,14 +838,15 @@ fn add_git_subfolder_skill() {
             "installed security/security-review (open-agents) -> .agents/skills/security/security-review/SKILL.md",
         ));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("security")
-        .join("security-review")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("security")
+            .join("security-review")
+            .join("SKILL.md")
+            .exists()
+    );
 }
 
 #[test]
@@ -741,13 +869,14 @@ fn legacy_alias_codex_works() {
             "installed example (open-agents) -> .agents/skills/example/SKILL.md",
         ));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("example")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("example")
+            .join("SKILL.md")
+            .exists()
+    );
 }
 
 #[test]
@@ -770,13 +899,14 @@ fn legacy_alias_claude_code_works() {
             "installed example (claude) -> .claude/skills/example/SKILL.md",
         ));
 
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("skills")
-        .join("example")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("example")
+            .join("SKILL.md")
+            .exists()
+    );
 }
 
 #[test]
@@ -867,13 +997,15 @@ fn delete_generated_capability_cleans_up() {
             "deleted 'remove-test' from project scope",
         ));
 
-    assert!(!temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("remove-test")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        !temp
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("remove-test")
+            .join("SKILL.md")
+            .exists()
+    );
 
     // Only check project scope — coral-cli-guide remains from init
     coral()
@@ -998,13 +1130,14 @@ fn add_tool_installs_and_emits() {
             "installed scan-tool (open-agents) -> .agents/tools/scan-tool/run.sh",
         ));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("tools")
-        .join("scan-tool")
-        .join("run.sh")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("tools")
+            .join("scan-tool")
+            .join("run.sh")
+            .exists()
+    );
 }
 
 #[test]
@@ -1171,20 +1304,22 @@ fn add_tool_multi_agent_with_mcp() {
         .assert()
         .success();
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("tools")
-        .join("scan-tool")
-        .join("run.sh")
-        .exists());
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("tools")
-        .join("scan-tool")
-        .join("run.sh")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("tools")
+            .join("scan-tool")
+            .join("run.sh")
+            .exists()
+    );
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("tools")
+            .join("scan-tool")
+            .join("run.sh")
+            .exists()
+    );
 
     // Both MCP configs should exist
     let agents_mcp = temp.path().join(".agents").join("mcp.json");
@@ -1271,13 +1406,14 @@ fn add_hook_installs_and_emits() {
             "this hook runs 'cargo test' on event 'before_finish'",
         ));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("hooks")
-        .join("pre-commit")
-        .join("hook.toml")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("hooks")
+            .join("pre-commit")
+            .join("hook.toml")
+            .exists()
+    );
 }
 
 #[test]
@@ -1418,13 +1554,14 @@ fn delete_generated_hook_cleans_directory() {
         .assert()
         .success();
 
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("hooks")
-        .join("pre-commit")
-        .join("hook.json")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("hooks")
+            .join("pre-commit")
+            .join("hook.json")
+            .exists()
+    );
 
     coral()
         .current_dir(temp.path())
@@ -1432,12 +1569,14 @@ fn delete_generated_hook_cleans_directory() {
         .assert()
         .success();
 
-    assert!(!temp
-        .path()
-        .join(".claude")
-        .join("hooks")
-        .join("pre-commit")
-        .exists());
+    assert!(
+        !temp
+            .path()
+            .join(".claude")
+            .join("hooks")
+            .join("pre-commit")
+            .exists()
+    );
 }
 
 #[test]
@@ -1520,20 +1659,23 @@ fn delete_with_agent_flag_only_removes_from_specified() {
         .success();
 
     // Claude files should still exist
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("skills")
-        .join("target-test")
-        .join("SKILL.md")
-        .exists());
-    assert!(!temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("target-test")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("target-test")
+            .join("SKILL.md")
+            .exists()
+    );
+    assert!(
+        !temp
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("target-test")
+            .join("SKILL.md")
+            .exists()
+    );
 
     let lockfile: serde_json::Value = serde_json::from_str(
         &fs::read_to_string(temp.path().join(".coral").join("coral-lock.json")).unwrap(),
@@ -1773,6 +1915,172 @@ fn add_adopts_existing_agent_directory() {
 }
 
 #[test]
+fn generate_index_writes_default_open_agents_path() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "indexed-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["generate", "index", "-a", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "generated index for open-agents -> .agents/CAPABILITIES.md",
+        ));
+
+    let index = fs::read_to_string(temp.path().join(".agents").join("CAPABILITIES.md")).unwrap();
+    assert!(index.contains("# Capability Index: Open Agents"));
+    assert!(index.contains("`indexed-skill`"));
+    assert!(index.contains("Example capability."));
+    assert!(index.contains(".agents/skills/indexed-skill/SKILL.md"));
+    assert!(index.contains("`clean`"));
+}
+
+#[test]
+fn generate_index_writes_default_claude_path() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "claude-indexed");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "-a", "claude"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["generate", "index", "-a", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "generated index for claude -> .claude/CAPABILITIES.md",
+        ));
+
+    let index = fs::read_to_string(temp.path().join(".claude").join("CAPABILITIES.md")).unwrap();
+    assert!(index.contains("# Capability Index: Claude"));
+    assert!(index.contains("`claude-indexed`"));
+    assert!(index.contains(".claude/skills/claude-indexed/SKILL.md"));
+}
+
+#[test]
+fn generate_index_supports_custom_output() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "custom-index");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "generate",
+            "index",
+            "-a",
+            "open-agents",
+            "--output",
+            "docs/capabilities.md",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "generated index for open-agents -> docs/capabilities.md",
+        ));
+
+    let index = fs::read_to_string(temp.path().join("docs").join("capabilities.md")).unwrap();
+    assert!(index.contains("`custom-index`"));
+}
+
+#[test]
+fn generate_report_writes_project_report_with_status_summary() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "reported-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("reported-skill")
+            .join("SKILL.md"),
+        "# Example\n\nChanged text.\n",
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["generate", "report"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "generated report -> .coral/reports/coral-report.md",
+        ));
+
+    let report = fs::read_to_string(
+        temp.path()
+            .join(".coral")
+            .join("reports")
+            .join("coral-report.md"),
+    )
+    .unwrap();
+    assert!(report.contains("# Coral Report"));
+    assert!(report.contains("- Modified files: 1"));
+    assert!(report.contains("`reported-skill`"));
+    assert!(report.contains("`modified`"));
+}
+
+#[test]
+fn generate_index_rejects_unknown_agent() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["generate", "index", "-a", "unknown"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown agent 'unknown'"));
+}
+
+#[test]
 fn untrack_in_place_capability_preserves_files() {
     let temp = TempDir::new().unwrap();
     let skill_dir = temp.path().join(".agents").join("skills").join("keep-me");
@@ -1807,13 +2115,15 @@ fn untrack_in_place_capability_preserves_files() {
 
     assert!(skill_dir.join("SKILL.md").exists());
     assert!(skill_dir.join("coral.toml").exists());
-    assert!(!temp
-        .path()
-        .join(".coral")
-        .join("baselines")
-        .join("open-agents")
-        .join("keep-me")
-        .exists());
+    assert!(
+        !temp
+            .path()
+            .join(".coral")
+            .join("baselines")
+            .join("open-agents")
+            .join("keep-me")
+            .exists()
+    );
 }
 
 #[test]
@@ -1848,25 +2158,28 @@ fn delete_requires_force_for_modified_generated_files() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("use --force to delete"));
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("modified-delete")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("modified-delete")
+            .join("SKILL.md")
+            .exists()
+    );
 
     coral()
         .current_dir(temp.path())
         .args(["delete", "modified-delete", "-a", "open-agents", "--force"])
         .assert()
         .success();
-    assert!(!temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("modified-delete")
-        .exists());
+    assert!(
+        !temp
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("modified-delete")
+            .exists()
+    );
 }
 
 #[test]
@@ -1883,20 +2196,22 @@ fn create_skill_scaffolds_importable_files() {
         ))
         .stdout(predicate::str::contains("coral list"));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("my-skill")
-        .join("coral.toml")
-        .exists());
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("skills")
-        .join("my-skill")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("my-skill")
+            .join("coral.toml")
+            .exists()
+    );
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("my-skill")
+            .join("SKILL.md")
+            .exists()
+    );
     assert!(temp.path().join(".coral").join("coral-lock.json").exists());
 
     coral()
@@ -1922,19 +2237,21 @@ fn create_skill_can_select_claude_agent() {
         ))
         .stdout(predicate::str::contains(".claude/skills/my-skill/SKILL.md"));
 
-    assert!(temp
-        .path()
-        .join(".claude")
-        .join("skills")
-        .join("my-skill")
-        .join("SKILL.md")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("my-skill")
+            .join("SKILL.md")
+            .exists()
+    );
 
     let config: serde_json::Value = serde_json::from_str(
         &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(config["targets"][0], "claude");
+    assert_eq!(config["defaultAgent"], "open-agents");
 }
 
 #[test]
@@ -2208,10 +2525,11 @@ fn create_generates_adapter_specific_hook_files() {
         .assert()
         .success();
 
-    assert!(temp
-        .path()
-        .join(".agents/hooks/agents-hook/hook.toml")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents/hooks/agents-hook/hook.toml")
+            .exists()
+    );
     let claude_hook = temp.path().join(".claude/hooks/claude-hook/hook.json");
     assert!(claude_hook.exists());
     let hook: serde_json::Value =
@@ -2397,13 +2715,14 @@ fn add_workflow_installs_and_shows_deps() {
         .stderr(predicate::str::contains("dep-a (skill)"))
         .stderr(predicate::str::contains("dep-b (tool)"));
 
-    assert!(temp
-        .path()
-        .join(".agents")
-        .join("workflows")
-        .join("test-wf")
-        .join("workflow.toml")
-        .exists());
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("workflows")
+            .join("test-wf")
+            .join("workflow.toml")
+            .exists()
+    );
 
     coral()
         .current_dir(temp.path())

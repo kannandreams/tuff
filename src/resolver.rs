@@ -72,10 +72,7 @@ pub fn resolve_entry(
     Ok(None)
 }
 
-pub fn overrides_global(
-    id: &str,
-    repo_root: &Path,
-) -> Result<bool> {
+pub fn overrides_global(id: &str, repo_root: &Path) -> Result<bool> {
     let project_exists = read_lockfile(Scope::Project, Some(repo_root))?
         .map(|lf| lf.capabilities.contains_key(id))
         .unwrap_or(false);
@@ -103,20 +100,16 @@ pub fn check_collision(
     let global_source = global_entry.source.as_ref().map(|s| s.url.as_str());
 
     match (new_source_url, global_source) {
-        (Some(new_url), Some(global_url)) if new_url != global_url => {
-            Ok(Some(format!(
-                "note: '{}' is already installed globally from a different source ({}). \
+        (Some(new_url), Some(global_url)) if new_url != global_url => Ok(Some(format!(
+            "note: '{}' is already installed globally from a different source ({}). \
                  The project copy will take precedence and the global copy will be shadowed.",
-                id, global_url
-            )))
-        }
-        (None, Some(global_url)) => {
-            Ok(Some(format!(
-                "note: '{}' is already installed globally from {}. \
+            id, global_url
+        ))),
+        (None, Some(global_url)) => Ok(Some(format!(
+            "note: '{}' is already installed globally from {}. \
                  The project copy will take precedence and the global copy will be shadowed.",
-                id, global_url
-            )))
-        }
+            id, global_url
+        ))),
         _ => Ok(None),
     }
 }
@@ -156,6 +149,7 @@ mod tests {
                 lockfile::CapabilityLockEntry {
                     capability_type: capability_type.to_string(),
                     installed_version: version.to_string(),
+                    description: String::new(),
                     source_path: "".into(),
                     targets: std::collections::BTreeMap::new(),
                     source: None,

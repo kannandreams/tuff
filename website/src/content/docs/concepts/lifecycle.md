@@ -70,7 +70,8 @@ coral list
 coral diff my-skill
 ```
 
-Creation initializes tracking automatically. Pass `--agent claude` to create
+Creation initializes tracking automatically. It uses the configured default
+agent; pass `--agent claude` to create
 the scaffold under `.claude/` instead.
 
 If the drift is intentional and should become the new baseline:
@@ -85,21 +86,23 @@ Cleanup is explicit about file ownership. For a capability Coral installed by
 copying files into an agent, delete only the generated agent files:
 
 ```sh frame="terminal"
-coral delete my-skill -a open-agents
+coral delete my-skill
 ```
 
 For a capability added from an existing `.agents/` or `.claude/` directory,
 remove Coral tracking without touching the files:
 
 ```sh frame="terminal"
-coral untrack my-skill -a open-agents
+coral untrack my-skill
 ```
 
-Both commands require an agent. `delete` refuses in-place added capabilities and
-requires `--force` for locally modified generated files. `untrack` removes the
+Both commands use the configured default agent unless `-a/--agent` is provided.
+`delete` refuses in-place added capabilities and requires `--force` for locally modified generated files. `untrack` removes the
 target lock entry and baseline while preserving the capability files,
 `coral.toml`, and MCP configuration. The original source directory is never
 deleted by `delete`.
+
+See the [CLI Reference](/cli#coral-delete) for cleanup flags and explicit agent selection.
 
 ## Git-sourced capability lifecycle
 
@@ -140,8 +143,8 @@ coral update <id> --force
 | `coral check` | Fail CI when tracked files drift |
 | `coral outdated` | Show whether git-sourced capabilities have newer revisions |
 | `coral update <id>` | Accept local edits or reconcile git-backed changes |
-| `coral delete <id> -a <agent>` | Delete Coral-generated files for an agent |
-| `coral untrack <id> -a <agent>` | Remove tracking while preserving files |
+| `coral delete <id>` | Delete Coral-generated files for the default agent |
+| `coral untrack <id>` | Remove tracking while preserving files for the default agent |
 
 ## Capability Metadata
 
