@@ -39,6 +39,25 @@
       },
       "scope": "project"
     },
+    "http-api-tool": {
+      "type": "tool",
+      "installedVersion": "0.1.0",
+      "description": "Fetch basic status from an HTTP endpoint using Python stdlib networking.",
+      "sourcePath": "examples/tools/http-api-tool",
+      "targets": {
+        "open-agents": {
+          "baselineDir": ".coral/baselines/open-agents/http-api-tool",
+          "emittedFiles": [
+            {
+              "path": ".agents/tools/http-api-tool/fetch_status.py",
+              "hash": "260d39e6f12e5e1ec93f72c944b25f1995835c0daf8c78c71d0b6f12c8266722"
+            }
+          ],
+          "ownership": "generated"
+        }
+      },
+      "scope": "project"
+    },
     "just-command-orchestration": {
       "type": "skill",
       "installedVersion": "0.1.0",

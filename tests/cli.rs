@@ -327,7 +327,9 @@ fn agent_list_add_remove() {
         .args(["agent", "list"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("open-agents *"))
+        .stdout(predicate::str::contains("REGISTERED"))
+        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains("yes"))
         .stdout(predicate::str::contains("claude"));
 
     // Register Claude; Open Agents is registered by coral init.
@@ -1138,6 +1140,15 @@ fn add_tool_installs_and_emits() {
             .join("run.sh")
             .exists()
     );
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("tools")
+            .join("scan-tool")
+            .join("coral.toml")
+            .exists()
+    );
+    assert!(!temp.path().join(".agents").join("mcp.json").exists());
 }
 
 #[test]
@@ -1242,6 +1253,43 @@ fn add_tool_shows_runtime_deps() {
 }
 
 #[test]
+fn add_mcp_tool_registers_mcp_entry() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+    let manifest_path = tool.join("coral.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "registered MCP server scan-tool (open-agents) -> .agents/mcp.json",
+        ));
+
+    let mcp_path = temp.path().join(".agents").join("mcp.json");
+    assert!(mcp_path.exists());
+    let mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    assert!(mcp["mcpServers"]["scan-tool"].is_object());
+}
+
+#[test]
 fn list_filter_by_primitive_kind() {
     let temp = TempDir::new().unwrap();
     let skill = make_primitive(temp.path(), "my-skill");
@@ -1266,9 +1314,11 @@ fn list_filter_by_primitive_kind() {
     coral()
         .current_dir(temp.path())
         .args(["list", "--type", "tool"])
+        .env_remove("NO_COLOR")
         .assert()
         .success()
         .stdout(predicate::str::contains("my-tool"))
+        .stdout(predicate::str::contains("\u{1b}[35mtool\u{1b}[0m"))
         .stdout(predicate::str::contains("my-skill").not());
 
     coral()
@@ -1284,6 +1334,16 @@ fn list_filter_by_primitive_kind() {
 fn add_tool_multi_agent_with_mcp() {
     let temp = TempDir::new().unwrap();
     let tool = make_tool_primitive(temp.path(), "scan-tool");
+    let manifest_path = tool.join("coral.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1329,9 +1389,95 @@ fn add_tool_multi_agent_with_mcp() {
 }
 
 #[test]
+fn example_tools_install_and_register_mcp_entries() {
+    let temp = TempDir::new().unwrap();
+    let examples_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("tools");
+    let examples = [
+        ("local-binary-wrapper", "run.sh"),
+        ("python-script-tool", "analyze_text.py"),
+        ("mcp-server-tool", "server.js"),
+        ("http-api-tool", "fetch_status.py"),
+        ("repo-command-tool", "run_repo_check.sh"),
+        ("docker-container-tool", "run_container.sh"),
+    ];
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    for (id, entrypoint) in examples {
+        let tool_dir = examples_root.join(id);
+        coral()
+            .current_dir(temp.path())
+            .args(["add", tool_dir.to_str().unwrap()])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(format!(
+                "installed {id} (open-agents) -> .agents/tools/{id}/{entrypoint}"
+            )));
+
+        assert!(
+            temp.path()
+                .join(".agents")
+                .join("tools")
+                .join(id)
+                .join(entrypoint)
+                .exists()
+        );
+        assert!(
+            temp.path()
+                .join(".agents")
+                .join("tools")
+                .join(id)
+                .join("coral.toml")
+                .exists()
+        );
+    }
+
+    let mcp_path = temp.path().join(".agents").join("mcp.json");
+    let mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    assert!(mcp["mcpServers"]["mcp-server-tool"].is_object());
+    for (id, _) in examples {
+        if id != "mcp-server-tool" {
+            assert!(
+                mcp["mcpServers"][id].is_null(),
+                "{id} should not be registered as an MCP server"
+            );
+        }
+    }
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--type", "tool"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("local-binary-wrapper"))
+        .stdout(predicate::str::contains("python-script-tool"))
+        .stdout(predicate::str::contains("mcp-server-tool"))
+        .stdout(predicate::str::contains("http-api-tool"))
+        .stdout(predicate::str::contains("repo-command-tool"))
+        .stdout(predicate::str::contains("docker-container-tool"));
+}
+
+#[test]
 fn remove_tool_cleans_mcp_entry() {
     let temp = TempDir::new().unwrap();
     let tool = make_tool_primitive(temp.path(), "scan-tool");
+    let manifest_path = tool.join("coral.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -2250,7 +2396,7 @@ fn create_skill_can_select_claude_agent() {
         &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
     )
     .unwrap();
-    assert_eq!(config["targets"][0], "claude");
+    assert_eq!(config["agents"][0], "claude");
     assert_eq!(config["defaultAgent"], "open-agents");
 }
 
@@ -2569,7 +2715,7 @@ fn create_tool_scaffolds_executable_runner() {
         .join("scan-tool")
         .join("run.sh");
     assert!(run_sh.exists());
-    assert!(temp.path().join(".agents").join("mcp.json").exists());
+    assert!(!temp.path().join(".agents").join("mcp.json").exists());
 
     #[cfg(unix)]
     {

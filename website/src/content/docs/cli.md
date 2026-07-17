@@ -441,8 +441,9 @@ Registering an agent also creates its project directory (`.agents/` or
 
 Legacy aliases (`codex`, `claude-code`) are accepted and map to the current agent names.
 
-The `*` marker means the agent is registered. The `DEFAULT` column shows which
-agent is selected when `-a/--agent` is omitted.
+The `REGISTERED` column shows which agents are available for Coral operations in
+the selected config. The `DEFAULT` column shows which registered agent is used
+when `-a/--agent` is omitted.
 
 #### Remove an agent
 

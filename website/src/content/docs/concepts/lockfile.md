@@ -71,7 +71,7 @@ and `coral update` without re-installing anything.
 
 ```json
 {
-  "targets": ["open-agents", "claude"],
+  "agents": ["open-agents", "claude"],
   "defaultAgent": "open-agents"
 }
 ```

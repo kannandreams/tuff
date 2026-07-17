@@ -9,7 +9,8 @@ pub const DEFAULT_AGENT: &str = "open-agents";
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CoralConfig {
-    pub targets: Vec<String>,
+    #[serde(rename = "agents", alias = "targets")]
+    pub agents: Vec<String>,
     #[serde(rename = "defaultAgent", alias = "default_agent")]
     pub default_agent: String,
 }
@@ -17,7 +18,7 @@ pub struct CoralConfig {
 impl Default for CoralConfig {
     fn default() -> Self {
         Self {
-            targets: vec![],
+            agents: vec![],
             default_agent: DEFAULT_AGENT.to_string(),
         }
     }

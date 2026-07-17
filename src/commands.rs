@@ -6,10 +6,7 @@ use std::{
 
 const CORAL_GUIDE_CONTENT: &str = include_str!("../assets/coral-cli-guide.md");
 
-use tabled::{
-    Table, Tabled,
-    settings::{Modify, Style, Width, object::Columns},
-};
+use tabled::Tabled;
 
 use crate::{
     adapter::{self, AdapterKind, resolve_capability},
@@ -86,6 +83,16 @@ fn style_drift_status(status: &str) -> String {
         "modified" => format!("{} {}", paint("●", "33"), paint("modified", "33")),
         "missing" => format!("{} {}", paint("✗", "31"), paint("missing", "31")),
         "error" => format!("{} {}", paint("✗", "31"), paint("error", "31")),
+        other => other.to_string(),
+    }
+}
+
+fn style_capability_type(capability_type: &str) -> String {
+    match capability_type {
+        "skill" => paint("skill", "36"),
+        "tool" => paint("tool", "35"),
+        "hook" => paint("hook", "33"),
+        "workflow" => paint("workflow", "34"),
         other => other.to_string(),
     }
 }
@@ -191,8 +198,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
         display::print_init_banner();
         let lock_path = lockfile::init_lockfile(repo_root)?;
         let mut config = config::read_config(repo_root)?;
-        if !config.targets.iter().any(|target| target == "open-agents") {
-            config.targets.push("open-agents".to_string());
+        if !config.agents.iter().any(|agent| agent == "open-agents") {
+            config.agents.push("open-agents".to_string());
             config::write_config(repo_root, &config)?;
         }
 
@@ -382,8 +389,8 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
                 ownership: lockfile::TargetOwnership::Generated,
             },
         );
-        if !config.targets.iter().any(|target| target == adapter.id()) {
-            config.targets.push(adapter.id().to_string());
+        if !config.agents.iter().any(|agent| agent == adapter.id()) {
+            config.agents.push(adapter.id().to_string());
         }
 
         for (name, _) in files {
@@ -396,15 +403,6 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
                     lockfile::relative_or_absolute_fs(&root.join(name), repo_root)
                 );
             }
-        }
-
-        if kind == "tool" {
-            let mcp_path = match adapter {
-                AdapterKind::OpenAgents => repo_root.join(".agents").join("mcp.json"),
-                AdapterKind::Claude => repo_root.join(".mcp.json"),
-            };
-            let entrypoint = format!("{}/tools/{}/run.sh", adapter_project_dir(*adapter), id);
-            crate::adapters::mcp_register_tool(repo_root, &mcp_path, id, "bash", &[entrypoint])?;
         }
     }
 
@@ -1080,6 +1078,11 @@ fn install_capability(
     let mut plans: Vec<(AdapterKind, Vec<adapter::PlannedFile>)> = Vec::new();
     for adapter in &adapters {
         let mut planned = adapter.plan(&capability, install_root)?;
+        if let Some(manifest_file) =
+            copied_tool_manifest_file(*adapter, install_root, capability, manifest)?
+        {
+            planned.push(manifest_file);
+        }
         if is_git && capability.capability_type == "skill" {
             planned.push(generated_git_manifest_file(
                 *adapter,
@@ -1175,30 +1178,50 @@ fn install_capability(
     // MCP registration for tool primitives
     if capability.capability_type == "tool" {
         if let Some(ref impl_cfg) = capability.implementation {
-            for adapter in &adapters {
-                let mcp_path = match adapter {
-                    AdapterKind::OpenAgents => install_root.join(".agents").join("mcp.json"),
-                    AdapterKind::Claude => install_root.join(".mcp.json"),
-                };
+            if impl_cfg.mcp {
+                for adapter in &adapters {
+                    let mcp_path = match adapter {
+                        AdapterKind::OpenAgents => install_root.join(".agents").join("mcp.json"),
+                        AdapterKind::Claude => install_root.join(".mcp.json"),
+                    };
 
-                let mcp_command = impl_cfg.language.clone();
-                let entrypoint_path = match adapter {
-                    AdapterKind::OpenAgents => {
-                        format!(".agents/tools/{}/{}", capability.id, impl_cfg.entrypoint)
-                    }
-                    AdapterKind::Claude => {
-                        format!(".claude/tools/{}/{}", capability.id, impl_cfg.entrypoint)
-                    }
-                };
-                let mcp_args = vec![entrypoint_path];
+                    let mcp_command = impl_cfg.language.clone();
+                    let entrypoint_path = match adapter {
+                        AdapterKind::OpenAgents => {
+                            format!(".agents/tools/{}/{}", capability.id, impl_cfg.entrypoint)
+                        }
+                        AdapterKind::Claude => {
+                            format!(".claude/tools/{}/{}", capability.id, impl_cfg.entrypoint)
+                        }
+                    };
+                    let mcp_args = vec![entrypoint_path];
 
-                crate::adapters::mcp_register_tool(
-                    install_root,
-                    &mcp_path,
-                    &capability.id,
-                    &mcp_command,
-                    &mcp_args,
-                )?;
+                    crate::adapters::mcp_register_tool(
+                        install_root,
+                        &mcp_path,
+                        &capability.id,
+                        &mcp_command,
+                        &mcp_args,
+                    )?;
+                    println!(
+                        "registered MCP server {} ({}) -> {}",
+                        capability.id,
+                        adapter.id(),
+                        lockfile::relative_or_absolute_fs(&mcp_path, install_root)
+                    );
+                }
+            } else {
+                for adapter in &adapters {
+                    let mcp_path = match adapter {
+                        AdapterKind::OpenAgents => install_root.join(".agents").join("mcp.json"),
+                        AdapterKind::Claude => install_root.join(".mcp.json"),
+                    };
+                    crate::adapters::mcp_remove_tool(install_root, &mcp_path, &capability.id)?;
+                }
+                eprintln!(
+                    "note: tool '{}' is not MCP-native; copied and tracked without MCP registration",
+                    capability.id
+                );
             }
         }
     }
@@ -1275,6 +1298,33 @@ fn generated_git_manifest_file(
         path: lockfile::relative_or_absolute_fs(&path, install_root),
         content: content.into_bytes(),
     }
+}
+
+fn copied_tool_manifest_file(
+    adapter: AdapterKind,
+    install_root: &Path,
+    capability: &adapter::ResolvedCapability,
+    manifest: &manifest::CapabilityManifest,
+) -> Result<Option<adapter::PlannedFile>> {
+    if capability.capability_type != "tool" {
+        return Ok(None);
+    }
+
+    let manifest_path = manifest.root.join("coral.toml");
+    if !manifest_path.exists() {
+        return Ok(None);
+    }
+
+    let dir = match adapter {
+        AdapterKind::OpenAgents => install_root.join(".agents").join("tools"),
+        AdapterKind::Claude => install_root.join(".claude").join("tools"),
+    };
+    let path = dir.join(&capability.id).join("coral.toml");
+
+    Ok(Some(adapter::PlannedFile {
+        path: lockfile::relative_or_absolute_fs(&path, install_root),
+        content: fs::read(manifest_path)?,
+    }))
 }
 
 fn is_generated_manifest_file(planned: &adapter::PlannedFile) -> bool {
@@ -1456,7 +1506,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         .map(|row| {
             vec![
                 row.id,
-                row.capability_type,
+                style_capability_type(&row.capability_type),
                 row.version,
                 row.scope,
                 row.target,
@@ -2846,15 +2896,11 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
 // ── Agent commands ──────────────────────────────────────────────────────────
 
 pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
-    #[derive(Tabled)]
     struct AgentRow {
-        #[tabled(rename = "AGENT")]
         agent: String,
-        #[tabled(rename = "AGENTS SUPPORTED")]
         agents: String,
-        #[tabled(rename = "PRIMITIVES")]
         primitives: String,
-        #[tabled(rename = "DEFAULT")]
+        registered: String,
         default: String,
     }
 
@@ -2865,42 +2911,58 @@ pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
     };
     let config = config::read_config(&config_root)?;
     let registered: std::collections::HashSet<&str> =
-        config.targets.iter().map(|s| s.as_str()).collect();
+        config.agents.iter().map(|s| s.as_str()).collect();
 
     let rows: Vec<AgentRow> = AdapterKind::all()
         .iter()
-        .map(|a| {
-            let agent_label = if registered.contains(a.id()) {
-                format!("{} *", a.id())
+        .map(|a| AgentRow {
+            agent: a.id().to_string(),
+            agents: a.supported_agents().join(", "),
+            primitives: a.kinds_supported().join(", "),
+            registered: if registered.contains(a.id()) {
+                "yes".to_string()
             } else {
-                a.id().to_string()
-            };
-            AgentRow {
-                agent: agent_label,
-                agents: a.supported_agents().join(", "),
-                primitives: a.kinds_supported().join(", "),
-                default: if config.default_agent == a.id() {
-                    "yes".to_string()
-                } else {
-                    String::new()
-                },
-            }
+                String::new()
+            },
+            default: if config.default_agent == a.id() {
+                "yes".to_string()
+            } else {
+                String::new()
+            },
         })
         .collect();
 
-    let mut table = Table::new(rows);
-    table
-        .with(Style::modern())
-        .with(Modify::new(Columns::single(1)).with(Width::wrap(40).keep_words(true)));
-
-    println!("{table}");
-
+    let table_rows: Vec<Vec<String>> = rows
+        .into_iter()
+        .map(|row| {
+            vec![
+                row.agent,
+                row.agents,
+                row.primitives,
+                row.registered,
+                row.default,
+            ]
+        })
+        .collect();
     println!(
-        "\n  {} = registered (use 'coral agent add <id>' to register)",
-        paint("*", "32")
+        "{}",
+        render_table(
+            &[
+                "AGENT",
+                "AGENTS SUPPORTED",
+                "CAPABILITIES",
+                "REGISTERED",
+                "DEFAULT"
+            ],
+            &table_rows
+        )
     );
     println!(
-        "  DEFAULT = selected when --agent is omitted ({})",
+        "\n  REGISTERED = available for Coral operations in this {} config",
+        if global { "global" } else { "project" }
+    );
+    println!(
+        "  DEFAULT = used when --agent is omitted ({})",
         if global { "global" } else { "project" }
     );
     Ok(())
@@ -2916,12 +2978,12 @@ pub fn cmd_agent_add(repo_root: &Path, id: &str) -> Result<()> {
 
     let mut config = config::read_config(repo_root)?;
     adapter.ensure_project_dir(repo_root)?;
-    if config.targets.contains(&adapter.id().to_string()) {
+    if config.agents.contains(&adapter.id().to_string()) {
         println!("agent '{}' is already registered", id);
         return Ok(());
     }
 
-    config.targets.push(adapter.id().to_string());
+    config.agents.push(adapter.id().to_string());
     config::write_config(repo_root, &config)?;
     println!(
         "registered agent '{}' ({})",
@@ -2940,9 +3002,9 @@ pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     })?;
 
     let mut config = config::read_config(repo_root)?;
-    let was_registered = config.targets.contains(&adapter.id().to_string());
+    let was_registered = config.agents.contains(&adapter.id().to_string());
 
-    config.targets.retain(|t| t != adapter.id());
+    config.agents.retain(|t| t != adapter.id());
     config::write_config(repo_root, &config)?;
 
     if was_registered {

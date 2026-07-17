@@ -34,6 +34,8 @@ pub struct ImplementationConfig {
     pub language: String,
     pub entrypoint: String,
     #[serde(default)]
+    pub mcp: bool,
+    #[serde(default)]
     pub runtime_deps: Vec<String>,
 }
 
