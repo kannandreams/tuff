@@ -10,8 +10,8 @@ agent-specific agent output.
 
 `coral.toml` travels with the capability. It is not the project index and it is
 not the lockfile. Coral keeps project tracking and baselines in
-`.coral/coral-lock.json`, and can generate readable derived files such as
-`.agents/CAPABILITIES.md` with `coral generate index`.
+`.coral/coral-lock.json` and `.coral/objects/`, and can generate readable
+derived files such as `.agents/CAPABILITIES.md` with `coral generate index`.
 
 The `type` field is the important discriminator. It tells Coral whether the
 directory should be treated as a skill, tool, hook, policy, or workflow while
@@ -65,11 +65,11 @@ For a skill with `id = "python-uv-default"`, Coral installs:
 .agents/skills/python-uv-default/SKILL.md
 ```
 
-It also records an install-time baseline under `.coral/` so later edits can be
-reported as drift:
+It also records an install-time baseline as a content-addressed object under
+`.coral/objects/` so later edits can be reported as drift:
 
 ```text
-.coral/baselines/open-agents/python-uv-default/
+.coral/objects/sha256/a1/b2c3...
 ```
 
 ## Where capabilities should live
@@ -80,4 +80,6 @@ one of two places:
 - the user project that owns the capability
 - an external pack repository maintained by a person, team, or company
 
-Fixtures under `examples/fixtures` are for tests and documentation examples.
+Runnable capability examples live under `examples/<type>/`, such as
+`examples/skills/` and `examples/tools/`. Test-only inputs belong under
+`tests/fixtures/`.

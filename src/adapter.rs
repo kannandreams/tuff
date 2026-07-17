@@ -10,6 +10,8 @@ use crate::manifest::CapabilityManifest;
 pub struct EmittedFile {
     pub path: String,
     pub hash: String,
+    #[serde(rename = "baselineHash")]
+    pub baseline_hash: String,
 }
 
 #[derive(Debug, Clone)]

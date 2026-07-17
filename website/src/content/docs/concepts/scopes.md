@@ -17,7 +17,7 @@ The important rule is simple: project scope wins.
 Project-scoped capabilities live in the repository and are tracked by files under:
 
 - `.coral/coral-lock.json`
-- `.coral/baselines/`
+- `.coral/objects/`
 - `.coral/config.json`
 
 This is the default scope for `coral add`, `coral list`, `coral diff`, and
@@ -29,7 +29,7 @@ Global scope is for personal capabilities shared across projects. It lives under
 directory:
 
 - `~/.coral/coral-lock.json`
-- `~/.coral/baselines/`
+- `~/.coral/objects/`
 - `~/.agents/` or other global emitted files
 
 Use it explicitly:

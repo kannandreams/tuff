@@ -1,0 +1,23 @@
+id = "repo-command-tool"
+version = "0.1.0"
+type = "tool"
+description = "Run an allowlisted repository check command for the agent."
+files = ["run_repo_check.sh"]
+
+[parameters]
+type = "object"
+required = ["check"]
+
+[parameters.properties.check]
+type = "string"
+description = "Allowlisted repository check to run."
+enum = ["status", "rust-tests", "docs-build"]
+
+[parameters.properties.path]
+type = "string"
+description = "Repository path where the check should run."
+
+[implementation]
+language = "bash"
+entrypoint = "run_repo_check.sh"
+runtime_deps = ["bash", "git", "cargo", "npm"]

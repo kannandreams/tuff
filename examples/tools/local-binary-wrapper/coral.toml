@@ -1,0 +1,23 @@
+id = "local-binary-wrapper"
+version = "0.1.0"
+type = "tool"
+description = "Report basic status from approved local binaries such as git or rg."
+files = ["run.sh"]
+
+[parameters]
+type = "object"
+required = ["binary"]
+
+[parameters.properties.binary]
+type = "string"
+description = "Approved binary to inspect."
+enum = ["git", "rg"]
+
+[parameters.properties.path]
+type = "string"
+description = "Repository or directory path to inspect."
+
+[implementation]
+language = "bash"
+entrypoint = "run.sh"
+runtime_deps = ["bash", "git", "ripgrep"]

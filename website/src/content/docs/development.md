@@ -52,11 +52,11 @@ mkdir -p /tmp/coral-smoke
 cd /tmp/coral-smoke
 coral --version
 coral init
-coral add /absolute/path/to/coral/examples/fixtures/python-uv-default
+coral add /absolute/path/to/coral/examples/skills/python-uv-default
 coral list
 ```
 
-From this repo, `just smoke-install` runs the same flow using the fixture path
+From this repo, `just smoke-install` runs the same flow using the skill example
 from the current checkout.
 
 ## Build docs
@@ -91,7 +91,7 @@ instead of inline text.
 
 ```text
 src/main.rs        CLI and core implementation
-tests/             integration tests
-examples/fixtures/ demo and test primitives
-docs/              Docusaurus documentation source files
+tests/             integration tests and test fixtures
+examples/          runnable capability examples
+docs/              documentation source files
 ```

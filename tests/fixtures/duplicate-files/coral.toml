@@ -1,0 +1,5 @@
+id = "duplicate-files"
+version = "1.0.0"
+type = "skill"
+description = "A fixture with a duplicated source file declaration."
+files = ["SKILL.md", "SKILL.md"]

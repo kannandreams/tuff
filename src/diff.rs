@@ -109,14 +109,23 @@ pub fn three_way_merge(
     }
 }
 
+#[allow(dead_code)]
 pub fn merge_and_write(
     baseline_path: &Path,
     local_path: &Path,
     upstream_path: &Path,
 ) -> Result<Option<Vec<ConflictReport>>> {
+    let baseline = std::fs::read_to_string(baseline_path)?;
+    merge_with_baseline_content(&baseline, local_path, upstream_path)
+}
+
+pub fn merge_with_baseline_content(
+    baseline: &str,
+    local_path: &Path,
+    upstream_path: &Path,
+) -> Result<Option<Vec<ConflictReport>>> {
     let mut reports = Vec::new();
 
-    let baseline = std::fs::read_to_string(baseline_path)?;
     let local = std::fs::read_to_string(local_path)?;
     let upstream = std::fs::read_to_string(upstream_path)?;
 

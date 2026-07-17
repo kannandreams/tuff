@@ -14,7 +14,11 @@ pub fn mcp_register_tool(
 ) -> Result<()> {
     let mut config: serde_json::Value = if mcp_config_path.exists() {
         let raw = std::fs::read_to_string(mcp_config_path)?;
-        serde_json::from_str(&raw).unwrap_or(serde_json::json!({}))
+        if raw.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&raw).unwrap_or(serde_json::json!({}))
+        }
     } else {
         serde_json::json!({})
     };

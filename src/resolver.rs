@@ -140,7 +140,7 @@ mod tests {
 
     fn create_lockfile(path: &std::path::Path, entries: &[(&str, &str, &str)]) {
         let mut lf = lockfile::Lockfile {
-            version: 1,
+            version: lockfile::LOCKFILE_VERSION,
             capabilities: std::collections::BTreeMap::new(),
         };
         for (id, capability_type, version) in entries {

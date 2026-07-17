@@ -1,0 +1,27 @@
+id = "docker-container-tool"
+version = "0.1.0"
+type = "tool"
+description = "Prepare or run an allowlisted Docker container command."
+files = ["run_container.sh"]
+
+[parameters]
+type = "object"
+required = ["image"]
+
+[parameters.properties.image]
+type = "string"
+description = "Allowlisted container image."
+enum = ["hello-world", "alpine:3.20"]
+
+[parameters.properties.message]
+type = "string"
+description = "Message to print when using the alpine example."
+
+[parameters.properties.execute]
+type = "boolean"
+description = "Whether to execute the Docker command instead of printing it."
+
+[implementation]
+language = "bash"
+entrypoint = "run_container.sh"
+runtime_deps = ["bash", "docker"]

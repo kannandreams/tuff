@@ -131,8 +131,8 @@ coral add ./feature-build -a open-agents
 # 3. Install the required capabilities
 coral add https://github.com/pproenca/dot-skills --skill rust-implement -a open-agents
 coral add https://github.com/pproenca/dot-skills --skill rust-write-tests -a open-agents
-coral add examples/fixtures/pre-commit-lint -a open-agents
-coral add examples/fixtures/security-review -a open-agents
+coral add examples/hooks/pre-commit-lint -a open-agents
+coral add examples/tools/security-review -a open-agents
 
 # 4. Check status
 coral status

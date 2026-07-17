@@ -87,6 +87,35 @@ fn coral() -> Command {
     Command::cargo_bin("coral").unwrap()
 }
 
+fn test_fixture(name: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
+}
+
+fn baseline_object_path(root: &Path, hash: &str) -> std::path::PathBuf {
+    root.join(".coral")
+        .join("objects")
+        .join("sha256")
+        .join(&hash[..2])
+        .join(&hash[2..])
+}
+
+fn baseline_content(root: &Path, capability: &str, agent: &str, emitted_path: &str) -> String {
+    let lockfile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(root.join(".coral/coral-lock.json")).unwrap())
+            .unwrap();
+    let emitted = lockfile["capabilities"][capability]["targets"][agent]["emittedFiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["path"].as_str() == Some(emitted_path))
+        .unwrap();
+    let hash = emitted["baselineHash"].as_str().unwrap();
+    fs::read_to_string(baseline_object_path(root, hash)).unwrap()
+}
+
 fn make_tool_primitive(root: &Path, tool_id: &str) -> std::path::PathBuf {
     let primitive = root.join("tool-primitive");
     fs::create_dir_all(&primitive).unwrap();
@@ -130,6 +159,113 @@ fn version_outputs_current_version() {
         .assert()
         .success()
         .stdout(predicate::str::contains("coral 0.1.0"));
+}
+
+#[test]
+fn malformed_manifest_fixture_is_rejected() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("malformed-manifest").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("missing field `description`"));
+}
+
+#[test]
+fn legacy_lockfile_fixture_is_rejected() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    fs::copy(
+        test_fixture("legacy-lockfile").join("coral-lock.json"),
+        temp.path().join(".coral").join("coral-lock.json"),
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("duplicate-files").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported lockfile version: 3"));
+}
+
+#[test]
+fn duplicate_files_fixture_installs_one_emitted_file() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("duplicate-files").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+
+    let installed = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("duplicate-files")
+        .join("SKILL.md");
+    assert!(installed.exists());
+    assert_eq!(
+        fs::read_dir(installed.parent().unwrap()).unwrap().count(),
+        1
+    );
+}
+
+#[test]
+fn invalid_capability_fixture_is_rejected() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            test_fixture("invalid-capability").to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported capability type"));
 }
 
 #[test]
@@ -327,7 +463,9 @@ fn agent_list_add_remove() {
         .args(["agent", "list"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("open-agents *"))
+        .stdout(predicate::str::contains("REGISTERED"))
+        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains("yes"))
         .stdout(predicate::str::contains("claude"));
 
     // Register Claude; Open Agents is registered by coral init.
@@ -919,7 +1057,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
     // Cleanup from previous runs
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 
     coral()
         .current_dir(temp.path())
@@ -941,7 +1079,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
     // Cleanup
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 }
 
 #[test]
@@ -1027,12 +1165,7 @@ fn status_shows_override_warning() {
     // Cleanup from previous runs
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
-    let _ = std::fs::remove_dir_all(
-        home.join(".coral")
-            .join("baselines")
-            .join("open-agents")
-            .join("dup-override"),
-    );
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 
     coral()
         .current_dir(temp.path())
@@ -1074,7 +1207,7 @@ fn status_shows_override_warning() {
     // Cleanup
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines"));
+    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 }
 
 #[test]
@@ -1138,6 +1271,15 @@ fn add_tool_installs_and_emits() {
             .join("run.sh")
             .exists()
     );
+    assert!(
+        temp.path()
+            .join(".agents")
+            .join("tools")
+            .join("scan-tool")
+            .join("coral.toml")
+            .exists()
+    );
+    assert!(!temp.path().join(".agents").join("mcp.json").exists());
 }
 
 #[test]
@@ -1242,6 +1384,43 @@ fn add_tool_shows_runtime_deps() {
 }
 
 #[test]
+fn add_mcp_tool_registers_mcp_entry() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+    let manifest_path = tool.join("coral.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "registered MCP server scan-tool (open-agents) -> .agents/mcp.json",
+        ));
+
+    let mcp_path = temp.path().join(".agents").join("mcp.json");
+    assert!(mcp_path.exists());
+    let mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    assert!(mcp["mcpServers"]["scan-tool"].is_object());
+}
+
+#[test]
 fn list_filter_by_primitive_kind() {
     let temp = TempDir::new().unwrap();
     let skill = make_primitive(temp.path(), "my-skill");
@@ -1266,9 +1445,11 @@ fn list_filter_by_primitive_kind() {
     coral()
         .current_dir(temp.path())
         .args(["list", "--type", "tool"])
+        .env_remove("NO_COLOR")
         .assert()
         .success()
         .stdout(predicate::str::contains("my-tool"))
+        .stdout(predicate::str::contains("\u{1b}[35mtool\u{1b}[0m"))
         .stdout(predicate::str::contains("my-skill").not());
 
     coral()
@@ -1284,6 +1465,16 @@ fn list_filter_by_primitive_kind() {
 fn add_tool_multi_agent_with_mcp() {
     let temp = TempDir::new().unwrap();
     let tool = make_tool_primitive(temp.path(), "scan-tool");
+    let manifest_path = tool.join("coral.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1329,9 +1520,95 @@ fn add_tool_multi_agent_with_mcp() {
 }
 
 #[test]
+fn example_tools_install_and_register_mcp_entries() {
+    let temp = TempDir::new().unwrap();
+    let examples_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("tools");
+    let examples = [
+        ("local-binary-wrapper", "run.sh"),
+        ("python-script-tool", "analyze_text.py"),
+        ("mcp-server-tool", "server.js"),
+        ("http-api-tool", "fetch_status.py"),
+        ("repo-command-tool", "run_repo_check.sh"),
+        ("docker-container-tool", "run_container.sh"),
+    ];
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    for (id, entrypoint) in examples {
+        let tool_dir = examples_root.join(id);
+        coral()
+            .current_dir(temp.path())
+            .args(["add", tool_dir.to_str().unwrap()])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(format!(
+                "installed {id} (open-agents) -> .agents/tools/{id}/{entrypoint}"
+            )));
+
+        assert!(
+            temp.path()
+                .join(".agents")
+                .join("tools")
+                .join(id)
+                .join(entrypoint)
+                .exists()
+        );
+        assert!(
+            temp.path()
+                .join(".agents")
+                .join("tools")
+                .join(id)
+                .join("coral.toml")
+                .exists()
+        );
+    }
+
+    let mcp_path = temp.path().join(".agents").join("mcp.json");
+    let mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    assert!(mcp["mcpServers"]["mcp-server-tool"].is_object());
+    for (id, _) in examples {
+        if id != "mcp-server-tool" {
+            assert!(
+                mcp["mcpServers"][id].is_null(),
+                "{id} should not be registered as an MCP server"
+            );
+        }
+    }
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--type", "tool"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("local-binary-wrapper"))
+        .stdout(predicate::str::contains("python-script-tool"))
+        .stdout(predicate::str::contains("mcp-server-tool"))
+        .stdout(predicate::str::contains("http-api-tool"))
+        .stdout(predicate::str::contains("repo-command-tool"))
+        .stdout(predicate::str::contains("docker-container-tool"));
+}
+
+#[test]
 fn remove_tool_cleans_mcp_entry() {
     let temp = TempDir::new().unwrap();
     let tool = make_tool_primitive(temp.path(), "scan-tool");
+    let manifest_path = tool.join("coral.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -2097,6 +2374,17 @@ fn untrack_in_place_capability_preserves_files() {
         .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
+    let tracked_content_hash = {
+        let lockfile: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(temp.path().join(".coral/coral-lock.json")).unwrap(),
+        )
+        .unwrap();
+        lockfile["capabilities"]["keep-me"]["targets"]["open-agents"]["emittedFiles"][0]
+            ["baselineHash"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
 
     coral()
         .current_dir(temp.path())
@@ -2115,15 +2403,7 @@ fn untrack_in_place_capability_preserves_files() {
 
     assert!(skill_dir.join("SKILL.md").exists());
     assert!(skill_dir.join("coral.toml").exists());
-    assert!(
-        !temp
-            .path()
-            .join(".coral")
-            .join("baselines")
-            .join("open-agents")
-            .join("keep-me")
-            .exists()
-    );
+    assert!(!baseline_object_path(temp.path(), &tracked_content_hash).exists());
 }
 
 #[test]
@@ -2250,7 +2530,7 @@ fn create_skill_can_select_claude_agent() {
         &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
     )
     .unwrap();
-    assert_eq!(config["targets"][0], "claude");
+    assert_eq!(config["agents"][0], "claude");
     assert_eq!(config["defaultAgent"], "open-agents");
 }
 
@@ -2472,14 +2752,15 @@ fn update_local_rejects_force_and_missing_files_without_partial_changes() {
         .failure()
         .stderr(predicate::str::contains("tracked file is missing"));
 
-    let baseline = temp
-        .path()
-        .join(".coral")
-        .join("baselines")
-        .join("open-agents")
-        .join("local-skill")
-        .join("SKILL.md");
-    assert!(!fs::read_to_string(baseline).unwrap().contains("Edited"));
+    assert!(
+        !baseline_content(
+            temp.path(),
+            "local-skill",
+            "open-agents",
+            ".agents/skills/local-skill/SKILL.md"
+        )
+        .contains("Edited")
+    );
 }
 
 #[test]
@@ -2569,7 +2850,7 @@ fn create_tool_scaffolds_executable_runner() {
         .join("scan-tool")
         .join("run.sh");
     assert!(run_sh.exists());
-    assert!(temp.path().join(".agents").join("mcp.json").exists());
+    assert!(!temp.path().join(".agents").join("mcp.json").exists());
 
     #[cfg(unix)]
     {

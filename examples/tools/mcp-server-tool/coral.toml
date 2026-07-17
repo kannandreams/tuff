@@ -1,0 +1,20 @@
+id = "mcp-server-tool"
+version = "0.1.0"
+type = "tool"
+description = "Expose a tiny stdio MCP-style server that returns repository guidance."
+files = ["server.js"]
+
+[parameters]
+type = "object"
+required = ["topic"]
+
+[parameters.properties.topic]
+type = "string"
+description = "Guidance topic to request."
+enum = ["tests", "diff", "release"]
+
+[implementation]
+language = "node"
+entrypoint = "server.js"
+mcp = true
+runtime_deps = ["node>=18"]
