@@ -1,3 +1,4 @@
 {
-  "targets": []
+  "targets": [],
+  "defaultAgent": "open-agents"
 }

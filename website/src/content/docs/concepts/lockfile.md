@@ -12,7 +12,7 @@ and the hashes needed for drift detection and diffs.
 | File | Purpose | Commit to git? |
 |---|---|---|
 | `.coral/coral-lock.json` | Installed capability state (id, version, targets, source, hashes) | Yes |
-| `.coral/config.json` | Registered agent harnesses (`coral init`, `coral agent add`, or `coral create`) | Yes |
+| `.coral/config.json` | Registered agent harnesses and the default agent | Yes |
 | `.coral/baselines/<target>/<id>/` | Pristine copies of installed files for diffing | Yes |
 | `~/.coral/coral-lock.json` | Global scope: personal, across all projects | No |
 | `~/.coral/cache/git/` | Cloned git repositories for skill discovery | No |
@@ -71,15 +71,19 @@ and `coral update` without re-installing anything.
 
 ```json
 {
-  "targets": ["open-agents", "claude"]
+  "targets": ["open-agents", "claude"],
+  "defaultAgent": "open-agents"
 }
 ```
 
 Initialized by `coral init`, updated by `coral agent add <id>` or `coral create`,
-and read by `coral agent list`.
+and read by `coral agent list`. Set the default with `coral agent set-default
+<id>`; use `--global` for the global configuration. Commands with no explicit
+`-a/--agent` use this value.
 
 Agent registration is separate from capability tracking. `coral agent remove`
 only unregisters an agent; it does not change the lockfile or delete files.
 
-Use `coral delete <id> -a <agent>` to delete Coral-generated files. Use
-`coral untrack <id> -a <agent>` to remove tracking while preserving files.
+Use `coral delete <id>` to delete Coral-generated files for the default agent.
+Use `coral untrack <id>` to remove tracking while preserving files. Pass
+`-a/--agent` to select another agent.

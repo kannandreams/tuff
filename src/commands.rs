@@ -185,6 +185,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
         let home = home_dir()?;
         let lock_path = home.join(".coral").join("coral-lock.json");
         lockfile::init_lockfile_at(&lock_path)?;
+        let _ = config::read_config(&home)?;
         println!("initialized ~/.coral/coral-lock.json");
     } else {
         display::print_init_banner();
@@ -276,8 +277,9 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
         return Err(CoralError::new("capability name must not be empty"));
     }
 
+    let target_ids = resolve_agent_selection(repo_root, target_ids)?;
     let mut adapters = Vec::new();
-    for target in target_ids {
+    for target in &target_ids {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
             CoralError::new(format!(
                 "unknown agent '{}'; use 'coral agent list' to see available agents",
@@ -747,20 +749,21 @@ pub fn cmd_add(
     } else {
         (Scope::Project, repo_root.to_path_buf())
     };
+    let target_ids = resolve_agent_selection(&install_root, target_ids)?;
 
     if git::is_git_url(&capability.to_string_lossy()) {
         return cmd_add_git(
             &install_root,
             scope,
             &capability.to_string_lossy(),
-            target_ids,
+            &target_ids,
             skill_name,
             tool_name,
             hook_name,
             repo_root,
         );
     }
-    cmd_add_local(&install_root, scope, capability, target_ids, repo_root)
+    cmd_add_local(&install_root, scope, capability, &target_ids, repo_root)
 }
 
 fn cmd_add_git(
@@ -1526,11 +1529,19 @@ fn display_path_for_rows(rows: &[InventoryRow]) -> String {
 
 // ── Generate ────────────────────────────────────────────────────────────────
 
-pub fn cmd_generate_index(repo_root: &Path, agent: &str, output: Option<&Path>) -> Result<()> {
-    let adapter = AdapterKind::from_id(agent).ok_or_else(|| {
+pub fn cmd_generate_index(
+    repo_root: &Path,
+    agent: Option<&str>,
+    output: Option<&Path>,
+) -> Result<()> {
+    let requested = agent
+        .map(|value| vec![value.to_string()])
+        .unwrap_or_default();
+    let selected = resolve_agent_selection(repo_root, &requested)?;
+    let adapter = AdapterKind::from_id(&selected[0]).ok_or_else(|| {
         CoralError::new(format!(
             "unknown agent '{}'; use 'coral agent list' to see available agents",
-            agent
+            selected[0]
         ))
     })?;
     let canonical_agent = adapter.id();
@@ -1962,13 +1973,24 @@ pub fn cmd_diff(
 
     let _ = scope;
 
+    let requested = target
+        .map(|value| vec![value.to_string()])
+        .unwrap_or_default();
+    let selected_targets = resolve_agent_selection(&scope_root, &requested)?;
+
     if upstream {
-        return cmd_diff_upstream(scope_root, capability_id, &entry, target);
+        return cmd_diff_upstream(
+            scope_root,
+            capability_id,
+            &entry,
+            selected_targets.first().map(String::as_str),
+        );
     }
 
     let mut output = String::new();
 
-    if let Some(tid) = target {
+    if selected_targets.len() == 1 {
+        let tid = &selected_targets[0];
         output.push_str(&lockfile::diff_against_baseline(
             &scope_root,
             capability_id,
@@ -1977,7 +1999,7 @@ pub fn cmd_diff(
         )?);
     } else {
         let mut first = true;
-        for tid in entry.targets.keys() {
+        for tid in &selected_targets {
             let diff = lockfile::diff_against_baseline(&scope_root, capability_id, tid, &entry)?;
             if diff.is_empty() {
                 continue;
@@ -2087,20 +2109,6 @@ fn resolve_cleanup_scope(repo_root: &Path, scope_str: &str) -> Result<(Scope, Pa
     Ok((scope, scope_root))
 }
 
-fn canonical_cleanup_targets(targets: &[String]) -> Result<Vec<String>> {
-    let mut canonical = BTreeSet::new();
-    for target in targets {
-        let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-            CoralError::new(format!(
-                "unknown agent '{}'; use 'coral agent list' to see available agents",
-                target
-            ))
-        })?;
-        canonical.insert(adapter.id().to_string());
-    }
-    Ok(canonical.into_iter().collect())
-}
-
 fn remove_target_tracking(
     scope_root: &Path,
     id: &str,
@@ -2129,7 +2137,7 @@ pub fn cmd_delete(
     force: bool,
 ) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = canonical_cleanup_targets(targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets)?;
 
     let mut lockfile = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
@@ -2189,7 +2197,7 @@ pub fn cmd_delete(
 
 pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[String]) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = canonical_cleanup_targets(targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets)?;
 
     let mut lockfile = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
@@ -2224,27 +2232,6 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
 }
 
 // ── Update ──────────────────────────────────────────────────────────────────
-
-fn select_update_targets(
-    id: &str,
-    entry: &lockfile::CapabilityLockEntry,
-    requested: &[String],
-) -> Result<Vec<String>> {
-    if requested.is_empty() {
-        return Ok(entry.targets.keys().cloned().collect());
-    }
-
-    for target_id in requested {
-        if !entry.targets.contains_key(target_id) {
-            return Err(CoralError::new(format!(
-                "'{}' is not installed for agent '{}'",
-                id, target_id
-            )));
-        }
-    }
-
-    Ok(requested.to_vec())
-}
 
 fn update_local_baseline(
     scope_root: &Path,
@@ -2496,7 +2483,7 @@ pub fn cmd_update(
         }
     };
 
-    let target_ids = select_update_targets(id, &entry, requested_targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, requested_targets)?;
 
     if entry.source.is_none() && is_in_place_source_path(&entry.source_path) {
         return update_local_baseline(&scope_root, id, &target_ids, check, force);
@@ -2858,7 +2845,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
 
 // ── Agent commands ──────────────────────────────────────────────────────────
 
-pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
+pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
     #[derive(Tabled)]
     struct AgentRow {
         #[tabled(rename = "AGENT")]
@@ -2867,9 +2854,16 @@ pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
         agents: String,
         #[tabled(rename = "PRIMITIVES")]
         primitives: String,
+        #[tabled(rename = "DEFAULT")]
+        default: String,
     }
 
-    let config = config::read_config(repo_root)?;
+    let config_root = if global {
+        home_dir()?
+    } else {
+        repo_root.to_path_buf()
+    };
+    let config = config::read_config(&config_root)?;
     let registered: std::collections::HashSet<&str> =
         config.targets.iter().map(|s| s.as_str()).collect();
 
@@ -2885,6 +2879,11 @@ pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
                 agent: agent_label,
                 agents: a.supported_agents().join(", "),
                 primitives: a.kinds_supported().join(", "),
+                default: if config.default_agent == a.id() {
+                    "yes".to_string()
+                } else {
+                    String::new()
+                },
             }
         })
         .collect();
@@ -2899,6 +2898,10 @@ pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
     println!(
         "\n  {} = registered (use 'coral agent add <id>' to register)",
         paint("*", "32")
+    );
+    println!(
+        "  DEFAULT = selected when --agent is omitted ({})",
+        if global { "global" } else { "project" }
     );
     Ok(())
 }
@@ -2950,7 +2953,52 @@ pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn cmd_agent_set_default(repo_root: &Path, id: &str, global: bool) -> Result<()> {
+    let adapter = AdapterKind::from_id(id).ok_or_else(|| {
+        CoralError::new(format!(
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
+            id
+        ))
+    })?;
+    let config_root = if global {
+        home_dir()?
+    } else {
+        repo_root.to_path_buf()
+    };
+    let mut config = config::read_config(&config_root)?;
+    config.default_agent = adapter.id().to_string();
+    config::write_config(&config_root, &config)?;
+    println!(
+        "set default agent '{}' ({})",
+        adapter.id(),
+        if global { "global" } else { "project" }
+    );
+    Ok(())
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+fn resolve_agent_selection(root: &Path, requested: &[String]) -> Result<Vec<String>> {
+    let values = if requested.is_empty() {
+        vec![config::read_config(root)?.default_agent]
+    } else {
+        requested.to_vec()
+    };
+
+    let mut selected = Vec::new();
+    for value in values {
+        let adapter = AdapterKind::from_id(&value).ok_or_else(|| {
+            CoralError::new(format!(
+                "unknown agent '{}'; use 'coral agent list' to see available agents",
+                value
+            ))
+        })?;
+        if !selected.iter().any(|existing| existing == adapter.id()) {
+            selected.push(adapter.id().to_string());
+        }
+    }
+    Ok(selected)
+}
 
 fn home_dir() -> Result<std::path::PathBuf> {
     home_dir_opt().ok_or_else(|| CoralError::new("HOME environment variable not set"))

@@ -395,6 +395,110 @@ fn agent_add_claude_creates_project_directory() {
 }
 
 #[test]
+fn configured_default_agent_is_used_when_agent_is_omitted() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["agent", "set-default", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("set default agent 'claude'"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "defaulted-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "created and tracked skill 'defaulted-skill' (claude)",
+        ));
+
+    assert!(
+        temp.path()
+            .join(".claude")
+            .join("skills")
+            .join("defaulted-skill")
+            .join("SKILL.md")
+            .exists()
+    );
+    assert!(
+        !temp
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("defaulted-skill")
+            .exists()
+    );
+
+    let config: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config["defaultAgent"], "claude");
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "create",
+            "skill",
+            "explicit-open-agents",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "created and tracked skill 'explicit-open-agents' (open-agents)",
+        ));
+}
+
+#[test]
+fn global_default_agent_is_used_for_global_add() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let primitive = make_primitive(project.path(), "global-defaulted");
+
+    coral()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["init", "--global"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["agent", "set-default", "claude", "--global"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", primitive.to_str().unwrap(), "--global"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed global-defaulted (claude)",
+        ));
+
+    assert!(
+        home.path()
+            .join(".claude")
+            .join("skills")
+            .join("global-defaulted")
+            .join("SKILL.md")
+            .exists()
+    );
+}
+
+#[test]
 fn add_to_multiple_agents() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
@@ -2147,6 +2251,7 @@ fn create_skill_can_select_claude_agent() {
     )
     .unwrap();
     assert_eq!(config["targets"][0], "claude");
+    assert_eq!(config["defaultAgent"], "open-agents");
 }
 
 #[test]

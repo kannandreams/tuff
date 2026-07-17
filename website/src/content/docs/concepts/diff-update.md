@@ -6,6 +6,9 @@ description: How Coral shows local drift, accepts local baselines, and updates g
 Coral uses the recorded baseline in `.coral/baselines/` as the reference point for both local
 diffing and upstream-aware updates.
 
+This page explains the behavior behind the commands. See the [CLI Reference](/cli#coral-diff) for
+the complete command and flag syntax.
+
 There are three distinct flows:
 
 - local drift against the recorded baseline
@@ -118,8 +121,8 @@ coral update rust-implement --force
 | `coral diff <id> --upstream` | Upstream changes against baseline |
 | `coral outdated` | Show whether git-sourced capabilities have newer upstream commits |
 | `coral update <id> --check` | Preview update behavior |
-| `coral update <id> -a <agent>` | Update one recorded agent |
-| `coral update <id>` | Apply update using baseline-aware merge logic |
+| `coral update <id>` | Update the configured default agent |
+| `coral update <id> -a <agent>` | Update one explicitly selected agent |
 | `coral update <id> --force` | Replace local files with recorded source output |
 
 ## Important distinction

@@ -3,7 +3,10 @@ title: Getting Started
 description: Initialize Coral state and install your first capability.
 ---
 
-This guide walks through setting up Coral and managing capabilities in a project.
+This guide walks through the first Coral workflow: initialize a project, create or install a
+capability, detect drift, and validate the result.
+
+For every command, the [CLI Reference](/cli) has the complete flags, scope behavior, and examples.
 
 Before you initialize anything, `coral` gives you a quick overview of the CLI:
 
@@ -15,15 +18,28 @@ Before you initialize anything, `coral` gives you a quick overview of the CLI:
 coral init
 ```
 
-Creates `.coral/` state, registers `open-agents`, scaffolds `.agents/` directories, and auto-installs
-`coral-cli-guide`, a reference skill your coding agent can read to learn Coral commands.
+Creates `.coral/` state, configures `open-agents` as the default agent, scaffolds `.agents/`
+directories, and auto-installs `coral-cli-guide`, a reference skill your coding agent can read to
+learn Coral commands.
 
-## 2. Register agent harnesses
+See [`coral init`](/cli#coral-init) for project and global initialization.
+
+## 2. Configure another agent (optional)
+
+`coral init` is enough for the default `.agents/` workflow. Register another harness when you want
+to emit capabilities into its native directory:
 
 ```sh frame="terminal"
-coral agent add open-agents
 coral agent add claude
 ```
+
+To make that harness the default for later commands, run:
+
+```sh frame="terminal"
+coral agent set-default claude
+```
+
+See [`coral agent`](/cli#coral-agent) for registration, defaults, aliases, and global settings.
 
 ## 3. Create and track your first capability
 
@@ -31,22 +47,25 @@ coral agent add claude
 coral create skill my-skill
 ```
 
-Coral creates a valid starter scaffold in `.agents/skills/my-skill/` so you can edit the generated
-files instead of writing boilerplate from scratch.
+Coral creates a valid starter scaffold in `.agents/skills/my-skill/`, records the baseline, and
+starts tracking drift without requiring a separate import.
 
-Use `--agent claude` to scaffold and track under `.claude/` instead:
+To create it for another agent explicitly:
 
 ```sh frame="terminal"
-coral create skill my-skill --agent claude
+coral create skill my-skill -a claude
 ```
 
-The command records the baseline and starts tracking drift without requiring a separate import.
+See [`coral create`](/cli#coral-create) for skills, tools, hooks, workflows, and repeated agent
+selection.
 
 If your project already has a skill under `.agents/skills/`, add it in place:
 
 ```sh frame="terminal"
-coral add .agents/skills/existing-skill -a open-agents
+coral add .agents/skills/existing-skill
 ```
+
+See [`coral add`](/cli#coral-add) for adopting existing files and installing from git.
 
 ## 4. Inspect what is installed
 
@@ -54,36 +73,42 @@ coral add .agents/skills/existing-skill -a open-agents
 coral list
 ```
 
-`coral list` now shows a table with the capability type, agent, status, and path.
+`coral list` shows the capability type, agent, drift status, and emitted path. See
+[`coral list`](/cli#coral-list) for scope and type filters.
 
 ## 5. Edit and detect drift
+
+After editing `.agents/skills/my-skill/SKILL.md`, inspect the change:
 
 ```sh frame="terminal"
 coral list
 coral diff my-skill
 ```
 
-After you edit `.agents/skills/my-skill/SKILL.md`, `coral list` will show it as modified and
-`coral diff my-skill` will show the tracked changes.
+`coral list` shows the capability as modified and `coral diff` shows the tracked changes. See
+[`coral diff`](/cli#coral-diff) for baseline and upstream comparisons.
 
-If the drift is intentional and you want Coral to treat the edited version as the new baseline,
-accept the local edits with `coral update`:
+If the drift is intentional and should become the new baseline:
 
 ```sh frame="terminal"
 coral update my-skill
 ```
 
-For a capability installed on multiple agents, use `-t/--agent` to update only selected agents.
+Commands use the configured default agent when `-a/--agent` is omitted. Pass `-a <agent>` to
+operate on a different agent, or repeat the flag for multiple agents. See
+[`coral update`](/cli#coral-update) for source-aware updates and dry runs.
+
 For existing files that were added in place, later edits follow this same drift and update flow.
 
 ## 6. Install from git
 
 ```sh frame="terminal"
-coral add https://github.com/pproenca/dot-skills --skill rust-implement -a open-agents
+coral add https://github.com/pproenca/dot-skills --skill rust-implement
 ```
 
-Use this when the capability already lives in another repository and you want Coral to install and
-track it in your project.
+The command installs the selected skill, creates its local `coral.toml`, and tracks the upstream
+revision using the configured default agent. See [`coral add`](/cli#coral-add) for git skill, tool,
+and hook options.
 
 ## 7. Check for updates
 
@@ -93,31 +118,38 @@ coral update rust-implement
 ```
 
 `coral outdated` compares tracked git-backed capabilities against their latest upstream revision,
-and `coral update` reconciles them when you are ready.
+and `coral update` reconciles them when you are ready. See [`coral outdated`](/cli#coral-outdated)
+and [`coral update`](/cli#coral-update).
 
 ## 8. Clean up a capability
 
-Delete files Coral generated for an agent:
+Delete files Coral generated for the default agent:
 
 ```sh frame="terminal"
-coral delete rust-implement -a open-agents
+coral delete rust-implement
 ```
 
 If the capability was added from files you already owned, preserve those files and remove only
 Coral tracking:
 
 ```sh frame="terminal"
-coral untrack my-skill -a open-agents
+coral untrack my-skill
 ```
 
-`coral agent remove open-agents` only unregisters the agent. It does not remove capabilities.
+See [`coral delete`](/cli#coral-delete) and [`coral untrack`](/cli#coral-untrack) for explicit
+agent selection, global scope, and force behavior.
+
+`coral agent remove <agent>` only unregisters the agent. It does not remove capabilities.
 
 ## 9. CI validation
 
 ```sh frame="terminal"
 coral check
-# ✓ coral-cli-guide    skill    open-agents    ok
-# ✓ my-skill           skill    open-agents    ok
+# coral-cli-guide    skill    open-agents    ok
+# my-skill           skill    open-agents    ok
 ```
 
-See the [development lifecycle guide](/concepts/development-lifecycle) for full scenario walkthroughs.
+See [`coral check`](/cli#coral-check) for JSON output, failure handling, and the GitHub Actions
+example.
+
+For deeper scenario walkthroughs, see the [development lifecycle guide](/concepts/development-lifecycle).

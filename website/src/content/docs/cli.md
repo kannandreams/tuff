@@ -5,17 +5,20 @@ description: Command reference for the Coral CLI.
 
 Run commands from the repository root unless `--global` is specified.
 
+New to Coral? Start with the [Getting Started guide](/getting-started), then return here for the
+complete command and flag reference.
+
 ## Command Groups
 
 | Group | Commands |
 |---|---|
-| Start | `coral`, `coral init` |
-| Create or add capabilities | `coral create`, `coral add` |
-| Inspect and generate | `coral list`, `coral status`, `coral generate`, `coral outdated` |
-| Diff and update | `coral diff`, `coral update` |
-| Validate in CI | `coral check` |
-| Clean up | `coral delete`, `coral untrack` |
-| Configure agents and scope | `coral agent`, scope behavior |
+| Start | [`coral init`](#coral-init) |
+| Create or add capabilities | [`coral create`](#coral-create), [`coral add`](#coral-add) |
+| Inspect and generate | [`coral list`](#coral-list), [`coral status`](#coral-status), [`coral generate`](#coral-generate), [`coral outdated`](#coral-outdated) |
+| Diff and update | [`coral diff`](#coral-diff), [`coral update`](#coral-update) |
+| Validate in CI | [`coral check`](#coral-check) |
+| Clean up | [`coral delete`](#coral-delete), [`coral untrack`](#coral-untrack) |
+| Configure agents and scope | [`coral agent`](#coral-agent), [scope behavior](/concepts/scopes) |
 
 ## Start
 
@@ -42,7 +45,7 @@ coral init --global
 ```
 
 Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global),
-scaffolds `.agents/`, and registers `open-agents` as the default project agent.
+scaffolds `.agents/`, and configures `open-agents` as the default agent.
 
 ## Create or Add Capabilities
 
@@ -57,18 +60,20 @@ coral create hook review-hook -a open-agents -a claude
 coral create workflow release-flow -a claude
 ```
 
-The capability type and id are positional. `-a, --agent` is repeatable and
-defaults to `open-agents`. Creation initializes Coral state, registers the
-selected agents, writes adapter-valid files, and records the baseline. Use
-`coral add <path> -a <agent>` for agent files created outside Coral.
+The capability type and id are positional. `-a, --agent` is optional and
+repeatable. When omitted, Coral uses the configured default agent. Creation
+initializes Coral state, registers the selected agents, writes adapter-valid
+files, and records the baseline. Use `-a <agent>` when creating for a
+different agent.
 
 ### `coral add`
 
-Install a capability from a local directory:
+Install a capability from a local directory. The agent defaults to the
+configured project agent:
 
 ```sh frame="terminal"
 # Skill
-coral add ./my-skill -a open-agents
+coral add ./my-skill
 
 # Tool
 coral add ./my-tool -a claude
@@ -76,8 +81,8 @@ coral add ./my-tool -a claude
 # Multiple agents
 coral add ./my-skill -a claude -a open-agents
 
-# Global scope
-coral add ./my-skill -a open-agents --global
+# Global scope, using the global default agent
+coral add ./my-skill --global
 ```
 
 Add existing agent files in place:
@@ -109,7 +114,7 @@ supporting files, Coral can track them internally while `coral add` and
 
 | Flag | Description |
 |---|---|
-| `-a, --agent <id>` | Agent harness (required, repeatable) |
+| `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
 | `-s, --skill <name>` | Skill name for git URLs |
 | `--tool <name>` | Tool name for git URLs |
 | `--hook <name>` | Hook name for git URLs |
@@ -287,13 +292,13 @@ Git-sourced capabilities perform a three-way merge between baseline, local, and 
 See the [lifecycle docs](/concepts/lifecycle) for the merge behavior table.
 
 ```sh frame="terminal"
-# Attempt three-way merge or accept intentional local edits
+# Update the configured default agent
 coral update <id>
 
 # Dry run: show what would happen without applying
 coral update <id> --check
 
-# Update one agent (defaults to all recorded agents)
+# Update a specific agent instead
 coral update <id> -a <agent>
 
 # Force overwrite local changes with recorded source output
@@ -372,7 +377,7 @@ coral delete <id> -a open-agents --scope global
 coral delete <id> -a open-agents --force
 ```
 
-The agent flag is required. `delete` removes emitted files, their baselines,
+When `-a/--agent` is omitted, `delete` uses the configured agent. It removes emitted files, their baselines,
 and generated tool MCP entries. It never deletes the original capability source
 directory. Modified generated files require `--force`. In-place added capabilities
 cannot be deleted; use `coral untrack` instead.
@@ -383,8 +388,8 @@ Stop tracking a capability for explicitly selected agents while preserving its
 agent files and manifest:
 
 ```sh frame="terminal"
-# Stop tracking an in-place added skill
-coral untrack my-skill -a open-agents
+# Stop tracking an in-place added skill for the default agent
+coral untrack my-skill
 
 # Stop tracking several agents
 coral untrack my-skill -a open-agents -a claude
@@ -401,10 +406,27 @@ The lockfile itself remains in place, even when it contains no capabilities.
 
 ### `coral agent`
 
+#### Configure the default agent
+
+```sh frame="terminal"
+# Project default
+coral agent set-default open-agents
+
+# Global default
+coral agent set-default claude --global
+```
+
+Commands that accept `-a/--agent` use this value when the flag is omitted.
+An explicit agent flag always overrides the default, and repeated flags still
+apply an operation to multiple agents.
+
 #### List available and registered agents
 
 ```sh frame="terminal"
 coral agent list
+
+# Show the global default
+coral agent list --global
 ```
 
 #### Register an agent
@@ -419,7 +441,8 @@ Registering an agent also creates its project directory (`.agents/` or
 
 Legacy aliases (`codex`, `claude-code`) are accepted and map to the current agent names.
 
-The `*` marker means the agent is registered; the legend is shown below the table.
+The `*` marker means the agent is registered. The `DEFAULT` column shows which
+agent is selected when `-a/--agent` is omitted.
 
 #### Remove an agent
 
@@ -429,8 +452,8 @@ coral agent remove open-agents
 
 Unregisters the agent from the project configuration. It does not delete
 capabilities, emitted files, baselines, MCP registrations, or lockfile entries.
-Use `coral delete <id> -a <agent>` or `coral untrack <id> -a <agent>` for
-capability cleanup.
+Use `coral delete <id>` or `coral untrack <id>` for the configured default
+agent. Pass `-a <agent>` when selecting a different agent.
 
 ### Scope
 
