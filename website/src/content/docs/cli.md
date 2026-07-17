@@ -100,6 +100,11 @@ coral add https://github.com/owner/repo --tool <name> -a claude
 coral add https://github.com/owner/repo --hook <name> -a open-agents
 ```
 
+For git-sourced skills, Coral installs the selected skill's `SKILL.md` and
+generates a local `coral.toml` beside it. If the upstream skill includes
+supporting files, Coral can track them internally while `coral add` and
+`coral list` keep the display collapsed to the skill entrypoint.
+
 #### Flags
 
 | Flag | Description |

@@ -7,9 +7,18 @@ use tempfile::TempDir;
 fn make_git_skill_repo(root: &Path) -> std::path::PathBuf {
     let repo = root.join("skill-repo");
     fs::create_dir_all(repo.join("skills").join("test-skill")).unwrap();
+    fs::create_dir_all(repo.join("skills").join("test-skill").join("references")).unwrap();
     fs::write(
         repo.join("skills").join("test-skill").join("SKILL.md"),
         "# Test Skill\n\nHello from git-installed skill.\n",
+    )
+    .unwrap();
+    fs::write(
+        repo.join("skills")
+            .join("test-skill")
+            .join("references")
+            .join("extra.md"),
+        "# Extra reference\n",
     )
     .unwrap();
 
@@ -503,16 +512,21 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .success()
         .stdout(predicate::str::contains(
             "installed test-skill (open-agents) -> .agents/skills/test-skill/SKILL.md",
-        ));
+        ))
+        .stdout(predicate::str::contains("references/extra.md").not());
 
-    assert!(
-        temp.path()
-            .join(".agents")
-            .join("skills")
-            .join("test-skill")
-            .join("SKILL.md")
-            .exists()
-    );
+    let installed_dir = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("test-skill");
+    assert!(installed_dir.join("SKILL.md").exists());
+    assert!(installed_dir.join("coral.toml").exists());
+    assert!(installed_dir.join("references").join("extra.md").exists());
+    let generated_manifest = fs::read_to_string(installed_dir.join("coral.toml")).unwrap();
+    assert!(generated_manifest.contains("id = \"test-skill\""));
+    assert!(generated_manifest.contains("\"SKILL.md\""));
+    assert!(generated_manifest.contains("\"references/extra.md\""));
 
     coral()
         .current_dir(temp.path())
@@ -520,7 +534,8 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .assert()
         .success()
         .stdout(predicate::str::contains("test-skill"))
-        .stdout(predicate::str::contains("clean"));
+        .stdout(predicate::str::contains("clean"))
+        .stdout(predicate::str::contains("references/extra.md").not());
 
     fs::write(
         temp.path()

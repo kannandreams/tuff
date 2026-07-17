@@ -252,14 +252,22 @@ pub fn synthetic_manifest(
     name: &str,
     version: &str,
 ) -> Result<CapabilityManifest> {
+    let skill_file = skill_dir.join("SKILL.md");
+    if !skill_file.exists() {
+        return Err(CoralError::new(format!(
+            "skill entrypoint not found: {}",
+            skill_file.display()
+        )));
+    }
     let mut files = Vec::new();
     walk_skill_dir(skill_dir, "", &mut files)?;
+    files.sort();
 
     Ok(CapabilityManifest {
         id: name.to_string(),
         version: version.to_string(),
         capability_type: "skill".to_string(),
-        description: String::new(),
+        description: "Installed from git source.".to_string(),
         files,
         parameters: None,
         implementation: None,
@@ -281,7 +289,7 @@ fn walk_skill_dir(base: &Path, prefix: &str, files: &mut Vec<String>) -> Result<
         };
         if path.is_dir() {
             walk_skill_dir(&path, &rel, files)?;
-        } else {
+        } else if rel != "coral.toml" {
             files.push(rel);
         }
     }

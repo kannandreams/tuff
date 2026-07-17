@@ -172,10 +172,8 @@ pub fn diff_against_baseline(
 
     let mut output = String::new();
     for emitted in &target_entry.emitted_files {
-        let file_name = Path::new(&emitted.path).file_name().ok_or_else(|| {
-            CoralError::new(format!("invalid emitted file path: {}", emitted.path))
-        })?;
-        let baseline_path = baseline_dir.join(file_name);
+        let rel_path = capability_relative_path(&emitted.path, primitive_id);
+        let baseline_path = baseline_dir.join(&rel_path);
         let target_path = repo_root.join(&emitted.path);
 
         if !baseline_path.exists() {
@@ -201,7 +199,8 @@ pub fn diff_against_baseline(
 
         let diff = TextDiff::from_lines(&baseline, &target);
         output.push_str(&format!(
-            "--- baseline/{target_id}/{primitive_id}/\n+++ {}\n",
+            "--- baseline/{target_id}/{primitive_id}/{}\n+++ {}\n",
+            rel_path.display(),
             emitted.path
         ));
         for group in diff.grouped_ops(3) {
@@ -220,6 +219,29 @@ pub fn diff_against_baseline(
     }
 
     Ok(output)
+}
+
+fn capability_relative_path(path: &str, capability_id: &str) -> PathBuf {
+    for base in [
+        ".agents/skills",
+        ".claude/skills",
+        ".agents/tools",
+        ".claude/tools",
+        ".agents/hooks",
+        ".claude/hooks",
+        ".agents/workflows",
+        ".claude/workflows",
+    ] {
+        let prefix = format!("{base}/{capability_id}/");
+        if let Some(rel) = path.strip_prefix(&prefix) {
+            return PathBuf::from(rel);
+        }
+    }
+
+    Path::new(path)
+        .file_name()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(path))
 }
 
 pub fn relative_or_absolute_fs(path: &Path, repo_root: &Path) -> String {
