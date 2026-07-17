@@ -60,13 +60,13 @@ Every tool goes through these checks at `coral add` time:
 
 ```sh frame="terminal"
 # Local directory
-coral add ./my-tool -t claude
+coral add ./my-tool -a claude
 
 # Git repository (use --tool instead of --skill)
-coral add https://github.com/owner/repo --tool security-review -t claude
+coral add https://github.com/owner/repo --tool security-review -a claude
 
-# Multiple targets
-coral add ./my-tool -t claude -t open-agents
+# Multiple agents
+coral add ./my-tool -a claude -a open-agents
 ```
 
 ## Where files go
@@ -91,8 +91,9 @@ native config:
 }
 ```
 
-Multiple tools share a single `mcpServers` object. `coral remove` cleans up both the
-tool directory and its MCP entry.
+Multiple tools share a single `mcpServers` object. `coral delete` cleans up both
+Coral-generated tool directories and their MCP entries. `coral untrack` preserves
+the tool directory and MCP entry while removing Coral tracking.
 
 ## Filtering
 

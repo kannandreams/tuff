@@ -55,6 +55,16 @@ pub struct TargetLockEntry {
     pub baseline_dir: String,
     #[serde(rename = "emittedFiles")]
     pub emitted_files: Vec<EmittedFile>,
+    #[serde(default)]
+    pub ownership: TargetOwnership,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TargetOwnership {
+    #[default]
+    Generated,
+    Imported,
 }
 
 pub fn lockfile_path(repo_root: &Path) -> PathBuf {
@@ -291,6 +301,38 @@ mod tests {
         write_lockfile_at(&path, &lf).unwrap();
         let read = read_lockfile_at(&path).unwrap();
         assert_eq!(read.capabilities.len(), 1);
+    }
+
+    #[test]
+    fn missing_target_ownership_defaults_to_generated() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("legacy.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "version": 1,
+  "capabilities": {
+    "legacy": {
+      "type": "skill",
+      "installedVersion": "1.0",
+      "sourcePath": "legacy",
+      "targets": {
+        "open-agents": {
+          "baselineDir": ".coral/baselines/open-agents/legacy",
+          "emittedFiles": []
+        }
+      }
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        let read = read_lockfile_at(&path).unwrap();
+        assert_eq!(
+            read.capabilities["legacy"].targets["open-agents"].ownership,
+            TargetOwnership::Generated
+        );
     }
 
     #[test]

@@ -35,7 +35,7 @@ the full product thesis.
 | Current model | Skills, typically `SKILL.md` plus supporting files | Starts with skills, designed to expand to tools, hooks, and workflows |
 | Distribution | Public git repos, local folders, and ecosystem discovery | Local filesystem capabilities first; pack and registry behavior deferred |
 | CLI shape | `npx skills add`, `find`, `list`, `remove`, `update`, `init`, and related commands | `coral init`, `add`, `list`, and `diff` for the first lifecycle loop |
-| Agent targets | Broad multi-agent support across many coding assistants | Codex target first; multi-target support is not the near-term wedge |
+| Agents | Broad multi-agent support across many coding assistants | Codex first; multiple-agent support is not the near-term wedge |
 | Install ownership | Project or global scope, with copy/symlink behavior | Project-local artifacts are repo-owned after install |
 | Drift handling | Update behavior exists, but local-edit merge semantics are not the core positioning | Baseline hashes and diffs are central; future update/merge behavior is the product bet |
 | Opinion layer | Broad ecosystem and discovery directory | Optional packs can sit above the content-agnostic engine |

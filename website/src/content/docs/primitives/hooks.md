@@ -37,7 +37,7 @@ working_directory = "."
 
 ## Supported events
 
-Events are validated by the target adapter at install time. Each adapter maintains a
+Events are validated by the agent adapter at install time. Each adapter maintains a
 list of supported event names.
 
 ### Open Agents (`open-agents`)
@@ -60,19 +60,19 @@ list of supported event names.
 
 ```sh frame="terminal"
 # Local directory
-coral add ./pre-commit-lint -t open-agents
+coral add ./pre-commit-lint -a open-agents
 
 # Git repository
-coral add https://github.com/owner/repo --hook pre-commit-lint -t open-agents
+coral add https://github.com/owner/repo --hook pre-commit-lint -a open-agents
 
-# Multiple targets
-coral add ./pre-commit-lint -t open-agents -t claude
+# Multiple agents
+coral add ./pre-commit-lint -a open-agents -a claude
 ```
 
 Install-time validation:
 
 ```sh frame="terminal"
-$ coral add ./pre-commit-lint -t open-agents
+$ coral add ./pre-commit-lint -a open-agents
 note: this hook runs 'cargo fmt --check && cargo clippy -- -D warnings'
       on event 'before_finish': it will not be executed during install
 installed pre-commit-lint (open-agents) -> .agents/hooks/pre-commit-lint/hook.toml

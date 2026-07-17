@@ -92,11 +92,11 @@ files = ["run.sh"]
 
 [parameters]
 type = "object"
-required = ["target"]
+required = ["agent"]
 
-[parameters.properties.target]
+[parameters.properties.endpoint]
 type = "string"
-description = "The target to scan"
+description = "The endpoint to scan"
 
 [implementation]
 language = "bash"
@@ -106,7 +106,11 @@ runtime_deps = ["curl"]
         ),
     )
     .unwrap();
-    fs::write(primitive.join("run.sh"), "#!/bin/bash\necho \"scanning: $1\"\n").unwrap();
+    fs::write(
+        primitive.join("run.sh"),
+        "#!/bin/bash\necho \"scanning: $1\"\n",
+    )
+    .unwrap();
     primitive
 }
 
@@ -143,12 +147,14 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .arg("init")
         .assert()
         .success()
-        .stdout(predicate::str::contains("initialized .coral/coral-lock.json"));
+        .stdout(predicate::str::contains(
+            "initialized .coral/coral-lock.json",
+        ));
     assert!(temp.path().join(".coral").join("coral-lock.json").exists());
 
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -204,12 +210,7 @@ fn add_requires_init() {
 
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("run 'coral init' first"));
@@ -235,23 +236,44 @@ fn add_refuses_to_overwrite_untracked_skill() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "open-agents",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "refusing to overwrite untracked",
-        ));
+        .stderr(predicate::str::contains("refusing to overwrite untracked"));
 }
 
 #[test]
-fn rejects_unknown_target() {
+fn rejects_unknown_agent() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "--agent", "nonexistent"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown agent"));
+}
+
+#[test]
+fn old_target_command_is_removed() {
+    coral()
+        .args(["target", "list"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'target'"));
+}
+
+#[test]
+fn old_target_flags_are_removed() {
+    let temp = TempDir::new().unwrap();
+    let primitive = make_primitive(temp.path(), "old-target-flag");
 
     coral()
         .current_dir(temp.path())
@@ -265,15 +287,22 @@ fn rejects_unknown_target() {
             "add",
             primitive.to_str().unwrap(),
             "--target",
-            "nonexistent",
+            "open-agents",
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unknown target"));
+        .stderr(predicate::str::contains("unexpected argument '--target'"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", primitive.to_str().unwrap(), "-t", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument '-t'"));
 }
 
 #[test]
-fn target_list_add_remove() {
+fn agent_list_add_remove() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
 
@@ -286,50 +315,77 @@ fn target_list_add_remove() {
     // List available adapters
     coral()
         .current_dir(temp.path())
-        .args(["target", "list"])
+        .args(["agent", "list"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains("open-agents *"))
         .stdout(predicate::str::contains("claude"));
 
-    // Register open-agents
+    // Register Claude; Open Agents is registered by coral init.
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "open-agents"])
+        .args(["agent", "add", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("registered target 'open-agents'"));
+        .stdout(predicate::str::contains("registered agent 'claude'"));
+
+    assert!(temp.path().join(".claude").is_dir());
 
     // Install a skill to open-agents
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
             "installed example (open-agents) -> .agents/skills/example/SKILL.md",
         ));
 
-    // Remove open-agents target (should clean up emitted files)
+    // Unregister open-agents without changing installed capabilities
     coral()
         .current_dir(temp.path())
-        .args(["target", "remove", "open-agents"])
+        .args(["agent", "remove", "open-agents"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("unregistered target 'open-agents'"));
+        .stdout(predicate::str::contains("unregistered agent 'open-agents'"));
 
-    // Emitted file should be cleaned up
-    assert!(!temp
+    assert!(temp
         .path()
         .join(".agents")
         .join("skills")
         .join("example")
         .join("SKILL.md")
         .exists());
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--scope", "project"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("example"));
 }
 
 #[test]
-fn add_to_multiple_targets() {
+fn agent_add_claude_creates_project_directory() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["agent", "add", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("registered agent 'claude'"));
+
+    assert!(temp.path().join(".claude").is_dir());
+}
+
+#[test]
+fn add_to_multiple_agents() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
 
@@ -344,9 +400,9 @@ fn add_to_multiple_targets() {
         .args([
             "add",
             primitive.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
         ])
         .assert()
@@ -374,7 +430,7 @@ fn add_to_multiple_targets() {
         .join("SKILL.md")
         .exists());
 
-    // List should show both targets
+    // List should show both agents
     coral()
         .current_dir(temp.path())
         .arg("list")
@@ -386,17 +442,17 @@ fn add_to_multiple_targets() {
         .stdout(predicate::str::contains("claude"))
         .stdout(predicate::str::contains(".claude/skills/example/SKILL.md"));
 
-    // Diff with specific target
+    // Diff with specific agent
     coral()
         .current_dir(temp.path())
-        .args(["diff", "example", "--target", "open-agents"])
+        .args(["diff", "example", "--agent", "open-agents"])
         .assert()
         .success();
 
-    // Removing open-agents should keep claude files
+    // Unregistering open-agents should keep all capability files
     coral()
         .current_dir(temp.path())
-        .args(["target", "remove", "open-agents"])
+        .args(["agent", "remove", "open-agents"])
         .assert()
         .success();
 
@@ -407,7 +463,7 @@ fn add_to_multiple_targets() {
         .join("example")
         .join("SKILL.md")
         .exists());
-    assert!(!temp
+    assert!(temp
         .path()
         .join(".agents")
         .join("skills")
@@ -433,7 +489,7 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "test-skill",
@@ -501,10 +557,12 @@ fn add_git_requires_skill_flag() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", &repo_url, "--target", "open-agents"])
+        .args(["add", &repo_url, "--agent", "open-agents"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--skill, --tool, or --hook is required"));
+        .stderr(predicate::str::contains(
+            "--skill, --tool, or --hook is required",
+        ));
 }
 
 #[test]
@@ -524,7 +582,7 @@ fn add_git_missing_skill_reports_error() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "nonexistent",
@@ -535,7 +593,7 @@ fn add_git_missing_skill_reports_error() {
 }
 
 #[test]
-fn add_git_skill_multi_target() {
+fn add_git_skill_multi_agent() {
     let temp = TempDir::new().unwrap();
     let repo = make_git_skill_repo(temp.path());
     let repo_url = format!("file://{}", repo.display());
@@ -551,9 +609,9 @@ fn add_git_skill_multi_target() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
             "--skill",
             "test-skill",
@@ -588,12 +646,7 @@ fn add_git_subfolder_skill() {
     let temp = TempDir::new().unwrap();
     let repo = temp.path().join("skill-repo");
 
-    fs::create_dir_all(
-        repo.join("skills")
-            .join("security")
-            .join("security-review"),
-    )
-    .unwrap();
+    fs::create_dir_all(repo.join("skills").join("security").join("security-review")).unwrap();
     fs::write(
         repo.join("skills")
             .join("security")
@@ -647,7 +700,7 @@ fn add_git_subfolder_skill() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "security/security-review",
@@ -681,7 +734,7 @@ fn legacy_alias_codex_works() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "codex"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "codex"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -710,12 +763,7 @@ fn legacy_alias_claude_code_works() {
 
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            primitive.to_str().unwrap(),
-            "--target",
-            "claude-code",
-        ])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "claude-code"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -745,7 +793,13 @@ fn add_global_creates_lockfile_and_emits_to_home() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents", "--global"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--global",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -772,7 +826,7 @@ fn list_shows_scope_column() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -789,7 +843,7 @@ fn list_shows_scope_column() {
 }
 
 #[test]
-fn remove_primitive_cleans_up() {
+fn delete_generated_capability_cleans_up() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "remove-test");
 
@@ -800,16 +854,18 @@ fn remove_primitive_cleans_up() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "remove-test"])
+        .args(["delete", "remove-test", "-a", "open-agents"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("removed 'remove-test' from project scope"));
+        .stdout(predicate::str::contains(
+            "deleted 'remove-test' from project scope",
+        ));
 
     assert!(!temp
         .path()
@@ -839,11 +895,22 @@ fn status_shows_override_warning() {
     // Cleanup from previous runs
     let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
     let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("baselines").join("open-agents").join("dup-override"));
+    let _ = std::fs::remove_dir_all(
+        home.join(".coral")
+            .join("baselines")
+            .join("open-agents")
+            .join("dup-override"),
+    );
 
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive_a.to_str().unwrap(), "--target", "open-agents", "--global"])
+        .args([
+            "add",
+            primitive_a.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--global",
+        ])
         .assert()
         .success();
 
@@ -854,7 +921,12 @@ fn status_shows_override_warning() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive_a.to_str().unwrap(), "--target", "open-agents"])
+        .args([
+            "add",
+            primitive_a.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
         .assert()
         .success();
 
@@ -890,7 +962,7 @@ fn update_git_skill_reports_up_to_date() {
         .args([
             "add",
             &repo_url,
-            "--target",
+            "--agent",
             "open-agents",
             "--skill",
             "test-skill",
@@ -919,7 +991,7 @@ fn add_tool_installs_and_emits() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -966,10 +1038,12 @@ entrypoint = "run.sh"
 
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("parameters 'type' must be 'object'"));
+        .stderr(predicate::str::contains(
+            "parameters 'type' must be 'object'",
+        ));
 }
 
 #[test]
@@ -1007,7 +1081,7 @@ entrypoint = "../etc/passwd"
 
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("path traversal"));
@@ -1026,10 +1100,12 @@ fn add_tool_shows_runtime_deps() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("this tool requires runtime dependencies: curl"));
+        .stderr(predicate::str::contains(
+            "this tool requires runtime dependencies: curl",
+        ));
 }
 
 #[test]
@@ -1045,12 +1121,12 @@ fn list_filter_by_primitive_kind() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1072,7 +1148,7 @@ fn list_filter_by_primitive_kind() {
 }
 
 #[test]
-fn add_tool_multi_target_with_mcp() {
+fn add_tool_multi_agent_with_mcp() {
     let temp = TempDir::new().unwrap();
     let tool = make_tool_primitive(temp.path(), "scan-tool");
 
@@ -1087,9 +1163,9 @@ fn add_tool_multi_target_with_mcp() {
         .args([
             "add",
             tool.to_str().unwrap(),
-            "--target",
+            "--agent",
             "open-agents",
-            "--target",
+            "--agent",
             "claude",
         ])
         .assert()
@@ -1129,7 +1205,7 @@ fn remove_tool_cleans_mcp_entry() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--target", "claude"])
+        .args(["add", tool.to_str().unwrap(), "--agent", "claude"])
         .assert()
         .success();
 
@@ -1141,7 +1217,7 @@ fn remove_tool_cleans_mcp_entry() {
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "scan-tool"])
+        .args(["delete", "scan-tool", "-a", "claude"])
         .assert()
         .success();
 
@@ -1185,7 +1261,7 @@ fn add_hook_installs_and_emits() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1230,10 +1306,12 @@ command = "echo test"
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("'event' must be a non-empty string"));
+        .stderr(predicate::str::contains(
+            "'event' must be a non-empty string",
+        ));
 }
 
 #[test]
@@ -1262,10 +1340,12 @@ command = "echo hello"
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--target", "claude"])
+        .args(["add", primitive.to_str().unwrap(), "--agent", "claude"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("does not support hook event 'on_mars_landing'"));
+        .stderr(predicate::str::contains(
+            "does not support hook event 'on_mars_landing'",
+        ));
 }
 
 #[test]
@@ -1280,7 +1360,7 @@ fn hook_list_and_drift() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1291,7 +1371,9 @@ fn hook_list_and_drift() {
         .success()
         .stdout(predicate::str::contains("pre-commit"))
         .stdout(predicate::str::contains("hook"))
-        .stdout(predicate::str::contains(".agents/hooks/pre-commit/hook.toml"));
+        .stdout(predicate::str::contains(
+            ".agents/hooks/pre-commit/hook.toml",
+        ));
 
     fs::write(
         temp.path()
@@ -1321,7 +1403,7 @@ fn hook_list_and_drift() {
 }
 
 #[test]
-fn hook_remove_cleans_directory() {
+fn delete_generated_hook_cleans_directory() {
     let temp = TempDir::new().unwrap();
     let hook = make_hook_primitive(temp.path(), "pre-commit");
 
@@ -1332,7 +1414,7 @@ fn hook_remove_cleans_directory() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--target", "claude"])
+        .args(["add", hook.to_str().unwrap(), "--agent", "claude"])
         .assert()
         .success();
 
@@ -1346,7 +1428,7 @@ fn hook_remove_cleans_directory() {
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "pre-commit"])
+        .args(["delete", "pre-commit", "-a", "claude"])
         .assert()
         .success();
 
@@ -1370,7 +1452,7 @@ fn outdated_reports_status() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1386,7 +1468,7 @@ fn outdated_reports_status() {
 }
 
 #[test]
-fn target_add_already_registered_shows_message() {
+fn agent_add_already_registered_shows_message() {
     let temp = TempDir::new().unwrap();
     coral()
         .current_dir(temp.path())
@@ -1395,19 +1477,21 @@ fn target_add_already_registered_shows_message() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "claude"])
+        .args(["agent", "add", "claude"])
         .assert()
         .success();
+    fs::remove_dir(temp.path().join(".claude")).unwrap();
     coral()
         .current_dir(temp.path())
-        .args(["target", "add", "claude"])
+        .args(["agent", "add", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains("already registered"));
+    assert!(temp.path().join(".claude").is_dir());
 }
 
 #[test]
-fn remove_with_target_flag_only_removes_from_specified() {
+fn delete_with_agent_flag_only_removes_from_specified() {
     let temp = TempDir::new().unwrap();
     let skill = make_primitive(temp.path(), "target-test");
 
@@ -1419,20 +1503,44 @@ fn remove_with_target_flag_only_removes_from_specified() {
     coral()
         .current_dir(temp.path())
         .args([
-            "add", skill.to_str().unwrap(), "--target", "open-agents", "--target", "claude",
+            "add",
+            skill.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--agent",
+            "claude",
         ])
         .assert()
         .success();
 
     coral()
         .current_dir(temp.path())
-        .args(["remove", "target-test", "-t", "open-agents"])
+        .args(["delete", "target-test", "-a", "open-agents"])
         .assert()
         .success();
 
     // Claude files should still exist
-    assert!(temp.path().join(".claude").join("skills").join("target-test").join("SKILL.md").exists());
-    assert!(!temp.path().join(".agents").join("skills").join("target-test").join("SKILL.md").exists());
+    assert!(temp
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join("target-test")
+        .join("SKILL.md")
+        .exists());
+    assert!(!temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("target-test")
+        .join("SKILL.md")
+        .exists());
+
+    let lockfile: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("coral-lock.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(lockfile["capabilities"]["target-test"]["targets"]["claude"].is_object());
+    assert!(lockfile["capabilities"]["target-test"]["targets"]["open-agents"].is_null());
 }
 
 #[test]
@@ -1466,7 +1574,14 @@ fn diff_upstream_shows_no_changes_for_current_ref() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", &repo_url, "--target", "open-agents", "--skill", "test-skill"])
+        .args([
+            "add",
+            &repo_url,
+            "--agent",
+            "open-agents",
+            "--skill",
+            "test-skill",
+        ])
         .assert()
         .success();
 
@@ -1490,7 +1605,7 @@ fn diff_upstream_error_on_local_primitive() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1499,7 +1614,9 @@ fn diff_upstream_error_on_local_primitive() {
         .args(["diff", "local-only", "--upstream"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("upstream diff only available for git-sourced"));
+        .stderr(predicate::str::contains(
+            "upstream diff only available for git-sourced",
+        ));
 }
 
 #[test]
@@ -1514,7 +1631,7 @@ fn check_clean_repo_reports_all_ok() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1540,12 +1657,16 @@ fn check_detects_modified_files() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
     fs::write(
-        temp.path().join(".agents").join("skills").join("dirty-skill").join("SKILL.md"),
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("dirty-skill")
+            .join("SKILL.md"),
         "# Modified\n",
     )
     .unwrap();
@@ -1571,12 +1692,16 @@ fn check_ignore_failures_exits_zero() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
     fs::write(
-        temp.path().join(".agents").join("skills").join("dirty-skill").join("SKILL.md"),
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("dirty-skill")
+            .join("SKILL.md"),
         "# Modified\n",
     )
     .unwrap();
@@ -1601,7 +1726,7 @@ fn check_json_output() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 
@@ -1614,11 +1739,11 @@ fn check_json_output() {
 }
 
 #[test]
-fn import_single_directory() {
+fn add_adopts_existing_agent_directory() {
     let temp = TempDir::new().unwrap();
-    let skill_dir = temp.path().join(".agents").join("skills").join("my-import");
+    let skill_dir = temp.path().join(".agents").join("skills").join("my-skill");
     fs::create_dir_all(&skill_dir).unwrap();
-    fs::write(skill_dir.join("SKILL.md"), "# Imported skill\n").unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Existing skill\n").unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1628,10 +1753,12 @@ fn import_single_directory() {
 
     coral()
         .current_dir(temp.path())
-        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("imported my-import (skill, open-agents)"));
+        .stdout(predicate::str::contains(
+            "added my-skill (skill, open-agents)",
+        ));
 
     assert!(skill_dir.join("coral.toml").exists());
 
@@ -1640,9 +1767,106 @@ fn import_single_directory() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains("my-import"))
+        .stdout(predicate::str::contains("my-skill"))
         .stdout(predicate::str::contains("skill"))
         .stdout(predicate::str::contains("clean"));
+}
+
+#[test]
+fn untrack_in_place_capability_preserves_files() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join(".agents").join("skills").join("keep-me");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Keep me\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["delete", "keep-me", "-a", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("tracked in place"));
+    assert!(skill_dir.join("SKILL.md").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["untrack", "keep-me", "-a", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("untracked 'keep-me'"));
+
+    assert!(skill_dir.join("SKILL.md").exists());
+    assert!(skill_dir.join("coral.toml").exists());
+    assert!(!temp
+        .path()
+        .join(".coral")
+        .join("baselines")
+        .join("open-agents")
+        .join("keep-me")
+        .exists());
+}
+
+#[test]
+fn delete_requires_force_for_modified_generated_files() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "modified-delete");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("modified-delete")
+            .join("SKILL.md"),
+        "# Local edit\n",
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["delete", "modified-delete", "-a", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("use --force to delete"));
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("modified-delete")
+        .join("SKILL.md")
+        .exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["delete", "modified-delete", "-a", "open-agents", "--force"])
+        .assert()
+        .success();
+    assert!(!temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("modified-delete")
+        .exists());
 }
 
 #[test]
@@ -1651,11 +1875,13 @@ fn create_skill_scaffolds_importable_files() {
 
     coral()
         .current_dir(temp.path())
-        .args(["create", "--skill", "my-skill"])
+        .args(["create", "skill", "my-skill"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("created skill scaffold"))
-        .stdout(predicate::str::contains("coral import .agents/skills/my-skill -t <target>"));
+        .stdout(predicate::str::contains(
+            "created and tracked skill 'my-skill'",
+        ))
+        .stdout(predicate::str::contains("coral list"));
 
     assert!(temp
         .path()
@@ -1671,6 +1897,338 @@ fn create_skill_scaffolds_importable_files() {
         .join("my-skill")
         .join("SKILL.md")
         .exists());
+    assert!(temp.path().join(".coral").join("coral-lock.json").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["list", "--scope", "project"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("my-skill"))
+        .stdout(predicate::str::contains("clean"));
+}
+
+#[test]
+fn create_skill_can_select_claude_agent() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "my-skill", "--agent", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "created and tracked skill 'my-skill' (claude)",
+        ))
+        .stdout(predicate::str::contains(".claude/skills/my-skill/SKILL.md"));
+
+    assert!(temp
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join("my-skill")
+        .join("SKILL.md")
+        .exists());
+
+    let config: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config["targets"][0], "claude");
+}
+
+#[test]
+fn update_accepts_local_edits_as_new_baseline() {
+    let temp = TempDir::new().unwrap();
+    let skill = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("local-skill")
+        .join("SKILL.md");
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "local-skill"])
+        .assert()
+        .success();
+
+    fs::write(&skill, "# Local Skill\n\nEdited locally.\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "local-skill", "--check"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "would record them as the new baseline",
+        ));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "local-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("updated local baseline"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "local-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "local-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already up to date"));
+}
+
+#[test]
+fn update_accepts_adopted_local_edits() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("existing-skill");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Existing\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(skill_dir.join("SKILL.md"), "# Existing\n\nEdited.\n").unwrap();
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "existing-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("updated local baseline"));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "existing-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn update_reloads_external_local_source() {
+    let temp = TempDir::new().unwrap();
+    let source = make_primitive(temp.path(), "external-skill");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", source.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(
+        source.join("src").join("SKILL.md"),
+        "# Example\n\nUpdated from source.\n",
+    )
+    .unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "external-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("installed external-skill"));
+
+    let installed = fs::read_to_string(
+        temp.path()
+            .join(".agents")
+            .join("skills")
+            .join("external-skill")
+            .join("SKILL.md"),
+    )
+    .unwrap();
+    assert!(installed.contains("Updated from source."));
+
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "external-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn update_local_can_select_one_agent() {
+    let temp = TempDir::new().unwrap();
+    let open_agents = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("multi-skill")
+        .join("SKILL.md");
+    let claude = temp
+        .path()
+        .join(".claude")
+        .join("skills")
+        .join("multi-skill")
+        .join("SKILL.md");
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "create",
+            "skill",
+            "multi-skill",
+            "-a",
+            "open-agents",
+            "-a",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    fs::write(&open_agents, "# Open Agents edit\n").unwrap();
+    fs::write(&claude, "# Claude edit\n").unwrap();
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "multi-skill", "-a", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "multi-skill", "-a", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    coral()
+        .current_dir(temp.path())
+        .args(["diff", "multi-skill", "-a", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Claude edit"));
+}
+
+#[test]
+fn update_local_rejects_force_and_missing_files_without_partial_changes() {
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("local-skill");
+    let skill = skill_dir.join("SKILL.md");
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "local-skill"])
+        .assert()
+        .success();
+
+    fs::write(&skill, "# Edited\n").unwrap();
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "local-skill", "--force"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("only valid for git-sourced"));
+
+    fs::remove_file(&skill).unwrap();
+    coral()
+        .current_dir(temp.path())
+        .args(["update", "local-skill"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("tracked file is missing"));
+
+    let baseline = temp
+        .path()
+        .join(".coral")
+        .join("baselines")
+        .join("open-agents")
+        .join("local-skill")
+        .join("SKILL.md");
+    assert!(!fs::read_to_string(baseline).unwrap().contains("Edited"));
+}
+
+#[test]
+fn create_supports_multiple_agents_and_tracks_each_output() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "create",
+            "skill",
+            "multi-skill",
+            "--agent",
+            "open-agents",
+            "--agent",
+            "claude",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(open-agents)"))
+        .stdout(predicate::str::contains("(claude)"));
+
+    let lockfile: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral").join("coral-lock.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(lockfile["capabilities"]["multi-skill"]["targets"]["open-agents"].is_object());
+    assert!(lockfile["capabilities"]["multi-skill"]["targets"]["claude"].is_object());
+}
+
+#[test]
+fn create_generates_adapter_specific_hook_files() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "hook", "agents-hook"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "hook", "claude-hook", "--agent", "claude"])
+        .assert()
+        .success();
+
+    assert!(temp
+        .path()
+        .join(".agents/hooks/agents-hook/hook.toml")
+        .exists());
+    let claude_hook = temp.path().join(".claude/hooks/claude-hook/hook.json");
+    assert!(claude_hook.exists());
+    let hook: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(claude_hook).unwrap()).unwrap();
+    assert_eq!(hook["event"], "before_finish");
+}
+
+#[test]
+fn create_rejects_legacy_flag_syntax() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "--skill", "legacy-skill"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
 }
 
 #[test]
@@ -1679,10 +2237,12 @@ fn create_tool_scaffolds_executable_runner() {
 
     coral()
         .current_dir(temp.path())
-        .args(["create", "--tool", "scan-tool"])
+        .args(["create", "tool", "scan-tool"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("created tool scaffold"));
+        .stdout(predicate::str::contains(
+            "created and tracked tool 'scan-tool'",
+        ));
 
     let run_sh = temp
         .path()
@@ -1691,6 +2251,7 @@ fn create_tool_scaffolds_executable_runner() {
         .join("scan-tool")
         .join("run.sh");
     assert!(run_sh.exists());
+    assert!(temp.path().join(".agents").join("mcp.json").exists());
 
     #[cfg(unix)]
     {
@@ -1701,11 +2262,8 @@ fn create_tool_scaffolds_executable_runner() {
 }
 
 #[test]
-fn import_dry_run_preview_only() {
+fn import_command_is_removed() {
     let temp = TempDir::new().unwrap();
-    let skill_dir = temp.path().join(".agents").join("skills").join("dry-skill");
-    fs::create_dir_all(&skill_dir).unwrap();
-    fs::write(skill_dir.join("SKILL.md"), "# Dry\n").unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1715,16 +2273,14 @@ fn import_dry_run_preview_only() {
 
     coral()
         .current_dir(temp.path())
-        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents", "--dry-run"])
+        .arg("import")
         .assert()
-        .success()
-        .stdout(predicate::str::contains("would import dry-skill"));
-
-    assert!(!skill_dir.join("coral.toml").exists());
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'import'"));
 }
 
 #[test]
-fn import_skip_already_tracked() {
+fn add_rejects_already_tracked_agent_directory() {
     let temp = TempDir::new().unwrap();
     let skill_dir = temp.path().join(".agents").join("skills").join("dup");
     fs::create_dir_all(&skill_dir).unwrap();
@@ -1737,54 +2293,46 @@ fn import_skip_already_tracked() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
 
     coral()
         .current_dir(temp.path())
-        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("skipped dup"));
+        .failure()
+        .stderr(predicate::str::contains("already tracked"));
 }
 
 #[test]
-fn import_override_replaces_entry() {
+fn add_agent_directory_requires_matching_agent() {
     let temp = TempDir::new().unwrap();
-    let skill_dir = temp.path().join(".agents").join("skills").join("override");
+    let skill_dir = temp
+        .path()
+        .join(".agents")
+        .join("skills")
+        .join("target-match");
     fs::create_dir_all(&skill_dir).unwrap();
-    fs::write(skill_dir.join("SKILL.md"), "# Original\n").unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Target\n").unwrap();
 
     coral()
         .current_dir(temp.path())
         .arg("init")
         .assert()
         .success();
-    coral()
-        .current_dir(temp.path())
-        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents"])
-        .assert()
-        .success();
 
-    // Override should succeed
     coral()
         .current_dir(temp.path())
-        .args(["import", skill_dir.to_str().unwrap(), "-t", "open-agents", "--override"])
+        .args(["add", skill_dir.to_str().unwrap(), "-a", "claude"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("imported override"));
+        .failure()
+        .stderr(predicate::str::contains("use -a open-agents"));
 }
 
 #[test]
-fn import_batch_scan() {
+fn add_does_not_batch_scan_agent_directories() {
     let temp = TempDir::new().unwrap();
-    let skill_a = temp.path().join(".agents").join("skills").join("batch-a");
-    let skill_b = temp.path().join(".agents").join("skills").join("batch-b");
-    fs::create_dir_all(&skill_a).unwrap();
-    fs::create_dir_all(&skill_b).unwrap();
-    fs::write(skill_a.join("SKILL.md"), "# A\n").unwrap();
-    fs::write(skill_b.join("SKILL.md"), "# B\n").unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1793,14 +2341,17 @@ fn import_batch_scan() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["import", "-t", "open-agents"])
+        .args(["add", "-a", "open-agents"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("batch-a"))
-        .stdout(predicate::str::contains("batch-b"));
+        .failure()
+        .stderr(predicate::str::contains("required"));
 }
 
-fn make_workflow_primitive(root: &Path, wf_id: &str, req_ids: &[(&str, &str)]) -> std::path::PathBuf {
+fn make_workflow_primitive(
+    root: &Path,
+    wf_id: &str,
+    req_ids: &[(&str, &str)],
+) -> std::path::PathBuf {
     let primitive = root.join("wf-primitive");
     fs::create_dir_all(&primitive).unwrap();
     let mut content = format!(
@@ -1822,10 +2373,11 @@ description = "A test workflow."
 #[test]
 fn add_workflow_installs_and_shows_deps() {
     let temp = TempDir::new().unwrap();
-    let wf = make_workflow_primitive(temp.path(), "test-wf", &[
-        ("dep-a", "skill"),
-        ("dep-b", "tool"),
-    ]);
+    let wf = make_workflow_primitive(
+        temp.path(),
+        "test-wf",
+        &[("dep-a", "skill"), ("dep-b", "tool")],
+    );
 
     coral()
         .current_dir(temp.path())
@@ -1835,15 +2387,23 @@ fn add_workflow_installs_and_shows_deps() {
 
     coral()
         .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains("installed test-wf (open-agents)"))
-        .stderr(predicate::str::contains("workflow 'test-wf' requires 2 capabilities"))
+        .stderr(predicate::str::contains(
+            "workflow 'test-wf' requires 2 capabilities",
+        ))
         .stderr(predicate::str::contains("dep-a (skill)"))
         .stderr(predicate::str::contains("dep-b (tool)"));
 
-    assert!(temp.path().join(".agents").join("workflows").join("test-wf").join("workflow.toml").exists());
+    assert!(temp
+        .path()
+        .join(".agents")
+        .join("workflows")
+        .join("test-wf")
+        .join("workflow.toml")
+        .exists());
 
     coral()
         .current_dir(temp.path())
@@ -1859,7 +2419,9 @@ fn add_workflow_rejects_self_reference() {
     let temp = TempDir::new().unwrap();
     let wf_dir = temp.path().join("self-wf");
     fs::create_dir_all(&wf_dir).unwrap();
-    fs::write(wf_dir.join("coral.toml"), r#"id = "self-wf"
+    fs::write(
+        wf_dir.join("coral.toml"),
+        r#"id = "self-wf"
 version = "1.0.0"
 type = "workflow"
 description = "Bad."
@@ -1867,7 +2429,9 @@ description = "Bad."
 [[workflow.requires]]
 id = "self-wf"
 type = "skill"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1876,7 +2440,7 @@ type = "skill"
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot require itself"));
@@ -1887,13 +2451,17 @@ fn add_workflow_rejects_empty_requires() {
     let temp = TempDir::new().unwrap();
     let wf_dir = temp.path().join("empty-wf");
     fs::create_dir_all(&wf_dir).unwrap();
-    fs::write(wf_dir.join("coral.toml"), r#"id = "empty-wf"
+    fs::write(
+        wf_dir.join("coral.toml"),
+        r#"id = "empty-wf"
 version = "1.0.0"
 type = "workflow"
 description = "Bad."
 
 [workflow]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1902,7 +2470,7 @@ description = "Bad."
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid capability manifest TOML"));
@@ -1913,7 +2481,9 @@ fn add_workflow_rejects_duplicate_requires() {
     let temp = TempDir::new().unwrap();
     let wf_dir = temp.path().join("dup-wf");
     fs::create_dir_all(&wf_dir).unwrap();
-    fs::write(wf_dir.join("coral.toml"), r#"id = "dup-wf"
+    fs::write(
+        wf_dir.join("coral.toml"),
+        r#"id = "dup-wf"
 version = "1.0.0"
 type = "workflow"
 description = "Bad."
@@ -1925,7 +2495,9 @@ type = "skill"
 [[workflow.requires]]
 id = "same"
 type = "tool"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1934,7 +2506,7 @@ type = "tool"
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("duplicate requirement"));
@@ -1953,12 +2525,12 @@ fn status_shows_workflow_dependency_tree() {
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
     coral()
         .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--target", "open-agents"])
+        .args(["add", wf.to_str().unwrap(), "--agent", "open-agents"])
         .assert()
         .success();
 

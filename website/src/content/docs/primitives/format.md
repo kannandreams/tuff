@@ -6,7 +6,7 @@ description: Manifest and file layout for Coral capabilities.
 Every Coral capability is described by a `coral.toml` manifest. The manifest
 declares the capability type, the files that belong to it, and enough metadata
 for Coral to track installs, validate structure, detect drift, and emit
-target-specific agent output.
+agent-specific agent output.
 
 The `type` field is the important discriminator. It tells Coral whether the
 directory should be treated as a skill, tool, hook, policy, or workflow while
@@ -36,7 +36,7 @@ files = ["src/SKILL.md"]
 
 `id`
 : Stable capability identifier. For skills, this becomes the skill directory
-  name in the target harness output.
+  name in the agent harness output.
 
 `version`
 : Capability version recorded in `.coral/coral-lock.json`.

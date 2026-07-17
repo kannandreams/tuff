@@ -17,9 +17,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_check, cmd_create, cmd_diff, cmd_import, cmd_init, cmd_list,
-    cmd_outdated, cmd_remove, cmd_status, cmd_target_add, cmd_target_list,
-    cmd_target_remove, cmd_update,
+    cmd_add, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_check, cmd_create, cmd_delete,
+    cmd_diff, cmd_init, cmd_list, cmd_outdated, cmd_status, cmd_untrack, cmd_update,
 };
 use error::Result;
 
@@ -44,9 +43,9 @@ enum Command {
         /// Path to a capability directory or git URL.
         capability: PathBuf,
 
-        /// Target harness to emit for (repeatable).
-        #[arg(short = 't', long = "target", required = true)]
-        target: Vec<String>,
+        /// Agent harness to emit for (repeatable).
+        #[arg(short = 'a', long = "agent", required = true)]
+        agent: Vec<String>,
 
         /// Skill name when installing from a git repository.
         #[arg(short = 's', long = "skill")]
@@ -84,32 +83,50 @@ enum Command {
         /// Installed capability id.
         capability_id: String,
 
-        /// Target to diff (if not specified, diffs all targets).
-        #[arg(short = 't', long = "target")]
-        target: Option<String>,
+        /// Agent to diff (if not specified, diffs all agents).
+        #[arg(short = 'a', long = "agent")]
+        agent: Option<String>,
 
         /// Diff against latest upstream source instead of baseline.
         #[arg(short = 'u', long = "upstream")]
         upstream: bool,
     },
 
-    /// Remove an installed primitive.
-    Remove {
-        /// Primitive id to remove.
+    /// Delete Coral-generated capability files.
+    Delete {
+        /// Capability id to delete.
         id: String,
 
-        /// Scope to remove from.
+        /// Scope to delete from.
         #[arg(short = 's', long = "scope", default_value = "project")]
         scope: String,
 
-        /// Target to remove from (if not specified, removes from all targets).
-        #[arg(short = 't', long = "target")]
-        target: Option<Vec<String>>,
+        /// Agent to delete from (repeatable).
+        #[arg(short = 'a', long = "agent", required = true)]
+        agent: Vec<String>,
+
+        /// Delete files even when they have local modifications.
+        #[arg(short = 'f', long = "force")]
+        force: bool,
     },
 
-    /// Update an installed primitive from its source.
+    /// Stop tracking a capability without deleting its agent files.
+    Untrack {
+        /// Capability id to untrack.
+        id: String,
+
+        /// Scope to untrack from.
+        #[arg(short = 's', long = "scope", default_value = "project")]
+        scope: String,
+
+        /// Agent to untrack (repeatable).
+        #[arg(short = 'a', long = "agent", required = true)]
+        agent: Vec<String>,
+    },
+
+    /// Reconcile an installed capability with its source or accept local edits.
     Update {
-        /// Primitive id to update.
+        /// Capability id to update.
         id: String,
 
         /// Scope to update.
@@ -120,51 +137,19 @@ enum Command {
         #[arg(long = "check")]
         check: bool,
 
-        /// Force overwrite local changes with upstream.
+        /// Agent harness to update (repeatable; defaults to all recorded agents).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+
+        /// Force overwrite local changes with upstream (Git sources only).
         #[arg(short = 'f', long = "force")]
         force: bool,
     },
 
-    /// Import existing agent assets into Coral management.
-    Import {
-        /// Path to an existing agent asset directory.
-        #[arg()]
-        path: Option<PathBuf>,
-
-        /// Target harness to import for (auto-inferred if path is under .agents/ or .claude/).
-        #[arg(short = 't', long = "target")]
-        target: Vec<String>,
-
-        /// Force capability type (auto-inferred from parent dir if omitted).
-        #[arg(long = "type")]
-        capability_type: Option<String>,
-
-        /// Preview what would be imported without making changes.
-        #[arg(long = "dry-run")]
-        dry_run: bool,
-
-        /// Overwrite existing lockfile entry for the same id.
-        #[arg(long = "override")]
-        override_existing: bool,
-    },
-
-    /// Scaffold a new capability in .agents/.
+    /// Create and track a new capability.
     Create {
-        /// Create a skill capability.
-        #[arg(long = "skill")]
-        skill: Option<String>,
-
-        /// Create a tool capability.
-        #[arg(long = "tool")]
-        tool: Option<String>,
-
-        /// Create a hook capability.
-        #[arg(long = "hook")]
-        hook: Option<String>,
-
-        /// Create a workflow capability.
-        #[arg(long = "workflow")]
-        workflow: Option<String>,
+        #[command(subcommand)]
+        kind: CreateCommand,
     },
 
     /// Validate installed capabilities (CI mode).
@@ -185,27 +170,63 @@ enum Command {
     /// Show installed capabilities with upstream update status.
     Outdated,
 
-    /// Manage harness targets.
-    Target {
+    /// Manage agent harnesses.
+    Agent {
         #[command(subcommand)]
-        action: TargetCommand,
+        action: AgentCommand,
     },
 }
 
 #[derive(Subcommand)]
-enum TargetCommand {
-    /// List available and registered targets.
+enum CreateCommand {
+    /// Create and track a skill.
+    Skill {
+        /// Capability id.
+        id: String,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
+    },
+    /// Create and track a tool.
+    Tool {
+        /// Capability id.
+        id: String,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
+    },
+    /// Create and track a hook.
+    Hook {
+        /// Capability id.
+        id: String,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
+    },
+    /// Create and track a workflow.
+    Workflow {
+        /// Capability id.
+        id: String,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent", default_values = ["open-agents"])]
+        agent: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum AgentCommand {
+    /// List available and registered agents.
     List,
 
-    /// Register a target for this repo.
+    /// Register an agent for this repo.
     Add {
-        /// Target adapter id.
+        /// Agent adapter id.
         id: String,
     },
 
-    /// Unregister a target and remove all emitted files.
+    /// Unregister an agent without changing installed capabilities.
     Remove {
-        /// Target adapter id.
+        /// Agent adapter id.
         id: String,
     },
 }
@@ -224,35 +245,17 @@ fn run() -> Result<()> {
     match cli.command {
         None => Ok(display::print_welcome()),
         Some(Command::Init { global }) => cmd_init(&repo_root, global),
-        Some(Command::Import {
-            path,
-            target,
-            capability_type,
-            dry_run,
-            override_existing,
-        }) => cmd_import(
-            &repo_root,
-            path.as_deref(),
-            &target,
-            capability_type.as_deref(),
-            dry_run,
-            override_existing,
-        ),
-        Some(Command::Create {
-            skill,
-            tool,
-            hook,
-            workflow,
-        }) => cmd_create(
-            &repo_root,
-            skill.as_deref(),
-            tool.as_deref(),
-            hook.as_deref(),
-            workflow.as_deref(),
-        ),
+        Some(Command::Create { kind }) => match kind {
+            CreateCommand::Skill { id, agent } => cmd_create(&repo_root, "skill", &id, &agent),
+            CreateCommand::Tool { id, agent } => cmd_create(&repo_root, "tool", &id, &agent),
+            CreateCommand::Hook { id, agent } => cmd_create(&repo_root, "hook", &id, &agent),
+            CreateCommand::Workflow { id, agent } => {
+                cmd_create(&repo_root, "workflow", &id, &agent)
+            }
+        },
         Some(Command::Add {
             capability,
-            target,
+            agent,
             skill,
             tool,
             hook,
@@ -260,7 +263,7 @@ fn run() -> Result<()> {
         }) => cmd_add(
             &repo_root,
             &capability,
-            &target,
+            &agent,
             skill.as_deref(),
             tool.as_deref(),
             hook.as_deref(),
@@ -270,28 +273,33 @@ fn run() -> Result<()> {
         Some(Command::Status) => cmd_status(&repo_root),
         Some(Command::Diff {
             capability_id,
-            target,
+            agent,
             upstream,
-        }) => cmd_diff(&repo_root, &capability_id, target.as_deref(), upstream),
-        Some(Command::Remove { id, scope, target }) => {
-            cmd_remove(&repo_root, &id, &scope, target.as_deref())
-        }
+        }) => cmd_diff(&repo_root, &capability_id, agent.as_deref(), upstream),
+        Some(Command::Delete {
+            id,
+            scope,
+            agent,
+            force,
+        }) => cmd_delete(&repo_root, &id, &scope, &agent, force),
+        Some(Command::Untrack { id, scope, agent }) => cmd_untrack(&repo_root, &id, &scope, &agent),
         Some(Command::Update {
             id,
             scope,
             check,
+            agent,
             force,
-        }) => cmd_update(&repo_root, &id, scope.as_deref(), check, force),
+        }) => cmd_update(&repo_root, &id, scope.as_deref(), &agent, check, force),
         Some(Command::Check {
             json,
             ignore_failures,
             global,
         }) => cmd_check(&repo_root, json, ignore_failures, global),
         Some(Command::Outdated) => cmd_outdated(&repo_root),
-        Some(Command::Target { action }) => match action {
-            TargetCommand::List => cmd_target_list(&repo_root),
-            TargetCommand::Add { id } => cmd_target_add(&repo_root, &id),
-            TargetCommand::Remove { id } => cmd_target_remove(&repo_root, &id),
+        Some(Command::Agent { action }) => match action {
+            AgentCommand::List => cmd_agent_list(&repo_root),
+            AgentCommand::Add { id } => cmd_agent_add(&repo_root, &id),
+            AgentCommand::Remove { id } => cmd_agent_remove(&repo_root, &id),
         },
     }
 }

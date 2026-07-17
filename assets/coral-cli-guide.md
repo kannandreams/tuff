@@ -1,6 +1,6 @@
 ---
 name: coral-cli-guide
-description: Reference for using Coral CLI to manage agent capabilities — install, list, diff, check, update, scope, and import operations.
+description: Reference for using Coral CLI to manage agent capabilities — create, add, list, diff, check, update, and scope operations.
 ---
 
 # Coral CLI Guide
@@ -12,12 +12,12 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 ## Available Commands
 
 ### Install
-- `coral add <path> -t <target>` — install a local capability
-- `coral add <git-url> --skill <name> -t <target>` — install from git
-- `coral add <git-url> --tool <name> -t <target>` — install tool from git
-- `coral add <git-url> --hook <name> -t <target>` — install hook from git
-- `coral import <path> -t <target>` — track existing agent files
-- `coral import -t <target>` — import all existing capabilities
+- `coral add <path> -a <agent>` — install a local capability
+- `coral add .agents/skills/<id> -a open-agents` — track existing agent files in place
+- `coral add <git-url> --skill <name> -a <agent>` — install from git
+- `coral add <git-url> --tool <name> -a <agent>` — install tool from git
+- `coral add <git-url> --hook <name> -a <agent>` — install hook from git
+- `coral create <type> <id> -a <agent>` — create and track a capability
 
 ### Inspect
 - `coral list` — show all installed capabilities with drift status
@@ -29,9 +29,10 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 - `coral outdated` — check all capabilities for available updates
 
 ### Update & Merge
-- `coral update <id> --check` — dry run: preview what would change
-- `coral update <id>` — attempt three-way merge with upstream
-- `coral update <id> --force` — overwrite local changes with upstream
+- `coral update <id> --check` — preview local baseline promotion or upstream changes
+- `coral update <id>` — accept local edits or reconcile with upstream
+- `coral update <id> -a <agent>` — update one recorded agent
+- `coral update <id> --force` — overwrite local changes with source output
 
 ### CI & Validation
 - `coral check` — validate all capabilities (exit 1 on any failure)
@@ -39,11 +40,11 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 
 ### Manage
 - `coral remove <id>` — remove a capability
-- `coral target list` — show available harness targets
-- `coral target add <id>` — register a target
+- `coral agent list` — show available agent harnesses
+- `coral agent add <id>` — register an agent and initialize its project directory
 - `coral init --global` — initialize global scope (~/.coral/)
 
-### Targets
+### Agents
 - `open-agents` — Codex, Cursor, OpenCode, Copilot, Gemini CLI, Roo, Cline
 - `claude` — Claude Code
 
@@ -67,11 +68,11 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 
 ## Quick Cheat Sheet
 ```
-coral init                          # initialize repo
-coral add <path> -t open-agents     # install capability
+coral init                          # initialize repo and register open-agents
+coral add <path> -a open-agents     # install capability
 coral list                          # check drift
 coral diff <id>                     # see what changed
 coral check                         # CI validation
 coral outdated                      # check for updates
-coral update <id>                   # update from source
+coral update <id>                   # accept local edits or update from source
 ```

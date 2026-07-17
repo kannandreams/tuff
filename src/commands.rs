@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -12,10 +12,10 @@ use tabled::{
 };
 
 use crate::{
-    adapter::{self, AdapterKind, resolve_capability},
-    config, git,
-    display,
+    adapter::{self, resolve_capability, AdapterKind},
+    config, display,
     error::{CoralError, Result},
+    git,
     lockfile::{self, TargetLockEntry},
     manifest::{self, load_manifest},
     resolver::{self, Scope},
@@ -31,7 +31,7 @@ struct ListRow {
     version: String,
     #[tabled(rename = "SCOPE")]
     scope: String,
-    #[tabled(rename = "TARGET")]
+    #[tabled(rename = "AGENT")]
     target: String,
     #[tabled(rename = "STATUS")]
     status: String,
@@ -45,7 +45,7 @@ struct OutdatedRow {
     id: String,
     #[tabled(rename = "TYPE")]
     capability_type: String,
-    #[tabled(rename = "TARGET")]
+    #[tabled(rename = "AGENT")]
     target: String,
     #[tabled(rename = "CURRENT")]
     current: String,
@@ -176,7 +176,11 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     } else {
         display::print_init_banner();
         let lock_path = lockfile::init_lockfile(repo_root)?;
-        let _ = config::read_config(repo_root)?;
+        let mut config = config::read_config(repo_root)?;
+        if !config.targets.iter().any(|target| target == "open-agents") {
+            config.targets.push("open-agents".to_string());
+            config::write_config(repo_root, &config)?;
+        }
 
         // Scaffold agent directories (smart skip: only create missing ones)
         for dir in &["skills", "tools", "hooks", "workflows"] {
@@ -193,7 +197,10 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
         println!("scaffolded .agents/ — place your capabilities here:");
 
         // Install coral-cli-guide skill
-        let guide_path = repo_root.join(".agents").join("skills").join("coral-cli-guide");
+        let guide_path = repo_root
+            .join(".agents")
+            .join("skills")
+            .join("coral-cli-guide");
         if !guide_path.exists() {
             std::fs::create_dir_all(&guide_path)?;
             std::fs::write(guide_path.join("SKILL.md"), CORAL_GUIDE_CONTENT)?;
@@ -223,6 +230,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                         path: ".agents/skills/coral-cli-guide/SKILL.md".into(),
                         hash,
                     }],
+                    ownership: lockfile::TargetOwnership::Generated,
                 },
             );
 
@@ -244,13 +252,268 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_create(
+pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[String]) -> Result<()> {
+    if !matches!(kind, "skill" | "tool" | "hook" | "workflow") {
+        return Err(CoralError::new(format!("unknown capability type '{kind}'")));
+    }
+    let id = raw_id.trim();
+    if id.is_empty() {
+        return Err(CoralError::new("capability name must not be empty"));
+    }
+
+    let mut adapters = Vec::new();
+    for target in target_ids {
+        let adapter = AdapterKind::from_id(target).ok_or_else(|| {
+            CoralError::new(format!(
+                "unknown agent '{}'; use 'coral agent list' to see available agents",
+                target
+            ))
+        })?;
+        if !adapter.supports(kind) {
+            return Err(CoralError::new(format!(
+                "{} does not yet support {} capabilities",
+                adapter.display_name(),
+                kind
+            )));
+        }
+        if !adapters.contains(&adapter) {
+            adapters.push(adapter);
+        }
+    }
+
+    let lock_path = lockfile::lockfile_path(repo_root);
+    let mut coral_lock = if lock_path.exists() {
+        lockfile::read_lockfile_at(&lock_path)?
+    } else {
+        lockfile::Lockfile {
+            version: lockfile::LOCKFILE_VERSION,
+            capabilities: BTreeMap::new(),
+        }
+    };
+    if coral_lock.capabilities.contains_key(id) {
+        return Err(CoralError::new(format!(
+            "capability '{}' is already tracked; choose another id",
+            id
+        )));
+    }
+
+    let mut plans = Vec::new();
+    for adapter in &adapters {
+        let (relative_dir, files) = create_scaffold_files(kind, id, *adapter)?;
+        let root = repo_root
+            .join(adapter_project_dir(*adapter))
+            .join(relative_dir)
+            .join(id);
+        if root.exists() {
+            return Err(CoralError::new(format!(
+                "refusing to overwrite existing capability scaffold: {}",
+                lockfile::relative_or_absolute_fs(&root, repo_root)
+            )));
+        }
+        plans.push((*adapter, root, files));
+    }
+
+    let mut config = config::read_config(repo_root)?;
+    let mut target_entries = BTreeMap::new();
+    let source_path = plans
+        .first()
+        .map(|(_, root, _)| lockfile::relative_or_absolute_fs(root, repo_root))
+        .unwrap_or_default();
+
+    for (adapter, root, files) in &plans {
+        fs::create_dir_all(root)?;
+        for (name, content) in files {
+            fs::write(root.join(name), content)?;
+        }
+
+        #[cfg(unix)]
+        if kind == "tool" {
+            use std::os::unix::fs::PermissionsExt;
+            let run_sh = root.join("run.sh");
+            let mut permissions = fs::metadata(&run_sh)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(run_sh, permissions)?;
+        }
+
+        let baseline_dir = repo_root
+            .join(".coral")
+            .join("baselines")
+            .join(adapter.id())
+            .join(id);
+        let mut emitted_files = Vec::new();
+        for (name, content) in files {
+            if *name == "coral.toml" {
+                continue;
+            }
+            let target_path = root.join(name);
+            let baseline_path = baseline_dir.join(name);
+            if let Some(parent) = baseline_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&baseline_path, content)?;
+            emitted_files.push(adapter::EmittedFile {
+                path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
+                hash: lockfile::hash_bytes(content.as_bytes()),
+            });
+        }
+
+        target_entries.insert(
+            adapter.id().to_string(),
+            TargetLockEntry {
+                baseline_dir: lockfile::relative_or_absolute_fs(&baseline_dir, repo_root),
+                emitted_files,
+                ownership: lockfile::TargetOwnership::Generated,
+            },
+        );
+        if !config.targets.iter().any(|target| target == adapter.id()) {
+            config.targets.push(adapter.id().to_string());
+        }
+
+        for (name, _) in files {
+            if *name != "coral.toml" {
+                println!(
+                    "created and tracked {} '{}' ({}) -> {}",
+                    kind,
+                    id,
+                    adapter.id(),
+                    lockfile::relative_or_absolute_fs(&root.join(name), repo_root)
+                );
+            }
+        }
+
+        if kind == "tool" {
+            let mcp_path = match adapter {
+                AdapterKind::OpenAgents => repo_root.join(".agents").join("mcp.json"),
+                AdapterKind::Claude => repo_root.join(".mcp.json"),
+            };
+            let entrypoint = format!("{}/tools/{}/run.sh", adapter_project_dir(*adapter), id);
+            crate::adapters::mcp_register_tool(repo_root, &mcp_path, id, "bash", &[entrypoint])?;
+        }
+    }
+
+    coral_lock.capabilities.insert(
+        id.to_string(),
+        lockfile::CapabilityLockEntry {
+            capability_type: kind.to_string(),
+            installed_version: "0.1.0".to_string(),
+            source_path,
+            targets: target_entries,
+            source: None,
+            scope: "project".to_string(),
+        },
+    );
+    config::write_config(repo_root, &config)?;
+    lockfile::write_lockfile(repo_root, &coral_lock)?;
+    println!("next: edit the generated files, then run `coral list` or `coral diff {id}`");
+    Ok(())
+}
+
+fn adapter_project_dir(adapter: AdapterKind) -> &'static str {
+    match adapter {
+        AdapterKind::OpenAgents => ".agents",
+        AdapterKind::Claude => ".claude",
+    }
+}
+
+fn create_scaffold_files(
+    kind: &str,
+    id: &str,
+    adapter: AdapterKind,
+) -> Result<(&'static str, Vec<(&'static str, String)>)> {
+    let files = match kind {
+        "skill" => vec![
+            (
+                "coral.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"skill\"\ndescription = \"What this skill helps the agent do.\"\nfiles = [\"SKILL.md\"]\n"
+                ),
+            ),
+            (
+                "SKILL.md",
+                format!(
+                    "# {id}\n\n## Purpose\n\nDescribe when the agent should use this skill.\n\n## Guidance\n\n- Add the key rules the agent should follow.\n- Add examples, constraints, and team conventions.\n"
+                ),
+            ),
+        ],
+        "tool" => vec![
+            (
+                "coral.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"tool\"\ndescription = \"What this tool does for the agent.\"\nfiles = [\"run.sh\"]\n\n[parameters]\ntype = \"object\"\n\n[parameters.properties.input]\ntype = \"string\"\ndescription = \"Input passed to the tool\"\n\n[implementation]\nlanguage = \"bash\"\nentrypoint = \"run.sh\"\n"
+                ),
+            ),
+            (
+                "run.sh",
+                "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n".to_string(),
+            ),
+        ],
+        "hook" => {
+            let file = match adapter {
+                AdapterKind::OpenAgents => "hook.toml",
+                AdapterKind::Claude => "hook.json",
+            };
+            let content = match adapter {
+                AdapterKind::OpenAgents => {
+                    "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string()
+                }
+                AdapterKind::Claude => serde_json::to_string_pretty(&serde_json::json!({
+                    "event": "before_finish",
+                    "command": "echo review hook",
+                    "working_directory": "."
+                }))? + "\n",
+            };
+            vec![
+                (
+                    "coral.toml",
+                    format!(
+                        "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"hook\"\ndescription = \"What this hook enforces.\"\nfiles = [\"{file}\"]\n\n[hook]\nevent = \"before_finish\"\ncommand = \"echo review hook\"\nworking_directory = \".\"\n"
+                    ),
+                ),
+                (file, content),
+            ]
+        }
+        "workflow" => vec![
+            (
+                "coral.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\nfiles = [\"workflow.toml\"]\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
+                ),
+            ),
+            (
+                "workflow.toml",
+                format!(
+                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
+                ),
+            ),
+        ],
+        _ => unreachable!(),
+    };
+    let relative_dir = match kind {
+        "skill" => "skills",
+        "tool" => "tools",
+        "hook" => "hooks",
+        "workflow" => "workflows",
+        _ => unreachable!(),
+    };
+    Ok((relative_dir, files))
+}
+
+#[allow(dead_code)]
+fn cmd_create_legacy(
     repo_root: &Path,
     skill: Option<&str>,
     tool: Option<&str>,
     hook: Option<&str>,
     workflow: Option<&str>,
+    target: &str,
 ) -> Result<()> {
+    let adapter = AdapterKind::from_id(target).ok_or_else(|| {
+        CoralError::new(format!(
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
+            target
+        ))
+    })?;
+
     let selections = [
         ("skill", skill),
         ("tool", tool),
@@ -264,7 +527,7 @@ pub fn cmd_create(
 
     if chosen.len() != 1 {
         return Err(CoralError::new(
-            "choose exactly one scaffold target: --skill, --tool, --hook, or --workflow",
+            "choose exactly one scaffold type: --skill, --tool, --hook, or --workflow",
         ));
     }
 
@@ -345,10 +608,11 @@ echo "replace with tool logic"
         ),
         "hook" => (
             "hooks",
-            vec![(
-                "coral.toml",
-                format!(
-                    r#"id = "{id}"
+            vec![
+                (
+                    "coral.toml",
+                    format!(
+                        r#"id = "{id}"
 version = "0.1.0"
 type = "hook"
 description = "What this hook enforces."
@@ -359,18 +623,21 @@ event = "before_finish"
 command = "echo review hook"
 working_directory = "."
 "#
+                    ),
                 ),
-            ), (
-                "hook.toml",
-                "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string(),
-            )],
+                (
+                    "hook.toml",
+                    "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string(),
+                ),
+            ],
         ),
         "workflow" => (
             "workflows",
-            vec![(
-                "coral.toml",
-                format!(
-                    r#"id = "{id}"
+            vec![
+                (
+                    "coral.toml",
+                    format!(
+                        r#"id = "{id}"
 version = "0.1.0"
 type = "workflow"
 description = "When the agent should run this workflow."
@@ -380,16 +647,24 @@ files = ["workflow.toml"]
 id = "replace-me"
 type = "skill"
 "#
+                    ),
                 ),
-            ), (
-                "workflow.toml",
-                "name = \"replace-me\"\ndescription = \"Fill in the workflow steps here.\"\n".to_string(),
-            )],
+                (
+                    "workflow.toml",
+                    "name = \"replace-me\"\ndescription = \"Fill in the workflow steps here.\"\n"
+                        .to_string(),
+                ),
+            ],
         ),
         _ => unreachable!(),
     };
 
-    let root = repo_root.join(".agents").join(relative_dir).join(id);
+    let target_root = match adapter {
+        AdapterKind::OpenAgents => ".agents",
+        AdapterKind::Claude => ".claude",
+    };
+    let canonical_target = adapter.id();
+    let root = repo_root.join(target_root).join(relative_dir).join(id);
     if root.exists() {
         return Err(CoralError::new(format!(
             "refusing to overwrite existing capability scaffold: {}",
@@ -416,8 +691,9 @@ type = "skill"
         lockfile::relative_or_absolute_fs(&root, repo_root)
     );
     println!(
-        "next: edit the generated files, then run `coral import {} -t <target>`",
-        lockfile::relative_or_absolute_fs(&root, repo_root)
+        "next: edit the generated files, then run `coral add {} -t {}`",
+        lockfile::relative_or_absolute_fs(&root, repo_root),
+        canonical_target
     );
 
     Ok(())
@@ -485,12 +761,19 @@ fn cmd_add_git(
         }
     }
 
-    install_capability(install_root, scope, &capability, &manifest, target_ids, Some(&SourceMetaInput {
-        source_type: "git".to_string(),
-        url: clean_url,
-        source_ref: commit_sha.clone(),
-        skill: name.to_string(),
-    }))
+    install_capability(
+        install_root,
+        scope,
+        &capability,
+        &manifest,
+        target_ids,
+        Some(&SourceMetaInput {
+            source_type: "git".to_string(),
+            url: clean_url,
+            source_ref: commit_sha.clone(),
+            skill: name.to_string(),
+        }),
+    )
 }
 
 fn cmd_add_local(
@@ -501,16 +784,214 @@ fn cmd_add_local(
     project_root: &Path,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability);
-    let capability = load_manifest(&capability_dir)?;
-    let resolved = resolve_capability(&capability)?;
+    let inferred = infer_from_path(&capability_dir);
+    let manifest = load_or_synthetic_manifest(&capability_dir, Some(&inferred.0))?;
+    let resolved = resolve_capability(&manifest)?;
 
     if scope == Scope::Project {
-        if let Some(warning) = resolver::check_collision(&capability.id, project_root, None)? {
+        if let Some(warning) = resolver::check_collision(&resolved.id, project_root, None)? {
             eprintln!("{warning}");
         }
     }
 
-    install_capability(install_root, scope, &resolved, &capability, target_ids, None)
+    if is_target_layout_path(install_root, &capability_dir) {
+        return adopt_capability_in_place(
+            install_root,
+            scope,
+            &capability_dir,
+            &manifest,
+            &resolved,
+            &inferred.1,
+            target_ids,
+        );
+    }
+
+    install_capability(install_root, scope, &resolved, &manifest, target_ids, None)
+}
+
+fn load_or_synthetic_manifest(
+    capability_dir: &Path,
+    inferred_type: Option<&str>,
+) -> Result<manifest::CapabilityManifest> {
+    if capability_dir.join("coral.toml").exists() {
+        load_manifest(capability_dir)
+    } else {
+        synthetic_local_manifest(capability_dir, inferred_type)
+    }
+}
+
+fn synthetic_local_manifest(
+    capability_dir: &Path,
+    inferred_type: Option<&str>,
+) -> Result<manifest::CapabilityManifest> {
+    if !capability_dir.exists() || !capability_dir.is_dir() {
+        return Err(CoralError::new(format!(
+            "directory not found: {}",
+            capability_dir.display()
+        )));
+    }
+
+    let id = capability_dir
+        .file_name()
+        .ok_or_else(|| CoralError::new("capability directory must have a name"))?
+        .to_string_lossy()
+        .to_string();
+    let capability_type = inferred_type.unwrap_or("skill").to_string();
+
+    let mut files = Vec::new();
+    for entry in fs::read_dir(capability_dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name != "coral.toml" {
+            files.push(name);
+        }
+    }
+    files.sort();
+    if files.is_empty() {
+        return Err(CoralError::new(format!(
+            "no source files found in {}",
+            capability_dir.display()
+        )));
+    }
+
+    Ok(manifest::CapabilityManifest {
+        id,
+        version: "0.1.0".into(),
+        capability_type,
+        description: "Added from existing agent assets.".into(),
+        files,
+        parameters: None,
+        implementation: None,
+        hook: None,
+        workflow: None,
+        targets: vec![],
+        root: capability_dir.to_path_buf(),
+    })
+}
+
+fn is_target_layout_path(root: &Path, capability_dir: &Path) -> bool {
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let canonical_dir = capability_dir
+        .canonicalize()
+        .unwrap_or_else(|_| capability_dir.to_path_buf());
+    let rel = canonical_dir
+        .strip_prefix(&canonical_root)
+        .unwrap_or(canonical_dir.as_path());
+    matches!(
+        rel.components()
+            .next()
+            .and_then(|component| component.as_os_str().to_str()),
+        Some(".agents" | ".claude")
+    )
+}
+
+fn relative_or_absolute_canonical(path: &Path, root: &Path) -> String {
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    canonical_path
+        .strip_prefix(&canonical_root)
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| lockfile::relative_or_absolute_fs(path, root))
+}
+
+fn adopt_capability_in_place(
+    install_root: &Path,
+    scope: Scope,
+    capability_dir: &Path,
+    manifest: &manifest::CapabilityManifest,
+    capability: &adapter::ResolvedCapability,
+    inferred_target: &str,
+    target_ids: &[String],
+) -> Result<()> {
+    for target_id in target_ids {
+        if target_id != inferred_target {
+            return Err(CoralError::new(format!(
+                "{} is already in the '{}' agent layout; use -a {}",
+                lockfile::relative_or_absolute_fs(capability_dir, install_root),
+                inferred_target,
+                inferred_target
+            )));
+        }
+    }
+
+    if !capability_dir.join("coral.toml").exists() {
+        let toml_content = format!(
+            "# Generated by coral add\nid = \"{}\"\nversion = \"{}\"\ntype = \"{}\"\ndescription = \"Added from existing agent assets.\"\nfiles = [{}]\n",
+            capability.id,
+            capability.version,
+            capability.capability_type,
+            manifest
+                .files
+                .iter()
+                .map(|file| format!("\"{file}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        fs::write(capability_dir.join("coral.toml"), toml_content)?;
+    }
+
+    let mut lockfile = lockfile::require_lockfile(install_root)?;
+    if lockfile.capabilities.contains_key(&capability.id) {
+        return Err(CoralError::new(format!(
+            "capability '{}' is already tracked; use 'coral update {}' for tracked changes",
+            capability.id, capability.id
+        )));
+    }
+
+    let baseline_dir = install_root
+        .join(".coral")
+        .join("baselines")
+        .join(inferred_target)
+        .join(&capability.id);
+    fs::create_dir_all(&baseline_dir)?;
+
+    let mut emitted_files = Vec::new();
+    for (rel_path, content) in &capability.source_files {
+        let file_path = capability_dir.join(rel_path);
+        let baseline_path = baseline_dir.join(rel_path);
+        if let Some(parent) = baseline_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&baseline_path, content)?;
+        emitted_files.push(adapter::EmittedFile {
+            path: relative_or_absolute_canonical(&file_path, install_root),
+            hash: lockfile::hash_bytes(&fs::read(&file_path)?),
+        });
+    }
+
+    let mut targets = BTreeMap::new();
+    targets.insert(
+        inferred_target.to_string(),
+        lockfile::TargetLockEntry {
+            baseline_dir: lockfile::relative_or_absolute_fs(&baseline_dir, install_root),
+            emitted_files,
+            ownership: lockfile::TargetOwnership::Imported,
+        },
+    );
+
+    lockfile.capabilities.insert(
+        capability.id.clone(),
+        lockfile::CapabilityLockEntry {
+            capability_type: capability.capability_type.clone(),
+            installed_version: capability.version.clone(),
+            source_path: relative_or_absolute_canonical(capability_dir, install_root),
+            targets,
+            source: None,
+            scope: scope.as_str().to_string(),
+        },
+    );
+    lockfile::write_lockfile(install_root, &lockfile)?;
+    println!(
+        "added {} ({}, {}) -> {}",
+        capability.id,
+        capability.capability_type,
+        inferred_target,
+        relative_or_absolute_canonical(capability_dir, install_root)
+    );
+    Ok(())
 }
 
 struct SourceMetaInput {
@@ -534,7 +1015,7 @@ fn install_capability(
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
             CoralError::new(format!(
-                "unknown target '{}'; run 'coral target list' to see available targets",
+                "unknown agent '{}'; run 'coral agent list' to see available agents",
                 tid
             ))
         })?;
@@ -547,7 +1028,10 @@ fn install_capability(
         }
         if capability.capability_type == "hook" {
             if let Some(ref hook_cfg) = capability.hook {
-                if !adapter.supported_events().contains(&hook_cfg.event.as_str()) {
+                if !adapter
+                    .supported_events()
+                    .contains(&hook_cfg.event.as_str())
+                {
                     return Err(CoralError::new(format!(
                         "{} does not support hook event '{}'. Supported events: {}",
                         adapter.display_name(),
@@ -632,6 +1116,7 @@ fn install_capability(
             TargetLockEntry {
                 baseline_dir: baseline_rel,
                 emitted_files: emitted,
+                ownership: lockfile::TargetOwnership::Generated,
             },
         );
     }
@@ -641,12 +1126,8 @@ fn install_capability(
         if let Some(ref impl_cfg) = capability.implementation {
             for adapter in &adapters {
                 let mcp_path = match adapter {
-                    AdapterKind::OpenAgents => {
-                        install_root.join(".agents").join("mcp.json")
-                    }
-                    AdapterKind::Claude => {
-                        install_root.join(".mcp.json")
-                    }
+                    AdapterKind::OpenAgents => install_root.join(".agents").join("mcp.json"),
+                    AdapterKind::Claude => install_root.join(".mcp.json"),
                 };
 
                 let mcp_command = impl_cfg.language.clone();
@@ -797,7 +1278,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
     println!(
         "{}",
         render_table(
-            &["ID", "TYPE", "VERSION", "SCOPE", "TARGET", "STATUS", "PATH"],
+            &["ID", "TYPE", "VERSION", "SCOPE", "AGENT", "STATUS", "PATH"],
             &table_rows
         )
     );
@@ -842,11 +1323,21 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
                         let mut requires = Vec::new();
                         let mut current_id = String::new();
                         for line in content.lines() {
-                            if line.starts_with("id = \"") && !line.contains("version") && !line.contains("description") && !line.contains("type") {
-                                current_id = line.trim_start_matches("id = \"").trim_end_matches('"').to_string();
+                            if line.starts_with("id = \"")
+                                && !line.contains("version")
+                                && !line.contains("description")
+                                && !line.contains("type")
+                            {
+                                current_id = line
+                                    .trim_start_matches("id = \"")
+                                    .trim_end_matches('"')
+                                    .to_string();
                             }
                             if line.starts_with("type = \"") {
-                                let ctype = line.trim_start_matches("type = \"").trim_end_matches('"').to_string();
+                                let ctype = line
+                                    .trim_start_matches("type = \"")
+                                    .trim_end_matches('"')
+                                    .to_string();
                                 if !current_id.is_empty() && ctype != "workflow" {
                                     requires.push((current_id.clone(), ctype));
                                     current_id.clear();
@@ -855,16 +1346,23 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
                         }
 
                         for (req_id, req_type) in &requires {
-                            let child_status = if let Ok(lf) = lockfile::require_lockfile(repo_root) {
+                            let child_status = if let Ok(lf) = lockfile::require_lockfile(repo_root)
+                            {
                                 if let Some(child_entry) = lf.capabilities.get(req_id) {
                                     let mut child_drift = Vec::new();
                                     for (_, ct_entry) in &child_entry.targets {
                                         for e in &ct_entry.emitted_files {
                                             let s = lockfile::drift_status(repo_root, e);
-                                            if s != "clean" { child_drift.push(s); }
+                                            if s != "clean" {
+                                                child_drift.push(s);
+                                            }
                                         }
                                     }
-                                    if child_drift.is_empty() { "clean".to_string() } else { child_drift.join(",") }
+                                    if child_drift.is_empty() {
+                                        "clean".to_string()
+                                    } else {
+                                        child_drift.join(",")
+                                    }
                                 } else {
                                     "not installed".to_string()
                                 }
@@ -980,7 +1478,7 @@ pub fn cmd_diff(
         }
     }
 
-    print!("{output}");
+    print!("{}", style_diff(&output));
     Ok(())
 }
 
@@ -1011,11 +1509,8 @@ fn cmd_diff_upstream(
                 .unwrap_or_default()
                 .to_string_lossy();
 
-            let upstream_content = crate::diff::get_upstream_content(
-                &cache_dir,
-                &source.skill,
-                &file_name,
-            )?;
+            let upstream_content =
+                crate::diff::get_upstream_content(&cache_dir, &source.skill, &file_name)?;
             let baseline_path = baseline_dir.join(file_name.as_ref());
             let baseline_content = std::fs::read_to_string(&baseline_path)?;
 
@@ -1027,8 +1522,7 @@ fn cmd_diff_upstream(
                 "--- baseline/{}\n+++ upstream/{}/{}\n",
                 file_name, tid, file_name
             ));
-            let diff =
-                similar::TextDiff::from_lines(&baseline_content, &upstream_content);
+            let diff = similar::TextDiff::from_lines(&baseline_content, &upstream_content);
             for group in diff.grouped_ops(3) {
                 for operation in group {
                     for change in diff.iter_changes(&operation) {
@@ -1048,77 +1542,417 @@ fn cmd_diff_upstream(
     if output.is_empty() {
         println!("no upstream changes");
     } else {
-        print!("{output}");
+        print!("{}", style_diff(&output));
     }
 
     Ok(())
 }
 
-// ── Remove ──────────────────────────────────────────────────────────────────
+fn style_diff(diff: &str) -> String {
+    diff.split_inclusive('\n')
+        .map(|line| {
+            let code = if line.starts_with("+++") || line.starts_with("---") {
+                "36"
+            } else if line.starts_with('+') {
+                "32"
+            } else if line.starts_with('-') {
+                "31"
+            } else {
+                return line.to_string();
+            };
+            paint(line, code)
+        })
+        .collect()
+}
 
-pub fn cmd_remove(
-    repo_root: &Path,
-    id: &str,
-    scope_str: &str,
-    targets: Option<&[String]>,
-) -> Result<()> {
+// ── Delete / untrack ────────────────────────────────────────────────────────
+
+fn resolve_cleanup_scope(repo_root: &Path, scope_str: &str) -> Result<(Scope, PathBuf)> {
     let scope = resolver::Scope::from_str(scope_str)
         .ok_or_else(|| CoralError::new(format!("invalid scope '{}'", scope_str)))?;
-
     let scope_root = match scope {
         Scope::Project => repo_root.to_path_buf(),
         Scope::Global => home_dir()?,
     };
+    Ok((scope, scope_root))
+}
+
+fn canonical_cleanup_targets(targets: &[String]) -> Result<Vec<String>> {
+    let mut canonical = BTreeSet::new();
+    for target in targets {
+        let adapter = AdapterKind::from_id(target).ok_or_else(|| {
+            CoralError::new(format!(
+                "unknown agent '{}'; use 'coral agent list' to see available agents",
+                target
+            ))
+        })?;
+        canonical.insert(adapter.id().to_string());
+    }
+    Ok(canonical.into_iter().collect())
+}
+
+fn remove_target_tracking(
+    scope_root: &Path,
+    id: &str,
+    entry: &mut lockfile::CapabilityLockEntry,
+    target: &str,
+) -> Result<()> {
+    if let Some(target_entry) = entry.targets.remove(target) {
+        let baseline_dir = scope_root.join(&target_entry.baseline_dir);
+        if baseline_dir.exists() {
+            std::fs::remove_dir_all(baseline_dir)?;
+        }
+    } else {
+        return Err(CoralError::new(format!(
+            "'{}' is not tracked for agent '{}'",
+            id, target
+        )));
+    }
+    Ok(())
+}
+
+pub fn cmd_delete(
+    repo_root: &Path,
+    id: &str,
+    scope_str: &str,
+    targets: &[String],
+    force: bool,
+) -> Result<()> {
+    let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
+    let target_ids = canonical_cleanup_targets(targets)?;
 
     let mut lockfile = lockfile::require_lockfile(&scope_root)?;
-    let entry = lockfile.capabilities.remove(id).ok_or_else(|| {
-        CoralError::new(format!("'{}' is not installed in {} scope", id, scope.as_str()))
+    let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
+        CoralError::new(format!(
+            "'{}' is not installed in {} scope",
+            id,
+            scope.as_str()
+        ))
     })?;
 
-    let mut modified = false;
-    for (_, target_entry) in &entry.targets {
-        for emitted in &target_entry.emitted_files {
-            if lockfile::drift_status(&scope_root, emitted) == "modified" {
-                modified = true;
-            }
+    for target in &target_ids {
+        let target_entry = entry.targets.get(target).ok_or_else(|| {
+            CoralError::new(format!("'{}' is not tracked for agent '{}'", id, target))
+        })?;
+
+        if target_entry.ownership == lockfile::TargetOwnership::Imported {
+            return Err(CoralError::new(format!(
+                "'{}' is tracked in place for agent '{}'; use 'coral untrack {} -a {}' instead",
+                id, target, id, target
+            )));
+        }
+
+        let modified = target_entry
+            .emitted_files
+            .iter()
+            .any(|emitted| lockfile::drift_status(&scope_root, emitted) == "modified");
+        if modified && !force {
+            return Err(CoralError::new(format!(
+                "'{}' has local modifications for agent '{}'; use --force to delete",
+                id, target
+            )));
+        }
+        if modified {
+            eprintln!(
+                "warning: '{}' has local modifications for agent '{}' - deleting them",
+                id, target
+            );
         }
     }
-    if modified {
-        eprintln!("warning: '{}' has local modifications — removing will discard them", id);
-    }
 
-    let adapter_ids: Vec<String> = if let Some(tgts) = targets {
-        tgts.to_vec()
-    } else {
-        entry.targets.keys().cloned().collect()
-    };
-
-    for tid in &adapter_ids {
-        if let Some(adapter) = AdapterKind::from_id(tid) {
+    for target in &target_ids {
+        if let Some(adapter) = AdapterKind::from_id(target) {
             adapter.remove(id, &scope_root)?;
+        }
+        remove_target_tracking(&scope_root, id, &mut entry, target)?;
+    }
 
-            let baseline_dir = scope_root
-                .join(".coral")
-                .join("baselines")
-                .join(tid)
-                .join(id);
-            if baseline_dir.exists() {
-                std::fs::remove_dir_all(&baseline_dir)?;
-            }
+    if entry.targets.is_empty() {
+        lockfile.capabilities.remove(id);
+    } else {
+        lockfile.capabilities.insert(id.to_string(), entry);
+    }
+    lockfile::write_lockfile(&scope_root, &lockfile)?;
+    println!("deleted '{}' from {} scope", id, scope.as_str());
+    Ok(())
+}
+
+pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[String]) -> Result<()> {
+    let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
+    let target_ids = canonical_cleanup_targets(targets)?;
+
+    let mut lockfile = lockfile::require_lockfile(&scope_root)?;
+    let mut entry = lockfile.capabilities.get(id).cloned().ok_or_else(|| {
+        CoralError::new(format!(
+            "'{}' is not installed in {} scope",
+            id,
+            scope.as_str()
+        ))
+    })?;
+
+    for target in &target_ids {
+        if !entry.targets.contains_key(target) {
+            return Err(CoralError::new(format!(
+                "'{}' is not tracked for agent '{}'",
+                id, target
+            )));
         }
     }
 
+    for target in &target_ids {
+        remove_target_tracking(&scope_root, id, &mut entry, target)?;
+    }
+
+    if entry.targets.is_empty() {
+        lockfile.capabilities.remove(id);
+    } else {
+        lockfile.capabilities.insert(id.to_string(), entry);
+    }
     lockfile::write_lockfile(&scope_root, &lockfile)?;
-    println!("removed '{}' from {} scope", id, scope.as_str());
+    println!("untracked '{}' from {} scope", id, scope.as_str());
     Ok(())
 }
 
 // ── Update ──────────────────────────────────────────────────────────────────
 
+fn select_update_targets(
+    id: &str,
+    entry: &lockfile::CapabilityLockEntry,
+    requested: &[String],
+) -> Result<Vec<String>> {
+    if requested.is_empty() {
+        return Ok(entry.targets.keys().cloned().collect());
+    }
+
+    for target_id in requested {
+        if !entry.targets.contains_key(target_id) {
+            return Err(CoralError::new(format!(
+                "'{}' is not installed for agent '{}'",
+                id, target_id
+            )));
+        }
+    }
+
+    Ok(requested.to_vec())
+}
+
+fn update_local_baseline(
+    scope_root: &Path,
+    id: &str,
+    target_ids: &[String],
+    check: bool,
+    force: bool,
+) -> Result<()> {
+    if force {
+        return Err(CoralError::new(
+            "--force is only valid for git-sourced capabilities; local updates accept the current files as the new baseline",
+        ));
+    }
+
+    let lockfile = lockfile::require_lockfile(scope_root)?;
+    let entry = lockfile
+        .capabilities
+        .get(id)
+        .ok_or_else(|| CoralError::new(format!("'{}' is not installed", id)))?;
+
+    let mut updates = Vec::new();
+    let mut changed_files = 0usize;
+
+    // Preflight every selected file before writing any baseline or lockfile data.
+    for target_id in target_ids {
+        let target_entry = entry.targets.get(target_id).ok_or_else(|| {
+            CoralError::new(format!(
+                "'{}' is not installed for agent '{}'",
+                id, target_id
+            ))
+        })?;
+
+        for emitted in &target_entry.emitted_files {
+            let local_path = scope_root.join(&emitted.path);
+            if !local_path.is_file() {
+                return Err(CoralError::new(format!(
+                    "tracked file is missing for '{}': {}",
+                    id,
+                    local_path.display()
+                )));
+            }
+
+            let file_name = Path::new(&emitted.path).file_name().ok_or_else(|| {
+                CoralError::new(format!("invalid emitted file path: {}", emitted.path))
+            })?;
+            let baseline_path = scope_root.join(&target_entry.baseline_dir).join(file_name);
+            if !baseline_path.is_file() {
+                return Err(CoralError::new(format!(
+                    "baseline file is missing for '{}': {}",
+                    id,
+                    baseline_path.display()
+                )));
+            }
+
+            let content = fs::read(&local_path)?;
+            let baseline = fs::read(&baseline_path)?;
+            if content != baseline {
+                changed_files += 1;
+            }
+            updates.push((
+                target_id.clone(),
+                emitted.path.clone(),
+                baseline_path,
+                content,
+            ));
+        }
+    }
+
+    if check {
+        if changed_files == 0 {
+            println!("'{}' is already up to date", id);
+        } else {
+            println!(
+                "'{}' has {} local file(s) — update would record them as the new baseline",
+                id, changed_files
+            );
+        }
+        return Ok(());
+    }
+
+    for (_target_id, _path, baseline_path, content) in &updates {
+        if let Some(parent) = baseline_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(baseline_path, content)?;
+    }
+
+    let mut lockfile = lockfile;
+    let installed = lockfile
+        .capabilities
+        .get_mut(id)
+        .ok_or_else(|| CoralError::new(format!("'{}' is not installed", id)))?;
+    for (target_id, path, _baseline_path, content) in updates {
+        let target_entry = installed.targets.get_mut(&target_id).ok_or_else(|| {
+            CoralError::new(format!(
+                "'{}' is not installed for agent '{}'",
+                id, target_id
+            ))
+        })?;
+        let emitted = target_entry
+            .emitted_files
+            .iter_mut()
+            .find(|emitted| emitted.path == path)
+            .ok_or_else(|| CoralError::new(format!("tracked file disappeared: {}", path)))?;
+        emitted.hash = lockfile::hash_bytes(&content);
+    }
+    lockfile::write_lockfile(scope_root, &lockfile)?;
+
+    if changed_files == 0 {
+        println!("'{}' is already up to date", id);
+    } else {
+        println!(
+            "updated local baseline for '{}' ({} file(s))",
+            id, changed_files
+        );
+    }
+    Ok(())
+}
+
+fn is_in_place_source_path(source_path: &str) -> bool {
+    source_path.is_empty()
+        || source_path.starts_with(".agents/")
+        || source_path == ".agents"
+        || source_path.starts_with(".claude/")
+        || source_path == ".claude"
+}
+
+fn update_local_from_source(
+    scope_root: &Path,
+    scope: Scope,
+    id: &str,
+    entry: &lockfile::CapabilityLockEntry,
+    target_ids: &[String],
+    check: bool,
+    force: bool,
+) -> Result<()> {
+    let source_dir = lockfile::absolutize(scope_root, Path::new(&entry.source_path));
+    let manifest = load_manifest(&source_dir)?;
+    let capability = resolve_capability(&manifest)?;
+    if capability.id != id {
+        return Err(CoralError::new(format!(
+            "sourcePath for '{}' points at capability '{}'",
+            id, capability.id
+        )));
+    }
+
+    let mut adapters = Vec::new();
+    for tid in target_ids {
+        let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
+            CoralError::new(format!(
+                "unknown agent '{}'; run 'coral agent list' to see available agents",
+                tid
+            ))
+        })?;
+        adapters.push(adapter);
+    }
+
+    let mut changed_files = 0usize;
+    let mut has_local_drift = false;
+    for adapter in &adapters {
+        let planned_files = adapter.plan(&capability, scope_root)?;
+        let target_entry = entry.targets.get(adapter.id()).ok_or_else(|| {
+            CoralError::new(format!(
+                "'{}' is not installed for agent '{}'",
+                id,
+                adapter.id()
+            ))
+        })?;
+        for planned in &planned_files {
+            let current_path = scope_root.join(&planned.path);
+            let current = if current_path.exists() {
+                fs::read(&current_path)?
+            } else {
+                Vec::new()
+            };
+            if current != planned.content {
+                changed_files += 1;
+            }
+        }
+        has_local_drift |= target_entry
+            .emitted_files
+            .iter()
+            .any(|emitted| lockfile::drift_status(scope_root, emitted) != "clean");
+    }
+
+    if check {
+        if has_local_drift && !force {
+            println!(
+                "'{}' has local changes — update would require --force to reload from local source",
+                id
+            );
+        } else if changed_files == 0 {
+            println!("'{}' is already up to date", id);
+        } else {
+            println!(
+                "'{}' has {} source file(s) to apply from {}",
+                id, changed_files, entry.source_path
+            );
+        }
+        return Ok(());
+    }
+
+    if has_local_drift && !force {
+        return Err(CoralError::new(format!(
+            "'{}' has local changes; run 'coral diff {}' first or use --force to reload from source",
+            id, id
+        )));
+    }
+
+    install_capability(scope_root, scope, &capability, &manifest, target_ids, None)?;
+    Ok(())
+}
+
 pub fn cmd_update(
     repo_root: &Path,
     id: &str,
     scope_str: Option<&str>,
+    requested_targets: &[String],
     check: bool,
     force: bool,
 ) -> Result<()> {
@@ -1153,11 +1987,17 @@ pub fn cmd_update(
         }
     };
 
-    let source = entry.source.as_ref().ok_or_else(|| {
-        CoralError::new(
-            format!("'{}' is not a git-sourced capability — update only works for git sources", id),
-        )
-    })?;
+    let target_ids = select_update_targets(id, &entry, requested_targets)?;
+
+    if entry.source.is_none() && is_in_place_source_path(&entry.source_path) {
+        return update_local_baseline(&scope_root, id, &target_ids, check, force);
+    }
+
+    if entry.source.is_none() {
+        return update_local_from_source(&scope_root, scope, id, &entry, &target_ids, check, force);
+    }
+
+    let source = entry.source.as_ref().expect("source checked above");
 
     let (cache_dir, _clean_url) = git::clone_or_fetch(&source.url)?;
     let latest_sha = git::resolve_ref(&cache_dir)?;
@@ -1172,7 +2012,6 @@ pub fn cmd_update(
     if force {
         let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
         let capability = resolve_capability(&manifest)?;
-        let target_ids: Vec<String> = entry.targets.keys().cloned().collect();
         return install_capability(
             &scope_root,
             scope,
@@ -1192,7 +2031,13 @@ pub fn cmd_update(
     let mut had_conflicts = false;
     let mut would_overwrite = false;
 
-    for (_tid, target_entry) in &entry.targets {
+    for target_id in &target_ids {
+        let target_entry = entry.targets.get(target_id).ok_or_else(|| {
+            CoralError::new(format!(
+                "'{}' is not installed for agent '{}'",
+                id, target_id
+            ))
+        })?;
         let baseline_dir = scope_root.join(&target_entry.baseline_dir);
         for emitted in &target_entry.emitted_files {
             let file_name = std::path::Path::new(&emitted.path)
@@ -1219,11 +2064,8 @@ pub fn cmd_update(
             }
 
             if !check {
-                let report = crate::diff::merge_and_write(
-                    &baseline_path,
-                    &local_path,
-                    &upstream_path,
-                )?;
+                let report =
+                    crate::diff::merge_and_write(&baseline_path, &local_path, &upstream_path)?;
 
                 if let Some(reports) = report {
                     had_conflicts = true;
@@ -1247,7 +2089,10 @@ pub fn cmd_update(
         if all_clean {
             println!("'{}' can be updated cleanly (no local changes)", id);
         } else if would_overwrite {
-            println!("'{}' has local changes — update would attempt three-way merge", id);
+            println!(
+                "'{}' has local changes — update would attempt three-way merge",
+                id
+            );
         } else {
             println!("'{}' is up to date", id);
         }
@@ -1262,8 +2107,6 @@ pub fn cmd_update(
 
     let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
     let primitive = resolve_capability(&manifest)?;
-    let target_ids: Vec<String> = entry.targets.keys().cloned().collect();
-
     install_capability(
         &scope_root,
         scope,
@@ -1279,188 +2122,6 @@ pub fn cmd_update(
     )
 }
 
-// ── Import ──────────────────────────────────────────────────────────────────
-
-pub fn cmd_import(
-    repo_root: &Path,
-    path: Option<&Path>,
-    targets: &[String],
-    capability_type: Option<&str>,
-    dry_run: bool,
-    override_existing: bool,
-) -> Result<()> {
-    let mut import_paths: Vec<(std::path::PathBuf, String, String)> = Vec::new();
-
-    if let Some(dir) = path {
-        let dir = lockfile::absolutize(repo_root, dir);
-        if !dir.exists() || !dir.is_dir() {
-            return Err(CoralError::new(format!(
-                "directory not found: {}",
-                dir.display()
-            )));
-        }
-
-        let (inferred_type, inferred_target) = infer_from_path(&dir);
-        let ctype = capability_type.unwrap_or(&inferred_type);
-        let tid = if targets.is_empty() {
-            inferred_target
-        } else {
-            targets[0].clone()
-        };
-
-        import_paths.push((dir, ctype.to_string(), tid));
-    } else {
-        // Batch scan
-        if targets.is_empty() {
-            // Scan both default locations
-            for (base, target_id) in &[
-                (".agents", "open-agents"),
-                (".claude", "claude"),
-            ] {
-                let base_dir = repo_root.join(base);
-                if base_dir.exists() {
-                    scan_agent_dir(&base_dir, target_id, &mut import_paths)?;
-                }
-            }
-        } else {
-            for tid in targets {
-                let base = if tid == "open-agents" { ".agents" } else { ".claude" };
-                let base_dir = repo_root.join(base);
-                if base_dir.exists() {
-                    scan_agent_dir(&base_dir, tid, &mut import_paths)?;
-                }
-            }
-        }
-    }
-
-    if import_paths.is_empty() {
-        println!("no assets found to import");
-        return Ok(());
-    }
-
-    for (dir, ctype, target_id) in &import_paths {
-        let id = dir
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-
-        if dry_run {
-            println!(
-                "would import {} ({}, {}) from {}",
-                id, ctype, target_id, lockfile::relative_or_absolute_fs(dir, repo_root)
-            );
-            continue;
-        }
-
-        // Check if already in lockfile
-        if !override_existing {
-            if let Ok(lf) = lockfile::require_lockfile(repo_root) {
-                if lf.capabilities.contains_key(&id) {
-                    println!("skipped {} — already tracked (use --override to overwrite)", id);
-                    continue;
-                }
-            }
-        }
-
-        // Generate coral.toml
-        let toml_content = format!(
-            "# Generated by coral import\nid = \"{id}\"\nversion = \"0.1.0\"\ntype = \"{ctype}\"\ndescription = \"Imported from existing agent assets.\"\n",
-            id = id,
-            ctype = ctype
-        );
-        std::fs::write(dir.join("coral.toml"), toml_content)?;
-
-        // Build file list
-        let mut file_list = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let fname = entry.file_name();
-                if fname == "coral.toml" {
-                    continue;
-                }
-                file_list.push(fname.to_string_lossy().to_string());
-            }
-        }
-
-        // Create manifest and import
-        let manifest = manifest::CapabilityManifest {
-            id: id.clone(),
-            version: "0.1.0".into(),
-            capability_type: ctype.clone(),
-            description: "Imported from existing agent assets.".into(),
-            files: file_list,
-            parameters: None,
-            implementation: None,
-            hook: None,
-            workflow: None,
-            targets: vec![],
-            root: dir.clone(),
-        };
-
-        let capability = resolve_capability(&manifest)?;
-
-        // Import: files already exist — skip emit, just baseline + lockfile
-        let entrypoint_files: Vec<String> = capability
-            .source_files
-            .iter()
-            .map(|(name, _)| name.clone())
-            .collect();
-
-        if !entrypoint_files.is_empty() {
-            let mut lockfile = lockfile::require_lockfile(repo_root)?;
-            let mut emitted_files = Vec::new();
-
-            let baseline_dir = repo_root
-                .join(".coral")
-                .join("baselines")
-                .join(target_id)
-                .join(&id);
-            std::fs::create_dir_all(&baseline_dir)?;
-
-            for (rel_path, content) in &capability.source_files {
-                let file_path = dir.join(rel_path);
-                let hash = lockfile::hash_bytes(&std::fs::read(&file_path)?);
-                emitted_files.push(adapter::EmittedFile {
-                    path: lockfile::relative_or_absolute_fs(&file_path, repo_root),
-                    hash,
-                });
-                std::fs::write(baseline_dir.join(rel_path), content)?;
-            }
-
-            let baseline_rel = lockfile::relative_or_absolute_fs(&baseline_dir, repo_root);
-            let mut targets = BTreeMap::new();
-            targets.insert(
-                target_id.clone(),
-                lockfile::TargetLockEntry {
-                    baseline_dir: baseline_rel,
-                    emitted_files,
-                },
-            );
-
-            lockfile.capabilities.insert(
-                id.clone(),
-                lockfile::CapabilityLockEntry {
-                    capability_type: ctype.clone(),
-                    installed_version: "0.1.0".into(),
-                    source_path: String::new(),
-                    targets,
-                    source: None,
-                    scope: "project".into(),
-                },
-            );
-
-            lockfile::write_lockfile(repo_root, &lockfile)?;
-            println!(
-                "imported {} ({}, {})",
-                id, ctype, target_id
-            );
-        }
-    }
-
-    Ok(())
-}
-
 fn infer_from_path(path: &Path) -> (String, String) {
     let parent = path
         .parent()
@@ -1471,6 +2132,7 @@ fn infer_from_path(path: &Path) -> (String, String) {
     let ctype = match parent.as_str() {
         "tools" => "tool",
         "hooks" => "hook",
+        "workflows" => "workflow",
         _ => "skill",
     };
 
@@ -1487,26 +2149,6 @@ fn infer_from_path(path: &Path) -> (String, String) {
     };
 
     (ctype.to_string(), target.to_string())
-}
-
-fn scan_agent_dir(
-    base: &Path,
-    target_id: &str,
-    results: &mut Vec<(std::path::PathBuf, String, String)>,
-) -> Result<()> {
-    for kind in &["skills", "tools", "hooks"] {
-        let kind_dir = base.join(kind);
-        if kind_dir.exists() {
-            for entry in std::fs::read_dir(&kind_dir)? {
-                let entry = entry?;
-                if entry.file_type()?.is_dir() {
-                    let ctype = kind.trim_end_matches('s');
-                    results.push((entry.path(), ctype.to_string(), target_id.to_string()));
-                }
-            }
-        }
-    }
-    Ok(())
 }
 
 // ── Check ───────────────────────────────────────────────────────────────────
@@ -1628,8 +2270,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
                                     id: id.clone(),
                                     capability_type: entry.capability_type.clone(),
                                     target: target_id.clone(),
-                                    current: short_sha(&entry.installed_version)
-                                        .to_string(),
+                                    current: short_sha(&entry.installed_version).to_string(),
                                     latest: "unavailable".to_string(),
                                     status: "error".to_string(),
                                 });
@@ -1702,20 +2343,20 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     println!(
         "{}",
         render_table(
-            &["ID", "TYPE", "TARGET", "CURRENT", "LATEST", "STATUS"],
+            &["ID", "TYPE", "AGENT", "CURRENT", "LATEST", "STATUS"],
             &table_rows
         )
     );
     Ok(())
 }
 
-// ── Target commands (unchanged) ─────────────────────────────────────────────
+// ── Agent commands ──────────────────────────────────────────────────────────
 
-pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
+pub fn cmd_agent_list(repo_root: &Path) -> Result<()> {
     #[derive(Tabled)]
-    struct TargetRow {
-        #[tabled(rename = "TARGET")]
-        target: String,
+    struct AgentRow {
+        #[tabled(rename = "AGENT")]
+        agent: String,
         #[tabled(rename = "AGENTS SUPPORTED")]
         agents: String,
         #[tabled(rename = "PRIMITIVES")]
@@ -1726,16 +2367,16 @@ pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
     let registered: std::collections::HashSet<&str> =
         config.targets.iter().map(|s| s.as_str()).collect();
 
-    let rows: Vec<TargetRow> = AdapterKind::all()
+    let rows: Vec<AgentRow> = AdapterKind::all()
         .iter()
         .map(|a| {
-            let target_label = if registered.contains(a.id()) {
+            let agent_label = if registered.contains(a.id()) {
                 format!("{} *", a.id())
             } else {
                 a.id().to_string()
             };
-            TargetRow {
-                target: target_label,
+            AgentRow {
+                agent: agent_label,
                 agents: a.supported_agents().join(", "),
                 primitives: a.kinds_supported().join(", "),
             }
@@ -1745,92 +2386,60 @@ pub fn cmd_target_list(repo_root: &Path) -> Result<()> {
     let mut table = Table::new(rows);
     table
         .with(Style::modern())
-        .with(Modify::new(Columns::single(1)).with(
-            Width::wrap(40).keep_words(true),
-        ));
+        .with(Modify::new(Columns::single(1)).with(Width::wrap(40).keep_words(true)));
 
     println!("{table}");
 
-    if registered.is_empty() {
-        println!("\n  *  = registered (use 'coral target add <id>' to register)");
-    }
+    println!(
+        "\n  {} = registered (use 'coral agent add <id>' to register)",
+        paint("*", "32")
+    );
     Ok(())
 }
 
-pub fn cmd_target_add(repo_root: &Path, id: &str) -> Result<()> {
+pub fn cmd_agent_add(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
         CoralError::new(format!(
-            "unknown target '{}'; use 'coral target list' to see available targets",
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
             id
         ))
     })?;
 
     let mut config = config::read_config(repo_root)?;
-    if config.targets.contains(&id.to_string()) {
-        println!("target '{}' is already registered", id);
+    adapter.ensure_project_dir(repo_root)?;
+    if config.targets.contains(&adapter.id().to_string()) {
+        println!("agent '{}' is already registered", id);
         return Ok(());
     }
 
-    config.targets.push(id.to_string());
+    config.targets.push(adapter.id().to_string());
     config::write_config(repo_root, &config)?;
     println!(
-        "registered target '{}' ({})",
+        "registered agent '{}' ({})",
         adapter.id(),
         adapter.display_name()
     );
     Ok(())
 }
 
-pub fn cmd_target_remove(repo_root: &Path, id: &str) -> Result<()> {
+pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
         CoralError::new(format!(
-            "unknown target '{}'; use 'coral target list' to see available targets",
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
             id
         ))
     })?;
 
     let mut config = config::read_config(repo_root)?;
-    let was_registered = config.targets.contains(&id.to_string());
+    let was_registered = config.targets.contains(&adapter.id().to_string());
 
-    let mut lockfile = lockfile::require_lockfile(repo_root)?;
-    for (primitive_id, entry) in lockfile.capabilities.iter() {
-        if entry.targets.contains_key(id) {
-            adapter.remove(primitive_id, repo_root)?;
-            let baseline_dir = repo_root
-                .join(".coral")
-                .join("baselines")
-                .join(id)
-                .join(primitive_id);
-            if baseline_dir.exists() {
-                std::fs::remove_dir_all(&baseline_dir)?;
-            }
-        }
-    }
-
-    for entry in lockfile.capabilities.values_mut() {
-        entry.targets.remove(id);
-    }
-
-    let baseline_parent = repo_root.join(".coral").join("baselines").join(id);
-    if baseline_parent.exists() {
-        let is_empty = match std::fs::read_dir(&baseline_parent) {
-            Ok(mut rd) => rd.next().is_none(),
-            Err(_) => false,
-        };
-        if is_empty {
-            std::fs::remove_dir(&baseline_parent)?;
-        }
-    }
-
-    lockfile::write_lockfile(repo_root, &lockfile)?;
-
-    config.targets.retain(|t| t != id);
+    config.targets.retain(|t| t != adapter.id());
     config::write_config(repo_root, &config)?;
 
     if was_registered {
-        println!("unregistered target '{}'", adapter.id());
+        println!("unregistered agent '{}'", adapter.id());
     } else {
-        println!("removed target '{}'", adapter.id());
+        println!("removed agent '{}'", adapter.id());
     }
     Ok(())
 }

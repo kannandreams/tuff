@@ -24,7 +24,7 @@ Product teams install the capabilities they need:
 
 ```sh frame="terminal"
 coral init
-coral add https://github.com/company/company-agent-pack --skill rust-test-workflow -t open-agents
+coral add https://github.com/company/company-agent-pack --skill rust-test-workflow -a open-agents
 coral list
 ```
 
@@ -60,24 +60,25 @@ repositories, then bring them under Coral lifecycle tracking.
 The intended flow is:
 
 ```sh frame="terminal"
-coral add https://github.com/owner/repo --skill rust-implement -t open-agents
+coral add https://github.com/owner/repo --skill rust-implement -a open-agents
 coral list
 coral diff rust-implement
 ```
 
-Use `coral import` for local agent assets that already exist in a project. Use
-`coral add` for capabilities hosted in a git repository.
+Use `coral add .agents/skills/<id> -a open-agents` for local agent assets that
+already exist in a project. Use `coral add <git-url> --skill <id>` for
+capabilities hosted in a git repository.
 
 ## Harness compilation
 
 Different coding agents expect different file layouts. Coral should keep a
-single managed source model and compile or emit target-specific output:
+single managed source model and compile or emit agent-specific output:
 
 ```sh frame="terminal"
-coral target add open-agents
-coral target add claude
+coral agent add open-agents
+coral agent add claude
 ```
 
-Harness adapters make target output explicit and reproducible. The same
+Harness adapters make agent output explicit and reproducible. The same
 managed capability can be emitted into `.agents/` for Open Agents-compatible
 harnesses or `.claude/` for Claude Code.

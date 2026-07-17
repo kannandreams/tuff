@@ -7,7 +7,7 @@ Coral is built around capability lifecycle management, not just file installatio
 
 The core loop is:
 
-1. install or import a capability into a target
+1. create or add a capability into an agent
 2. record the install-time baseline
 3. allow the repo to customize the emitted files
 4. detect drift relative to the recorded baseline
@@ -23,7 +23,7 @@ Git is still the system of record for repository history. Coral adds a different
 Git can tell you that a file changed. Coral also records:
 
 - which capability produced that file
-- which target emitted it
+- which agent emitted it
 - which baseline version it came from
 - whether it was installed from a local source or git source
 - which upstream revision it was pinned to
@@ -65,17 +65,41 @@ When Coral compares local files against the recorded baseline, the common states
 For local capabilities, the typical flow is:
 
 ```sh frame="terminal"
-coral create --skill my-skill
-coral import .agents/skills/my-skill -t open-agents
+coral create skill my-skill
 coral list
 coral diff my-skill
 ```
 
+Creation initializes tracking automatically. Pass `--agent claude` to create
+the scaffold under `.claude/` instead.
+
 If the drift is intentional and should become the new baseline:
 
 ```sh frame="terminal"
-coral import .agents/skills/my-skill -t open-agents --override
+coral update my-skill
 ```
+
+## Cleanup
+
+Cleanup is explicit about file ownership. For a capability Coral installed by
+copying files into an agent, delete only the generated agent files:
+
+```sh frame="terminal"
+coral delete my-skill -a open-agents
+```
+
+For a capability added from an existing `.agents/` or `.claude/` directory,
+remove Coral tracking without touching the files:
+
+```sh frame="terminal"
+coral untrack my-skill -a open-agents
+```
+
+Both commands require an agent. `delete` refuses in-place added capabilities and
+requires `--force` for locally modified generated files. `untrack` removes the
+target lock entry and baseline while preserving the capability files,
+`coral.toml`, and MCP configuration. The original source directory is never
+deleted by `delete`.
 
 ## Git-sourced capability lifecycle
 
@@ -110,12 +134,14 @@ coral update <id> --force
 
 | Command | Purpose |
 |---|---|
-| `coral list` | Show drift status and target paths |
+| `coral list` | Show drift status and agent paths |
 | `coral diff <id>` | Show local changes against baseline |
 | `coral diff <id> --upstream` | Show upstream changes against baseline |
 | `coral check` | Fail CI when tracked files drift |
 | `coral outdated` | Show whether git-sourced capabilities have newer revisions |
-| `coral update <id>` | Reconcile a git-sourced capability with upstream |
+| `coral update <id>` | Accept local edits or reconcile git-backed changes |
+| `coral delete <id> -a <agent>` | Delete Coral-generated files for an agent |
+| `coral untrack <id> -a <agent>` | Remove tracking while preserving files |
 
 ## Capability Metadata
 
@@ -124,7 +150,7 @@ attached to the emitted files for the whole lifecycle:
 
 - source
 - version
-- target
+- agent
 - baseline
 - scope
 - update path

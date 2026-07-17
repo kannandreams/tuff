@@ -6,7 +6,7 @@ description: Skills teach an agent how to work inside a project.
 A skill is project-specific instruction. It tells an agent how to work in a repository,
 what conventions matter, what workflows are expected, and what domain context it should keep in mind.
 
-Skills are installed into target-specific directories along with any associated files (scripts,
+Skills are installed into agent-specific directories along with any associated files (scripts,
 references, assets):
 
 ```text
@@ -28,7 +28,7 @@ description = "Use uv for Python dependency and environment management."
 files = ["src/SKILL.md"]
 ```
 
-The `files` field lists source files to copy. Each file is written to the target directory
+The `files` field lists source files to copy. Each file is written to the agent directory
 preserving relative paths. For local coral-shaped directories, the `src/` prefix is stripped
 during emit.
 
@@ -36,13 +36,13 @@ during emit.
 
 ```sh frame="terminal"
 # Local directory
-coral add ./my-skill -t open-agents
+coral add ./my-skill -a open-agents
 
 # Git repository
-coral add https://github.com/owner/repo --skill <name> -t claude -t open-agents
+coral add https://github.com/owner/repo --skill <name> -a claude -a open-agents
 
 # Global scope
-coral add ./my-skill -t open-agents --global
+coral add ./my-skill -a open-agents --global
 ```
 
 Coral tracks where each skill came from, records a baseline, and reports local drift after

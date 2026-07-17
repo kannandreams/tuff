@@ -67,7 +67,7 @@ Before changing the lockfile schema:
 3. Choose a compatibility policy: dual-version reading, explicit migration, or
    a documented pre-release reset.
 4. Test old and new files, including missing fields and malformed values.
-5. Test `coral init`, installation, import, list, diff, check, and update flows.
+5. Test `coral init`, creation, add, list, diff, check, and update flows.
 6. Run formatting, linting, Rust tests, and the documentation build.
 7. Document the minimum Coral version required by repositories using the new
    schema.
@@ -75,9 +75,10 @@ Before changing the lockfile schema:
 ## Baselines and capability versions
 
 Changing a capability's `coral.toml` version does not migrate the lockfile.
-Coral tracks emitted file hashes and baseline copies separately. Use
-`coral import --override` when intentional local edits become the new baseline.
-Use `coral update` for git-backed upstream changes and three-way reconciliation.
+Coral tracks emitted file hashes and baseline copies separately. `coral update`
+is source-aware: for in-place local entries it records intentional edits as the
+new baseline; for external local and git-backed entries it refreshes from the
+recorded source.
 
 ## Non-goals
 

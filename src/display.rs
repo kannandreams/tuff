@@ -125,14 +125,18 @@ fn render_divider(colors: &Palette<'_>) -> String {
 fn render_quick_start(colors: &Palette<'_>) -> String {
     let rows = [
         ("coral init", "Initialize Coral state"),
-        ("coral add <path> -t <target>", "Install a capability"),
+        ("coral add <path> -a <agent>", "Install a capability"),
         ("coral list", "Show installed capabilities"),
         ("coral diff <id>", "Compare local changes to baseline"),
-        ("coral target list", "Show registered harness targets"),
+        ("coral agent list", "Show registered agent harnesses"),
         ("coral --help", "Show command reference"),
     ];
 
-    let left_width = rows.iter().map(|(left, _)| left.chars().count()).max().unwrap_or(0);
+    let left_width = rows
+        .iter()
+        .map(|(left, _)| left.chars().count())
+        .max()
+        .unwrap_or(0);
     let right_width = rows
         .iter()
         .map(|(_, right)| right.chars().count())
