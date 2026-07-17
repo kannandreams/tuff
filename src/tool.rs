@@ -3,14 +3,11 @@ use std::path::Path;
 use crate::error::{CoralError, Result};
 
 pub fn validate_json_schema(value: &serde_json::Value) -> Result<()> {
-    let obj = value.as_object().ok_or_else(|| {
-        CoralError::new("parameters must be a JSON object with 'type: object'")
-    })?;
+    let obj = value
+        .as_object()
+        .ok_or_else(|| CoralError::new("parameters must be a JSON object with 'type: object'"))?;
 
-    let schema_type = obj
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let schema_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if schema_type != "object" {
         return Err(CoralError::new(format!(
             "parameters 'type' must be 'object', got '{}'",
@@ -34,7 +31,9 @@ pub fn validate_json_schema(value: &serde_json::Value) -> Result<()> {
     if obj.contains_key("required") {
         let required = obj.get("required").and_then(|v| v.as_array());
         if required.is_none() {
-            return Err(CoralError::new("parameters 'required' must be an array of field names"));
+            return Err(CoralError::new(
+                "parameters 'required' must be an array of field names",
+            ));
         }
     }
 
@@ -64,7 +63,9 @@ pub fn validate_entrypoint(primitive_dir: &Path, entrypoint: &str) -> Result<()>
 
 pub fn check_path_traversal(entrypoint: &str) -> Result<()> {
     if entrypoint.is_empty() {
-        return Err(CoralError::new("implementation entrypoint must not be empty"));
+        return Err(CoralError::new(
+            "implementation entrypoint must not be empty",
+        ));
     }
 
     if entrypoint.starts_with('/') {
@@ -125,7 +126,12 @@ mod tests {
 
     #[test]
     fn schema_accepts_no_required_field() {
-        assert!(validate_json_schema(&json!({"type": "object", "properties": {"file": {"type": "string"}}})).is_ok());
+        assert!(
+            validate_json_schema(
+                &json!({"type": "object", "properties": {"file": {"type": "string"}}})
+            )
+            .is_ok()
+        );
     }
 
     #[test]

@@ -10,10 +10,7 @@ pub const SUPPORTED_TYPES: &[&str] = &["skill", "tool", "hook", "workflow"];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
 
-pub const SUPPORTED_EVENTS: &[&str] = &[
-    "before_finish",
-    "post_tool_execution",
-];
+pub const SUPPORTED_EVENTS: &[&str] = &["before_finish", "post_tool_execution"];
 
 pub fn supports(capability_type: &str) -> bool {
     SUPPORTED_TYPES.contains(&capability_type)
@@ -81,9 +78,10 @@ fn plan_tool(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<Pl
 }
 
 fn plan_hook(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    let hook_cfg = capability.hook.as_ref().ok_or_else(|| {
-        CoralError::new("hook capability requires [hook] section")
-    })?;
+    let hook_cfg = capability
+        .hook
+        .as_ref()
+        .ok_or_else(|| CoralError::new("hook capability requires [hook] section"))?;
 
     let target_path = repo_root
         .join(".claude")

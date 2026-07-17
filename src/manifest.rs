@@ -136,7 +136,9 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     match manifest.capability_type.as_str() {
         "skill" => {
             if manifest.files.is_empty() {
-                return Err(CoralError::new("skill capability 'files' must not be empty"));
+                return Err(CoralError::new(
+                    "skill capability 'files' must not be empty",
+                ));
             }
             manifest.source_files()?;
         }
@@ -170,9 +172,10 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             }
         }
         "hook" => {
-            let hook_cfg = manifest.hook.as_ref().ok_or_else(|| {
-                CoralError::new("hook capability requires a [hook] section")
-            })?;
+            let hook_cfg = manifest
+                .hook
+                .as_ref()
+                .ok_or_else(|| CoralError::new("hook capability requires a [hook] section"))?;
 
             if hook_cfg.event.trim().is_empty() {
                 return Err(CoralError::new("hook 'event' must be a non-empty string"));
@@ -198,13 +201,17 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             })?;
 
             if wf.requires.is_empty() {
-                return Err(CoralError::new("workflow 'requires' must have at least one entry"));
+                return Err(CoralError::new(
+                    "workflow 'requires' must have at least one entry",
+                ));
             }
 
             let mut seen = std::collections::HashSet::new();
             for req in &wf.requires {
                 if req.id.trim().is_empty() {
-                    return Err(CoralError::new("workflow requirement 'id' must not be empty"));
+                    return Err(CoralError::new(
+                        "workflow requirement 'id' must not be empty",
+                    ));
                 }
                 if req.id == manifest.id {
                     return Err(CoralError::new("workflow cannot require itself"));
@@ -217,7 +224,11 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
                 }
             }
 
-            let names: Vec<_> = wf.requires.iter().map(|r| format!("{} ({})", r.id, r.capability_type)).collect();
+            let names: Vec<_> = wf
+                .requires
+                .iter()
+                .map(|r| format!("{} ({})", r.id, r.capability_type))
+                .collect();
             eprintln!(
                 "note: workflow '{}' requires {} capabilities: {}",
                 manifest.id,
@@ -236,7 +247,11 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     Ok(manifest)
 }
 
-pub fn synthetic_manifest(skill_dir: &Path, name: &str, version: &str) -> Result<CapabilityManifest> {
+pub fn synthetic_manifest(
+    skill_dir: &Path,
+    name: &str,
+    version: &str,
+) -> Result<CapabilityManifest> {
     let mut files = Vec::new();
     walk_skill_dir(skill_dir, "", &mut files)?;
 
@@ -288,12 +303,15 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         fs::create_dir_all(tmp.path().join("src")).unwrap();
         fs::write(tmp.path().join("src").join("SKILL.md"), "# Skill").unwrap();
-        write_manifest(tmp.path(), r#"id = "test"
+        write_manifest(
+            tmp.path(),
+            r#"id = "test"
 version = "1.0.0"
 type = "skill"
 description = "A test skill"
 files = ["src/SKILL.md"]
-"#);
+"#,
+        );
         let m = load_manifest(tmp.path()).unwrap();
         assert_eq!(m.id, "test");
         assert_eq!(m.capability_type, "skill");
@@ -303,7 +321,9 @@ files = ["src/SKILL.md"]
     fn load_tool_manifest_succeeds() {
         let tmp = TempDir::new().unwrap();
         fs::write(tmp.path().join("run.sh"), "echo ok").unwrap();
-        write_manifest(tmp.path(), r#"id = "tool1"
+        write_manifest(
+            tmp.path(),
+            r#"id = "tool1"
 version = "1.0.0"
 type = "tool"
 description = "A test tool"
@@ -319,7 +339,8 @@ description = "x"
 [implementation]
 language = "bash"
 entrypoint = "run.sh"
-"#);
+"#,
+        );
         let m = load_manifest(tmp.path()).unwrap();
         assert_eq!(m.capability_type, "tool");
         assert!(m.implementation.is_some());
@@ -328,7 +349,9 @@ entrypoint = "run.sh"
     #[test]
     fn load_hook_manifest_succeeds() {
         let tmp = TempDir::new().unwrap();
-        write_manifest(tmp.path(), r#"id = "hook1"
+        write_manifest(
+            tmp.path(),
+            r#"id = "hook1"
 version = "1.0.0"
 type = "hook"
 description = "A test hook"
@@ -336,7 +359,8 @@ description = "A test hook"
 [hook]
 event = "before_finish"
 command = "cargo test"
-"#);
+"#,
+        );
         let m = load_manifest(tmp.path()).unwrap();
         assert_eq!(m.capability_type, "hook");
         assert!(m.hook.is_some());
@@ -345,12 +369,15 @@ command = "cargo test"
     #[test]
     fn load_rejects_unsupported_type() {
         let tmp = TempDir::new().unwrap();
-        write_manifest(tmp.path(), r#"id = "bad"
+        write_manifest(
+            tmp.path(),
+            r#"id = "bad"
 version = "1.0.0"
 type = "unknown"
 description = "Bad"
 files = ["SKILL.md"]
-"#);
+"#,
+        );
         assert!(load_manifest(tmp.path()).is_err());
     }
 
@@ -374,7 +401,7 @@ files = ["SKILL.md"]
             parameters: None,
             implementation: None,
             hook: None,
-        workflow: None,
+            workflow: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };
@@ -395,7 +422,7 @@ files = ["SKILL.md"]
             parameters: None,
             implementation: None,
             hook: None,
-        workflow: None,
+            workflow: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };

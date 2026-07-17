@@ -9,8 +9,14 @@ pub const DISPLAY_NAME: &str = "Open Agents";
 pub const SUPPORTED_TYPES: &[&str] = &["skill", "tool", "hook", "workflow"];
 
 pub const SUPPORTED_AGENTS: &[&str] = &[
-    "Codex", "Cursor", "OpenCode", "GitHub Copilot",
-    "Gemini CLI", "Roo", "Cline", "Windsurf",
+    "Codex",
+    "Cursor",
+    "OpenCode",
+    "GitHub Copilot",
+    "Gemini CLI",
+    "Roo",
+    "Cline",
+    "Windsurf",
 ];
 
 pub const SUPPORTED_EVENTS: &[&str] = &[
@@ -88,9 +94,10 @@ fn plan_tool(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<Pl
 }
 
 fn plan_hook(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    let hook_cfg = capability.hook.as_ref().ok_or_else(|| {
-        CoralError::new("hook capability requires [hook] section")
-    })?;
+    let hook_cfg = capability
+        .hook
+        .as_ref()
+        .ok_or_else(|| CoralError::new("hook capability requires [hook] section"))?;
 
     let target_path = repo_root
         .join(".agents")

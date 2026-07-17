@@ -42,11 +42,7 @@ pub fn run_checks(repo_root: &Path) -> Result<CheckOutcome> {
     Ok(CheckOutcome { valid, results })
 }
 
-fn check_lockfile(
-    scope_root: &Path,
-    lf: &lockfile::Lockfile,
-    results: &mut Vec<CheckResult>,
-) {
+fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<CheckResult>) {
     for (id, entry) in lf.capabilities.iter() {
         for (target_id, target_entry) in entry.targets.iter() {
             let mut failing_files = Vec::new();

@@ -26,6 +26,8 @@ pub struct CapabilityLockEntry {
     pub capability_type: String,
     #[serde(rename = "installedVersion")]
     pub installed_version: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
     #[serde(rename = "sourcePath")]
     pub source_path: String,
     pub targets: BTreeMap<String, TargetLockEntry>,
@@ -170,11 +172,9 @@ pub fn diff_against_baseline(
 
     let mut output = String::new();
     for emitted in &target_entry.emitted_files {
-        let file_name = Path::new(&emitted.path)
-            .file_name()
-            .ok_or_else(|| {
-                CoralError::new(format!("invalid emitted file path: {}", emitted.path))
-            })?;
+        let file_name = Path::new(&emitted.path).file_name().ok_or_else(|| {
+            CoralError::new(format!("invalid emitted file path: {}", emitted.path))
+        })?;
         let baseline_path = baseline_dir.join(file_name);
         let target_path = repo_root.join(&emitted.path);
 
@@ -276,7 +276,11 @@ mod tests {
         .unwrap();
 
         let error = read_lockfile_at(&path).unwrap_err();
-        assert!(error.to_string().contains("unsupported lockfile version: 2"));
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported lockfile version: 2")
+        );
     }
 
     #[test]
@@ -292,6 +296,7 @@ mod tests {
             CapabilityLockEntry {
                 capability_type: "skill".into(),
                 installed_version: "1.0".into(),
+                description: "test skill".into(),
                 source_path: "".into(),
                 targets: BTreeMap::new(),
                 source: None,

@@ -8,6 +8,11 @@ declares the capability type, the files that belong to it, and enough metadata
 for Coral to track installs, validate structure, detect drift, and emit
 agent-specific agent output.
 
+`coral.toml` travels with the capability. It is not the project index and it is
+not the lockfile. Coral keeps project tracking and baselines in
+`.coral/coral-lock.json`, and can generate readable derived files such as
+`.agents/CAPABILITIES.md` with `coral generate index`.
+
 The `type` field is the important discriminator. It tells Coral whether the
 directory should be treated as a skill, tool, hook, policy, or workflow while
 still using the same lifecycle commands: install, list, check, diff, update,

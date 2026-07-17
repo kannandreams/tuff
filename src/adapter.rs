@@ -153,12 +153,18 @@ mod tests {
     #[test]
     fn from_id_returns_open_agents_for_codex_alias() {
         assert_eq!(AdapterKind::from_id("codex"), Some(AdapterKind::OpenAgents));
-        assert_eq!(AdapterKind::from_id("open-agents"), Some(AdapterKind::OpenAgents));
+        assert_eq!(
+            AdapterKind::from_id("open-agents"),
+            Some(AdapterKind::OpenAgents)
+        );
     }
 
     #[test]
     fn from_id_returns_claude_for_claude_code_alias() {
-        assert_eq!(AdapterKind::from_id("claude-code"), Some(AdapterKind::Claude));
+        assert_eq!(
+            AdapterKind::from_id("claude-code"),
+            Some(AdapterKind::Claude)
+        );
         assert_eq!(AdapterKind::from_id("claude"), Some(AdapterKind::Claude));
     }
 

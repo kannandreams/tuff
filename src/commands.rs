@@ -7,12 +7,12 @@ use std::{
 const CORAL_GUIDE_CONTENT: &str = include_str!("../assets/coral-cli-guide.md");
 
 use tabled::{
-    settings::{object::Columns, Modify, Style, Width},
     Table, Tabled,
+    settings::{Modify, Style, Width, object::Columns},
 };
 
 use crate::{
-    adapter::{self, resolve_capability, AdapterKind},
+    adapter::{self, AdapterKind, resolve_capability},
     config, display,
     error::{CoralError, Result},
     git,
@@ -37,6 +37,19 @@ struct ListRow {
     status: String,
     #[tabled(rename = "PATH")]
     path: String,
+}
+
+#[derive(Clone)]
+struct InventoryRow {
+    id: String,
+    capability_type: String,
+    version: String,
+    scope: String,
+    target: String,
+    status: String,
+    path: String,
+    description: String,
+    source_type: String,
 }
 
 #[derive(Tabled)]
@@ -239,6 +252,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                 lockfile::CapabilityLockEntry {
                     capability_type: "skill".into(),
                     installed_version: "0.1.0".into(),
+                    description: "Guide for using Coral CLI commands inside this repository."
+                        .into(),
                     source_path: String::new(),
                     targets,
                     source: None,
@@ -396,6 +411,7 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
         lockfile::CapabilityLockEntry {
             capability_type: kind.to_string(),
             installed_version: "0.1.0".to_string(),
+            description: default_capability_description(kind).to_string(),
             source_path,
             targets: target_entries,
             source: None,
@@ -412,6 +428,16 @@ fn adapter_project_dir(adapter: AdapterKind) -> &'static str {
     match adapter {
         AdapterKind::OpenAgents => ".agents",
         AdapterKind::Claude => ".claude",
+    }
+}
+
+fn default_capability_description(kind: &str) -> &'static str {
+    match kind {
+        "skill" => "What this skill helps the agent do.",
+        "tool" => "What this tool does for the agent.",
+        "hook" => "What this hook enforces.",
+        "workflow" => "When the agent should run this workflow.",
+        _ => "",
     }
 }
 
@@ -444,7 +470,8 @@ fn create_scaffold_files(
             ),
             (
                 "run.sh",
-                "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n".to_string(),
+                "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n"
+                    .to_string(),
             ),
         ],
         "hook" => {
@@ -456,11 +483,13 @@ fn create_scaffold_files(
                 AdapterKind::OpenAgents => {
                     "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string()
                 }
-                AdapterKind::Claude => serde_json::to_string_pretty(&serde_json::json!({
-                    "event": "before_finish",
-                    "command": "echo review hook",
-                    "working_directory": "."
-                }))? + "\n",
+                AdapterKind::Claude => {
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "event": "before_finish",
+                        "command": "echo review hook",
+                        "working_directory": "."
+                    }))? + "\n"
+                }
             };
             vec![
                 (
@@ -977,6 +1006,7 @@ fn adopt_capability_in_place(
         lockfile::CapabilityLockEntry {
             capability_type: capability.capability_type.clone(),
             installed_version: capability.version.clone(),
+            description: capability.description.clone(),
             source_path: relative_or_absolute_canonical(capability_dir, install_root),
             targets,
             source: None,
@@ -1175,6 +1205,7 @@ fn install_capability(
         lockfile::CapabilityLockEntry {
             capability_type: capability.capability_type.clone(),
             installed_version: capability.version.clone(),
+            description: capability.description.clone(),
             source_path,
             targets: merged_targets,
             source: source_meta.map(|m| lockfile::SourceMetadata {
@@ -1193,35 +1224,111 @@ fn install_capability(
 
 // ── List ────────────────────────────────────────────────────────────────────
 
+fn collect_lockfile_inventory(
+    root: &Path,
+    lockfile: &lockfile::Lockfile,
+    scope: &str,
+    path_prefix: Option<&str>,
+    kind_filter: Option<&str>,
+) -> Vec<InventoryRow> {
+    let mut rows = Vec::new();
+
+    for (id, entry) in &lockfile.capabilities {
+        if let Some(kind) = kind_filter {
+            if entry.capability_type != kind {
+                continue;
+            }
+        }
+
+        let description = capability_description(root, entry);
+        let source_type = capability_source_type(entry).to_string();
+
+        for (target_id, target_entry) in &entry.targets {
+            for emitted in &target_entry.emitted_files {
+                let status = lockfile::drift_status(root, emitted);
+                let path = match path_prefix {
+                    Some(prefix) => format!("{prefix}{}", emitted.path),
+                    None => emitted.path.clone(),
+                };
+                rows.push(InventoryRow {
+                    id: id.clone(),
+                    capability_type: entry.capability_type.clone(),
+                    version: short_sha(&entry.installed_version).to_string(),
+                    scope: scope.to_string(),
+                    target: target_id.clone(),
+                    status: status.to_string(),
+                    path,
+                    description: description.clone(),
+                    source_type: source_type.clone(),
+                });
+            }
+        }
+    }
+
+    rows
+}
+
+fn capability_description(root: &Path, entry: &lockfile::CapabilityLockEntry) -> String {
+    if !entry.description.trim().is_empty() {
+        return entry.description.clone();
+    }
+
+    if entry.source_path.trim().is_empty() {
+        return String::new();
+    }
+
+    let source_path = Path::new(&entry.source_path);
+    let capability_dir = if source_path.is_absolute() {
+        source_path.to_path_buf()
+    } else {
+        root.join(source_path)
+    };
+
+    load_manifest(&capability_dir)
+        .map(|manifest| manifest.description)
+        .unwrap_or_default()
+}
+
+fn capability_source_type(entry: &lockfile::CapabilityLockEntry) -> &'static str {
+    if let Some(source) = &entry.source {
+        if source.source_type == "git" {
+            return "git";
+        }
+    }
+
+    if entry.source_path.trim().is_empty() {
+        "local"
+    } else {
+        "local"
+    }
+}
+
+fn project_inventory(repo_root: &Path, kind_filter: Option<&str>) -> Result<Vec<InventoryRow>> {
+    let lockfile = lockfile::require_lockfile(repo_root)?;
+    Ok(collect_lockfile_inventory(
+        repo_root,
+        &lockfile,
+        "project",
+        None,
+        kind_filter,
+    ))
+}
+
 pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>) -> Result<()> {
     let show_project = scope_filter == "all" || scope_filter == "project";
     let show_global = scope_filter == "all" || scope_filter == "global";
 
-    let mut rows: Vec<ListRow> = Vec::new();
+    let mut inventory: Vec<InventoryRow> = Vec::new();
 
     if show_project {
         if let Ok(lockfile) = lockfile::require_lockfile(repo_root) {
-            for (id, entry) in &lockfile.capabilities {
-                if let Some(kind) = kind_filter {
-                    if entry.capability_type != kind {
-                        continue;
-                    }
-                }
-                for (target_id, target_entry) in &entry.targets {
-                    for emitted in &target_entry.emitted_files {
-                        let status = lockfile::drift_status(repo_root, emitted);
-                        rows.push(ListRow {
-                            id: id.clone(),
-                            capability_type: entry.capability_type.clone(),
-                            version: short_sha(&entry.installed_version).to_string(),
-                            scope: "project".to_string(),
-                            target: target_id.clone(),
-                            status: style_drift_status(status),
-                            path: emitted.path.clone(),
-                        });
-                    }
-                }
-            }
+            inventory.extend(collect_lockfile_inventory(
+                repo_root,
+                &lockfile,
+                "project",
+                None,
+                kind_filter,
+            ));
         }
     }
 
@@ -1229,37 +1336,36 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         if let Some(home) = home_dir_opt() {
             let lock_path = home.join(".coral").join("coral-lock.json");
             if let Ok(lockfile) = lockfile::read_lockfile_at(&lock_path) {
-                for (id, entry) in &lockfile.capabilities {
-                    if let Some(kind) = kind_filter {
-                        if entry.capability_type != kind {
-                            continue;
-                        }
-                    }
-                    for (target_id, target_entry) in &entry.targets {
-                        for emitted in &target_entry.emitted_files {
-                            let status = lockfile::drift_status(&home, emitted);
-                            rows.push(ListRow {
-                                id: id.clone(),
-                                capability_type: entry.capability_type.clone(),
-                                version: short_sha(&entry.installed_version).to_string(),
-                                scope: "global".to_string(),
-                                target: target_id.clone(),
-                                status: style_drift_status(status),
-                                path: format!("~/{}", emitted.path),
-                            });
-                        }
-                    }
-                }
+                inventory.extend(collect_lockfile_inventory(
+                    &home,
+                    &lockfile,
+                    "global",
+                    Some("~/"),
+                    kind_filter,
+                ));
             }
         }
     }
 
-    if rows.is_empty() {
+    if inventory.is_empty() {
         println!("no capabilities installed");
         return Ok(());
     }
 
-    rows.sort_by(|a, b| a.scope.cmp(&b.scope).then_with(|| a.id.cmp(&b.id)));
+    inventory.sort_by(|a, b| a.scope.cmp(&b.scope).then_with(|| a.id.cmp(&b.id)));
+
+    let rows: Vec<ListRow> = inventory
+        .into_iter()
+        .map(|row| ListRow {
+            id: row.id,
+            capability_type: row.capability_type,
+            version: row.version,
+            scope: row.scope,
+            target: row.target,
+            status: style_drift_status(&row.status),
+            path: row.path,
+        })
+        .collect();
 
     let table_rows: Vec<Vec<String>> = rows
         .into_iter()
@@ -1283,6 +1389,279 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         )
     );
     Ok(())
+}
+
+// ── Generate ────────────────────────────────────────────────────────────────
+
+pub fn cmd_generate_index(repo_root: &Path, agent: &str, output: Option<&Path>) -> Result<()> {
+    let adapter = AdapterKind::from_id(agent).ok_or_else(|| {
+        CoralError::new(format!(
+            "unknown agent '{}'; use 'coral agent list' to see available agents",
+            agent
+        ))
+    })?;
+    let canonical_agent = adapter.id();
+
+    let mut rows: Vec<InventoryRow> = project_inventory(repo_root, None)?
+        .into_iter()
+        .filter(|row| row.target == canonical_agent)
+        .collect();
+    rows.sort_by(|a, b| {
+        a.capability_type
+            .cmp(&b.capability_type)
+            .then_with(|| a.id.cmp(&b.id))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+
+    let output_path = output
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_index_path(repo_root, adapter));
+    write_generated_file(&output_path, &render_index_markdown(adapter, &rows))?;
+    println!(
+        "generated index for {} -> {}",
+        canonical_agent,
+        lockfile::relative_or_absolute_fs(&output_path, repo_root)
+    );
+    Ok(())
+}
+
+pub fn cmd_generate_report(repo_root: &Path, output: Option<&Path>) -> Result<()> {
+    let mut rows = project_inventory(repo_root, None)?;
+    rows.sort_by(|a, b| {
+        a.target
+            .cmp(&b.target)
+            .then_with(|| a.capability_type.cmp(&b.capability_type))
+            .then_with(|| a.id.cmp(&b.id))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+
+    let output_path = output.map(Path::to_path_buf).unwrap_or_else(|| {
+        repo_root
+            .join(".coral")
+            .join("reports")
+            .join("coral-report.md")
+    });
+    write_generated_file(&output_path, &render_report_markdown(&rows))?;
+    println!(
+        "generated report -> {}",
+        lockfile::relative_or_absolute_fs(&output_path, repo_root)
+    );
+    Ok(())
+}
+
+fn default_index_path(repo_root: &Path, adapter: AdapterKind) -> PathBuf {
+    match adapter {
+        AdapterKind::OpenAgents => repo_root.join(".agents").join("CAPABILITIES.md"),
+        AdapterKind::Claude => repo_root.join(".claude").join("CAPABILITIES.md"),
+    }
+}
+
+fn write_generated_file(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, content)?;
+    Ok(())
+}
+
+fn render_index_markdown(adapter: AdapterKind, rows: &[InventoryRow]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "# Capability Index: {}\n\n",
+        adapter.display_name()
+    ));
+    out.push_str("Generated by Coral from tracked project capabilities.\n\n");
+
+    if rows.is_empty() {
+        out.push_str("No capabilities are currently tracked for this agent.\n");
+        return out;
+    }
+
+    for capability_type in ordered_capability_types(rows) {
+        let type_rows: Vec<&InventoryRow> = rows
+            .iter()
+            .filter(|row| row.capability_type == capability_type)
+            .collect();
+        out.push_str(&format!(
+            "## {}\n\n",
+            capability_type_heading(&capability_type)
+        ));
+        for group in group_capability_rows(type_rows) {
+            write_capability_markdown(&mut out, &group);
+        }
+    }
+
+    out
+}
+
+fn render_report_markdown(rows: &[InventoryRow]) -> String {
+    let mut out = String::new();
+    out.push_str("# Coral Report\n\n");
+    out.push_str("Generated by Coral from project tracking state.\n\n");
+
+    let capability_count = rows
+        .iter()
+        .map(|row| (&row.id, &row.target))
+        .collect::<BTreeSet<_>>()
+        .len();
+    let clean = rows.iter().filter(|row| row.status == "clean").count();
+    let modified = rows.iter().filter(|row| row.status == "modified").count();
+    let missing = rows.iter().filter(|row| row.status == "missing").count();
+
+    out.push_str("## Summary\n\n");
+    out.push_str(&format!("- Capabilities: {capability_count}\n"));
+    out.push_str(&format!("- Tracked files: {}\n", rows.len()));
+    out.push_str(&format!("- Clean files: {clean}\n"));
+    out.push_str(&format!("- Modified files: {modified}\n"));
+    out.push_str(&format!("- Missing files: {missing}\n\n"));
+
+    if rows.is_empty() {
+        out.push_str("No project capabilities are currently tracked.\n");
+        return out;
+    }
+
+    out.push_str("## Agents\n\n");
+    for agent in ordered_agents(rows) {
+        let agent_rows: Vec<&InventoryRow> =
+            rows.iter().filter(|row| row.target == agent).collect();
+        let agent_clean = agent_rows
+            .iter()
+            .filter(|row| row.status == "clean")
+            .count();
+        let agent_modified = agent_rows
+            .iter()
+            .filter(|row| row.status == "modified")
+            .count();
+        let agent_missing = agent_rows
+            .iter()
+            .filter(|row| row.status == "missing")
+            .count();
+        out.push_str(&format!(
+            "- `{}`: {} files, {} clean, {} modified, {} missing\n",
+            markdown_escape(&agent),
+            agent_rows.len(),
+            agent_clean,
+            agent_modified,
+            agent_missing
+        ));
+    }
+    out.push('\n');
+
+    out.push_str("## Capabilities\n\n");
+    for group in group_capability_rows(rows.iter().collect()) {
+        write_capability_markdown(&mut out, &group);
+    }
+
+    out
+}
+
+struct CapabilityGroup<'a> {
+    id: &'a str,
+    capability_type: &'a str,
+    version: &'a str,
+    target: &'a str,
+    scope: &'a str,
+    description: &'a str,
+    source_type: &'a str,
+    status: &'a str,
+    paths: Vec<&'a str>,
+}
+
+fn group_capability_rows(rows: Vec<&InventoryRow>) -> Vec<CapabilityGroup<'_>> {
+    let mut grouped: BTreeMap<(&str, &str, &str), Vec<&InventoryRow>> = BTreeMap::new();
+    for row in rows {
+        grouped
+            .entry((&row.id, &row.target, &row.capability_type))
+            .or_default()
+            .push(row);
+    }
+
+    grouped
+        .into_values()
+        .map(|mut rows| {
+            rows.sort_by(|a, b| a.path.cmp(&b.path));
+            let first = rows[0];
+            let status = if rows.iter().any(|row| row.status == "missing") {
+                "missing"
+            } else if rows.iter().any(|row| row.status == "modified") {
+                "modified"
+            } else {
+                "clean"
+            };
+            CapabilityGroup {
+                id: &first.id,
+                capability_type: &first.capability_type,
+                version: &first.version,
+                target: &first.target,
+                scope: &first.scope,
+                description: &first.description,
+                source_type: &first.source_type,
+                status,
+                paths: rows.iter().map(|row| row.path.as_str()).collect(),
+            }
+        })
+        .collect()
+}
+
+fn write_capability_markdown(out: &mut String, group: &CapabilityGroup<'_>) {
+    out.push_str(&format!(
+        "- `{}` ({}, version `{}`) - `{}`\n",
+        markdown_escape(group.id),
+        markdown_escape(group.capability_type),
+        markdown_escape(group.version),
+        markdown_escape(group.status)
+    ));
+    if !group.description.trim().is_empty() {
+        out.push_str(&format!(
+            "  - Description: {}\n",
+            markdown_escape(group.description)
+        ));
+    }
+    out.push_str(&format!(
+        "  - Agent: `{}`; scope: `{}`; source: `{}`\n",
+        markdown_escape(group.target),
+        markdown_escape(group.scope),
+        markdown_escape(group.source_type)
+    ));
+    for path in &group.paths {
+        out.push_str(&format!("  - Path: `{}`\n", markdown_escape(path)));
+    }
+    out.push('\n');
+}
+
+fn ordered_capability_types(rows: &[InventoryRow]) -> Vec<String> {
+    let mut remaining: BTreeSet<String> =
+        rows.iter().map(|row| row.capability_type.clone()).collect();
+    let mut ordered = Vec::new();
+    for capability_type in ["skill", "tool", "hook", "workflow"] {
+        if remaining.remove(capability_type) {
+            ordered.push(capability_type.to_string());
+        }
+    }
+    ordered.extend(remaining);
+    ordered
+}
+
+fn ordered_agents(rows: &[InventoryRow]) -> Vec<String> {
+    rows.iter()
+        .map(|row| row.target.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn capability_type_heading(capability_type: &str) -> String {
+    match capability_type {
+        "skill" => "Skills".to_string(),
+        "tool" => "Tools".to_string(),
+        "hook" => "Hooks".to_string(),
+        "workflow" => "Workflows".to_string(),
+        other => format!("{other}s"),
+    }
+}
+
+fn markdown_escape(value: &str) -> String {
+    value.replace('|', "\\|")
 }
 
 // ── Status ──────────────────────────────────────────────────────────────────

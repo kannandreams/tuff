@@ -18,7 +18,8 @@ use clap::{Parser, Subcommand};
 
 use commands::{
     cmd_add, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_check, cmd_create, cmd_delete,
-    cmd_diff, cmd_init, cmd_list, cmd_outdated, cmd_status, cmd_untrack, cmd_update,
+    cmd_diff, cmd_generate_index, cmd_generate_report, cmd_init, cmd_list, cmd_outdated,
+    cmd_status, cmd_untrack, cmd_update,
 };
 use error::Result;
 
@@ -36,6 +37,12 @@ enum Command {
         /// Initialize global scope (~/.coral/).
         #[arg(short = 'g', long = "global")]
         global: bool,
+    },
+
+    /// Create and track a new capability.
+    Create {
+        #[command(subcommand)]
+        kind: CreateCommand,
     },
 
     /// Install a capability.
@@ -78,6 +85,15 @@ enum Command {
     /// Show detailed status for installed primitives.
     Status,
 
+    /// Generate derived Coral artifacts.
+    Generate {
+        #[command(subcommand)]
+        artifact: GenerateCommand,
+    },
+
+    /// Show installed capabilities with upstream update status.
+    Outdated,
+
     /// Diff an installed capability against baseline.
     Diff {
         /// Installed capability id.
@@ -90,6 +106,43 @@ enum Command {
         /// Diff against latest upstream source instead of baseline.
         #[arg(short = 'u', long = "upstream")]
         upstream: bool,
+    },
+
+    /// Reconcile an installed capability with its source or accept local edits.
+    Update {
+        /// Capability id to update.
+        id: String,
+
+        /// Scope to update.
+        #[arg(short = 's', long = "scope")]
+        scope: Option<String>,
+
+        /// Dry run — show what would change without applying.
+        #[arg(long = "check")]
+        check: bool,
+
+        /// Agent harness to update (repeatable; defaults to all recorded agents).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+
+        /// Force overwrite local changes with upstream (Git sources only).
+        #[arg(short = 'f', long = "force")]
+        force: bool,
+    },
+
+    /// Validate installed capabilities (CI mode).
+    Check {
+        /// Output results as JSON.
+        #[arg(long = "json")]
+        json: bool,
+
+        /// Report failures but exit with code 0.
+        #[arg(long = "ignore-failures")]
+        ignore_failures: bool,
+
+        /// Validate global scope only.
+        #[arg(long = "global")]
+        global: bool,
     },
 
     /// Delete Coral-generated capability files.
@@ -124,56 +177,31 @@ enum Command {
         agent: Vec<String>,
     },
 
-    /// Reconcile an installed capability with its source or accept local edits.
-    Update {
-        /// Capability id to update.
-        id: String,
-
-        /// Scope to update.
-        #[arg(short = 's', long = "scope")]
-        scope: Option<String>,
-
-        /// Dry run — show what would change without applying.
-        #[arg(long = "check")]
-        check: bool,
-
-        /// Agent harness to update (repeatable; defaults to all recorded agents).
-        #[arg(short = 'a', long = "agent")]
-        agent: Vec<String>,
-
-        /// Force overwrite local changes with upstream (Git sources only).
-        #[arg(short = 'f', long = "force")]
-        force: bool,
-    },
-
-    /// Create and track a new capability.
-    Create {
-        #[command(subcommand)]
-        kind: CreateCommand,
-    },
-
-    /// Validate installed capabilities (CI mode).
-    Check {
-        /// Output results as JSON.
-        #[arg(long = "json")]
-        json: bool,
-
-        /// Report failures but exit with code 0.
-        #[arg(long = "ignore-failures")]
-        ignore_failures: bool,
-
-        /// Validate global scope only.
-        #[arg(long = "global")]
-        global: bool,
-    },
-
-    /// Show installed capabilities with upstream update status.
-    Outdated,
-
     /// Manage agent harnesses.
     Agent {
         #[command(subcommand)]
         action: AgentCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum GenerateCommand {
+    /// Generate an agent-facing capability index.
+    Index {
+        /// Agent harness to generate an index for.
+        #[arg(short = 'a', long = "agent")]
+        agent: String,
+
+        /// Output path. Defaults to the agent's standard CAPABILITIES.md path.
+        #[arg(short = 'o', long = "output")]
+        output: Option<PathBuf>,
+    },
+
+    /// Generate a project capability report.
+    Report {
+        /// Output path. Defaults to .coral/reports/coral-report.md.
+        #[arg(short = 'o', long = "output")]
+        output: Option<PathBuf>,
     },
 }
 
@@ -271,18 +299,20 @@ fn run() -> Result<()> {
         ),
         Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),
         Some(Command::Status) => cmd_status(&repo_root),
+        Some(Command::Generate { artifact }) => match artifact {
+            GenerateCommand::Index { agent, output } => {
+                cmd_generate_index(&repo_root, &agent, output.as_deref())
+            }
+            GenerateCommand::Report { output } => {
+                cmd_generate_report(&repo_root, output.as_deref())
+            }
+        },
+        Some(Command::Outdated) => cmd_outdated(&repo_root),
         Some(Command::Diff {
             capability_id,
             agent,
             upstream,
         }) => cmd_diff(&repo_root, &capability_id, agent.as_deref(), upstream),
-        Some(Command::Delete {
-            id,
-            scope,
-            agent,
-            force,
-        }) => cmd_delete(&repo_root, &id, &scope, &agent, force),
-        Some(Command::Untrack { id, scope, agent }) => cmd_untrack(&repo_root, &id, &scope, &agent),
         Some(Command::Update {
             id,
             scope,
@@ -295,7 +325,13 @@ fn run() -> Result<()> {
             ignore_failures,
             global,
         }) => cmd_check(&repo_root, json, ignore_failures, global),
-        Some(Command::Outdated) => cmd_outdated(&repo_root),
+        Some(Command::Delete {
+            id,
+            scope,
+            agent,
+            force,
+        }) => cmd_delete(&repo_root, &id, &scope, &agent, force),
+        Some(Command::Untrack { id, scope, agent }) => cmd_untrack(&repo_root, &id, &scope, &agent),
         Some(Command::Agent { action }) => match action {
             AgentCommand::List => cmd_agent_list(&repo_root),
             AgentCommand::Add { id } => cmd_agent_add(&repo_root, &id),
