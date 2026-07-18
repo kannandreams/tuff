@@ -286,7 +286,10 @@ fn run() -> Result<()> {
     let repo_root = std::env::current_dir()?;
 
     match cli.command {
-        None => Ok(display::print_welcome()),
+        None => {
+            display::print_welcome();
+            Ok(())
+        },
         Some(Command::Init { global }) => cmd_init(&repo_root, global),
         Some(Command::Create { kind }) => match kind {
             CreateCommand::Skill { id, agent } => cmd_create(&repo_root, CapabilityType::Skill, &id, &agent),
