@@ -57,17 +57,15 @@ pub fn resolve_entry(
     id: &str,
     repo_root: &Path,
 ) -> Result<Option<(Scope, lockfile::CapabilityLockEntry)>> {
-    if let Some(project_lf) = read_lockfile(Scope::Project, Some(repo_root))? {
-        if let Some(entry) = project_lf.capabilities.get(id) {
+    if let Some(project_lf) = read_lockfile(Scope::Project, Some(repo_root))?
+        && let Some(entry) = project_lf.capabilities.get(id) {
             return Ok(Some((Scope::Project, entry.clone())));
         }
-    }
 
-    if let Some(global_lf) = read_lockfile(Scope::Global, None)? {
-        if let Some(entry) = global_lf.capabilities.get(id) {
+    if let Some(global_lf) = read_lockfile(Scope::Global, None)?
+        && let Some(entry) = global_lf.capabilities.get(id) {
             return Ok(Some((Scope::Global, entry.clone())));
         }
-    }
 
     Ok(None)
 }

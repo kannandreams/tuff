@@ -147,7 +147,7 @@ pub fn merge_with_baseline_content(
     // modified local, changed upstream → attempt merge
     let file_name = local_path.file_name().unwrap_or_default().to_string_lossy();
 
-    match merge(&baseline, &local, &upstream) {
+    match merge(baseline, &local, &upstream) {
         Ok(merged) => {
             // clean merge — write merged result
             std::fs::write(local_path, &merged)?;

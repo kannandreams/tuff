@@ -31,22 +31,20 @@ fn clean_git_url(raw: &str) -> (String, Option<String>) {
     let path = parsed.path();
     let segments: Vec<&str> = path.trim_start_matches('/').split('/').collect();
 
-    if host == "github.com" || host.ends_with(".github.com") {
-        if segments.len() >= 4 && (segments[2] == "tree" || segments[2] == "blob") {
+    if (host == "github.com" || host.ends_with(".github.com"))
+        && segments.len() >= 4 && (segments[2] == "tree" || segments[2] == "blob") {
             let clean = format!("https://{}/{}/{}", host, segments[0], segments[1]);
             return (clean, Some(segments[3].to_string()));
         }
-    }
 
-    if host == "gitlab.com" || host.ends_with(".gitlab.com") {
-        if segments.len() >= 5
+    if (host == "gitlab.com" || host.ends_with(".gitlab.com"))
+        && segments.len() >= 5
             && segments[2] == "-"
             && (segments[3] == "tree" || segments[3] == "blob")
         {
             let clean = format!("https://{}/{}/{}", host, segments[0], segments[1]);
             return (clean, Some(segments[4].to_string()));
         }
-    }
 
     (raw.to_string(), None)
 }

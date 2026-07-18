@@ -124,14 +124,13 @@ impl CapabilityManifest {
             paths.push(path);
         }
 
-        if self.capability_type == CapabilityType::Tool {
-            if let Some(ref imp) = self.implementation {
+        if self.capability_type == CapabilityType::Tool
+            && let Some(ref imp) = self.implementation {
                 let ep_path = self.root.join(&imp.entrypoint);
                 if !paths.contains(&ep_path) && ep_path.exists() {
                     paths.push(ep_path);
                 }
             }
-        }
 
         Ok(paths)
     }
