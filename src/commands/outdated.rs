@@ -144,17 +144,11 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
 
     rows.sort_by(|a, b| a.id.cmp(&b.id));
 
-    let styled_rows: Vec<OutdatedRow> = rows
+    let table_rows: Vec<Vec<String>> = rows
         .into_iter()
         .map(|r| {
             let status = style_outdated_status(&r.status);
-            OutdatedRow { status, ..r }
-        })
-        .collect();
-
-    let table_rows: Vec<Vec<String>> = styled_rows
-        .into_iter()
-        .map(|row| {
+            let row = OutdatedRow { status, ..r };
             vec![
                 row.id,
                 row.capability_type.to_string(),

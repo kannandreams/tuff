@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use crate::adapter::{self, AdapterKind, resolve_capability, AgentAdapter};
+use crate::adapter::{self, AdapterKind, CapabilityKind, resolve_capability, AgentAdapter};
 use crate::error::{CoralError, Result};
 use crate::git;
 use crate::lockfile::{self, TargetLockEntry};
@@ -45,7 +45,7 @@ pub fn cmd_add(
     cmd_add_local(&install_root, scope, capability, &target_ids, repo_root)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "git install requires separate url, scope, name options, and project root")]
 fn cmd_add_git(
     install_root: &Path,
     scope: Scope,
@@ -81,7 +81,7 @@ fn cmd_add_git(
         Some(&SourceMetaInput {
             source_type: "git".to_string(),
             url: clean_url,
-            source_ref: commit_sha.clone(),
+            source_ref: commit_sha,
             skill: name.to_string(),
         }),
     )
@@ -325,19 +325,18 @@ pub(crate) fn install_capability(
                 capability.capability_type
             )));
         }
-        if capability.capability_type == CapabilityType::Hook
-            && let Some(ref hook_cfg) = capability.hook
-                && !adapter
-                    .supported_events()
-                    .contains(&hook_cfg.event.as_str())
-                {
-                    return Err(CoralError::new(format!(
-                        "{} does not support hook event '{}'. Supported events: {}",
-                        adapter.display_name(),
-                        hook_cfg.event,
-                        adapter.supported_events().join(", ")
-                    )));
-                }
+        if let CapabilityKind::Hook { hook: ref hook_cfg } = capability.kind
+            && !adapter
+                .supported_events()
+                .contains(&hook_cfg.event.as_str())
+            {
+                return Err(CoralError::new(format!(
+                    "{} does not support hook event '{}'. Supported events: {}",
+                    adapter.display_name(),
+                    hook_cfg.event,
+                    adapter.supported_events().join(", ")
+                )));
+            }
         adapters.push(adapter);
     }
 
@@ -421,9 +420,8 @@ pub(crate) fn install_capability(
         );
     }
 
-    if capability.capability_type == CapabilityType::Tool
-        && let Some(ref impl_cfg) = capability.implementation {
-            if impl_cfg.mcp {
+    if let CapabilityKind::Tool { implementation: ref impl_cfg, .. } = capability.kind {
+        if impl_cfg.mcp {
                 for adapter in &adapters {
                     let mcp_path = install_root.join(adapter.mcp_config_relpath());
 

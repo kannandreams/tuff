@@ -235,7 +235,7 @@ fn create_scaffold_files(
     Ok((relative_dir, files))
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "deprecated legacy create path; kept for backward compat reference")]
 fn cmd_create_legacy(
     repo_root: &Path,
     skill: Option<&str>,
