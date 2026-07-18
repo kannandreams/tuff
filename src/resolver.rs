@@ -135,6 +135,7 @@ fn dirs_home() -> Option<PathBuf> {
 mod tests {
     use super::*;
     use crate::lockfile;
+    use crate::manifest::CapabilityType;
     use std::fs;
     use tempfile::TempDir;
 
@@ -144,10 +145,12 @@ mod tests {
             capabilities: std::collections::BTreeMap::new(),
         };
         for (id, capability_type, version) in entries {
+            let ct = CapabilityType::from_str(capability_type)
+                .unwrap_or(CapabilityType::Skill);
             lf.capabilities.insert(
                 id.to_string(),
                 lockfile::CapabilityLockEntry {
-                    capability_type: capability_type.to_string(),
+                    capability_type: ct,
                     installed_version: version.to_string(),
                     description: String::new(),
                     source_path: "".into(),

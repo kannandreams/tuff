@@ -4,12 +4,13 @@ use serde::Serialize;
 
 use crate::error::Result;
 use crate::lockfile;
+use crate::manifest::CapabilityType;
 
 #[derive(Debug, Serialize)]
 pub struct CheckResult {
     pub id: String,
     #[serde(rename = "type")]
-    pub capability_type: String,
+    pub capability_type: CapabilityType,
     pub target: String,
     pub status: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -71,7 +72,7 @@ fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<
 
             results.push(CheckResult {
                 id: id.clone(),
-                capability_type: entry.capability_type.clone(),
+                capability_type: entry.capability_type,
                 target: target_id.clone(),
                 status: status.to_string(),
                 files: failing_files,

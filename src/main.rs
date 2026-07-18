@@ -22,6 +22,7 @@ use commands::{
     cmd_outdated, cmd_status, cmd_untrack, cmd_update,
 };
 use error::Result;
+use manifest::CapabilityType;
 
 #[derive(Parser)]
 #[command(name = "coral", version)]
@@ -288,11 +289,11 @@ fn run() -> Result<()> {
         None => Ok(display::print_welcome()),
         Some(Command::Init { global }) => cmd_init(&repo_root, global),
         Some(Command::Create { kind }) => match kind {
-            CreateCommand::Skill { id, agent } => cmd_create(&repo_root, "skill", &id, &agent),
-            CreateCommand::Tool { id, agent } => cmd_create(&repo_root, "tool", &id, &agent),
-            CreateCommand::Hook { id, agent } => cmd_create(&repo_root, "hook", &id, &agent),
+            CreateCommand::Skill { id, agent } => cmd_create(&repo_root, CapabilityType::Skill, &id, &agent),
+            CreateCommand::Tool { id, agent } => cmd_create(&repo_root, CapabilityType::Tool, &id, &agent),
+            CreateCommand::Hook { id, agent } => cmd_create(&repo_root, CapabilityType::Hook, &id, &agent),
             CreateCommand::Workflow { id, agent } => {
-                cmd_create(&repo_root, "workflow", &id, &agent)
+                cmd_create(&repo_root, CapabilityType::Workflow, &id, &agent)
             }
         },
         Some(Command::Add {

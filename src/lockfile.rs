@@ -10,6 +10,7 @@ use similar::{ChangeTag, TextDiff};
 
 use crate::adapter::EmittedFile;
 use crate::error::{CoralError, Result};
+use crate::manifest::CapabilityType;
 
 pub const LOCKFILE_VERSION: u8 = 2;
 
@@ -23,7 +24,7 @@ pub struct Lockfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityLockEntry {
     #[serde(rename = "type")]
-    pub capability_type: String,
+    pub capability_type: CapabilityType,
     #[serde(rename = "installedVersion")]
     pub installed_version: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -410,7 +411,7 @@ mod tests {
         lf.capabilities.insert(
             "test".into(),
             CapabilityLockEntry {
-                capability_type: "skill".into(),
+                capability_type: CapabilityType::Skill,
                 installed_version: "1.0".into(),
                 description: "test skill".into(),
                 source_path: "".into(),
