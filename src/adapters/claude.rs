@@ -3,24 +3,30 @@ use std::path::Path;
 use crate::adapter::{PlannedFile, ResolvedCapability};
 use crate::error::{CoralError, Result};
 use crate::lockfile;
+use crate::manifest::CapabilityType;
 
 pub const ID: &str = "claude";
 pub const DISPLAY_NAME: &str = "Claude";
-pub const SUPPORTED_TYPES: &[&str] = &["skill", "tool", "hook", "workflow"];
+pub const SUPPORTED_TYPES: &[CapabilityType] = &[
+    CapabilityType::Skill,
+    CapabilityType::Tool,
+    CapabilityType::Hook,
+    CapabilityType::Workflow,
+];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
 
 pub const SUPPORTED_EVENTS: &[&str] = &["before_finish", "post_tool_execution"];
 
-pub fn supports(capability_type: &str) -> bool {
+pub fn supports(capability_type: CapabilityType) -> bool {
     SUPPORTED_TYPES.contains(&capability_type)
 }
 
 pub fn plan(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    match capability.capability_type.as_str() {
-        "tool" => plan_tool(capability, repo_root),
-        "hook" => plan_hook(capability, repo_root),
-        "workflow" => plan_workflow(capability, repo_root),
+    match capability.capability_type {
+        CapabilityType::Tool => plan_tool(capability, repo_root),
+        CapabilityType::Hook => plan_hook(capability, repo_root),
+        CapabilityType::Workflow => plan_workflow(capability, repo_root),
         _ => plan_skill(capability, repo_root),
     }
 }
@@ -184,14 +190,9 @@ mod tests {
 
     #[test]
     fn supports_returns_true_for_known_types() {
-        assert!(supports("skill"));
-        assert!(supports("tool"));
-        assert!(supports("hook"));
-    }
-
-    #[test]
-    fn supports_returns_false_for_unknown() {
-        assert!(!supports("unknown"));
+        assert!(supports(CapabilityType::Skill));
+        assert!(supports(CapabilityType::Tool));
+        assert!(supports(CapabilityType::Hook));
     }
 
     #[test]

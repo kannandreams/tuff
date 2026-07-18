@@ -14,7 +14,7 @@ use crate::{
     error::{CoralError, Result},
     git,
     lockfile::{self, TargetLockEntry},
-    manifest::{self, load_manifest},
+    manifest::{self, load_manifest, CapabilityType},
     resolver::{self, Scope},
 };
 
@@ -23,7 +23,7 @@ struct ListRow {
     #[tabled(rename = "ID")]
     id: String,
     #[tabled(rename = "TYPE")]
-    capability_type: String,
+    capability_type: CapabilityType,
     #[tabled(rename = "VERSION")]
     version: String,
     #[tabled(rename = "SCOPE")]
@@ -39,7 +39,7 @@ struct ListRow {
 #[derive(Clone)]
 struct InventoryRow {
     id: String,
-    capability_type: String,
+    capability_type: CapabilityType,
     version: String,
     scope: String,
     target: String,
@@ -54,7 +54,7 @@ struct OutdatedRow {
     #[tabled(rename = "ID")]
     id: String,
     #[tabled(rename = "TYPE")]
-    capability_type: String,
+    capability_type: CapabilityType,
     #[tabled(rename = "AGENT")]
     target: String,
     #[tabled(rename = "CURRENT")]
@@ -87,14 +87,15 @@ fn style_drift_status(status: &str) -> String {
     }
 }
 
-fn style_capability_type(capability_type: &str) -> String {
-    match capability_type {
-        "skill" => paint("skill", "36"),
-        "tool" => paint("tool", "35"),
-        "hook" => paint("hook", "33"),
-        "workflow" => paint("workflow", "34"),
-        other => other.to_string(),
-    }
+fn style_capability_type(capability_type: CapabilityType) -> String {
+    let s = capability_type.as_str();
+    let code = match capability_type {
+        CapabilityType::Skill => "36",
+        CapabilityType::Tool => "35",
+        CapabilityType::Hook => "33",
+        CapabilityType::Workflow => "34",
+    };
+    paint(s, code)
 }
 
 fn style_outdated_status(status: &str) -> String {
@@ -251,7 +252,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             lf.capabilities.insert(
                 "coral-cli-guide".into(),
                 lockfile::CapabilityLockEntry {
-                    capability_type: "skill".into(),
+                    capability_type: CapabilityType::Skill,
                     installed_version: "0.1.0".into(),
                     description: "Guide for using Coral CLI commands inside this repository."
                         .into(),
@@ -268,10 +269,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[String]) -> Result<()> {
-    if !matches!(kind, "skill" | "tool" | "hook" | "workflow") {
-        return Err(CoralError::new(format!("unknown capability type '{kind}'")));
-    }
+pub fn cmd_create(repo_root: &Path, kind: CapabilityType, raw_id: &str, target_ids: &[String]) -> Result<()> {
     let id = raw_id.trim();
     if id.is_empty() {
         return Err(CoralError::new("capability name must not be empty"));
@@ -344,7 +342,7 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
         }
 
         #[cfg(unix)]
-        if kind == "tool" {
+        if kind == CapabilityType::Tool {
             use std::os::unix::fs::PermissionsExt;
             let run_sh = root.join("run.sh");
             let mut permissions = fs::metadata(&run_sh)?.permissions();
@@ -393,7 +391,7 @@ pub fn cmd_create(repo_root: &Path, kind: &str, raw_id: &str, target_ids: &[Stri
     coral_lock.capabilities.insert(
         id.to_string(),
         lockfile::CapabilityLockEntry {
-            capability_type: kind.to_string(),
+            capability_type: kind,
             installed_version: "0.1.0".to_string(),
             description: default_capability_description(kind).to_string(),
             source_path,
@@ -415,23 +413,22 @@ fn adapter_project_dir(adapter: AdapterKind) -> &'static str {
     }
 }
 
-fn default_capability_description(kind: &str) -> &'static str {
+fn default_capability_description(kind: CapabilityType) -> &'static str {
     match kind {
-        "skill" => "What this skill helps the agent do.",
-        "tool" => "What this tool does for the agent.",
-        "hook" => "What this hook enforces.",
-        "workflow" => "When the agent should run this workflow.",
-        _ => "",
+        CapabilityType::Skill => "What this skill helps the agent do.",
+        CapabilityType::Tool => "What this tool does for the agent.",
+        CapabilityType::Hook => "What this hook enforces.",
+        CapabilityType::Workflow => "When the agent should run this workflow.",
     }
 }
 
 fn create_scaffold_files(
-    kind: &str,
+    kind: CapabilityType,
     id: &str,
     adapter: AdapterKind,
 ) -> Result<(&'static str, Vec<(&'static str, String)>)> {
     let files = match kind {
-        "skill" => vec![
+        CapabilityType::Skill => vec![
             (
                 "coral.toml",
                 format!(
@@ -445,7 +442,7 @@ fn create_scaffold_files(
                 ),
             ),
         ],
-        "tool" => vec![
+        CapabilityType::Tool => vec![
             (
                 "coral.toml",
                 format!(
@@ -458,7 +455,7 @@ fn create_scaffold_files(
                     .to_string(),
             ),
         ],
-        "hook" => {
+        CapabilityType::Hook => {
             let file = match adapter {
                 AdapterKind::OpenAgents => "hook.toml",
                 AdapterKind::Claude => "hook.json",
@@ -485,7 +482,7 @@ fn create_scaffold_files(
                 (file, content),
             ]
         }
-        "workflow" => vec![
+        CapabilityType::Workflow => vec![
             (
                 "coral.toml",
                 format!(
@@ -499,15 +496,8 @@ fn create_scaffold_files(
                 ),
             ),
         ],
-        _ => unreachable!(),
     };
-    let relative_dir = match kind {
-        "skill" => "skills",
-        "tool" => "tools",
-        "hook" => "hooks",
-        "workflow" => "workflows",
-        _ => unreachable!(),
-    };
+    let relative_dir = kind.plural_dir();
     Ok((relative_dir, files))
 }
 
@@ -527,11 +517,11 @@ fn cmd_create_legacy(
         ))
     })?;
 
-    let selections = [
-        ("skill", skill),
-        ("tool", tool),
-        ("hook", hook),
-        ("workflow", workflow),
+    let selections: &[(CapabilityType, Option<&str>)] = &[
+        (CapabilityType::Skill, skill),
+        (CapabilityType::Tool, tool),
+        (CapabilityType::Hook, hook),
+        (CapabilityType::Workflow, workflow),
     ];
     let chosen: Vec<_> = selections
         .iter()
@@ -551,7 +541,7 @@ fn cmd_create_legacy(
     }
 
     let (relative_dir, files): (&str, Vec<(&str, String)>) = match kind {
-        "skill" => (
+        CapabilityType::Skill => (
             "skills",
             vec![
                 (
@@ -583,7 +573,7 @@ Describe when the agent should use this skill.
                 ),
             ],
         ),
-        "tool" => (
+        CapabilityType::Tool => (
             "tools",
             vec![
                 (
@@ -619,7 +609,7 @@ echo "replace with tool logic"
                 ),
             ],
         ),
-        "hook" => (
+        CapabilityType::Hook => (
             "hooks",
             vec![
                 (
@@ -644,7 +634,7 @@ working_directory = "."
                 ),
             ],
         ),
-        "workflow" => (
+        CapabilityType::Workflow => (
             "workflows",
             vec![
                 (
@@ -652,7 +642,7 @@ working_directory = "."
                     format!(
                         r#"id = "{id}"
 version = "0.1.0"
-type = "workflow"
+type = CapabilityType::Workflow
 description = "When the agent should run this workflow."
 files = ["workflow.toml"]
 
@@ -669,7 +659,6 @@ type = "skill"
                 ),
             ],
         ),
-        _ => unreachable!(),
     };
 
     let target_root = match adapter {
@@ -691,7 +680,7 @@ type = "skill"
     }
 
     #[cfg(unix)]
-    if kind == "tool" {
+    if kind == CapabilityType::Tool {
         use std::os::unix::fs::PermissionsExt;
         let run_sh = root.join("run.sh");
         let mut permissions = fs::metadata(&run_sh)?.permissions();
@@ -799,7 +788,7 @@ fn cmd_add_local(
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability);
     let inferred = infer_from_path(&capability_dir);
-    let manifest = load_or_synthetic_manifest(&capability_dir, Some(&inferred.0))?;
+    let manifest = load_or_synthetic_manifest(&capability_dir, Some(inferred.0))?;
     let resolved = resolve_capability(&manifest)?;
 
     if scope == Scope::Project {
@@ -825,7 +814,7 @@ fn cmd_add_local(
 
 fn load_or_synthetic_manifest(
     capability_dir: &Path,
-    inferred_type: Option<&str>,
+    inferred_type: Option<CapabilityType>,
 ) -> Result<manifest::CapabilityManifest> {
     if capability_dir.join("coral.toml").exists() {
         load_manifest(capability_dir)
@@ -836,7 +825,7 @@ fn load_or_synthetic_manifest(
 
 fn synthetic_local_manifest(
     capability_dir: &Path,
-    inferred_type: Option<&str>,
+    inferred_type: Option<CapabilityType>,
 ) -> Result<manifest::CapabilityManifest> {
     if !capability_dir.exists() || !capability_dir.is_dir() {
         return Err(CoralError::new(format!(
@@ -850,7 +839,7 @@ fn synthetic_local_manifest(
         .ok_or_else(|| CoralError::new("capability directory must have a name"))?
         .to_string_lossy()
         .to_string();
-    let capability_type = inferred_type.unwrap_or("skill").to_string();
+    let capability_type = inferred_type.unwrap_or(CapabilityType::Skill);
 
     let mut files = Vec::new();
     for entry in fs::read_dir(capability_dir)? {
@@ -1022,14 +1011,14 @@ fn install_capability(
                 tid
             ))
         })?;
-        if !adapter.supports(&capability.capability_type) {
+        if !adapter.supports(capability.capability_type) {
             return Err(CoralError::new(format!(
                 "{} does not yet support {} capabilities",
                 adapter.display_name(),
                 capability.capability_type
             )));
         }
-        if capability.capability_type == "hook" {
+        if capability.capability_type == CapabilityType::Hook {
             if let Some(ref hook_cfg) = capability.hook {
                 if !adapter
                     .supported_events()
@@ -1055,7 +1044,7 @@ fn install_capability(
         {
             planned.push(manifest_file);
         }
-        if is_git && capability.capability_type == "skill" {
+        if is_git && capability.capability_type == CapabilityType::Skill {
             planned.push(generated_git_manifest_file(
                 *adapter,
                 install_root,
@@ -1128,7 +1117,7 @@ fn install_capability(
     }
 
     // MCP registration for tool primitives
-    if capability.capability_type == "tool" {
+    if capability.capability_type == CapabilityType::Tool {
         if let Some(ref impl_cfg) = capability.implementation {
             if impl_cfg.mcp {
                 for adapter in &adapters {
@@ -1259,7 +1248,7 @@ fn copied_tool_manifest_file(
     capability: &adapter::ResolvedCapability,
     manifest: &manifest::CapabilityManifest,
 ) -> Result<Option<adapter::PlannedFile>> {
-    if capability.capability_type != "tool" {
+    if capability.capability_type != CapabilityType::Tool {
         return Ok(None);
     }
 
@@ -1288,7 +1277,7 @@ fn should_print_installed_file(
     capability: &adapter::ResolvedCapability,
     planned: &adapter::PlannedFile,
 ) -> bool {
-    if capability.capability_type != "skill" {
+    if capability.capability_type != CapabilityType::Skill {
         return true;
     }
     Path::new(&planned.path).file_name() == Some(std::ffi::OsStr::new("SKILL.md"))
@@ -1328,7 +1317,7 @@ fn collect_lockfile_inventory(
     lockfile: &lockfile::Lockfile,
     scope: &str,
     path_prefix: Option<&str>,
-    kind_filter: Option<&str>,
+    kind_filter: Option<CapabilityType>,
 ) -> Vec<InventoryRow> {
     let mut rows = Vec::new();
 
@@ -1402,7 +1391,7 @@ fn capability_source_type(entry: &lockfile::CapabilityLockEntry) -> &'static str
     }
 }
 
-fn project_inventory(repo_root: &Path, kind_filter: Option<&str>) -> Result<Vec<InventoryRow>> {
+fn project_inventory(repo_root: &Path, kind_filter: Option<CapabilityType>) -> Result<Vec<InventoryRow>> {
     let lockfile = lockfile::require_lockfile(repo_root)?;
     Ok(collect_lockfile_inventory(
         repo_root,
@@ -1414,6 +1403,8 @@ fn project_inventory(repo_root: &Path, kind_filter: Option<&str>) -> Result<Vec<
 }
 
 pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>) -> Result<()> {
+    let kind_type = kind_filter.and_then(CapabilityType::from_str);
+
     let show_project = scope_filter == "all" || scope_filter == "project";
     let show_global = scope_filter == "all" || scope_filter == "global";
 
@@ -1426,7 +1417,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
                 &lockfile,
                 "project",
                 None,
-                kind_filter,
+                kind_type,
             ));
         }
     }
@@ -1440,7 +1431,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
                     &lockfile,
                     "global",
                     Some("~/"),
-                    kind_filter,
+                    kind_type,
                 ));
             }
         }
@@ -1459,7 +1450,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
         .map(|row| {
             vec![
                 row.id,
-                style_capability_type(&row.capability_type),
+                style_capability_type(row.capability_type),
                 row.version,
                 row.scope,
                 row.target,
@@ -1631,7 +1622,7 @@ fn render_index_markdown(adapter: AdapterKind, rows: &[InventoryRow]) -> String 
             .collect();
         out.push_str(&format!(
             "## {}\n\n",
-            capability_type_heading(&capability_type)
+            capability_type_heading(capability_type)
         ));
         for group in group_capability_rows(type_rows) {
             write_capability_markdown(&mut out, &group);
@@ -1704,7 +1695,7 @@ fn render_report_markdown(rows: &[InventoryRow]) -> String {
 
 struct CapabilityGroup<'a> {
     id: &'a str,
-    capability_type: &'a str,
+    capability_type: CapabilityType,
     version: &'a str,
     target: &'a str,
     scope: &'a str,
@@ -1715,10 +1706,10 @@ struct CapabilityGroup<'a> {
 }
 
 fn group_capability_rows(rows: Vec<&InventoryRow>) -> Vec<CapabilityGroup<'_>> {
-    let mut grouped: BTreeMap<(&str, &str, &str), Vec<&InventoryRow>> = BTreeMap::new();
+    let mut grouped: BTreeMap<(&str, &str, CapabilityType), Vec<&InventoryRow>> = BTreeMap::new();
     for row in rows {
         grouped
-            .entry((&row.id, &row.target, &row.capability_type))
+            .entry((&row.id, &row.target, row.capability_type))
             .or_default()
             .push(row);
     }
@@ -1737,7 +1728,7 @@ fn group_capability_rows(rows: Vec<&InventoryRow>) -> Vec<CapabilityGroup<'_>> {
             };
             CapabilityGroup {
                 id: &first.id,
-                capability_type: &first.capability_type,
+                capability_type: first.capability_type,
                 version: &first.version,
                 target: &first.target,
                 scope: &first.scope,
@@ -1754,7 +1745,7 @@ fn write_capability_markdown(out: &mut String, group: &CapabilityGroup<'_>) {
     out.push_str(&format!(
         "- `{}` ({}, version `{}`) - `{}`\n",
         markdown_escape(group.id),
-        markdown_escape(group.capability_type),
+        markdown_escape(group.capability_type.as_str()),
         markdown_escape(group.version),
         markdown_escape(group.status)
     ));
@@ -1776,13 +1767,18 @@ fn write_capability_markdown(out: &mut String, group: &CapabilityGroup<'_>) {
     out.push('\n');
 }
 
-fn ordered_capability_types(rows: &[InventoryRow]) -> Vec<String> {
-    let mut remaining: BTreeSet<String> =
-        rows.iter().map(|row| row.capability_type.clone()).collect();
+fn ordered_capability_types(rows: &[InventoryRow]) -> Vec<CapabilityType> {
+    let mut remaining: BTreeSet<CapabilityType> =
+        rows.iter().map(|row| row.capability_type).collect();
     let mut ordered = Vec::new();
-    for capability_type in ["skill", "tool", "hook", "workflow"] {
-        if remaining.remove(capability_type) {
-            ordered.push(capability_type.to_string());
+    for capability_type in [
+        CapabilityType::Skill,
+        CapabilityType::Tool,
+        CapabilityType::Hook,
+        CapabilityType::Workflow,
+    ] {
+        if remaining.remove(&capability_type) {
+            ordered.push(capability_type);
         }
     }
     ordered.extend(remaining);
@@ -1797,13 +1793,12 @@ fn ordered_agents(rows: &[InventoryRow]) -> Vec<String> {
         .collect()
 }
 
-fn capability_type_heading(capability_type: &str) -> String {
+fn capability_type_heading(capability_type: CapabilityType) -> String {
     match capability_type {
-        "skill" => "Skills".to_string(),
-        "tool" => "Tools".to_string(),
-        "hook" => "Hooks".to_string(),
-        "workflow" => "Workflows".to_string(),
-        other => format!("{other}s"),
+        CapabilityType::Skill => "Skills".to_string(),
+        CapabilityType::Tool => "Tools".to_string(),
+        CapabilityType::Hook => "Hooks".to_string(),
+        CapabilityType::Workflow => "Workflows".to_string(),
     }
 }
 
@@ -1842,7 +1837,7 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
 
             println!("{id}  project  {drift}{override_warning}");
 
-            if entry.capability_type == "workflow" && !entry.targets.is_empty() {
+            if entry.capability_type == CapabilityType::Workflow && !entry.targets.is_empty() {
                 let (_, target_entry) = entry.targets.iter().next().unwrap();
                 for emitted in &target_entry.emitted_files {
                     if let Ok(content) = std::fs::read_to_string(repo_root.join(&emitted.path)) {
@@ -1860,13 +1855,14 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
                                     .to_string();
                             }
                             if line.starts_with("type = \"") {
-                                let ctype = line
+                                let raw_type = line
                                     .trim_start_matches("type = \"")
-                                    .trim_end_matches('"')
-                                    .to_string();
-                                if !current_id.is_empty() && ctype != "workflow" {
-                                    requires.push((current_id.clone(), ctype));
-                                    current_id.clear();
+                                    .trim_end_matches('"');
+                                if let Some(parsed) = CapabilityType::from_str(raw_type) {
+                                    if !current_id.is_empty() && parsed != CapabilityType::Workflow {
+                                        requires.push((current_id.clone(), parsed));
+                                        current_id.clear();
+                                    }
                                 }
                             }
                         }
@@ -2612,7 +2608,7 @@ pub fn cmd_update(
     )
 }
 
-fn infer_from_path(path: &Path) -> (String, String) {
+fn infer_from_path(path: &Path) -> (CapabilityType, String) {
     let parent = path
         .parent()
         .and_then(|p| p.file_name())
@@ -2620,10 +2616,10 @@ fn infer_from_path(path: &Path) -> (String, String) {
         .unwrap_or_default();
 
     let ctype = match parent.as_str() {
-        "tools" => "tool",
-        "hooks" => "hook",
-        "workflows" => "workflow",
-        _ => "skill",
+        "tools" => CapabilityType::Tool,
+        "hooks" => CapabilityType::Hook,
+        "workflows" => CapabilityType::Workflow,
+        _ => CapabilityType::Skill,
     };
 
     let grandparent = path
@@ -2638,7 +2634,7 @@ fn infer_from_path(path: &Path) -> (String, String) {
         _ => "open-agents",
     };
 
-    (ctype.to_string(), target.to_string())
+    (ctype, target.to_string())
 }
 
 // ── Check ───────────────────────────────────────────────────────────────────
@@ -2821,7 +2817,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
         .map(|row| {
             vec![
                 row.id,
-                row.capability_type,
+                row.capability_type.to_string(),
                 row.target,
                 row.current,
                 row.latest,
@@ -2865,7 +2861,7 @@ pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
         .map(|a| AgentRow {
             agent: a.id().to_string(),
             agents: a.supported_agents().join(", "),
-            primitives: a.kinds_supported().join(", "),
+            primitives: a.kinds_supported().iter().map(|ct| ct.to_string()).collect::<Vec<_>>().join(", "),
             registered: if registered.contains(a.id()) {
                 "yes".to_string()
             } else {

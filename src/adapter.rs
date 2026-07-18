@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::{claude, open_agents};
 use crate::error::Result;
-use crate::manifest::CapabilityManifest;
+use crate::manifest::{CapabilityManifest, CapabilityType};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmittedFile {
@@ -23,7 +23,7 @@ pub struct PlannedFile {
 #[allow(dead_code)]
 pub struct ResolvedCapability {
     pub id: String,
-    pub capability_type: String,
+    pub capability_type: CapabilityType,
     pub version: String,
     pub description: String,
     pub source_files: Vec<(String, Vec<u8>)>,
@@ -38,7 +38,7 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
     let source_files = manifest.read_source_contents_with_names()?;
     Ok(ResolvedCapability {
         id: manifest.id.clone(),
-        capability_type: manifest.capability_type.clone(),
+        capability_type: manifest.capability_type,
         version: manifest.version.clone(),
         description: manifest.description.clone(),
         source_files,
@@ -93,7 +93,7 @@ impl AdapterKind {
         }
     }
 
-    pub fn supports(&self, capability_type: &str) -> bool {
+    pub fn supports(&self, capability_type: CapabilityType) -> bool {
         match self {
             Self::OpenAgents => open_agents::supports(capability_type),
             Self::Claude => claude::supports(capability_type),
@@ -126,7 +126,7 @@ impl AdapterKind {
         }
     }
 
-    pub fn kinds_supported(&self) -> &[&'static str] {
+    pub fn kinds_supported(&self) -> &[CapabilityType] {
         match self {
             Self::OpenAgents => open_agents::SUPPORTED_TYPES,
             Self::Claude => claude::SUPPORTED_TYPES,

@@ -1,15 +1,60 @@
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{CoralError, Result};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CapabilityType {
+    Skill,
+    Tool,
+    Hook,
+    Workflow,
+}
+
+impl CapabilityType {
+    pub fn plural_dir(&self) -> &'static str {
+        match self {
+            Self::Skill => "skills",
+            Self::Tool => "tools",
+            Self::Hook => "hooks",
+            Self::Workflow => "workflows",
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Skill => "skill",
+            Self::Tool => "tool",
+            Self::Hook => "hook",
+            Self::Workflow => "workflow",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "skill" => Some(Self::Skill),
+            "tool" => Some(Self::Tool),
+            "hook" => Some(Self::Hook),
+            "workflow" => Some(Self::Workflow),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for CapabilityType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct CapabilityManifest {
     pub id: String,
     pub version: String,
     #[serde(rename = "type")]
-    pub capability_type: String,
+    pub capability_type: CapabilityType,
     pub description: String,
     #[serde(default)]
     pub files: Vec<String>,
@@ -56,7 +101,7 @@ pub struct WorkflowConfig {
 pub struct Requirement {
     pub id: String,
     #[serde(rename = "type")]
-    pub capability_type: String,
+    pub capability_type: CapabilityType,
 }
 
 fn default_cwd() -> String {
@@ -79,7 +124,7 @@ impl CapabilityManifest {
             paths.push(path);
         }
 
-        if self.capability_type == "tool" {
+        if self.capability_type == CapabilityType::Tool {
             if let Some(ref imp) = self.implementation {
                 let ep_path = self.root.join(&imp.entrypoint);
                 if !paths.contains(&ep_path) && ep_path.exists() {
@@ -132,11 +177,11 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
 
     validate_non_empty("id", &manifest.id)?;
     validate_non_empty("version", &manifest.version)?;
-    validate_non_empty("type", &manifest.capability_type)?;
+    validate_non_empty("type", &manifest.capability_type.to_string())?;
     validate_non_empty("description", &manifest.description)?;
 
-    match manifest.capability_type.as_str() {
-        "skill" => {
+    match manifest.capability_type {
+        CapabilityType::Skill => {
             if manifest.files.is_empty() {
                 return Err(CoralError::new(
                     "skill capability 'files' must not be empty",
@@ -144,7 +189,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             }
             manifest.source_files()?;
         }
-        "tool" => {
+        CapabilityType::Tool => {
             if manifest.parameters.is_none() {
                 return Err(CoralError::new(
                     "tool capability requires a [parameters] section with JSON Schema",
@@ -173,7 +218,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
                 manifest.source_files()?;
             }
         }
-        "hook" => {
+        CapabilityType::Hook => {
             let hook_cfg = manifest
                 .hook
                 .as_ref()
@@ -197,7 +242,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
                 manifest.source_files()?;
             }
         }
-        "workflow" => {
+        CapabilityType::Workflow => {
             let wf = manifest.workflow.as_ref().ok_or_else(|| {
                 CoralError::new("workflow capability requires a [[workflow.requires]] section")
             })?;
@@ -238,12 +283,6 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
                 names.join(", ")
             );
         }
-        other => {
-            return Err(CoralError::new(format!(
-                "unsupported capability type '{}'; supported: skill, tool, hook, workflow",
-                other
-            )));
-        }
     }
 
     Ok(manifest)
@@ -268,7 +307,7 @@ pub fn synthetic_manifest(
     Ok(CapabilityManifest {
         id: name.to_string(),
         version: version.to_string(),
-        capability_type: "skill".to_string(),
+        capability_type: CapabilityType::Skill,
         description: "Installed from git source.".to_string(),
         files,
         parameters: None,
@@ -324,7 +363,7 @@ files = ["src/SKILL.md"]
         );
         let m = load_manifest(tmp.path()).unwrap();
         assert_eq!(m.id, "test");
-        assert_eq!(m.capability_type, "skill");
+        assert_eq!(m.capability_type, CapabilityType::Skill);
     }
 
     #[test]
@@ -352,7 +391,7 @@ entrypoint = "run.sh"
 "#,
         );
         let m = load_manifest(tmp.path()).unwrap();
-        assert_eq!(m.capability_type, "tool");
+        assert_eq!(m.capability_type, CapabilityType::Tool);
         assert!(m.implementation.is_some());
     }
 
@@ -372,7 +411,7 @@ command = "cargo test"
 "#,
         );
         let m = load_manifest(tmp.path()).unwrap();
-        assert_eq!(m.capability_type, "hook");
+        assert_eq!(m.capability_type, CapabilityType::Hook);
         assert!(m.hook.is_some());
     }
 
@@ -405,7 +444,7 @@ files = ["SKILL.md"]
         let m = CapabilityManifest {
             id: "t".into(),
             version: "1.0".into(),
-            capability_type: "skill".into(),
+            capability_type: CapabilityType::Skill,
             description: "desc".into(),
             files: vec!["src/SKILL.md".into()],
             parameters: None,
@@ -426,7 +465,7 @@ files = ["SKILL.md"]
         let m = CapabilityManifest {
             id: "t".into(),
             version: "1.0".into(),
-            capability_type: "skill".into(),
+            capability_type: CapabilityType::Skill,
             description: "desc".into(),
             files: vec!["src/MISSING.md".into()],
             parameters: None,

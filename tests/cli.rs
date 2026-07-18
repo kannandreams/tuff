@@ -265,7 +265,7 @@ fn invalid_capability_fixture_is_rejected() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unsupported capability type"));
+        .stderr(predicate::str::contains("unknown variant"));
 }
 
 #[test]

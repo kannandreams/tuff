@@ -3,10 +3,16 @@ use std::path::Path;
 use crate::adapter::{PlannedFile, ResolvedCapability};
 use crate::error::{CoralError, Result};
 use crate::lockfile;
+use crate::manifest::CapabilityType;
 
 pub const ID: &str = "open-agents";
 pub const DISPLAY_NAME: &str = "Open Agents";
-pub const SUPPORTED_TYPES: &[&str] = &["skill", "tool", "hook", "workflow"];
+pub const SUPPORTED_TYPES: &[CapabilityType] = &[
+    CapabilityType::Skill,
+    CapabilityType::Tool,
+    CapabilityType::Hook,
+    CapabilityType::Workflow,
+];
 
 pub const SUPPORTED_AGENTS: &[&str] = &[
     "Codex",
@@ -26,15 +32,15 @@ pub const SUPPORTED_EVENTS: &[&str] = &[
     "post_tool_execution",
 ];
 
-pub fn supports(capability_type: &str) -> bool {
+pub fn supports(capability_type: CapabilityType) -> bool {
     SUPPORTED_TYPES.contains(&capability_type)
 }
 
 pub fn plan(capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
-    match capability.capability_type.as_str() {
-        "tool" => plan_tool(capability, repo_root),
-        "hook" => plan_hook(capability, repo_root),
-        "workflow" => plan_workflow(capability, repo_root),
+    match capability.capability_type {
+        CapabilityType::Tool => plan_tool(capability, repo_root),
+        CapabilityType::Hook => plan_hook(capability, repo_root),
+        CapabilityType::Workflow => plan_workflow(capability, repo_root),
         _ => plan_skill(capability, repo_root),
     }
 }
@@ -200,15 +206,10 @@ mod tests {
 
     #[test]
     fn supports_returns_true_for_known_types() {
-        assert!(supports("skill"));
-        assert!(supports("tool"));
-        assert!(supports("hook"));
-    }
-
-    #[test]
-    fn supports_returns_false_for_unknown() {
-        assert!(!supports("unknown"));
-        assert!(!supports("policy"));
+        assert!(supports(CapabilityType::Skill));
+        assert!(supports(CapabilityType::Tool));
+        assert!(supports(CapabilityType::Hook));
+        assert!(supports(CapabilityType::Workflow));
     }
 
     #[test]
