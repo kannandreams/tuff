@@ -20,7 +20,35 @@ pub struct PlannedFile {
     pub content: Vec<u8>,
 }
 
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum CapabilityKind {
+    Skill,
+    Tool {
+        #[expect(dead_code, reason = "parameters JSON Schema is consumed by the agent at runtime, not by Coral itself")]
+        parameters: serde_json::Value,
+        implementation: crate::manifest::ImplementationConfig,
+    },
+    Hook {
+        hook: crate::manifest::HookConfig,
+    },
+    Workflow {
+        workflow: crate::manifest::WorkflowConfig,
+    },
+}
+
+impl CapabilityKind {
+    #[expect(dead_code, reason = "utility method for code that only has a CapabilityKind value")]
+    pub fn capability_type(&self) -> CapabilityType {
+        match self {
+            Self::Skill => CapabilityType::Skill,
+            Self::Tool { .. } => CapabilityType::Tool,
+            Self::Hook { .. } => CapabilityType::Hook,
+            Self::Workflow { .. } => CapabilityType::Workflow,
+        }
+    }
+}
+
+#[expect(dead_code, reason = "ResolvedCapability is used throughout the codebase; dead_code is a false positive")]
 pub struct ResolvedCapability {
     pub id: String,
     pub capability_type: CapabilityType,
@@ -28,14 +56,32 @@ pub struct ResolvedCapability {
     pub description: String,
     pub source_files: Vec<(String, Vec<u8>)>,
     pub source_dir: PathBuf,
-    pub parameters: Option<serde_json::Value>,
-    pub implementation: Option<crate::manifest::ImplementationConfig>,
-    pub hook: Option<crate::manifest::HookConfig>,
-    pub workflow: Option<crate::manifest::WorkflowConfig>,
+    pub kind: CapabilityKind,
 }
 
 pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapability> {
     let source_files = manifest.read_source_contents_with_names()?;
+    let kind = match manifest.capability_type {
+        CapabilityType::Skill => CapabilityKind::Skill,
+        CapabilityType::Tool => CapabilityKind::Tool {
+            parameters: manifest.parameters.clone().ok_or_else(|| {
+                CoralError::new("tool capability requires [parameters] section")
+            })?,
+            implementation: manifest.implementation.clone().ok_or_else(|| {
+                CoralError::new("tool capability requires [implementation] section")
+            })?,
+        },
+        CapabilityType::Hook => CapabilityKind::Hook {
+            hook: manifest.hook.clone().ok_or_else(|| {
+                CoralError::new("hook capability requires [hook] section")
+            })?,
+        },
+        CapabilityType::Workflow => CapabilityKind::Workflow {
+            workflow: manifest.workflow.clone().ok_or_else(|| {
+                CoralError::new("workflow capability requires [workflow] section")
+            })?,
+        },
+    };
     Ok(ResolvedCapability {
         id: manifest.id.clone(),
         capability_type: manifest.capability_type,
@@ -43,10 +89,7 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
         description: manifest.description.clone(),
         source_files,
         source_dir: manifest.root.clone(),
-        parameters: manifest.parameters.clone(),
-        implementation: manifest.implementation.clone(),
-        hook: manifest.hook.clone(),
-        workflow: manifest.workflow.clone(),
+        kind,
     })
 }
 
@@ -62,7 +105,7 @@ pub trait AgentAdapter {
         &self,
         hook_cfg: &crate::manifest::HookConfig,
     ) -> Result<Vec<u8>>;
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "part of public adapter API; may be used by external callers")]
     fn detect(&self, repo_root: &Path) -> bool;
 
     fn kinds_supported(&self) -> &[CapabilityType];
@@ -168,10 +211,9 @@ pub trait AgentAdapter {
         capability: &ResolvedCapability,
         repo_root: &Path,
     ) -> Result<Vec<PlannedFile>> {
-        let hook_cfg = capability
-            .hook
-            .as_ref()
-            .ok_or_else(|| CoralError::new("hook capability requires [hook] section"))?;
+        let CapabilityKind::Hook { hook: hook_cfg } = &capability.kind else {
+            return Err(CoralError::new("plan_hook called on non-hook capability"));
+        };
 
         let target_path = repo_root
             .join(self.dir_prefix())
@@ -190,9 +232,9 @@ pub trait AgentAdapter {
         capability: &ResolvedCapability,
         repo_root: &Path,
     ) -> Result<Vec<PlannedFile>> {
-        let wf = capability.workflow.as_ref().ok_or_else(|| {
-            CoralError::new("workflow capability requires [[workflow.requires]] section")
-        })?;
+        let CapabilityKind::Workflow { workflow: wf } = &capability.kind else {
+            return Err(CoralError::new("plan_workflow called on non-workflow capability"));
+        };
 
         let target_path = repo_root
             .join(self.dir_prefix())
@@ -421,10 +463,7 @@ mod tests {
             description: "d".into(),
             source_files: vec![("SKILL.md".into(), b"hello".to_vec())],
             source_dir: tmp.path().to_path_buf(),
-            parameters: None,
-            implementation: None,
-            hook: None,
-            workflow: None,
+            kind: CapabilityKind::Skill,
         };
 
         for a in AdapterKind::all() {

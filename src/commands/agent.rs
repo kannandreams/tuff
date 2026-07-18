@@ -8,51 +8,23 @@ use crate::error::Result;
 use super::{home_dir, render_table};
 
 pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
-    struct AgentRow {
-        agent: String,
-        agents: String,
-        primitives: String,
-        registered: String,
-        default: String,
-    }
-
     let config_root = if global { home_dir()? } else { repo_root.to_path_buf() };
     let config = config::read_config(&config_root)?;
     let registered: HashSet<&str> = config.agents.iter().map(|s| s.as_str()).collect();
 
-    let rows: Vec<AgentRow> = AdapterKind::all()
+    let table_rows: Vec<Vec<String>> = AdapterKind::all()
         .iter()
-        .map(|a| AgentRow {
-            agent: a.id().to_string(),
-            agents: a.supported_agents().join(", "),
-            primitives: a
-                .kinds_supported()
-                .iter()
-                .map(|ct| ct.to_string())
-                .collect::<Vec<_>>()
-                .join(", "),
-            registered: if registered.contains(a.id()) {
-                "yes".to_string()
-            } else {
-                String::new()
-            },
-            default: if config.default_agent == a.id() {
-                "yes".to_string()
-            } else {
-                String::new()
-            },
-        })
-        .collect();
-
-    let table_rows: Vec<Vec<String>> = rows
-        .into_iter()
-        .map(|row| {
+        .map(|a| {
             vec![
-                row.agent,
-                row.agents,
-                row.primitives,
-                row.registered,
-                row.default,
+                a.id().to_string(),
+                a.supported_agents().join(", "),
+                a.kinds_supported()
+                    .iter()
+                    .map(|ct| ct.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                if registered.contains(a.id()) { "yes".to_string() } else { String::new() },
+                if config.default_agent == a.id() { "yes".to_string() } else { String::new() },
             ]
         })
         .collect();

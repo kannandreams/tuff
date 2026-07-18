@@ -29,7 +29,6 @@ pub const SUPPORTED_EVENTS: &[&str] = &[
     "post_tool_execution",
 ];
 
-#[allow(dead_code)]
 pub fn detect(repo_root: &Path) -> bool {
     repo_root.join(".agents").join("skills").exists()
 }

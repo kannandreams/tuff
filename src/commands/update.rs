@@ -276,7 +276,7 @@ pub fn cmd_update(
             Some(&SourceMetaInput {
                 source_type: "git".to_string(),
                 url: source.url.clone(),
-                source_ref: latest_sha.clone(),
+                source_ref: latest_sha,
                 skill: source.skill.clone(),
             }),
         );
@@ -389,7 +389,7 @@ pub fn cmd_update(
         Some(&SourceMetaInput {
             source_type: "git".to_string(),
             url: source.url.clone(),
-            source_ref: latest_sha.clone(),
+            source_ref: latest_sha,
             skill: source.skill.clone(),
         }),
     )

@@ -15,7 +15,6 @@ pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
 
 pub const SUPPORTED_EVENTS: &[&str] = &["before_finish", "post_tool_execution"];
 
-#[allow(dead_code)]
 pub fn detect(repo_root: &Path) -> bool {
     repo_root.join(".claude").exists() || repo_root.join("CLAUDE.md").exists()
 }
