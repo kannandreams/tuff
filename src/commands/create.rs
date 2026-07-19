@@ -98,9 +98,6 @@ pub fn cmd_create(
 
         let mut emitted_files = Vec::new();
         for (name, content) in files {
-            if *name == "coral.toml" {
-                continue;
-            }
             let target_path = root.join(name);
             let baseline_hash = lockfile::write_baseline_object(repo_root, content.as_bytes())?;
             emitted_files.push(adapter::EmittedFile {
@@ -122,15 +119,13 @@ pub fn cmd_create(
         }
 
         for (name, _) in files {
-            if *name != "coral.toml" {
-                println!(
-                    "created and tracked {} '{}' ({}) -> {}",
-                    kind,
-                    id,
-                    adapter.id(),
-                    lockfile::relative_or_absolute_fs(&root.join(name), repo_root)
-                );
-            }
+            println!(
+                "created and tracked {} '{}' ({}) -> {}",
+                kind,
+                id,
+                adapter.id(),
+                lockfile::relative_or_absolute_fs(&root.join(name), repo_root)
+            );
         }
     }
 
@@ -169,12 +164,6 @@ fn create_scaffold_files(
     let files = match kind {
         CapabilityType::Skill => vec![
             (
-                "coral.toml",
-                format!(
-                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"skill\"\ndescription = \"What this skill helps the agent do.\"\nfiles = [\"SKILL.md\"]\n"
-                ),
-            ),
-            (
                 "SKILL.md",
                 format!(
                     "# {id}\n\n## Purpose\n\nDescribe when the agent should use this skill.\n\n## Guidance\n\n- Add the key rules the agent should follow.\n- Add examples, constraints, and team conventions.\n"
@@ -182,12 +171,6 @@ fn create_scaffold_files(
             ),
         ],
         CapabilityType::Tool => vec![
-            (
-                "coral.toml",
-                format!(
-                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"tool\"\ndescription = \"What this tool does for the agent.\"\nfiles = [\"run.sh\"]\n\n[parameters]\ntype = \"object\"\n\n[parameters.properties.input]\ntype = \"string\"\ndescription = \"Input passed to the tool\"\n\n[implementation]\nlanguage = \"bash\"\nentrypoint = \"run.sh\"\n"
-                ),
-            ),
             (
                 "run.sh",
                 "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n"
@@ -206,23 +189,9 @@ fn create_scaffold_files(
                     String::from_utf8(bytes)
                         .map_err(|e| CoralError::new(format!("hook content is not valid UTF-8: {e}")))
                 })?;
-            vec![
-                (
-                    "coral.toml",
-                    format!(
-                        "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"hook\"\ndescription = \"What this hook enforces.\"\nfiles = [\"{file}\"]\n\n[hook]\nevent = \"before_finish\"\ncommand = \"echo review hook\"\nworking_directory = \".\"\n"
-                    ),
-                ),
-                (file, content),
-            ]
+            vec![(file, content)]
         }
         CapabilityType::Workflow => vec![
-            (
-                "coral.toml",
-                format!(
-                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\nfiles = [\"workflow.toml\"]\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
-                ),
-            ),
             (
                 "workflow.toml",
                 format!(
@@ -277,22 +246,10 @@ fn cmd_create_legacy(
     let (relative_dir, files): (&str, Vec<(&str, String)>) = match kind {
         CapabilityType::Skill => (
             "skills",
-            vec![
-                (
-                    "coral.toml",
-                    format!(
-                        r#"id = "{id}"
-version = "0.1.0"
-type = "skill"
-description = "What this skill helps the agent do."
-files = ["SKILL.md"]
-"#
-                    ),
-                ),
-                (
-                    "SKILL.md",
-                    format!(
-                        r#"# {id}
+            vec![(
+                "SKILL.md",
+                format!(
+                    r#"# {id}
 
 ## Purpose
 
@@ -303,95 +260,35 @@ Describe when the agent should use this skill.
 - Add the key rules the agent should follow.
 - Add examples, constraints, and team conventions.
 "#
-                    ),
                 ),
-            ],
+            )],
         ),
         CapabilityType::Tool => (
             "tools",
-            vec![
-                (
-                    "coral.toml",
-                    format!(
-                        r#"id = "{id}"
-version = "0.1.0"
-type = "tool"
-description = "What this tool does for the agent."
-files = ["run.sh"]
-
-[parameters]
-type = "object"
-
-[parameters.properties.input]
-type = "string"
-description = "Input passed to the tool"
-
-[implementation]
-language = "bash"
-entrypoint = "run.sh"
-"#
-                    ),
-                ),
-                (
-                    "run.sh",
-                    r#"#!/usr/bin/env bash
+            vec![(
+                "run.sh",
+                r#"#!/usr/bin/env bash
 set -euo pipefail
 
 echo "replace with tool logic"
 "#
-                    .to_string(),
-                ),
-            ],
+                .to_string(),
+            )],
         ),
         CapabilityType::Hook => (
             "hooks",
-            vec![
-                (
-                    "coral.toml",
-                    format!(
-                        r#"id = "{id}"
-version = "0.1.0"
-type = "hook"
-description = "What this hook enforces."
-files = ["hook.toml"]
-
-[hook]
-event = "before_finish"
-command = "echo review hook"
-working_directory = "."
-"#
-                    ),
-                ),
-                (
-                    "hook.toml",
-                    "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string(),
-                ),
-            ],
+            vec![(
+                "hook.toml",
+                "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string(),
+            )],
         ),
         CapabilityType::Workflow => (
             "workflows",
-            vec![
-                (
-                    "coral.toml",
-                    format!(
-                        r#"id = "{id}"
-version = "0.1.0"
-type = "workflow"
-description = "When the agent should run this workflow."
-files = ["workflow.toml"]
-
-[[workflow.requires]]
-id = "replace-me"
-type = "skill"
-"#
-                    ),
-                ),
-                (
-                    "workflow.toml",
-                    "name = \"replace-me\"\ndescription = \"Fill in the workflow steps here.\"\n"
-                        .to_string(),
-                ),
-            ],
+            vec![(
+                "workflow.toml",
+                "name = \"replace-me\"\ndescription = \"Fill in the workflow steps here.\"\n"
+                    .to_string(),
+            )],
         ),
     };
 

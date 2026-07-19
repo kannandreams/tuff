@@ -763,12 +763,7 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .join("skills")
         .join("test-skill");
     assert!(installed_dir.join("SKILL.md").exists());
-    assert!(installed_dir.join("coral.toml").exists());
     assert!(installed_dir.join("references").join("extra.md").exists());
-    let generated_manifest = fs::read_to_string(installed_dir.join("coral.toml")).unwrap();
-    assert!(generated_manifest.contains("id = \"test-skill\""));
-    assert!(generated_manifest.contains("\"SKILL.md\""));
-    assert!(generated_manifest.contains("\"references/extra.md\""));
 
     coral()
         .current_dir(temp.path())
@@ -1271,14 +1266,6 @@ fn add_tool_installs_and_emits() {
             .join("run.sh")
             .exists()
     );
-    assert!(
-        temp.path()
-            .join(".agents")
-            .join("tools")
-            .join("scan-tool")
-            .join("coral.toml")
-            .exists()
-    );
     assert!(!temp.path().join(".agents").join("mcp.json").exists());
 }
 
@@ -1557,14 +1544,6 @@ fn example_tools_install_and_register_mcp_entries() {
                 .join("tools")
                 .join(id)
                 .join(entrypoint)
-                .exists()
-        );
-        assert!(
-            temp.path()
-                .join(".agents")
-                .join("tools")
-                .join(id)
-                .join("coral.toml")
                 .exists()
         );
     }
@@ -2179,8 +2158,6 @@ fn add_adopts_existing_agent_directory() {
             "added my-skill (skill, open-agents)",
         ));
 
-    assert!(skill_dir.join("coral.toml").exists());
-
     coral()
         .current_dir(temp.path())
         .arg("list")
@@ -2402,7 +2379,6 @@ fn untrack_in_place_capability_preserves_files() {
         .stdout(predicate::str::contains("untracked 'keep-me'"));
 
     assert!(skill_dir.join("SKILL.md").exists());
-    assert!(skill_dir.join("coral.toml").exists());
     assert!(!baseline_object_path(temp.path(), &tracked_content_hash).exists());
 }
 
@@ -2476,14 +2452,6 @@ fn create_skill_scaffolds_importable_files() {
         ))
         .stdout(predicate::str::contains("coral list"));
 
-    assert!(
-        temp.path()
-            .join(".agents")
-            .join("skills")
-            .join("my-skill")
-            .join("coral.toml")
-            .exists()
-    );
     assert!(
         temp.path()
             .join(".agents")
