@@ -165,10 +165,6 @@ pub(crate) fn short_sha(v: &str) -> &str {
     }
 }
 
-pub(crate) fn toml_escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
 pub(crate) fn markdown_escape(value: &str) -> String {
     value.replace('|', "\\|")
 }
