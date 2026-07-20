@@ -437,13 +437,6 @@ fn old_target_flags_are_removed() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("unexpected argument '--target'"));
-
-    coral()
-        .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "-t", "open-agents"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("unexpected argument '-t'"));
 }
 
 #[test]
@@ -747,7 +740,9 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
             &repo_url,
             "--agent",
             "open-agents",
-            "--skill",
+            "--type",
+            "skill",
+            "--name",
             "test-skill",
         ])
         .assert()
@@ -819,7 +814,7 @@ fn add_git_requires_skill_flag() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "--skill, --tool, or --hook is required",
+            "--name is required",
         ));
 }
 
@@ -842,7 +837,9 @@ fn add_git_missing_skill_reports_error() {
             &repo_url,
             "--agent",
             "open-agents",
-            "--skill",
+            "--type",
+            "skill",
+            "--name",
             "nonexistent",
         ])
         .assert()
@@ -871,7 +868,9 @@ fn add_git_skill_multi_agent() {
             "open-agents",
             "--agent",
             "claude",
-            "--skill",
+            "--type",
+            "skill",
+            "--name",
             "test-skill",
         ])
         .assert()
@@ -962,7 +961,9 @@ fn add_git_subfolder_skill() {
             &repo_url,
             "--agent",
             "open-agents",
-            "--skill",
+            "--type",
+            "skill",
+            "--name",
             "security/security-review",
         ])
         .assert()
@@ -1224,7 +1225,9 @@ fn update_git_skill_reports_up_to_date() {
             &repo_url,
             "--agent",
             "open-agents",
-            "--skill",
+            "--type",
+            "skill",
+            "--name",
             "test-skill",
         ])
         .assert()
@@ -1977,7 +1980,9 @@ fn diff_upstream_shows_no_changes_for_current_ref() {
             &repo_url,
             "--agent",
             "open-agents",
-            "--skill",
+            "--type",
+            "skill",
+            "--name",
             "test-skill",
         ])
         .assert()

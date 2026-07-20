@@ -73,11 +73,14 @@ Every tool goes through these checks at `coral add` time:
 ## Installing a tool
 
 ```sh frame="terminal"
-# Local directory
+# Local directory (type auto-detected from parent directory)
 coral add ./my-tool -a claude
 
-# Git repository (use --tool instead of --skill)
-coral add https://github.com/owner/repo --tool security-review -a claude
+# Local file with explicit type
+coral add ./scripts/deploy.sh --type tool -a open-agents
+
+# Git repository
+coral add https://github.com/owner/repo --type tool --name security-review -a claude
 
 # Multiple agents
 coral add ./my-tool -a claude -a open-agents

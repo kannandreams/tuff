@@ -262,7 +262,7 @@ pub fn cmd_update(
         return Ok(());
     }
 
-    let skill_dir = git::discover_skill(&cache_dir, &source.skill)?;
+    let skill_dir = git::discover_capability(&cache_dir, &source.skill, entry.capability_type)?;
 
     if force {
         let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;

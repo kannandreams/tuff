@@ -48,24 +48,20 @@ enum Command {
 
     /// Install a capability.
     Add {
-        /// Path to a capability directory or git URL.
-        capability: PathBuf,
+        /// Path to a capability directory, file, or git URL.
+        source: Option<PathBuf>,
+
+        /// Override the capability name (default: inferred from source).
+        #[arg(short = 'n', long = "name")]
+        name: Option<String>,
+
+        /// Capability type: skill, tool, hook, or workflow. Auto-detected when omitted.
+        #[arg(short = 't', long = "type")]
+        capability_type: Option<String>,
 
         /// Agent harness to emit for (repeatable).
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
-
-        /// Skill name when installing from a git repository.
-        #[arg(short = 's', long = "skill")]
-        skill: Option<String>,
-
-        /// Tool name when installing from a git repository.
-        #[arg(long = "tool")]
-        tool: Option<String>,
-
-        /// Hook name when installing from a git repository.
-        #[arg(long = "hook")]
-        hook: Option<String>,
 
         /// Install to global scope (~/.coral/).
         #[arg(short = 'g', long = "global")]
@@ -300,19 +296,17 @@ fn run() -> Result<()> {
             }
         },
         Some(Command::Add {
-            capability,
+            source,
+            name,
+            capability_type,
             agent,
-            skill,
-            tool,
-            hook,
             global,
         }) => cmd_add(
             &repo_root,
-            &capability,
+            source.as_deref(),
+            name.as_deref(),
+            capability_type.as_deref(),
             &agent,
-            skill.as_deref(),
-            tool.as_deref(),
-            hook.as_deref(),
             global,
         ),
         Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),

@@ -98,7 +98,7 @@ fn cmd_diff_upstream(
             let rel_display = rel_path.to_string_lossy();
 
             let upstream_content =
-                crate::diff::get_upstream_content(&cache_dir, &source.skill, &rel_display)?;
+                crate::diff::get_upstream_content(&cache_dir, &source.skill, entry.capability_type, &rel_display)?;
             let baseline_content = String::from_utf8(lockfile::read_baseline_object(
                 &scope_root,
                 &emitted.baseline_hash,
