@@ -569,3 +569,14 @@ dialog[aria-label='Search'] {
 :root[data-theme='light'] .right-sidebar-panel h2 {
   color: var(--sl-color-text-secondary);
 }
+
+.cell-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+}
+
+.cell-icon svg {
+  display: block;
+}

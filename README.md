@@ -55,7 +55,7 @@ npm run build
 
 Start with:
 
-- [Introduction](website/src/content/docs/index.mdx)
+- [Intro](website/src/content/docs/index.mdx)
 - [When to Use Coral](website/src/content/docs/usage-scenarios.md)
 - [Skills.sh and Vercel Skills Comparison](website/src/content/docs/comparison/vercel-skills.md)
 
