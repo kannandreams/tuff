@@ -53,7 +53,7 @@ starts tracking drift without requiring a separate import.
 To create it for another agent explicitly:
 
 ```sh frame="terminal"
-coral create skill my-skill -a claude
+coral create skill my-skill --agent claude
 ```
 
 See [`coral create`](/cli#coral-create) for skills, tools, hooks, workflows, and repeated agent
@@ -62,7 +62,7 @@ selection.
 If your project already has a skill under `.agents/skills/`, add it in place:
 
 ```sh frame="terminal"
-coral add .agents/skills/existing-skill
+coral add skill .agents/skills/existing-skill --agent open-agents
 ```
 
 See [`coral add`](/cli#coral-add) for adopting existing files and installing from git.
@@ -103,12 +103,12 @@ For existing files that were added in place, later edits follow this same drift 
 ## 6. Install from git
 
 ```sh frame="terminal"
-coral add skill https://github.com/pproenca/dot-skills rust-implement
+coral add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
 ```
 
 The command installs the selected capability, tracks the upstream revision, and records
-everything in the lockfile. See [`coral add`](/cli#coral-add) for git skill, tool, and hook
-options.
+everything in the lockfile. Replace `skill` with `tool`, `hook`, or `workflow` when installing
+another capability type. See [`coral add`](/cli#coral-add) for local and Git source patterns.
 
 ## 7. Check for updates
 

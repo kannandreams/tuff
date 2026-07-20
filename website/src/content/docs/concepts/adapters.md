@@ -6,13 +6,6 @@ description: How Coral maps one capability model into agent-specific files and c
 A harness adapter is the agent-specific layer that turns one Coral capability into the files a
 particular coding environment expects.
 
-Coral manages capabilities in one common model:
-
-- `skill`
-- `tool`
-- `hook`
-- `workflow`
-
 The adapter decides where those files are emitted, what hook format is required, and where tool
 registration lives.
 
