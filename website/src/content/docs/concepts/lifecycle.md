@@ -98,8 +98,8 @@ coral untrack my-skill
 
 Both commands use the configured default agent unless `-a/--agent` is provided.
 `delete` refuses in-place added capabilities and requires `--force` for locally modified generated files. `untrack` removes the
-target lock entry and baseline while preserving the capability files,
-`coral.toml`, and MCP configuration. The original source directory is never
+target lock entry and baseline while preserving the capability files and MCP
+configuration. The original source directory is never
 deleted by `delete`.
 
 See the [CLI Reference](/cli#coral-delete) for cleanup flags and explicit agent selection.

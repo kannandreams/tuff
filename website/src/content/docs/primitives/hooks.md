@@ -60,19 +60,19 @@ list of supported event names.
 
 ```sh frame="terminal"
 # Local directory
-coral add ./pre-commit-lint -a open-agents
+coral add --agent open-agents ./pre-commit-lint
 
 # Git repository
-coral add https://github.com/owner/repo --hook pre-commit-lint -a open-agents
+coral add --agent open-agents hook https://github.com/owner/repo pre-commit-lint
 
 # Multiple agents
-coral add ./pre-commit-lint -a open-agents -a claude
+coral add --agent open-agents --agent claude ./pre-commit-lint
 ```
 
 Install-time validation:
 
 ```sh frame="terminal"
-$ coral add ./pre-commit-lint -a open-agents
+$ coral add --agent open-agents ./pre-commit-lint
 note: this hook runs 'cargo fmt --check && cargo clippy -- -D warnings'
       on event 'before_finish': it will not be executed during install
 installed pre-commit-lint (open-agents) -> .agents/hooks/pre-commit-lint/hook.toml

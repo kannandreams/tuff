@@ -12,11 +12,15 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 ## Available Commands
 
 ### Install
-- `coral add <path> -a <agent>` — install a local capability
+- `coral add <path> -a <agent>` — install a local capability (auto-detect type)
+- `coral add skill <path> [name] -a <agent>` — install a skill
+- `coral add tool <path> [name] -a <agent>` — install a tool
+- `coral add hook <path> [name] -a <agent>` — install a hook
+- `coral add workflow <path> [name] -a <agent>` — install a workflow
 - `coral add .agents/skills/<id> -a open-agents` — track existing agent files in place
-- `coral add <git-url> --skill <name> -a <agent>` — install from git
-- `coral add <git-url> --tool <name> -a <agent>` — install tool from git
-- `coral add <git-url> --hook <name> -a <agent>` — install hook from git
+- `coral add <git-url> skill <name> -a <agent>` — install skill from git
+- `coral add <git-url> tool <name> -a <agent>` — install tool from git
+- `coral add <git-url> hook <name> -a <agent>` — install hook from git
 - `coral create <type> <id> -a <agent>` — create and track a capability
 
 ### Inspect
@@ -68,8 +72,9 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 
 ## Quick Cheat Sheet
 ```
-coral init                          # initialize repo and register open-agents
-coral add <path> -a open-agents     # install capability
+coral init                              # initialize repo and register open-agents
+coral add <path> -a open-agents         # install capability (auto-detect type)
+coral add skill <path> [name]           # install a skill explicitly
 coral list                          # check drift
 coral diff <id>                     # see what changed
 coral check                         # CI validation

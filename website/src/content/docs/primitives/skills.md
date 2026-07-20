@@ -28,13 +28,13 @@ but not emitted into agent directories.
 
 ```sh frame="terminal"
 # Local directory
-coral add ./my-skill -a open-agents
+coral add --agent open-agents ./my-skill
 
 # Git repository
-coral add https://github.com/owner/repo --type skill --name <name> -a open-agents
+coral add --agent open-agents skill https://github.com/owner/repo <name>
 
 # Global scope
-coral add ./my-skill -a open-agents --global
+coral add --agent open-agents --global ./my-skill
 ```
 
 Coral tracks where each skill came from, records a baseline, and reports local drift after

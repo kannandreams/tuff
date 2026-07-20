@@ -71,35 +71,35 @@ different agent.
 Install a capability from a local path, file, or git URL:
 
 ```sh frame="terminal"
-# Skill
+# Skill (auto-detected)
 coral add ./my-skill
 
-# Explicit type and name
-coral add ./scripts/deploy.sh --type tool --name prod-deploy
+# Explicit type (subcommand) and name
+coral add tool ./scripts/deploy.sh prod-deploy
 
-# Tool with specific agent
-coral add ./my-tool --type tool -a claude
+# Tool with specific agent (--agent before subcommand)
+coral add --agent claude tool ./my-tool
 
 # Multiple agents
-coral add ./my-skill -a claude -a open-agents
+coral add --agent claude --agent open-agents ./my-skill
 
 # Global scope
-coral add ./my-skill --global
+coral add --global ./my-skill
 ```
 
 Add existing agent files in place:
 
 ```sh frame="terminal"
-coral add .agents/skills/my-skill -a open-agents
-coral add .claude/skills/my-skill -a claude
+coral add --agent open-agents .agents/skills/my-skill
+coral add --agent claude .agents/skills/my-skill
 ```
 
 Install from a git repository:
 
 ```sh frame="terminal"
-coral add https://github.com/owner/repo --type skill --name <name> -a open-agents
-coral add https://github.com/owner/repo --type tool --name <name> -a claude
-coral add https://github.com/owner/repo --type hook --name <name> -a open-agents
+coral add --agent open-agents skill https://github.com/owner/repo <name>
+coral add --agent claude tool https://github.com/owner/repo <name>
+coral add --agent open-agents hook https://github.com/owner/repo <name>
 ```
 
 #### Flags
@@ -107,16 +107,17 @@ coral add https://github.com/owner/repo --type hook --name <name> -a open-agents
 | Flag | Description |
 |---|---|
 | `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
-| `-t, --type <type>` | Capability type: skill, tool, hook, or workflow (auto-detected when omitted) |
-| `-n, --name <name>` | Override the capability name (default: inferred from source) |
 | `-g, --global` | Install to global scope (`~/.coral/`) |
+
+The capability type is specified as a subcommand (`skill`, `tool`, `hook`, `workflow`)
+rather than a `--type` flag. The name is the second positional argument after the path.
 
 ### Adding Existing Agent Files
 
 Bring existing agent assets under Coral management without rewriting content:
 
 ```sh frame="terminal"
-coral add .agents/skills/python-uv -a open-agents
+coral add --agent open-agents .agents/skills/python-uv
 ```
 
 #### Before/after
@@ -126,7 +127,7 @@ Before add:
 .agents/skills/python-uv/
   └── SKILL.md                ← existing, unmanaged
 
-After coral add .agents/skills/python-uv -a open-agents:
+After coral add --agent open-agents .agents/skills/python-uv:
 .agents/skills/python-uv/
   └── SKILL.md                ← untouched
 .coral/

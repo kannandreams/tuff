@@ -737,12 +737,10 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .current_dir(temp.path())
         .args([
             "add",
-            &repo_url,
             "--agent",
             "open-agents",
-            "--type",
             "skill",
-            "--name",
+            &repo_url,
             "test-skill",
         ])
         .assert()
@@ -834,12 +832,10 @@ fn add_git_missing_skill_reports_error() {
         .current_dir(temp.path())
         .args([
             "add",
-            &repo_url,
             "--agent",
             "open-agents",
-            "--type",
             "skill",
-            "--name",
+            &repo_url,
             "nonexistent",
         ])
         .assert()
@@ -863,14 +859,12 @@ fn add_git_skill_multi_agent() {
         .current_dir(temp.path())
         .args([
             "add",
-            &repo_url,
             "--agent",
             "open-agents",
             "--agent",
             "claude",
-            "--type",
             "skill",
-            "--name",
+            &repo_url,
             "test-skill",
         ])
         .assert()
@@ -958,12 +952,10 @@ fn add_git_subfolder_skill() {
         .current_dir(temp.path())
         .args([
             "add",
-            &repo_url,
             "--agent",
             "open-agents",
-            "--type",
             "skill",
-            "--name",
+            &repo_url,
             "security/security-review",
         ])
         .assert()
@@ -1222,12 +1214,10 @@ fn update_git_skill_reports_up_to_date() {
         .current_dir(temp.path())
         .args([
             "add",
-            &repo_url,
             "--agent",
             "open-agents",
-            "--type",
             "skill",
-            "--name",
+            &repo_url,
             "test-skill",
         ])
         .assert()
@@ -1977,12 +1967,10 @@ fn diff_upstream_shows_no_changes_for_current_ref() {
         .current_dir(temp.path())
         .args([
             "add",
-            &repo_url,
             "--agent",
             "open-agents",
-            "--type",
             "skill",
-            "--name",
+            &repo_url,
             "test-skill",
         ])
         .assert()

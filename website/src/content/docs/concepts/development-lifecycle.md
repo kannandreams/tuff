@@ -101,7 +101,7 @@ Install capabilities from shared repos, check for updates, and merge changes.
 
 ```sh frame="terminal"
 # 1. Install a skill from a git repository
-coral add https://github.com/pproenca/dot-skills --skill rust-implement -a open-agents
+coral add --agent open-agents skill https://github.com/pproenca/dot-skills rust-implement
 # installed rust-implement (open-agents) → .agents/skills/rust-implement/SKILL.md
 
 # 2. Check installed capabilities
@@ -150,9 +150,9 @@ coral agent add open-agents
 coral agent add claude
 
 # 3. Add the existing directories in place
-coral add .agents/skills/existing-skill -a open-agents
-coral add .agents/tools/scan-tool -a open-agents
-coral add .claude/skills/claude-only -a claude
+coral add --agent open-agents .agents/skills/existing-skill
+coral add --agent open-agents .agents/tools/scan-tool
+coral add --agent claude .claude/skills/claude-only
 # added existing-skill (skill, open-agents) -> .agents/skills/existing-skill
 # added scan-tool (tool, open-agents) -> .agents/tools/scan-tool
 # added claude-only (skill, claude) -> .claude/skills/claude-only
@@ -176,10 +176,10 @@ coral check
 
 | Directory | Purpose | Created by |
 |---|---|---|
-| `.agents/skills/` | Skill source files and coral.toml | `coral init` scaffolds, you author |
-| `.agents/tools/` | Tool source files and coral.toml | Same |
-| `.agents/hooks/` | Hook source files and coral.toml | Same |
-| `.agents/workflows/` | Workflow source files and coral.toml | Same |
+| `.agents/skills/` | Skill runtime files | `coral init` scaffolds, you author |
+| `.agents/tools/` | Tool runtime files | Same |
+| `.agents/hooks/` | Hook runtime files | Same |
+| `.agents/workflows/` | Workflow runtime files | Same |
 | `.coral/` | State: lockfile, baseline objects, and config | `coral init` |
 | `.claude/skills/` etc. | Claude-specific capabilities | `coral add` or you author |
 
