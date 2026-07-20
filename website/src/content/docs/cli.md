@@ -68,26 +68,54 @@ different agent.
 
 ### `coral add`
 
-Install a capability from a local path, file, or git URL:
+Install a capability from a local capability directory or Git URL. The command supports
+two forms:
+
+1. Let Coral infer the capability type from a local path.
+2. Use an explicit capability-type subcommand when the type is known or when
+   installing from a Git repository.
+
+The available capability types are `skill`, `tool`, `hook`, and `workflow`.
+In the examples below, `<capability-type>` means “replace this placeholder
+with one of those four types.”
+
+#### Local sources
+
+For a local capability directory, Coral can infer the type from its location or
+from its manifest:
 
 ```sh frame="terminal"
-# Skill (auto-detected)
+# Auto-detect the type
 coral add ./my-skill
 
-# Explicit type (subcommand) and name
-coral add tool ./scripts/deploy.sh prod-deploy
+# Explicit type
+coral add <capability-type> ./path/to/capability
 
-# Tool with specific agent (--agent before subcommand)
-coral add --agent claude tool ./my-tool
+# Explicit type with a selected agent
+coral add <capability-type> ./path/to/capability --agent claude
 
 # Multiple agents
-coral add --agent claude --agent open-agents ./my-skill
+coral add <capability-type> ./path/to/capability --agent claude --agent open-agents
 
 # Global scope
-coral add --global ./my-skill
+coral add <capability-type> ./path/to/capability --global
 ```
 
-Add existing agent files in place:
+For typed capability commands, `--agent` and `--global` come after the source
+and remain scoped to the selected capability type. For example:
+
+```sh frame="terminal"
+coral add tool ./my-tool --agent claude
+```
+
+For typed capability commands, options come after the capability source:
+
+```sh frame="terminal"
+# Agent and scope options stay with the typed command
+coral add tool ./my-tool --agent claude --global
+```
+
+Add existing agent files in place without copying their content:
 
 ```sh frame="terminal"
 coral add --agent open-agents .agents/skills/my-skill
@@ -97,10 +125,19 @@ coral add --agent claude .agents/skills/my-skill
 Install from a git repository:
 
 ```sh frame="terminal"
-coral add --agent open-agents skill https://github.com/owner/repo <name>
-coral add --agent claude tool https://github.com/owner/repo <name>
-coral add --agent open-agents hook https://github.com/owner/repo <name>
+coral add <capability-type> https://github.com/owner/repo <name> --agent open-agents
+coral add <capability-type> https://github.com/owner/repo <name> --agent claude
 ```
+
+For Git sources, `<name>` is the capability directory name inside the
+repository. For example:
+
+```sh frame="terminal"
+coral add skill https://github.com/owner/repo rust-implement --agent open-agents
+```
+
+Use the same structure for a tool, hook, or workflow by replacing `skill` with
+the corresponding capability type.
 
 #### Flags
 
@@ -109,8 +146,10 @@ coral add --agent open-agents hook https://github.com/owner/repo <name>
 | `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
 | `-g, --global` | Install to global scope (`~/.coral/`) |
 
-The capability type is specified as a subcommand (`skill`, `tool`, `hook`, `workflow`)
-rather than a `--type` flag. The name is the second positional argument after the path.
+The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
+`workflow`) rather than a `--type` flag. For a typed local source, the name is
+optional and is normally inferred from the source. For a Git source, the name
+is required so Coral knows which capability directory to discover.
 
 ### Adding Existing Agent Files
 

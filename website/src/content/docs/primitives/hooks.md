@@ -63,7 +63,7 @@ list of supported event names.
 coral add --agent open-agents ./pre-commit-lint
 
 # Git repository
-coral add --agent open-agents hook https://github.com/owner/repo pre-commit-lint
+coral add hook https://github.com/owner/repo pre-commit-lint --agent open-agents
 
 # Multiple agents
 coral add --agent open-agents --agent claude ./pre-commit-lint

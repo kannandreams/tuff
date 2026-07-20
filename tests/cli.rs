@@ -737,11 +737,11 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
         .current_dir(temp.path())
         .args([
             "add",
-            "--agent",
-            "open-agents",
             "skill",
             &repo_url,
             "test-skill",
+            "--agent",
+            "open-agents",
         ])
         .assert()
         .success()
@@ -795,6 +795,20 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
 }
 
 #[test]
+fn typed_add_rejects_parent_level_flags() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", "--agent", "claude", "tool", "./my-tool"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "for typed 'coral add' commands, put --agent and --global after the capability source",
+        ));
+}
+
+#[test]
 fn add_git_requires_skill_flag() {
     let temp = TempDir::new().unwrap();
     let repo = make_git_skill_repo(temp.path());
@@ -832,11 +846,11 @@ fn add_git_missing_skill_reports_error() {
         .current_dir(temp.path())
         .args([
             "add",
-            "--agent",
-            "open-agents",
             "skill",
             &repo_url,
             "nonexistent",
+            "--agent",
+            "open-agents",
         ])
         .assert()
         .failure()
@@ -859,13 +873,13 @@ fn add_git_skill_multi_agent() {
         .current_dir(temp.path())
         .args([
             "add",
+            "skill",
+            &repo_url,
+            "test-skill",
             "--agent",
             "open-agents",
             "--agent",
             "claude",
-            "skill",
-            &repo_url,
-            "test-skill",
         ])
         .assert()
         .success()
@@ -952,11 +966,11 @@ fn add_git_subfolder_skill() {
         .current_dir(temp.path())
         .args([
             "add",
-            "--agent",
-            "open-agents",
             "skill",
             &repo_url,
             "security/security-review",
+            "--agent",
+            "open-agents",
         ])
         .assert()
         .success()
@@ -1214,11 +1228,11 @@ fn update_git_skill_reports_up_to_date() {
         .current_dir(temp.path())
         .args([
             "add",
-            "--agent",
-            "open-agents",
             "skill",
             &repo_url,
             "test-skill",
+            "--agent",
+            "open-agents",
         ])
         .assert()
         .success();
@@ -1967,11 +1981,11 @@ fn diff_upstream_shows_no_changes_for_current_ref() {
         .current_dir(temp.path())
         .args([
             "add",
-            "--agent",
-            "open-agents",
             "skill",
             &repo_url,
             "test-skill",
+            "--agent",
+            "open-agents",
         ])
         .assert()
         .success();

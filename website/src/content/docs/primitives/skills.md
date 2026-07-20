@@ -31,7 +31,7 @@ but not emitted into agent directories.
 coral add --agent open-agents ./my-skill
 
 # Git repository
-coral add --agent open-agents skill https://github.com/owner/repo <name>
+coral add skill https://github.com/owner/repo <name> --agent open-agents
 
 # Global scope
 coral add --agent open-agents --global ./my-skill

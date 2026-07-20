@@ -129,8 +129,8 @@ EOF
 coral add --agent open-agents ./feature-build
 
 # 3. Install the required capabilities
-coral add --agent open-agents skill https://github.com/pproenca/dot-skills rust-implement
-coral add --agent open-agents skill https://github.com/pproenca/dot-skills rust-write-tests
+coral add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
+coral add skill https://github.com/pproenca/dot-skills rust-write-tests --agent open-agents
 coral add --agent open-agents examples/hooks/pre-commit-lint
 coral add --agent open-agents examples/tools/security-review
 

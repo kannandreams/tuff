@@ -24,7 +24,7 @@ Product teams install the capabilities they need:
 
 ```sh frame="terminal"
 coral init
-coral add --agent open-agents skill https://github.com/company/company-agent-pack rust-test-workflow
+coral add skill https://github.com/company/company-agent-pack rust-test-workflow --agent open-agents
 coral list
 ```
 
@@ -60,7 +60,7 @@ repositories, then bring them under Coral lifecycle tracking.
 The intended flow is:
 
 ```sh frame="terminal"
-coral add --agent open-agents skill https://github.com/owner/repo rust-implement
+coral add skill https://github.com/owner/repo rust-implement --agent open-agents
 coral list
 coral diff rust-implement
 ```

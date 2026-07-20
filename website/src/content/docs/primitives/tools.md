@@ -77,10 +77,10 @@ Every tool goes through these checks at `coral add` time:
 coral add --agent claude ./my-tool
 
 # Local file with explicit type (subcommand)
-coral add --agent open-agents tool ./scripts/deploy.sh
+coral add tool ./scripts/deploy.sh --agent open-agents
 
 # Git repository
-coral add --agent claude tool https://github.com/owner/repo security-review
+coral add tool https://github.com/owner/repo security-review --agent claude
 
 # Multiple agents
 coral add --agent claude --agent open-agents ./my-tool
