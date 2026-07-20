@@ -24,7 +24,7 @@ Product teams install the capabilities they need:
 
 ```sh frame="terminal"
 coral init
-coral add https://github.com/company/company-agent-pack --skill rust-test-workflow -a open-agents
+coral add --agent open-agents skill https://github.com/company/company-agent-pack rust-test-workflow
 coral list
 ```
 
@@ -60,13 +60,13 @@ repositories, then bring them under Coral lifecycle tracking.
 The intended flow is:
 
 ```sh frame="terminal"
-coral add https://github.com/owner/repo --skill rust-implement -a open-agents
+coral add --agent open-agents skill https://github.com/owner/repo rust-implement
 coral list
 coral diff rust-implement
 ```
 
-Use `coral add .agents/skills/<id> -a open-agents` for local agent assets that
-already exist in a project. Use `coral add <git-url> --skill <id>` for
+Use `coral add --agent open-agents .agents/skills/<id>` for local agent assets that
+already exist in a project. Use `coral add skill <git-url> <id>` for
 capabilities hosted in a git repository.
 
 ## Harness compilation

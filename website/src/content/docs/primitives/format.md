@@ -1,61 +1,30 @@
 ---
-title: coral.toml
-description: Manifest and file layout for Coral capabilities.
+title: Capability Format
+description: How Coral discovers and tracks capabilities.
 ---
 
-Every Coral capability is described by a `coral.toml` manifest. The manifest
-declares the capability type, the files that belong to it, and enough metadata
-for Coral to track installs, validate structure, detect drift, and emit
-agent-specific agent output.
+Coral discovers capabilities from directory structure and, optionally, a source
+`coral.toml` manifest. The manifest is **not required** — Coral can infer
+type, files, and metadata from the filesystem or from `--type` and `--name`
+flags passed at install time.
 
-`coral.toml` travels with the capability. It is not the project index and it is
-not the lockfile. Coral keeps project tracking and baselines in
-`.coral/coral-lock.json` and `.coral/objects/`, and can generate readable
-derived files such as `.agents/CAPABILITIES.md` with `coral generate index`.
+Tracking metadata lives exclusively in `.coral/coral-lock.json` and
+`.coral/objects/`. No tracking files are emitted into agent directories
+(`.agents/`, `.claude/`). Coral regenerates derived artifacts like
+`CAPABILITIES.md` on demand with `coral generate index`.
 
-The `type` field is the important discriminator. It tells Coral whether the
-directory should be treated as a skill, tool, hook, policy, or workflow while
-still using the same lifecycle commands: install, list, check, diff, update,
-and remove.
+## Discovery and auto-detection
 
-## Directory layout
+Coral infers capability type at `coral add` time from:
 
-```text
-python-uv-default/
-  coral.toml
-  src/
-    SKILL.md
-```
+1. The `--type` flag (explicit): `--type skill`, `--type tool`, etc.
+2. Parent directory name: `skills/` or `skill/` → skill, `tools/` or `tool/` → tool
+3. For git repositories: the cloned directory structure
 
-## Manifest
-
-```toml
-id = "python-uv-default"
-version = "0.1.0"
-type = "skill"
-description = "Use uv for Python dependency and environment management."
-files = ["src/SKILL.md"]
-```
-
-## Fields
-
-`id`
-: Stable capability identifier. For skills, this becomes the skill directory
-  name in the agent harness output.
-
-`version`
-: Capability version recorded in `.coral/coral-lock.json`.
-
-`type`
-: Capability type. Supported values include `skill`, `tool`, `hook`, and
-  `workflow`. Policies are part of the capability model, but may not be
-  available in every adapter yet.
-
-`description`
-: Human-readable capability summary.
-
-`files`
-: Source files managed as part of this capability.
+When installing from a git URL, `--name` identifies the capability folder
+inside the repository. Coral searches both plural and singular directory
+names (`skills/<name>`, `skill/<name>`, tools/<name>`, `tool/<name>`) plus
+the repo root.
 
 ## Installed output
 
@@ -65,19 +34,34 @@ For a skill with `id = "python-uv-default"`, Coral installs:
 .agents/skills/python-uv-default/SKILL.md
 ```
 
-It also records an install-time baseline as a content-addressed object under
+It records an install-time baseline as a content-addressed object under
 `.coral/objects/` so later edits can be reported as drift:
 
 ```text
 .coral/objects/sha256/a1/b2c3...
 ```
 
+Capabilities tracked from existing project files (e.g., `scripts/deploy.sh`)
+are tracked in-place without copying. The lockfile records their source path:
+
+```jsonc
+"prod-deploy": {
+    "type": "tool",
+    "sourcePath": "scripts/deploy.sh",
+    "targets": {
+        "open-agents": {
+            "emittedFiles": [],
+            "ownership": "imported"
+        }
+    }
+}
+```
+
 ## Where capabilities should live
 
-Coral core should stay content-agnostic. Production capabilities should live in
-one of two places:
+Coral core stays content-agnostic. Capabilities live in:
 
-- the user project that owns the capability
+- the user project that owns the capability (any path in the repo)
 - an external pack repository maintained by a person, team, or company
 
 Runnable capability examples live under `examples/<type>/`, such as

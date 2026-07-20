@@ -19,30 +19,22 @@ references, assets):
 
 ## Manifest
 
-```toml
-# coral.toml
-id = "python-uv-default"
-version = "0.1.0"
-primitive = "skill"
-description = "Use uv for Python dependency and environment management."
-files = ["src/SKILL.md"]
-```
-
-The `files` field lists source files to copy. Each file is written to the agent directory
-preserving relative paths. For local coral-shaped directories, the `src/` prefix is stripped
-during emit.
+Skills installed from a local directory or git repository do not require a
+manifest file. Coral discovers the skill's structure automatically. For
+source-based development, a `coral.toml` in the source directory is optional
+but not emitted into agent directories.
 
 ## Installing a skill
 
 ```sh frame="terminal"
 # Local directory
-coral add ./my-skill -a open-agents
+coral add --agent open-agents ./my-skill
 
 # Git repository
-coral add https://github.com/owner/repo --skill <name> -a claude -a open-agents
+coral add --agent open-agents skill https://github.com/owner/repo <name>
 
 # Global scope
-coral add ./my-skill -a open-agents --global
+coral add --agent open-agents --global ./my-skill
 ```
 
 Coral tracks where each skill came from, records a baseline, and reports local drift after

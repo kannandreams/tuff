@@ -4,6 +4,7 @@ use diffy::merge;
 use similar::{ChangeTag, TextDiff};
 
 use crate::error::{CoralError, Result};
+use crate::manifest::CapabilityType;
 
 pub struct ConflictReport {
     pub file_path: String,
@@ -197,11 +198,12 @@ pub fn merge_with_baseline_content(
 
 pub fn get_upstream_content(
     cache_dir: &Path,
-    skill_name: &str,
+    name: &str,
+    capability_type: CapabilityType,
     file_rel_path: &str,
 ) -> Result<String> {
-    let skill_dir = crate::git::discover_skill(cache_dir, skill_name)?;
-    let full_path = skill_dir.join(file_rel_path);
+    let capability_dir = crate::git::discover_capability(cache_dir, name, capability_type)?;
+    let full_path = capability_dir.join(file_rel_path);
     if !full_path.exists() {
         return Err(CoralError::new(format!(
             "upstream file not found: {}",

@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::error::{CoralError, Result};
+use crate::manifest::CapabilityType;
 
 pub fn is_git_url(s: &str) -> bool {
     s.starts_with("http://")
@@ -121,29 +122,42 @@ pub fn resolve_ref(repo: &Path) -> Result<String> {
     Ok(sha)
 }
 
-pub fn discover_skill(repo: &Path, name: &str) -> Result<PathBuf> {
+pub fn discover_capability(
+    repo: &Path,
+    name: &str,
+    capability_type: CapabilityType,
+) -> Result<PathBuf> {
+    let dir_plural = capability_type.plural_dir(); // "skills", "tools", "hooks", "workflows"
+    let dir_singular = capability_type.as_str(); // "skill", "tool", "hook", "workflow"
+
     let mut matches = Vec::new();
 
-    // Pattern 1: skills/<name>/SKILL.md
-    let p1 = repo.join("skills").join(name);
-    if p1.join("SKILL.md").exists() {
+    // Pattern 1: <plural>/<name>/ (e.g. skills/security-review/)
+    let p1 = repo.join(dir_plural).join(name);
+    if p1.is_dir() {
         matches.push(p1);
     }
 
-    // Pattern 2: <name>/SKILL.md (root level)
-    let p2 = repo.join(name);
-    if p2.join("SKILL.md").exists() {
+    // Pattern 2: <singular>/<name>/ (e.g. skill/security-review/)
+    let p2 = repo.join(dir_singular).join(name);
+    if p2.is_dir() {
         matches.push(p2);
     }
 
-    // Pattern 3: Walk skills/ subdirs for <category>/<name>/SKILL.md
-    let skills_dir = repo.join("skills");
-    if skills_dir.is_dir() {
-        for entry in std::fs::read_dir(&skills_dir)? {
+    // Pattern 3: <name>/ at root level
+    let p3 = repo.join(name);
+    if p3.is_dir() {
+        matches.push(p3);
+    }
+
+    // Pattern 4: Walk <plural>/ subdirs for <category>/<name>/
+    let plural_dir = repo.join(dir_plural);
+    if plural_dir.is_dir() {
+        for entry in std::fs::read_dir(&plural_dir)? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
                 let candidate = entry.path().join(name);
-                if candidate.join("SKILL.md").exists() {
+                if candidate.is_dir() {
                     matches.push(candidate);
                 }
             }
@@ -152,15 +166,15 @@ pub fn discover_skill(repo: &Path, name: &str) -> Result<PathBuf> {
 
     match matches.len() {
         0 => {
-            let nearby = list_nearby_skills(repo)?;
+            let nearby = list_nearby_capabilities(repo, capability_type)?;
             let hint = if nearby.is_empty() {
                 String::new()
             } else {
-                format!("\nAvailable skills: {}", nearby.join(", "))
+                format!("\nAvailable {dir_plural}: {}", nearby.join(", "))
             };
             Err(CoralError::new(format!(
-                "skill '{}' not found in repository{hint}",
-                name
+                "{} '{}' not found in repository{hint}",
+                capability_type, name
             )))
         }
         1 => Ok(matches[0].clone()),
@@ -170,7 +184,7 @@ pub fn discover_skill(repo: &Path, name: &str) -> Result<PathBuf> {
                 .map(|p| p.strip_prefix(repo).unwrap_or(p).display().to_string())
                 .collect();
             Err(CoralError::new(format!(
-                "ambiguous skill name '{}' matches multiple paths: {}",
+                "ambiguous capability name '{}' matches multiple paths: {}",
                 name,
                 paths.join(", ")
             )))
@@ -178,25 +192,28 @@ pub fn discover_skill(repo: &Path, name: &str) -> Result<PathBuf> {
     }
 }
 
-fn list_nearby_skills(repo: &Path) -> Result<Vec<String>> {
-    let skills_dir = repo.join("skills");
-    if !skills_dir.is_dir() {
+fn list_nearby_capabilities(
+    repo: &Path,
+    capability_type: CapabilityType,
+) -> Result<Vec<String>> {
+    let dir_plural = capability_type.plural_dir();
+    let capabilities_dir = repo.join(dir_plural);
+    if !capabilities_dir.is_dir() {
         return Ok(Vec::new());
     }
 
-    let mut skills = Vec::new();
-    for entry in std::fs::read_dir(&skills_dir)? {
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(&capabilities_dir)? {
         let entry = entry?;
         if entry.file_type()?.is_dir() {
-            let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
-            if !name.starts_with('.') && path.join("SKILL.md").exists() {
-                skills.push(name);
+            if !name.starts_with('.') {
+                names.push(name);
             }
         }
     }
-    skills.sort();
-    Ok(skills)
+    names.sort();
+    Ok(names)
 }
 
 fn dirs_home() -> Result<PathBuf> {

@@ -48,28 +48,23 @@ enum Command {
 
     /// Install a capability.
     Add {
-        /// Path to a capability directory or git URL.
-        capability: PathBuf,
+        /// Path or URL (auto-detect type). Use a subcommand to specify type explicitly.
+        source: Option<PathBuf>,
+
+        /// Override the capability name (only when type is auto-detected).
+        #[arg(short = 'n', long = "name")]
+        name: Option<String>,
 
         /// Agent harness to emit for (repeatable).
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
 
-        /// Skill name when installing from a git repository.
-        #[arg(short = 's', long = "skill")]
-        skill: Option<String>,
-
-        /// Tool name when installing from a git repository.
-        #[arg(long = "tool")]
-        tool: Option<String>,
-
-        /// Hook name when installing from a git repository.
-        #[arg(long = "hook")]
-        hook: Option<String>,
-
         /// Install to global scope (~/.coral/).
         #[arg(short = 'g', long = "global")]
         global: bool,
+
+        #[command(subcommand)]
+        kind: Option<AddCommand>,
     },
 
     /// List installed capabilities.
@@ -243,6 +238,32 @@ enum CreateCommand {
 }
 
 #[derive(Subcommand)]
+enum AddCommand {
+    /// Install a skill from a local path or git URL.
+    Skill {
+        /// Path to capability directory, file, or git URL.
+        source: PathBuf,
+        /// Override the capability name (default: inferred from source).
+        name: Option<String>,
+    },
+    /// Install a tool from a local path or git URL.
+    Tool {
+        source: PathBuf,
+        name: Option<String>,
+    },
+    /// Install a hook from a local path or git URL.
+    Hook {
+        source: PathBuf,
+        name: Option<String>,
+    },
+    /// Install a workflow from a local path or git URL.
+    Workflow {
+        source: PathBuf,
+        name: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum AgentCommand {
     /// List available and registered agents.
     List {
@@ -300,21 +321,26 @@ fn run() -> Result<()> {
             }
         },
         Some(Command::Add {
-            capability,
+            source,
+            name,
             agent,
-            skill,
-            tool,
-            hook,
             global,
-        }) => cmd_add(
-            &repo_root,
-            &capability,
-            &agent,
-            skill.as_deref(),
-            tool.as_deref(),
-            hook.as_deref(),
-            global,
-        ),
+            kind,
+        }) => match kind {
+            None => cmd_add(&repo_root, source.as_deref(), name.as_deref(), None, &agent, global),
+            Some(AddCommand::Skill { source, name }) => {
+                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("skill"), &agent, global)
+            }
+            Some(AddCommand::Tool { source, name }) => {
+                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("tool"), &agent, global)
+            }
+            Some(AddCommand::Hook { source, name }) => {
+                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("hook"), &agent, global)
+            }
+            Some(AddCommand::Workflow { source, name }) => {
+                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("workflow"), &agent, global)
+            }
+        },
         Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),
         Some(Command::Status) => cmd_status(&repo_root),
         Some(Command::Generate { artifact }) => match artifact {

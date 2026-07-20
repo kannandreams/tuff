@@ -125,7 +125,7 @@ fn render_divider(colors: &Palette<'_>) -> String {
 fn render_quick_start(colors: &Palette<'_>) -> String {
     let rows = [
         ("coral init", "Initialize Coral state"),
-        ("coral add <path>", "Install a capability"),
+        ("coral add skill <path> [name]", "Install a capability"),
         ("coral list", "Show installed capabilities"),
         ("coral diff <id>", "Compare local changes to baseline"),
         ("coral agent list", "Show configured agent harnesses"),

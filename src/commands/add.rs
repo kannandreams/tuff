@@ -13,13 +13,13 @@ use super::{home_dir, infer_from_path, resolve_agent_selection};
 
 pub fn cmd_add(
     repo_root: &Path,
-    capability: &Path,
+    source: Option<&Path>,
+    name: Option<&str>,
+    capability_type: Option<&str>,
     target_ids: &[String],
-    skill_name: Option<&str>,
-    tool_name: Option<&str>,
-    hook_name: Option<&str>,
     global: bool,
 ) -> Result<()> {
+    let source = source.ok_or_else(|| CoralError::new("source path or URL is required"))?;
     let (scope, install_root) = if global {
         let home = home_dir()?;
         let lock_path = home.join(".coral").join("coral-lock.json");
@@ -30,39 +30,39 @@ pub fn cmd_add(
     };
     let target_ids = resolve_agent_selection(&install_root, target_ids)?;
 
-    if git::is_git_url(&capability.to_string_lossy()) {
+    if git::is_git_url(&source.to_string_lossy()) {
         return cmd_add_git(
             &install_root,
             scope,
-            &capability.to_string_lossy(),
+            &source.to_string_lossy(),
             &target_ids,
-            skill_name,
-            tool_name,
-            hook_name,
+            name,
+            capability_type,
             repo_root,
         );
     }
-    cmd_add_local(&install_root, scope, capability, &target_ids, repo_root)
+    cmd_add_local(&install_root, scope, source, &target_ids, repo_root, capability_type, name)
 }
 
-#[expect(clippy::too_many_arguments, reason = "git install requires separate url, scope, name options, and project root")]
 fn cmd_add_git(
     install_root: &Path,
     scope: Scope,
     url: &str,
     target_ids: &[String],
-    skill_name: Option<&str>,
-    tool_name: Option<&str>,
-    hook_name: Option<&str>,
+    name: Option<&str>,
+    capability_type: Option<&str>,
     project_root: &Path,
 ) -> Result<()> {
-    let name = skill_name.or(tool_name).or(hook_name).ok_or_else(|| {
-        CoralError::new("--skill, --tool, or --hook is required when installing from a git URL")
+    let name = name.ok_or_else(|| {
+        CoralError::new("--name is required when installing from a git URL")
     })?;
 
     let (cache_dir, clean_url) = git::clone_or_fetch(url)?;
     let commit_sha = git::resolve_ref(&cache_dir)?;
-    let skill_dir = git::discover_skill(&cache_dir, name)?;
+    let cap_type = capability_type
+        .and_then(CapabilityType::from_str)
+        .unwrap_or(CapabilityType::Skill);
+    let skill_dir = git::discover_capability(&cache_dir, name, cap_type)?;
 
     let manifest = manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?;
     let capability = resolve_capability(&manifest)?;
@@ -93,10 +93,14 @@ fn cmd_add_local(
     capability_path: &Path,
     target_ids: &[String],
     project_root: &Path,
+    capability_type: Option<&str>,
+    _name: Option<&str>,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability_path);
+    let parsed_type = capability_type.and_then(CapabilityType::from_str);
     let inferred = infer_from_path(&capability_dir);
-    let manifest = load_or_synthetic_manifest(&capability_dir, Some(inferred.0))?;
+    let resolved_type = parsed_type.or(Some(inferred.0));
+    let manifest = load_or_synthetic_manifest(&capability_dir, resolved_type)?;
     let resolved = resolve_capability(&manifest)?;
 
     if scope == Scope::Project
