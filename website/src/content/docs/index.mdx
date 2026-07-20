@@ -3,7 +3,7 @@ title: Intro
 description: Capability lifecycle management for coding agents.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <p align="center">
   <img src="/img/coral-readme-banner.png?v=3" alt="Coral banner" class="coral-banner-image" />
@@ -39,22 +39,38 @@ These are common situations teams encounter as capabilities are shared across re
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> An upstream fix arrives after the local copy has been edited. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Updates use baseline, local, and upstream state together, so local customization is preserved where possible. |
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A new project starts by copying whatever someone remembers. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Setup becomes a repeatable CLI step instead of tribal knowledge. |
 
-## Coral features
+## Capabilities
 
-### Capability types
-
-Coral discovers capabilities from their directory structure and optional source metadata. Each capability has a `type` that determines how agents interact with it:
-
-| `type` | Purpose |
-|---|---|
-| `skill` | Prose instruction injected into agent context |
-| `tool` | Executable with typed parameter contract (JSON Schema) |
-| `hook` | Event-driven automation (`before_finish`, `after_save`, etc.) |
-| `workflow` | Composable pattern bundling skills, tools, and hooks together |
+<div class="capability-grid">
+  <CardGrid>
+    <LinkCard
+      title="Skills"
+      href="/primitives/skills"
+      description="Reusable instructions that shape how an agent works."
+    />
+    <LinkCard
+      title="Tools"
+      href="/primitives/tools"
+      description="Executable capabilities with typed parameters and clear contracts."
+    />
+    <LinkCard
+      title="Hooks"
+      href="/primitives/hooks"
+      description="Event-driven automation that runs at key points in a task."
+    />
+    <LinkCard
+      title="Workflows"
+      href="/primitives/workflows"
+      description="Composable patterns that bundle skills, tools, and hooks."
+    />
+  </CardGrid>
+</div>
 
 All four types share the same lifecycle: install, baseline, drift detection, diff,
 and merge-aware update through `coral create`, `coral add`, `coral update`, and
 `coral diff`.
+
+## Features
 
 ### Lifecycle management
 

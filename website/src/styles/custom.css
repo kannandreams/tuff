@@ -1,8 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Alien+Block&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Alien+Block&display=swap");
 
 :root {
-  --sl-font: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --sl-font-system: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --sl-font-system: 'Inter', system-ui, -apple-system, sans-serif;
   --sl-font-system-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   --sl-color-accent-low: #172554;
   --sl-color-accent: #38bdf8;
@@ -171,7 +171,7 @@ nav.sidebar span.large,
 .sl-markdown-content td,
 .sl-markdown-content th {
   color: var(--sl-color-text-secondary);
-  font-family: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 400;
   font-size: 16px;
@@ -203,7 +203,7 @@ nav.sidebar a[aria-current=true] {
 .sl-markdown-content h5,
 .sl-markdown-content h6 {
   color: var(--sl-color-text);
-  font-family: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-weight: 600;
 }
 
@@ -227,7 +227,7 @@ nav.sidebar a[aria-current=true] {
 
 nav.sidebar ul.top-level > li > details > summary .group-label > span {
   color: var(--sl-color-text);
-  font-family: 'Google Sans', 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 700;
   font-size: 14px;
@@ -579,4 +579,17 @@ dialog[aria-label='Search'] {
 
 .cell-icon svg {
   display: block;
+}
+
+.capability-cards a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.capability-grid .sl-link-card .title {
+  color: var(--sl-color-text-accent);
+}
+
+.capability-grid .sl-link-card:hover .title {
+  color: var(--sl-color-white);
 }
