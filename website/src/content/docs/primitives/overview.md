@@ -12,5 +12,5 @@ Coral manages these capability types:
 | [skill](/primitives/skills) | **Implemented** | Prose instruction injected into agent context |
 | [tool](/primitives/tools) | **Implemented** | Executable capability with typed parameter contract |
 | [hook](/primitives/hooks) | **Implemented** | Event-driven automation at lifecycle moments |
-| [workflow](/primitives/workflows) | **Implemented** | Composable patterns bundling skills, tools, and hooks |
+| [workflow](/primitives/workflows) | Roadmap | Composable patterns bundling skills, tools, and hooks |
 | policy | Roadmap | Constraints and guardrails on agent behavior |

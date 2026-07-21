@@ -6,6 +6,11 @@ description: Workflows compose skills, tools, and hooks into named operational p
 A workflow capability declares a reusable pattern. It lists which skills, tools, and hooks
 should be installed together to support a specific workflow (e.g., "test-first Rust development").
 
+:::caution[Work in progress]
+Workflows are on the roadmap and remain in the development phase. The format and lifecycle may
+change as the capability model matures.
+:::
+
 Workflows don't execute anything. They are declarative bundles that surface a checklist
 of required capabilities. The harness (Codex, Claude, etc.) reads the workflow definition
 and activates the listed capabilities together.
@@ -50,7 +55,7 @@ Each `[[workflow.requires]]` entry must have:
 ## Installing a workflow
 
 ```sh frame="terminal"
-$ coral add --agent open-agents ./release-prep
+$ coral add workflow ./release-prep --agent open-agents
 note: workflow 'release-prep' requires 3 capabilities:
   - python-uv-default (skill)
   - security-review (tool)
@@ -59,7 +64,7 @@ installed release-prep (open-agents) -> .agents/workflows/release-prep/workflow.
 ```
 
 Workflows install themselves but do **not** auto-install dependencies. Install the required
-capabilities separately, or use `coral add --agent <agent> <path>` if they already exist in your
+capabilities separately, or use `coral add <capability-type> <path> --agent <agent>` if they already exist in your
 project.
 
 ## Validation
@@ -126,13 +131,13 @@ type = "tool"
 EOF
 
 # 2. Install the workflow
-coral add --agent open-agents ./feature-build
+coral add workflow ./feature-build --agent open-agents
 
 # 3. Install the required capabilities
-coral add --agent open-agents skill https://github.com/pproenca/dot-skills rust-implement
-coral add --agent open-agents skill https://github.com/pproenca/dot-skills rust-write-tests
-coral add --agent open-agents examples/hooks/pre-commit-lint
-coral add --agent open-agents examples/tools/security-review
+coral add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
+coral add skill https://github.com/pproenca/dot-skills rust-write-tests --agent open-agents
+coral add hook examples/hooks/pre-commit-lint --agent open-agents
+coral add tool examples/tools/security-review --agent open-agents
 
 # 4. Check status
 coral status

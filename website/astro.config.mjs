@@ -30,7 +30,7 @@ export default defineConfig({
         {
           label: 'Start Here',
           items: [
-            { label: 'Introduction', slug: 'index' },
+            { label: 'Intro', slug: 'index' },
             { label: 'Installation', slug: 'installation' },
             { label: 'Getting Started', slug: 'getting-started' },
             { label: 'CLI Reference', slug: 'cli' },

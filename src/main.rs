@@ -21,7 +21,7 @@ use commands::{
     cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report, cmd_init, cmd_list,
     cmd_outdated, cmd_status, cmd_untrack, cmd_update,
 };
-use error::Result;
+use error::{CoralError, Result};
 use manifest::CapabilityType;
 
 #[derive(Parser)]
@@ -245,22 +245,54 @@ enum AddCommand {
         source: PathBuf,
         /// Override the capability name (default: inferred from source).
         name: Option<String>,
+        /// Agent harness to emit for (repeatable).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+        /// Install to global scope (~/.coral/).
+        #[arg(short = 'g', long = "global")]
+        global: bool,
     },
     /// Install a tool from a local path or git URL.
     Tool {
         source: PathBuf,
         name: Option<String>,
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+        #[arg(short = 'g', long = "global")]
+        global: bool,
     },
     /// Install a hook from a local path or git URL.
     Hook {
         source: PathBuf,
         name: Option<String>,
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+        #[arg(short = 'g', long = "global")]
+        global: bool,
     },
     /// Install a workflow from a local path or git URL.
     Workflow {
         source: PathBuf,
         name: Option<String>,
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+        #[arg(short = 'g', long = "global")]
+        global: bool,
     },
+}
+
+fn reject_parent_add_options(
+    source: Option<&PathBuf>,
+    name: Option<&String>,
+    agent: &[String],
+    global: bool,
+) -> Result<()> {
+    if source.is_some() || name.is_some() || !agent.is_empty() || global {
+        return Err(CoralError::new(
+            "for typed 'coral add' commands, put --agent and --global after the capability source",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Subcommand)]
@@ -327,18 +359,77 @@ fn run() -> Result<()> {
             global,
             kind,
         }) => match kind {
-            None => cmd_add(&repo_root, source.as_deref(), name.as_deref(), None, &agent, global),
-            Some(AddCommand::Skill { source, name }) => {
-                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("skill"), &agent, global)
+            None => cmd_add(
+                &repo_root,
+                source.as_deref(),
+                name.as_deref(),
+                None,
+                &agent,
+                global,
+            ),
+            Some(AddCommand::Skill {
+                source: typed_source,
+                name: typed_name,
+                agent: typed_agent,
+                global: typed_global,
+            }) => {
+                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                cmd_add(
+                    &repo_root,
+                    Some(typed_source.as_path()),
+                    typed_name.as_deref(),
+                    Some("skill"),
+                    &typed_agent,
+                    typed_global,
+                )
             }
-            Some(AddCommand::Tool { source, name }) => {
-                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("tool"), &agent, global)
+            Some(AddCommand::Tool {
+                source: typed_source,
+                name: typed_name,
+                agent: typed_agent,
+                global: typed_global,
+            }) => {
+                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                cmd_add(
+                    &repo_root,
+                    Some(typed_source.as_path()),
+                    typed_name.as_deref(),
+                    Some("tool"),
+                    &typed_agent,
+                    typed_global,
+                )
             }
-            Some(AddCommand::Hook { source, name }) => {
-                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("hook"), &agent, global)
+            Some(AddCommand::Hook {
+                source: typed_source,
+                name: typed_name,
+                agent: typed_agent,
+                global: typed_global,
+            }) => {
+                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                cmd_add(
+                    &repo_root,
+                    Some(typed_source.as_path()),
+                    typed_name.as_deref(),
+                    Some("hook"),
+                    &typed_agent,
+                    typed_global,
+                )
             }
-            Some(AddCommand::Workflow { source, name }) => {
-                cmd_add(&repo_root, Some(source.as_path()), name.as_deref(), Some("workflow"), &agent, global)
+            Some(AddCommand::Workflow {
+                source: typed_source,
+                name: typed_name,
+                agent: typed_agent,
+                global: typed_global,
+            }) => {
+                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                cmd_add(
+                    &repo_root,
+                    Some(typed_source.as_path()),
+                    typed_name.as_deref(),
+                    Some("workflow"),
+                    &typed_agent,
+                    typed_global,
+                )
             }
         },
         Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),

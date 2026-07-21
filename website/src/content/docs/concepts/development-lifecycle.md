@@ -101,7 +101,7 @@ Install capabilities from shared repos, check for updates, and merge changes.
 
 ```sh frame="terminal"
 # 1. Install a skill from a git repository
-coral add --agent open-agents skill https://github.com/pproenca/dot-skills rust-implement
+coral add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
 # installed rust-implement (open-agents) → .agents/skills/rust-implement/SKILL.md
 
 # 2. Check installed capabilities
