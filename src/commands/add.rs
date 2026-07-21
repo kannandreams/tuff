@@ -2,11 +2,14 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use crate::adapter::{self, AdapterKind, CapabilityKind, resolve_capability, AgentAdapter};
+use crate::adapter::{
+    self, AdapterKind, AgentAdapter, CapabilityKind, HookDefinition, NativeHookConfig,
+    resolve_capability,
+};
 use crate::error::{CoralError, Result};
 use crate::git;
 use crate::lockfile::{self, TargetLockEntry};
-use crate::manifest::{self, load_manifest, CapabilityType};
+use crate::manifest::{self, CapabilityType, load_manifest};
 use crate::resolver::{self, Scope};
 
 use super::{home_dir, infer_from_path, resolve_agent_selection};
@@ -18,6 +21,7 @@ pub fn cmd_add(
     capability_type: Option<&str>,
     target_ids: &[String],
     global: bool,
+    hook_file: Option<&Path>,
 ) -> Result<()> {
     let source = source.ok_or_else(|| CoralError::new("source path or URL is required"))?;
     let (scope, install_root) = if global {
@@ -39,9 +43,19 @@ pub fn cmd_add(
             name,
             capability_type,
             repo_root,
+            hook_file,
         );
     }
-    cmd_add_local(&install_root, scope, source, &target_ids, repo_root, capability_type, name)
+    cmd_add_local(
+        &install_root,
+        scope,
+        source,
+        &target_ids,
+        repo_root,
+        capability_type,
+        name,
+        hook_file,
+    )
 }
 
 fn cmd_add_git(
@@ -52,10 +66,10 @@ fn cmd_add_git(
     name: Option<&str>,
     capability_type: Option<&str>,
     project_root: &Path,
+    hook_file: Option<&Path>,
 ) -> Result<()> {
-    let name = name.ok_or_else(|| {
-        CoralError::new("--name is required when installing from a git URL")
-    })?;
+    let name =
+        name.ok_or_else(|| CoralError::new("--name is required when installing from a git URL"))?;
 
     let (cache_dir, clean_url) = git::clone_or_fetch(url)?;
     let commit_sha = git::resolve_ref(&cache_dir)?;
@@ -64,13 +78,22 @@ fn cmd_add_git(
         .unwrap_or(CapabilityType::Skill);
     let skill_dir = git::discover_capability(&cache_dir, name, cap_type)?;
 
-    let manifest = manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?;
-    let capability = resolve_capability(&manifest)?;
+    let manifest = if cap_type == CapabilityType::Hook && hook_file.is_some() {
+        synthetic_local_manifest(&skill_dir, Some(cap_type))?
+    } else {
+        manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?
+    };
+    let capability = if cap_type == CapabilityType::Hook && hook_file.is_some() {
+        resolve_native_hook_capability(&skill_dir, Some(name), &commit_sha, hook_file)?
+    } else {
+        resolve_capability(&manifest)?
+    };
 
     if scope == Scope::Project
-        && let Some(warning) = resolver::check_collision(name, project_root, Some(&clean_url))? {
-            eprintln!("{warning}");
-        }
+        && let Some(warning) = resolver::check_collision(name, project_root, Some(&clean_url))?
+    {
+        eprintln!("{warning}");
+    }
 
     install_capability(
         install_root,
@@ -95,18 +118,24 @@ fn cmd_add_local(
     project_root: &Path,
     capability_type: Option<&str>,
     _name: Option<&str>,
+    hook_file: Option<&Path>,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability_path);
     let parsed_type = capability_type.and_then(CapabilityType::from_str);
     let inferred = infer_from_path(&capability_dir);
     let resolved_type = parsed_type.or(Some(inferred.0));
     let manifest = load_or_synthetic_manifest(&capability_dir, resolved_type)?;
-    let resolved = resolve_capability(&manifest)?;
+    let resolved = if resolved_type == Some(CapabilityType::Hook) && hook_file.is_some() {
+        resolve_native_hook_capability(&capability_dir, _name, "0.1.0", hook_file)?
+    } else {
+        resolve_capability(&manifest)?
+    };
 
     if scope == Scope::Project
-        && let Some(warning) = resolver::check_collision(&resolved.id, project_root, None)? {
-            eprintln!("{warning}");
-        }
+        && let Some(warning) = resolver::check_collision(&resolved.id, project_root, None)?
+    {
+        eprintln!("{warning}");
+    }
 
     if is_target_layout_path(install_root, &capability_dir) {
         return adopt_capability_in_place(
@@ -184,6 +213,110 @@ fn synthetic_local_manifest(
         targets: vec![],
         root: capability_dir.to_path_buf(),
     })
+}
+
+fn resolve_native_hook_capability(
+    capability_dir: &Path,
+    name: Option<&str>,
+    version: &str,
+    hook_file: Option<&Path>,
+) -> Result<adapter::ResolvedCapability> {
+    let hook_file = hook_file.ok_or_else(|| CoralError::new("--hook-file is required"))?;
+    let id = name
+        .map(str::to_string)
+        .or_else(|| {
+            capability_dir
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+        })
+        .ok_or_else(|| CoralError::new("hook directory must have a name"))?;
+
+    let hook_path = if hook_file.is_absolute() {
+        hook_file.to_path_buf()
+    } else {
+        capability_dir.join(hook_file)
+    };
+    if !hook_path.is_file() {
+        return Err(CoralError::new(format!(
+            "hook fragment not found: {}",
+            hook_path.display()
+        )));
+    }
+    let hook_rel = hook_path
+        .strip_prefix(capability_dir)
+        .map_err(|_| CoralError::new("--hook-file must be inside the hook source directory"))?
+        .to_string_lossy()
+        .replace('\\', "/");
+    crate::tool::check_path_traversal(&hook_rel)?;
+
+    let fragment: serde_json::Value = serde_json::from_str(&fs::read_to_string(&hook_path)?)?;
+    let source_files = collect_native_hook_source_files(capability_dir, &hook_path)?;
+
+    Ok(adapter::ResolvedCapability {
+        id,
+        capability_type: CapabilityType::Hook,
+        version: version.to_string(),
+        description: "Added from native hook fragment.".into(),
+        source_files: source_files.clone(),
+        source_dir: capability_dir.to_path_buf(),
+        kind: CapabilityKind::Hook {
+            hook: HookDefinition::Native(NativeHookConfig {
+                fragment,
+                source_files,
+            }),
+        },
+    })
+}
+
+fn collect_native_hook_source_files(
+    capability_dir: &Path,
+    hook_path: &Path,
+) -> Result<Vec<(String, Vec<u8>)>> {
+    let mut files = Vec::new();
+    collect_native_hook_source_files_inner(capability_dir, capability_dir, hook_path, &mut files)?;
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    if files.is_empty() {
+        eprintln!(
+            "note: hook source has no runtime files; only the native hook fragment will be merged"
+        );
+    }
+    Ok(files)
+}
+
+fn collect_native_hook_source_files_inner(
+    root: &Path,
+    current: &Path,
+    hook_path: &Path,
+    files: &mut Vec<(String, Vec<u8>)>,
+) -> Result<()> {
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_native_hook_source_files_inner(root, &path, hook_path, files)?;
+            continue;
+        }
+        if !path.is_file() || same_file_path(&path, hook_path) {
+            continue;
+        }
+
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if rel == "coral.toml" {
+            continue;
+        }
+        files.push((rel, fs::read(&path)?));
+    }
+    Ok(())
+}
+
+fn same_file_path(left: &Path, right: &Path) -> bool {
+    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
+    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
+    left == right
 }
 
 fn is_target_layout_path(root: &Path, capability_dir: &Path) -> bool {
@@ -313,18 +446,20 @@ pub(crate) fn install_capability(
                 capability.capability_type
             )));
         }
-        if let CapabilityKind::Hook { hook: ref hook_cfg } = capability.kind
+        if let CapabilityKind::Hook {
+            hook: HookDefinition::Command(ref hook_cfg),
+        } = capability.kind
             && !adapter
                 .supported_events()
                 .contains(&hook_cfg.event.as_str())
-            {
-                return Err(CoralError::new(format!(
-                    "{} does not support hook event '{}'. Supported events: {}",
-                    adapter.display_name(),
-                    hook_cfg.event,
-                    adapter.supported_events().join(", ")
-                )));
-            }
+        {
+            return Err(CoralError::new(format!(
+                "{} does not support hook event '{}'. Supported events: {}",
+                adapter.display_name(),
+                hook_cfg.event,
+                adapter.supported_events().join(", ")
+            )));
+        }
         adapters.push(adapter);
     }
 
@@ -343,6 +478,9 @@ pub(crate) fn install_capability(
             .is_some();
         if !is_tracked {
             for f in planned_files {
+                if f.allow_existing {
+                    continue;
+                }
                 let target_path = install_root.join(&f.path);
                 if target_path.exists() {
                     return Err(CoralError::new(format!(
@@ -387,50 +525,54 @@ pub(crate) fn install_capability(
             adapter.id().to_string(),
             TargetLockEntry {
                 emitted_files: emitted,
-                ownership: lockfile::TargetOwnership::Generated,
+                ownership: target_ownership_for(capability, install_root, *adapter),
             },
         );
     }
 
-    if let CapabilityKind::Tool { implementation: ref impl_cfg, .. } = capability.kind {
+    if let CapabilityKind::Tool {
+        implementation: ref impl_cfg,
+        ..
+    } = capability.kind
+    {
         if impl_cfg.mcp {
-                for adapter in &adapters {
-                    let mcp_path = install_root.join(adapter.mcp_config_relpath());
+            for adapter in &adapters {
+                let mcp_path = install_root.join(adapter.mcp_config_relpath());
 
-                    let mcp_command = impl_cfg.language.clone();
-                    let entrypoint_path = format!(
-                        "{}/tools/{}/{}",
-                        adapter.dir_prefix(),
-                        capability.id,
-                        impl_cfg.entrypoint
-                    );
-                    let mcp_args = vec![entrypoint_path];
+                let mcp_command = impl_cfg.language.clone();
+                let entrypoint_path = format!(
+                    "{}/tools/{}/{}",
+                    adapter.dir_prefix(),
+                    capability.id,
+                    impl_cfg.entrypoint
+                );
+                let mcp_args = vec![entrypoint_path];
 
-                    crate::adapters::mcp_register_tool(
-                        install_root,
-                        &mcp_path,
-                        &capability.id,
-                        &mcp_command,
-                        &mcp_args,
-                    )?;
-                    println!(
-                        "registered MCP server {} ({}) -> {}",
-                        capability.id,
-                        adapter.id(),
-                        lockfile::relative_or_absolute_fs(&mcp_path, install_root)
-                    );
-                }
-            } else {
-                for adapter in &adapters {
-                    let mcp_path = install_root.join(adapter.mcp_config_relpath());
-                    crate::adapters::mcp_remove_tool(install_root, &mcp_path, &capability.id)?;
-                }
-                eprintln!(
-                    "note: tool '{}' is not MCP-native; copied and tracked without MCP registration",
-                    capability.id
+                crate::adapters::mcp_register_tool(
+                    install_root,
+                    &mcp_path,
+                    &capability.id,
+                    &mcp_command,
+                    &mcp_args,
+                )?;
+                println!(
+                    "registered MCP server {} ({}) -> {}",
+                    capability.id,
+                    adapter.id(),
+                    lockfile::relative_or_absolute_fs(&mcp_path, install_root)
                 );
             }
+        } else {
+            for adapter in &adapters {
+                let mcp_path = install_root.join(adapter.mcp_config_relpath());
+                crate::adapters::mcp_remove_tool(install_root, &mcp_path, &capability.id)?;
+            }
+            eprintln!(
+                "note: tool '{}' is not MCP-native; copied and tracked without MCP registration",
+                capability.id
+            );
         }
+    }
 
     let mut lockfile = lockfile;
     let existing_targets = lockfile
@@ -481,4 +623,30 @@ fn should_print_installed_file(
         return true;
     }
     Path::new(&planned.path).file_name() == Some(std::ffi::OsStr::new("SKILL.md"))
+}
+
+fn target_ownership_for(
+    capability: &adapter::ResolvedCapability,
+    install_root: &Path,
+    adapter: AdapterKind,
+) -> lockfile::TargetOwnership {
+    if matches!(
+        &capability.kind,
+        CapabilityKind::Hook {
+            hook: HookDefinition::Native(_)
+        }
+    ) && is_path_under(
+        &capability.source_dir,
+        &install_root.join(adapter.dir_prefix()),
+    ) {
+        lockfile::TargetOwnership::Imported
+    } else {
+        lockfile::TargetOwnership::Generated
+    }
+}
+
+fn is_path_under(path: &Path, root: &Path) -> bool {
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    canonical_path.starts_with(canonical_root)
 }

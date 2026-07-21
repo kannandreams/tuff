@@ -3,10 +3,10 @@ title: Harness Adapters
 description: How Coral maps one capability model into agent-specific files and config.
 ---
 
-A harness adapter is the agent-specific layer that turns one Coral capability into the files a
-particular coding environment expects.
+A harness is the coding environment Coral emits into, such as `.agents/` or `.claude/`.
+A harness adapter is Coral's agent-specific implementation layer for that environment.
 
-The adapter decides where those files are emitted, what hook format is required, and where tool
+The adapter decides where files are emitted, how native settings are updated, and where tool
 registration lives.
 
 ## Supported Adapters
@@ -52,8 +52,11 @@ Hooks are where the adapter differences are most visible:
 
 | Agent | Emitted path | Format |
 |---|---|---|
-| `open-agents` | `.agents/hooks/<id>/hook.toml` | TOML |
-| `claude` | `.claude/hooks/<id>/hook.json` | JSON |
+| `open-agents` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Native JSON (development format) |
+| `claude` | `.claude/hooks/<id>/...` plus `.claude/settings.json` | Native Claude JSON |
+
+For Claude, `coral add hook ... --hook-file settings.json` reads a hooks-only native fragment,
+copies runtime files when needed, and merges the fragment into `.claude/settings.json`.
 
 ## Workflows
 
@@ -73,7 +76,7 @@ Both adapters currently support:
 
 ## Supported hook events
 
-Hook event support is adapter-specific.
+Manifest-style hook event support is adapter-specific.
 
 | Event | `open-agents` | `claude` |
 |---|---|---|
@@ -82,8 +85,9 @@ Hook event support is adapter-specific.
 | `pre_tool_execution` | Yes | No |
 | `post_tool_execution` | Yes | Yes |
 
-If you try to install a hook with an unsupported event, Coral blocks the install and shows which
-events that adapter accepts.
+If you try to install a manifest-style hook with an unsupported event, Coral blocks the install
+and shows which events that adapter accepts. Native hook fragments carry their own harness event
+names and are merged by the harness adapter.
 
 ## Commands
 

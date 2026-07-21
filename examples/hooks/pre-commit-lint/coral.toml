@@ -1,9 +1,0 @@
-id = "pre-commit-lint"
-version = "1.0.0"
-type = "hook"
-description = "Run lint checks before the agent finishes a session."
-
-[hook]
-event = "before_finish"
-command = "cargo fmt --check && cargo clippy -- -D warnings"
-working_directory = "."
