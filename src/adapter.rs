@@ -166,7 +166,12 @@ pub trait AgentAdapter {
         }
     }
 
-    fn remove(&self, primitive_id: &str, repo_root: &Path) -> Result<()> {
+    fn remove(
+        &self,
+        primitive_id: &str,
+        repo_root: &Path,
+        managed_hooks: &[crate::lockfile::ManagedHook],
+    ) -> Result<()> {
         let prefix = self.dir_prefix();
         for kind in &["skills", "tools", "hooks", "workflows"] {
             self.remove_dir(repo_root, prefix, kind, primitive_id)?;
@@ -177,8 +182,8 @@ pub trait AgentAdapter {
             primitive_id,
         )?;
         match self.id() {
-            claude::ID => claude::remove_hook_settings(repo_root, primitive_id)?,
-            open_agents::ID => open_agents::remove_hook_settings(repo_root, primitive_id)?,
+            claude::ID => claude::remove_hook_settings(repo_root, managed_hooks)?,
+            open_agents::ID => open_agents::remove_hook_settings(repo_root, managed_hooks)?,
             _ => {}
         }
         Ok(())
@@ -261,12 +266,42 @@ pub trait AgentAdapter {
                     .join(self.dir_prefix())
                     .join("hooks")
                     .join(&capability.id)
-                    .join(self.hook_filename());
+                    .join("run.sh");
+                let script = self.hook_file_content(hook_cfg)?;
+                let settings_relpath = if self.id() == claude::ID {
+                    claude::SETTINGS_RELPATH
+                } else {
+                    open_agents::HOOK_SETTINGS_RELPATH
+                };
+                let fragment = serde_json::json!({
+                    "hooks": {
+                        hook_cfg.event.clone(): [{
+                            "hooks": [{
+                                "type": "command",
+                                "command": format!("sh {}/hooks/{}/run.sh", self.dir_prefix(), capability.id)
+                            }]
+                        }]
+                    }
+                });
+                let settings_path = repo_root.join(settings_relpath);
+                let existing = if settings_path.is_file() {
+                    Some(std::fs::read(&settings_path)?)
+                } else {
+                    None
+                };
+                let merged = if self.id() == claude::ID {
+                    claude::merge_hook_fragment(existing.as_deref(), &fragment)?
+                } else {
+                    open_agents::merge_hook_fragment(existing.as_deref(), &fragment)?
+                };
 
-                Ok(vec![PlannedFile::new(
-                    relative_or_absolute_fs(&target_path, repo_root),
-                    self.hook_file_content(hook_cfg)?,
-                )])
+                Ok(vec![
+                    PlannedFile::new(relative_or_absolute_fs(&target_path, repo_root), script),
+                    PlannedFile::mergeable(
+                        relative_or_absolute_fs(&settings_path, repo_root),
+                        merged,
+                    ),
+                ])
             }
             HookDefinition::Native(native) => self.plan_native_hook(capability, native, repo_root),
         }
@@ -415,7 +450,10 @@ fn path_is_under(path: &Path, root: &Path) -> bool {
     canonical_path.starts_with(canonical_root)
 }
 
-fn replace_hook_dir_placeholder(mut value: serde_json::Value, hook_dir: &str) -> serde_json::Value {
+pub(crate) fn replace_hook_dir_placeholder(
+    mut value: serde_json::Value,
+    hook_dir: &str,
+) -> serde_json::Value {
     match &mut value {
         serde_json::Value::String(s) => {
             *s = s.replace("{{hook_dir}}", hook_dir);
@@ -493,26 +531,23 @@ impl AgentAdapter for AdapterKind {
 
     fn hook_filename(&self) -> &'static str {
         match self {
-            Self::OpenAgents => "hook.toml",
-            Self::Claude => "hook.json",
+            Self::OpenAgents => "run.sh",
+            Self::Claude => "run.sh",
         }
     }
 
     fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>> {
         match self {
             Self::OpenAgents => Ok(format!(
-                "event = \"{}\"\ncommand = \"{}\"\nworking_directory = \"{}\"\n",
-                hook_cfg.event, hook_cfg.command, hook_cfg.working_directory
+                "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
+                hook_cfg.working_directory, hook_cfg.command
             )
             .into_bytes()),
-            Self::Claude => {
-                let json = serde_json::json!({
-                    "event": hook_cfg.event,
-                    "command": hook_cfg.command,
-                    "working_directory": hook_cfg.working_directory,
-                });
-                Ok(serde_json::to_string_pretty(&json)?.into_bytes())
-            }
+            Self::Claude => Ok(format!(
+                "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
+                hook_cfg.working_directory, hook_cfg.command
+            )
+            .into_bytes()),
         }
     }
 
@@ -615,7 +650,7 @@ mod tests {
         for a in AdapterKind::all() {
             let dir = tmp.path().join(a.dir_prefix()).join("tools").join("test");
             std::fs::create_dir_all(&dir).unwrap();
-            assert!(a.remove("test", tmp.path()).is_ok());
+            assert!(a.remove("test", tmp.path(), &[]).is_ok());
             assert!(!dir.exists());
         }
     }

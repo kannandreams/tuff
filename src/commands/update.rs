@@ -1,14 +1,14 @@
 use std::fs;
 use std::path::Path;
 
-use crate::adapter::{AdapterKind, resolve_capability, AgentAdapter};
+use crate::adapter::{AdapterKind, AgentAdapter, resolve_capability};
 use crate::error::{CoralError, Result};
 use crate::git;
 use crate::lockfile;
 use crate::manifest::{self, load_manifest};
 use crate::resolver::{self, Scope};
 
-use super::add::{install_capability, SourceMetaInput};
+use super::add::{SourceMetaInput, install_capability};
 use super::{capability_relative_path, home_dir, resolve_agent_selection};
 
 fn update_local_baseline(
@@ -52,8 +52,7 @@ fn update_local_baseline(
             }
 
             let content = fs::read(&local_path)?;
-            let baseline =
-                lockfile::read_baseline_object(scope_root, &emitted.baseline_hash)?;
+            let baseline = lockfile::read_baseline_object(scope_root, &emitted.baseline_hash)?;
             if content != baseline {
                 changed_files += 1;
             }
@@ -247,9 +246,7 @@ pub fn cmd_update(
     }
 
     if entry.source.is_none() {
-        return update_local_from_source(
-            &scope_root, scope, id, &entry, &target_ids, check, force,
-        );
+        return update_local_from_source(&scope_root, scope, id, &entry, &target_ids, check, force);
     }
 
     let source = entry.source.as_ref().expect("source checked above");
@@ -294,28 +291,23 @@ pub fn cmd_update(
             ))
         })?;
         for emitted in &target_entry.emitted_files {
-            let rel_path =
-                capability_relative_path(&emitted.path, &source.skill);
+            let rel_path = capability_relative_path(&emitted.path, id);
 
             let local_path = scope_root.join(&emitted.path);
             let upstream_path = skill_dir.join(&rel_path);
 
-            let local_content =
-                std::fs::read_to_string(&local_path).unwrap_or_default();
-            let baseline_content = String::from_utf8(
-                lockfile::read_baseline_object(
-                    &scope_root,
-                    &emitted.baseline_hash,
-                )?,
-            )
+            let local_content = std::fs::read_to_string(&local_path).unwrap_or_default();
+            let baseline_content = String::from_utf8(lockfile::read_baseline_object(
+                &scope_root,
+                &emitted.baseline_hash,
+            )?)
             .map_err(|error| {
                 CoralError::new(format!(
                     "baseline object is not valid UTF-8 for '{}': {}",
                     emitted.path, error
                 ))
             })?;
-            let upstream_content =
-                std::fs::read_to_string(&upstream_path).unwrap_or_default();
+            let upstream_content = std::fs::read_to_string(&upstream_path).unwrap_or_default();
 
             if local_content == upstream_content {
                 continue;
@@ -339,14 +331,8 @@ pub fn cmd_update(
                     for r in reports {
                         for c in &r.conflicts {
                             eprintln!("  ✗ {}: {}", r.file_path, c.description);
-                            eprintln!(
-                                "    <<<<<< local\n{}\n    ======",
-                                c.local.trim()
-                            );
-                            eprintln!(
-                                "    {}\n    >>>>>> upstream",
-                                c.upstream.trim()
-                            );
+                            eprintln!("    <<<<<< local\n{}\n    ======", c.local.trim());
+                            eprintln!("    {}\n    >>>>>> upstream", c.upstream.trim());
                         }
                     }
                     eprintln!(

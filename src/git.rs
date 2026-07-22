@@ -33,21 +33,70 @@ fn clean_git_url(raw: &str) -> (String, Option<String>) {
     let segments: Vec<&str> = path.trim_start_matches('/').split('/').collect();
 
     if (host == "github.com" || host.ends_with(".github.com"))
-        && segments.len() >= 4 && (segments[2] == "tree" || segments[2] == "blob") {
-            let clean = format!("https://{}/{}/{}", host, segments[0], segments[1]);
-            return (clean, Some(segments[3].to_string()));
-        }
+        && segments.len() >= 4
+        && (segments[2] == "tree" || segments[2] == "blob")
+    {
+        let clean = format!("https://{}/{}/{}", host, segments[0], segments[1]);
+        return (clean, Some(segments[3].to_string()));
+    }
+
+    if (host == "github.com" || host.ends_with(".github.com")) && segments.len() > 2 {
+        return (
+            format!("https://{}/{}/{}", host, segments[0], segments[1]),
+            None,
+        );
+    }
 
     if (host == "gitlab.com" || host.ends_with(".gitlab.com"))
         && segments.len() >= 5
+        && segments[2] == "-"
+        && (segments[3] == "tree" || segments[3] == "blob")
+    {
+        let clean = format!("https://{}/{}/{}", host, segments[0], segments[1]);
+        return (clean, Some(segments[4].to_string()));
+    }
+
+    if (host == "gitlab.com" || host.ends_with(".gitlab.com")) && segments.len() > 2 {
+        return (
+            format!("https://{}/{}/{}", host, segments[0], segments[1]),
+            None,
+        );
+    }
+
+    (raw.to_string(), None)
+}
+
+/// Returns a repository-relative folder selected by a GitHub/GitLab URL.
+///
+/// A repository URL has no subdirectory. Folder URLs may use either the
+/// provider's normal `/tree/<branch>/...` form or a direct `/...` path.
+pub fn source_subdirectory(raw: &str) -> Option<String> {
+    let parsed = Url::parse(raw).ok()?;
+    let host = parsed.host_str()?;
+    let segments: Vec<&str> = parsed.path().trim_start_matches('/').split('/').collect();
+
+    if host == "github.com" || host.ends_with(".github.com") {
+        if segments.len() >= 5 && (segments[2] == "tree" || segments[2] == "blob") {
+            return Some(segments[4..].join("/"));
+        }
+        if segments.len() > 2 && segments[2] != "tree" && segments[2] != "blob" {
+            return Some(segments[2..].join("/"));
+        }
+    }
+
+    if host == "gitlab.com" || host.ends_with(".gitlab.com") {
+        if segments.len() >= 6
             && segments[2] == "-"
             && (segments[3] == "tree" || segments[3] == "blob")
         {
-            let clean = format!("https://{}/{}/{}", host, segments[0], segments[1]);
-            return (clean, Some(segments[4].to_string()));
+            return Some(segments[5..].join("/"));
         }
+        if segments.len() > 2 && segments[2] != "-" {
+            return Some(segments[2..].join("/"));
+        }
+    }
 
-    (raw.to_string(), None)
+    None
 }
 
 pub fn clone_or_fetch(raw_url: &str) -> Result<(PathBuf, String)> {
@@ -132,6 +181,13 @@ pub fn discover_capability(
 
     let mut matches = Vec::new();
 
+    // A URL-selected path can be nested arbitrarily deep, so try the exact
+    // repository-relative path before the conventional capability layouts.
+    let direct = repo.join(name);
+    if direct.is_dir() {
+        matches.push(direct);
+    }
+
     // Pattern 1: <plural>/<name>/ (e.g. skills/security-review/)
     let p1 = repo.join(dir_plural).join(name);
     if p1.is_dir() {
@@ -192,10 +248,7 @@ pub fn discover_capability(
     }
 }
 
-fn list_nearby_capabilities(
-    repo: &Path,
-    capability_type: CapabilityType,
-) -> Result<Vec<String>> {
+fn list_nearby_capabilities(repo: &Path, capability_type: CapabilityType) -> Result<Vec<String>> {
     let dir_plural = capability_type.plural_dir();
     let capabilities_dir = repo.join(dir_plural);
     if !capabilities_dir.is_dir() {
@@ -286,6 +339,31 @@ mod tests {
         let (url, branch) = clean_git_url("https://github.com/vercel-labs/skills");
         assert_eq!(url, "https://github.com/vercel-labs/skills");
         assert_eq!(branch, None);
+    }
+
+    #[test]
+    fn github_folder_url_is_normalized_and_preserves_subdirectory() {
+        let (url, branch) = clean_git_url(
+            "https://github.com/am-will/codex-skills/hooks/aitmpl-codex/automation/change-logger",
+        );
+        assert_eq!(url, "https://github.com/am-will/codex-skills");
+        assert_eq!(branch, None);
+        assert_eq!(
+            source_subdirectory(
+                "https://github.com/am-will/codex-skills/hooks/aitmpl-codex/automation/change-logger"
+            ),
+            Some("hooks/aitmpl-codex/automation/change-logger".to_string())
+        );
+    }
+
+    #[test]
+    fn github_tree_url_preserves_branch_and_subdirectory() {
+        assert_eq!(
+            source_subdirectory(
+                "https://github.com/am-will/codex-skills/tree/main/hooks/aitmpl-codex/automation/change-logger"
+            ),
+            Some("hooks/aitmpl-codex/automation/change-logger".to_string())
+        );
     }
 
     #[test]

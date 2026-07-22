@@ -6,7 +6,7 @@ use tabled::Tabled;
 
 use crate::error::Result;
 use crate::lockfile::{self};
-use crate::manifest::{load_manifest, CapabilityType};
+use crate::manifest::{CapabilityType, load_manifest};
 
 use super::{home_dir_opt, render_table, short_sha};
 use super::{style_capability_type, style_drift_status};
@@ -50,30 +50,24 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
 
     let mut inventory: Vec<InventoryRow> = Vec::new();
 
-    if show_project
-        && let Ok(lf) = lockfile::require_lockfile(repo_root) {
+    if show_project && let Ok(lf) = lockfile::require_lockfile(repo_root) {
+        inventory.extend(collect_lockfile_inventory(
+            repo_root, &lf, "project", None, kind_type,
+        ));
+    }
+
+    if show_global && let Some(home) = home_dir_opt() {
+        let lock_path = home.join(".coral").join("coral-lock.json");
+        if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             inventory.extend(collect_lockfile_inventory(
-                repo_root,
+                &home,
                 &lf,
-                "project",
-                None,
+                "global",
+                Some("~/"),
                 kind_type,
             ));
         }
-
-    if show_global
-        && let Some(home) = home_dir_opt() {
-            let lock_path = home.join(".coral").join("coral-lock.json");
-            if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
-                inventory.extend(collect_lockfile_inventory(
-                    &home,
-                    &lf,
-                    "global",
-                    Some("~/"),
-                    kind_type,
-                ));
-            }
-        }
+    }
 
     if inventory.is_empty() {
         println!("no capabilities installed");
@@ -118,16 +112,28 @@ pub(crate) fn collect_lockfile_inventory(
 
     for (id, entry) in &lf.capabilities {
         if let Some(kind) = kind_filter
-            && entry.capability_type != kind {
-                continue;
-            }
+            && entry.capability_type != kind
+        {
+            continue;
+        }
 
         let description = capability_description(root, entry);
         let source_type = capability_source_type(entry).to_string();
 
         for (target_id, target_entry) in &entry.targets {
+            let managed_status = target_entry
+                .managed_hooks
+                .iter()
+                .map(|hook| lockfile::managed_hook_status(root, hook))
+                .find(|status| *status != "clean")
+                .unwrap_or("clean");
             for emitted in &target_entry.emitted_files {
-                let status = lockfile::drift_status(root, emitted);
+                let file_status = lockfile::drift_status(root, emitted);
+                let status = if managed_status != "clean" {
+                    managed_status
+                } else {
+                    file_status
+                };
                 let path = match path_prefix {
                     Some(prefix) => format!("{prefix}{}", emitted.path),
                     None => emitted.path.clone(),
@@ -173,9 +179,10 @@ fn capability_description(root: &Path, entry: &lockfile::CapabilityLockEntry) ->
 
 fn capability_source_type(entry: &lockfile::CapabilityLockEntry) -> &'static str {
     if let Some(source) = &entry.source
-        && source.source_type == "git" {
-            return "git";
-        }
+        && source.source_type == "git"
+    {
+        return "git";
+    }
     "local"
 }
 

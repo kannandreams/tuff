@@ -64,6 +64,12 @@ fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<
                 }
             }
 
+            for hook in &target_entry.managed_hooks {
+                if lockfile::managed_hook_status(scope_root, hook) != "clean" {
+                    failing_files.push(format!("{}#{}", hook.settings_path, hook.event));
+                }
+            }
+
             let status = if failing_files.is_empty() {
                 "ok"
             } else {

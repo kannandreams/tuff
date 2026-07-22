@@ -101,6 +101,7 @@ pub fn cmd_create(
         }
 
         let mut emitted_files = Vec::new();
+        let mut managed_hooks = Vec::new();
         for (name, content) in files {
             let target_path = root.join(name);
             let baseline_hash = lockfile::write_baseline_object(repo_root, content.as_bytes())?;
@@ -149,12 +150,8 @@ pub fn cmd_create(
                 fs::create_dir_all(parent)?;
             }
             fs::write(&settings_path, &merged)?;
-            let baseline_hash = lockfile::write_baseline_object(repo_root, &merged)?;
-            emitted_files.push(adapter::EmittedFile {
-                path: lockfile::relative_or_absolute_fs(&settings_path, repo_root),
-                hash: lockfile::hash_bytes(&merged),
-                baseline_hash,
-            });
+            managed_hooks =
+                lockfile::managed_hooks_from_fragment(repo_root, settings_relpath, &fragment)?;
             println!(
                 "created and tracked hook '{}' ({}) -> {}",
                 id,
@@ -167,6 +164,7 @@ pub fn cmd_create(
             adapter.id().to_string(),
             TargetLockEntry {
                 emitted_files,
+                managed_hooks,
                 ownership: lockfile::TargetOwnership::Generated,
             },
         );
@@ -218,21 +216,17 @@ fn create_scaffold_files(
     adapter: AdapterKind,
 ) -> Result<(&'static str, Vec<(&'static str, String)>)> {
     let files = match kind {
-        CapabilityType::Skill => vec![
-            (
-                "SKILL.md",
-                format!(
-                    "# {id}\n\n## Purpose\n\nDescribe when the agent should use this skill.\n\n## Guidance\n\n- Add the key rules the agent should follow.\n- Add examples, constraints, and team conventions.\n"
-                ),
+        CapabilityType::Skill => vec![(
+            "SKILL.md",
+            format!(
+                "# {id}\n\n## Purpose\n\nDescribe when the agent should use this skill.\n\n## Guidance\n\n- Add the key rules the agent should follow.\n- Add examples, constraints, and team conventions.\n"
             ),
-        ],
-        CapabilityType::Tool => vec![
-            (
-                "run.sh",
-                "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n"
-                    .to_string(),
-            ),
-        ],
+        )],
+        CapabilityType::Tool => vec![(
+            "run.sh",
+            "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with tool logic\"\n"
+                .to_string(),
+        )],
         CapabilityType::Hook => {
             if adapter == AdapterKind::Claude || adapter == AdapterKind::OpenAgents {
                 return Ok((
@@ -254,19 +248,18 @@ fn create_scaffold_files(
                     working_directory: ".".into(),
                 })
                 .and_then(|bytes| {
-                    String::from_utf8(bytes)
-                        .map_err(|e| CoralError::new(format!("hook content is not valid UTF-8: {e}")))
+                    String::from_utf8(bytes).map_err(|e| {
+                        CoralError::new(format!("hook content is not valid UTF-8: {e}"))
+                    })
                 })?;
             vec![(file, content)]
         }
-        CapabilityType::Workflow => vec![
-            (
-                "workflow.toml",
-                format!(
-                    "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
-                ),
+        CapabilityType::Workflow => vec![(
+            "workflow.toml",
+            format!(
+                "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
             ),
-        ],
+        )],
     };
     let relative_dir = kind.plural_dir();
     Ok((relative_dir, files))

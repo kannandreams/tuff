@@ -53,10 +53,7 @@ pub fn cmd_delete(
 
     for target in &target_ids {
         let target_entry = entry.targets.get(target).ok_or_else(|| {
-            CoralError::new(format!(
-                "'{}' is not tracked for agent '{}'",
-                id, target
-            ))
+            CoralError::new(format!("'{}' is not tracked for agent '{}'", id, target))
         })?;
 
         if target_entry.ownership == lockfile::TargetOwnership::Imported {
@@ -70,7 +67,11 @@ pub fn cmd_delete(
             .emitted_files
             .iter()
             .any(|emitted| lockfile::drift_status(&scope_root, emitted) == "modified");
-        if modified && !force {
+        let modified_hook = target_entry
+            .managed_hooks
+            .iter()
+            .any(|hook| lockfile::managed_hook_status(&scope_root, hook) == "modified");
+        if (modified || modified_hook) && !force {
             return Err(CoralError::new(format!(
                 "'{}' has local modifications for agent '{}'; use --force to delete",
                 id, target
@@ -86,7 +87,12 @@ pub fn cmd_delete(
 
     for target in &target_ids {
         if let Some(adapter) = AdapterKind::from_id(target) {
-            adapter.remove(id, &scope_root)?;
+            let managed_hooks = entry
+                .targets
+                .get(target)
+                .map(|target_entry| target_entry.managed_hooks.as_slice())
+                .unwrap_or(&[]);
+            adapter.remove(id, &scope_root, managed_hooks)?;
         }
         remove_target_tracking(&scope_root, id, &mut entry, target)?;
     }
@@ -102,12 +108,7 @@ pub fn cmd_delete(
     Ok(())
 }
 
-pub fn cmd_untrack(
-    repo_root: &Path,
-    id: &str,
-    scope_str: &str,
-    targets: &[String],
-) -> Result<()> {
+pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[String]) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
     let target_ids = resolve_agent_selection(&scope_root, targets)?;
 

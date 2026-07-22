@@ -209,7 +209,7 @@ fn legacy_lockfile_fixture_is_rejected() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unsupported lockfile version: 3"));
+        .stderr(predicate::str::contains("unsupported lockfile version: 2"));
 }
 
 #[test]
@@ -825,9 +825,7 @@ fn add_git_requires_skill_flag() {
         .args(["add", &repo_url, "--agent", "open-agents"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "--name is required",
-        ));
+        .stderr(predicate::str::contains("--name is required"));
 }
 
 #[test]
@@ -1663,7 +1661,7 @@ fn add_hook_installs_and_emits() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "installed pre-commit (open-agents) -> .agents/hooks/pre-commit/hook.toml",
+            "installed pre-commit (open-agents) -> .agents/hooks/pre-commit/run.sh",
         ))
         .stderr(predicate::str::contains(
             "this hook runs 'cargo test' on event 'before_finish'",
@@ -1674,7 +1672,7 @@ fn add_hook_installs_and_emits() {
             .join(".agents")
             .join("hooks")
             .join("pre-commit")
-            .join("hook.toml")
+            .join("run.sh")
             .exists()
     );
 }
@@ -1703,7 +1701,11 @@ fn add_hook_file_merges_claude_settings_and_copies_external_assets() {
 "#,
     )
     .unwrap();
-    fs::write(hook.join("session-start.sh"), "#!/usr/bin/env bash\necho start\n").unwrap();
+    fs::write(
+        hook.join("session-start.sh"),
+        "#!/usr/bin/env bash\necho start\n",
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1770,7 +1772,11 @@ fn add_hook_file_adopts_assets_already_inside_harness() {
 "#,
     )
     .unwrap();
-    fs::write(hook.join("session-start.sh"), "#!/usr/bin/env bash\necho start\n").unwrap();
+    fs::write(
+        hook.join("session-start.sh"),
+        "#!/usr/bin/env bash\necho start\n",
+    )
+    .unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1900,17 +1906,15 @@ fn hook_list_and_drift() {
         .success()
         .stdout(predicate::str::contains("pre-commit"))
         .stdout(predicate::str::contains("hook"))
-        .stdout(predicate::str::contains(
-            ".agents/hooks/pre-commit/hook.toml",
-        ));
+        .stdout(predicate::str::contains(".agents/hooks/pre-commit/run.sh"));
 
     fs::write(
         temp.path()
             .join(".agents")
             .join("hooks")
             .join("pre-commit")
-            .join("hook.toml"),
-        "event = \"after_save\"\ncommand = \"cargo test\"\n",
+            .join("run.sh"),
+        "#!/usr/bin/env bash\nset -euo pipefail\ncd \".\"\necho changed\n",
     )
     .unwrap();
 
@@ -1927,8 +1931,7 @@ fn hook_list_and_drift() {
         .args(["diff", "pre-commit"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("-event = \"before_finish\""))
-        .stdout(predicate::str::contains("+event = \"after_save\""));
+        .stdout(predicate::str::contains("run.sh"));
 }
 
 #[test]
@@ -1952,7 +1955,7 @@ fn delete_generated_hook_cleans_directory() {
             .join(".claude")
             .join("hooks")
             .join("pre-commit")
-            .join("hook.json")
+            .join("run.sh")
             .exists()
     );
 
@@ -2916,10 +2919,9 @@ fn create_generates_adapter_specific_hook_files() {
             .join(".agents/hooks/agents-hook/run.sh")
             .exists()
     );
-    let agents_settings: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".agents/hook.json")).unwrap(),
-    )
-    .unwrap();
+    let agents_settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".agents/hook.json")).unwrap())
+            .unwrap();
     assert_eq!(
         agents_settings["hooks"]["before_finish"][0]["hooks"][0]["command"],
         "sh .agents/hooks/agents-hook/run.sh"

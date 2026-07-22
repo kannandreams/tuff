@@ -57,8 +57,7 @@ pub fn cmd_diff(
     } else {
         let mut first = true;
         for tid in &selected_targets {
-            let diff =
-                lockfile::diff_against_baseline(&scope_root, capability_id, tid, &entry)?;
+            let diff = lockfile::diff_against_baseline(&scope_root, capability_id, tid, &entry)?;
             if diff.is_empty() {
                 continue;
             }
@@ -76,7 +75,7 @@ pub fn cmd_diff(
 
 fn cmd_diff_upstream(
     scope_root: PathBuf,
-    _capability_id: &str,
+    capability_id: &str,
     entry: &lockfile::CapabilityLockEntry,
     target: Option<&str>,
 ) -> Result<()> {
@@ -89,16 +88,21 @@ fn cmd_diff_upstream(
 
     for (tid, target_entry) in &entry.targets {
         if let Some(t) = target
-            && tid != t {
-                continue;
-            }
+            && tid != t
+        {
+            continue;
+        }
 
         for emitted in &target_entry.emitted_files {
-            let rel_path = capability_relative_path(&emitted.path, &source.skill);
+            let rel_path = capability_relative_path(&emitted.path, capability_id);
             let rel_display = rel_path.to_string_lossy();
 
-            let upstream_content =
-                crate::diff::get_upstream_content(&cache_dir, &source.skill, entry.capability_type, &rel_display)?;
+            let upstream_content = crate::diff::get_upstream_content(
+                &cache_dir,
+                &source.skill,
+                entry.capability_type,
+                &rel_display,
+            )?;
             let baseline_content = String::from_utf8(lockfile::read_baseline_object(
                 &scope_root,
                 &emitted.baseline_hash,

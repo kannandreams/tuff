@@ -12,7 +12,7 @@ use crate::adapter::EmittedFile;
 use crate::error::{CoralError, Result};
 use crate::manifest::CapabilityType;
 
-pub const LOCKFILE_VERSION: u8 = 2;
+pub const LOCKFILE_VERSION: u8 = 3;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lockfile {
@@ -56,8 +56,98 @@ pub struct SourceMetadata {
 pub struct TargetLockEntry {
     #[serde(rename = "emittedFiles")]
     pub emitted_files: Vec<EmittedFile>,
+    #[serde(
+        default,
+        rename = "managedHooks",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub managed_hooks: Vec<ManagedHook>,
     #[serde(default)]
     pub ownership: TargetOwnership,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedHook {
+    #[serde(rename = "settingsPath")]
+    pub settings_path: String,
+    pub event: String,
+    pub command: String,
+    #[serde(rename = "baselineHash")]
+    pub baseline_hash: String,
+}
+
+pub fn managed_hooks_from_fragment(
+    repo_root: &Path,
+    settings_path: &str,
+    fragment: &serde_json::Value,
+) -> Result<Vec<ManagedHook>> {
+    let mut managed = Vec::new();
+    let Some(events) = fragment.get("hooks").and_then(serde_json::Value::as_object) else {
+        return Ok(managed);
+    };
+
+    for (event, groups) in events {
+        let Some(groups) = groups.as_array() else {
+            continue;
+        };
+        for group in groups {
+            let Some(hooks) = group.get("hooks").and_then(serde_json::Value::as_array) else {
+                continue;
+            };
+            for hook in hooks {
+                let Some(command) = hook.get("command").and_then(serde_json::Value::as_str) else {
+                    continue;
+                };
+                let baseline = serde_json::to_vec(hook)?;
+                managed.push(ManagedHook {
+                    settings_path: settings_path.to_string(),
+                    event: event.clone(),
+                    command: command.to_string(),
+                    baseline_hash: write_baseline_object(repo_root, &baseline)?,
+                });
+            }
+        }
+    }
+    Ok(managed)
+}
+
+pub fn managed_hook_status(repo_root: &Path, hook: &ManagedHook) -> &'static str {
+    let path = repo_root.join(&hook.settings_path);
+    let Ok(settings) = std::fs::read_to_string(path) else {
+        return "missing";
+    };
+    let Ok(settings): std::result::Result<serde_json::Value, _> = serde_json::from_str(&settings)
+    else {
+        return "modified";
+    };
+    let Some(groups) = settings
+        .get("hooks")
+        .and_then(|hooks| hooks.get(&hook.event))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return "missing";
+    };
+
+    for group in groups {
+        let Some(entries) = group.get("hooks").and_then(serde_json::Value::as_array) else {
+            continue;
+        };
+        for entry in entries {
+            if entry.get("command").and_then(serde_json::Value::as_str)
+                == Some(hook.command.as_str())
+            {
+                let Ok(content) = serde_json::to_vec(entry) else {
+                    return "modified";
+                };
+                return if hash_bytes(&content) == hook.baseline_hash {
+                    "clean"
+                } else {
+                    "modified"
+                };
+            }
+        }
+    }
+    "missing"
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,8 +290,18 @@ pub fn prune_unreferenced_baseline_objects(repo_root: &Path, lockfile: &Lockfile
         .capabilities
         .values()
         .flat_map(|entry| entry.targets.values())
-        .flat_map(|target| target.emitted_files.iter())
-        .map(|emitted| emitted.baseline_hash.as_str())
+        .flat_map(|target| {
+            target
+                .emitted_files
+                .iter()
+                .map(|emitted| emitted.baseline_hash.as_str())
+                .chain(
+                    target
+                        .managed_hooks
+                        .iter()
+                        .map(|hook| hook.baseline_hash.as_str()),
+                )
+        })
         .collect();
 
     let mut removed = 0usize;
@@ -313,6 +413,24 @@ pub fn diff_against_baseline(
         }
     }
 
+    for hook in &target_entry.managed_hooks {
+        let status = managed_hook_status(repo_root, hook);
+        if status == "clean" {
+            continue;
+        }
+        output.push_str(&format!(
+            "--- baseline/{target_id}/{}#{}\n+++ {} ({status})\n",
+            hook.settings_path, hook.event, hook.command
+        ));
+        if status == "missing" {
+            output.push_str("-managed hook registration\n");
+        } else {
+            output.push_str(
+                "-managed hook registration baseline\n+current hook registration differs\n",
+            );
+        }
+    }
+
     Ok(output)
 }
 
@@ -367,7 +485,7 @@ mod tests {
         assert!(path.exists());
 
         let lf = read_lockfile_at(&path).unwrap();
-        assert_eq!(lf.version, 2);
+        assert_eq!(lf.version, 3);
         assert!(lf.capabilities.is_empty());
     }
 
@@ -379,13 +497,13 @@ mod tests {
     }
 
     #[test]
-    fn read_lockfile_at_rejects_v3_schema() {
+    fn read_lockfile_at_rejects_v4_schema() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("v3-lock.json");
+        let path = tmp.path().join("v4-lock.json");
         fs::write(
             &path,
             r#"{
-  "version": 3,
+  "version": 4,
   "capabilities": {}
 }
 "#,
@@ -396,7 +514,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("unsupported lockfile version: 3")
+                .contains("unsupported lockfile version: 4")
         );
     }
 
@@ -432,7 +550,7 @@ mod tests {
         std::fs::write(
             &path,
             r#"{
-  "version": 2,
+  "version": 3,
   "capabilities": {
     "legacy": {
       "type": "skill",

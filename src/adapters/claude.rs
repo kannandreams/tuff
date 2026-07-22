@@ -18,7 +18,7 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
 
-pub const SUPPORTED_EVENTS: &[&str] = &["before_finish", "post_tool_execution"];
+pub const SUPPORTED_EVENTS: &[&str] = &["SessionStart", "before_finish", "post_tool_execution"];
 
 pub fn detect(repo_root: &Path) -> bool {
     repo_root.join(".claude").exists() || repo_root.join("CLAUDE.md").exists()
@@ -70,7 +70,13 @@ pub fn merge_hook_fragment(
     Ok(serde_json::to_string_pretty(&settings)?.into_bytes())
 }
 
-pub fn remove_hook_settings(repo_root: &Path, hook_id: &str) -> Result<()> {
+pub fn remove_hook_settings(
+    repo_root: &Path,
+    managed_hooks: &[lockfile::ManagedHook],
+) -> Result<()> {
+    if managed_hooks.is_empty() {
+        return Ok(());
+    }
     let settings_path = repo_root.join(SETTINGS_RELPATH);
     if !settings_path.is_file() {
         return Ok(());
@@ -85,13 +91,34 @@ pub fn remove_hook_settings(repo_root: &Path, hook_id: &str) -> Result<()> {
         return Ok(());
     };
 
-    let marker = format!(".claude/hooks/{hook_id}/");
     let mut empty_events = Vec::new();
     for (event, groups) in hooks.iter_mut() {
         let Some(groups) = groups.as_array_mut() else {
             continue;
         };
-        groups.retain(|group| !contains_command_marker(group, &marker));
+        let registrations: Vec<&lockfile::ManagedHook> = managed_hooks
+            .iter()
+            .filter(|hook| hook.settings_path == SETTINGS_RELPATH && hook.event == *event)
+            .collect();
+        for group in groups.iter_mut() {
+            if let Some(entries) = group
+                .get_mut("hooks")
+                .and_then(|value| value.as_array_mut())
+            {
+                entries.retain(|entry| {
+                    !registrations.iter().any(|hook| {
+                        entry.get("command").and_then(serde_json::Value::as_str)
+                            == Some(hook.command.as_str())
+                    })
+                });
+            }
+        }
+        groups.retain(|group| {
+            group
+                .get("hooks")
+                .and_then(|value| value.as_array())
+                .is_none_or(|entries| !entries.is_empty())
+        });
         if groups.is_empty() {
             empty_events.push(event.clone());
         }
@@ -129,19 +156,6 @@ fn validate_hook_fragment(fragment: &serde_json::Value) -> Result<()> {
         ));
     }
     Ok(())
-}
-
-fn contains_command_marker(value: &serde_json::Value, marker: &str) -> bool {
-    match value {
-        serde_json::Value::String(s) => s.contains(marker),
-        serde_json::Value::Array(items) => items
-            .iter()
-            .any(|item| contains_command_marker(item, marker)),
-        serde_json::Value::Object(map) => map
-            .values()
-            .any(|item| contains_command_marker(item, marker)),
-        _ => false,
-    }
 }
 
 #[cfg(test)]
