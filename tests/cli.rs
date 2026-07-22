@@ -1680,6 +1680,136 @@ fn add_hook_installs_and_emits() {
 }
 
 #[test]
+fn add_hook_file_merges_claude_settings_and_copies_external_assets() {
+    let temp = TempDir::new().unwrap();
+    let hook = temp.path().join("claude-session-start");
+    fs::create_dir_all(&hook).unwrap();
+    fs::write(
+        hook.join("settings.json"),
+        r#"{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{hook_dir}}/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+"#,
+    )
+    .unwrap();
+    fs::write(hook.join("session-start.sh"), "#!/usr/bin/env bash\necho start\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "hook",
+            hook.to_str().unwrap(),
+            "--agent",
+            "claude",
+            "--hook-file",
+            "settings.json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed claude-session-start (claude) -> .claude/hooks/claude-session-start/session-start.sh",
+        ))
+        .stdout(predicate::str::contains(
+            "installed claude-session-start (claude) -> .claude/settings.json",
+        ));
+
+    assert!(
+        temp.path()
+            .join(".claude/hooks/claude-session-start/session-start.sh")
+            .exists()
+    );
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".claude/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        settings["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+        ".claude/hooks/claude-session-start/session-start.sh"
+    );
+}
+
+#[test]
+fn add_hook_file_adopts_assets_already_inside_harness() {
+    let temp = TempDir::new().unwrap();
+    let hook = temp.path().join(".claude/hooks/session-start");
+    fs::create_dir_all(&hook).unwrap();
+    fs::write(
+        hook.join("settings.json"),
+        r#"{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{hook_dir}}/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+"#,
+    )
+    .unwrap();
+    fs::write(hook.join("session-start.sh"), "#!/usr/bin/env bash\necho start\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "hook",
+            ".claude/hooks/session-start",
+            "--agent",
+            "claude",
+            "--hook-file",
+            "settings.json",
+        ])
+        .assert()
+        .success();
+
+    let lockfile: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".coral/coral-lock.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        lockfile["capabilities"]["session-start"]["targets"]["claude"]["ownership"],
+        "imported"
+    );
+    assert!(
+        lockfile["capabilities"]["session-start"]["targets"]["claude"]["emittedFiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file["path"] == ".claude/hooks/session-start/session-start.sh")
+    );
+}
+
+#[test]
 fn add_hook_rejects_invalid_event() {
     let temp = TempDir::new().unwrap();
     let primitive = temp.path().join("bad-hook");
@@ -2783,14 +2913,27 @@ fn create_generates_adapter_specific_hook_files() {
 
     assert!(
         temp.path()
-            .join(".agents/hooks/agents-hook/hook.toml")
+            .join(".agents/hooks/agents-hook/run.sh")
             .exists()
     );
-    let claude_hook = temp.path().join(".claude/hooks/claude-hook/hook.json");
+    let agents_settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".agents/hook.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        agents_settings["hooks"]["before_finish"][0]["hooks"][0]["command"],
+        "sh .agents/hooks/agents-hook/run.sh"
+    );
+    let claude_hook = temp.path().join(".claude/hooks/claude-hook/run.sh");
     assert!(claude_hook.exists());
-    let hook: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(claude_hook).unwrap()).unwrap();
-    assert_eq!(hook["event"], "before_finish");
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".claude/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        settings["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+        "sh .claude/hooks/claude-hook/run.sh"
+    );
 }
 
 #[test]

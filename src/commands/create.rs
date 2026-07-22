@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::adapter::{self, AdapterKind, AgentAdapter};
+use crate::adapters::{claude, open_agents};
 use crate::config;
 use crate::error::{CoralError, Result};
 use crate::lockfile::{self, TargetLockEntry};
@@ -88,7 +89,10 @@ pub fn cmd_create(
         }
 
         #[cfg(unix)]
-        if kind == CapabilityType::Tool {
+        if kind == CapabilityType::Tool
+            || (kind == CapabilityType::Hook
+                && (*adapter == AdapterKind::Claude || *adapter == AdapterKind::OpenAgents))
+        {
             use std::os::unix::fs::PermissionsExt;
             let run_sh = root.join("run.sh");
             let mut permissions = fs::metadata(&run_sh)?.permissions();
@@ -105,6 +109,58 @@ pub fn cmd_create(
                 hash: lockfile::hash_bytes(content.as_bytes()),
                 baseline_hash,
             });
+        }
+
+        if kind == CapabilityType::Hook
+            && (*adapter == AdapterKind::Claude || *adapter == AdapterKind::OpenAgents)
+        {
+            let settings_relpath = if *adapter == AdapterKind::Claude {
+                claude::SETTINGS_RELPATH
+            } else {
+                open_agents::HOOK_SETTINGS_RELPATH
+            };
+            let settings_path = repo_root.join(settings_relpath);
+            let event = if *adapter == AdapterKind::Claude {
+                "SessionStart"
+            } else {
+                "before_finish"
+            };
+            let fragment = serde_json::json!({
+                "hooks": {
+                    event: [{
+                        "hooks": [{
+                            "type": "command",
+                            "command": format!("sh {}/hooks/{id}/run.sh", adapter.dir_prefix())
+                        }]
+                    }]
+                }
+            });
+            let existing = if settings_path.is_file() {
+                Some(fs::read(&settings_path)?)
+            } else {
+                None
+            };
+            let merged = if *adapter == AdapterKind::Claude {
+                claude::merge_hook_fragment(existing.as_deref(), &fragment)?
+            } else {
+                open_agents::merge_hook_fragment(existing.as_deref(), &fragment)?
+            };
+            if let Some(parent) = settings_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&settings_path, &merged)?;
+            let baseline_hash = lockfile::write_baseline_object(repo_root, &merged)?;
+            emitted_files.push(adapter::EmittedFile {
+                path: lockfile::relative_or_absolute_fs(&settings_path, repo_root),
+                hash: lockfile::hash_bytes(&merged),
+                baseline_hash,
+            });
+            println!(
+                "created and tracked hook '{}' ({}) -> {}",
+                id,
+                adapter.id(),
+                lockfile::relative_or_absolute_fs(&settings_path, repo_root)
+            );
         }
 
         target_entries.insert(
@@ -178,6 +234,18 @@ fn create_scaffold_files(
             ),
         ],
         CapabilityType::Hook => {
+            if adapter == AdapterKind::Claude || adapter == AdapterKind::OpenAgents {
+                return Ok((
+                    kind.plural_dir(),
+                    vec![
+                        (
+                            "run.sh",
+                            "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"replace with hook logic\"\n"
+                                .to_string(),
+                        ),
+                    ],
+                ));
+            }
             let file = adapter.hook_filename();
             let content = adapter
                 .hook_file_content(&crate::manifest::HookConfig {
@@ -202,132 +270,4 @@ fn create_scaffold_files(
     };
     let relative_dir = kind.plural_dir();
     Ok((relative_dir, files))
-}
-
-#[expect(dead_code, reason = "deprecated legacy create path; kept for backward compat reference")]
-fn cmd_create_legacy(
-    repo_root: &Path,
-    skill: Option<&str>,
-    tool: Option<&str>,
-    hook: Option<&str>,
-    workflow: Option<&str>,
-    target: &str,
-) -> Result<()> {
-    let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-        CoralError::new(format!(
-            "unknown agent '{}'; use 'coral agent list' to see available agents",
-            target
-        ))
-    })?;
-
-    let selections: &[(CapabilityType, Option<&str>)] = &[
-        (CapabilityType::Skill, skill),
-        (CapabilityType::Tool, tool),
-        (CapabilityType::Hook, hook),
-        (CapabilityType::Workflow, workflow),
-    ];
-    let chosen: Vec<_> = selections
-        .iter()
-        .filter_map(|(kind, value)| value.map(|name| (*kind, name)))
-        .collect();
-
-    if chosen.len() != 1 {
-        return Err(CoralError::new(
-            "choose exactly one scaffold type: --skill, --tool, --hook, or --workflow",
-        ));
-    }
-
-    let (kind, raw_name) = chosen[0];
-    let id = raw_name.trim();
-    if id.is_empty() {
-        return Err(CoralError::new("capability name must not be empty"));
-    }
-
-    let (relative_dir, files): (&str, Vec<(&str, String)>) = match kind {
-        CapabilityType::Skill => (
-            "skills",
-            vec![(
-                "SKILL.md",
-                format!(
-                    r#"# {id}
-
-## Purpose
-
-Describe when the agent should use this skill.
-
-## Guidance
-
-- Add the key rules the agent should follow.
-- Add examples, constraints, and team conventions.
-"#
-                ),
-            )],
-        ),
-        CapabilityType::Tool => (
-            "tools",
-            vec![(
-                "run.sh",
-                r#"#!/usr/bin/env bash
-set -euo pipefail
-
-echo "replace with tool logic"
-"#
-                .to_string(),
-            )],
-        ),
-        CapabilityType::Hook => (
-            "hooks",
-            vec![(
-                "hook.toml",
-                "event = \"before_finish\"\ncommand = \"echo review hook\"\n".to_string(),
-            )],
-        ),
-        CapabilityType::Workflow => (
-            "workflows",
-            vec![(
-                "workflow.toml",
-                "name = \"replace-me\"\ndescription = \"Fill in the workflow steps here.\"\n"
-                    .to_string(),
-            )],
-        ),
-    };
-
-    let target_root = match adapter {
-        AdapterKind::OpenAgents => ".agents",
-        AdapterKind::Claude => ".claude",
-    };
-    let canonical_target = adapter.id();
-    let root = repo_root.join(target_root).join(relative_dir).join(id);
-    if root.exists() {
-        return Err(CoralError::new(format!(
-            "refusing to overwrite existing capability scaffold: {}",
-            lockfile::relative_or_absolute_fs(&root, repo_root)
-        )));
-    }
-
-    fs::create_dir_all(&root)?;
-    for (name, content) in files {
-        fs::write(root.join(name), content)?;
-    }
-
-    #[cfg(unix)]
-    if kind == CapabilityType::Tool {
-        use std::os::unix::fs::PermissionsExt;
-        let run_sh = root.join("run.sh");
-        let mut permissions = fs::metadata(&run_sh)?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(run_sh, permissions)?;
-    }
-
-    println!(
-        "created {kind} scaffold at {}",
-        lockfile::relative_or_absolute_fs(&root, repo_root)
-    );
-    println!(
-        "next: edit the generated files, then run `coral add {} -t {}`",
-        lockfile::relative_or_absolute_fs(&root, repo_root),
-        canonical_target
-    );
-
-    Ok(())
 }

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh {{hook_dir}}/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -265,6 +265,9 @@ enum AddCommand {
     Hook {
         source: PathBuf,
         name: Option<String>,
+        /// Native harness hook fragment to merge, relative to the source directory.
+        #[arg(long = "hook-file")]
+        hook_file: Option<PathBuf>,
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
         #[arg(short = 'g', long = "global")]
@@ -342,12 +345,18 @@ fn run() -> Result<()> {
         None => {
             display::print_welcome();
             Ok(())
-        },
+        }
         Some(Command::Init { global }) => cmd_init(&repo_root, global),
         Some(Command::Create { kind }) => match kind {
-            CreateCommand::Skill { id, agent } => cmd_create(&repo_root, CapabilityType::Skill, &id, &agent),
-            CreateCommand::Tool { id, agent } => cmd_create(&repo_root, CapabilityType::Tool, &id, &agent),
-            CreateCommand::Hook { id, agent } => cmd_create(&repo_root, CapabilityType::Hook, &id, &agent),
+            CreateCommand::Skill { id, agent } => {
+                cmd_create(&repo_root, CapabilityType::Skill, &id, &agent)
+            }
+            CreateCommand::Tool { id, agent } => {
+                cmd_create(&repo_root, CapabilityType::Tool, &id, &agent)
+            }
+            CreateCommand::Hook { id, agent } => {
+                cmd_create(&repo_root, CapabilityType::Hook, &id, &agent)
+            }
             CreateCommand::Workflow { id, agent } => {
                 cmd_create(&repo_root, CapabilityType::Workflow, &id, &agent)
             }
@@ -366,6 +375,7 @@ fn run() -> Result<()> {
                 None,
                 &agent,
                 global,
+                None,
             ),
             Some(AddCommand::Skill {
                 source: typed_source,
@@ -381,6 +391,7 @@ fn run() -> Result<()> {
                     Some("skill"),
                     &typed_agent,
                     typed_global,
+                    None,
                 )
             }
             Some(AddCommand::Tool {
@@ -397,11 +408,13 @@ fn run() -> Result<()> {
                     Some("tool"),
                     &typed_agent,
                     typed_global,
+                    None,
                 )
             }
             Some(AddCommand::Hook {
                 source: typed_source,
                 name: typed_name,
+                hook_file,
                 agent: typed_agent,
                 global: typed_global,
             }) => {
@@ -413,6 +426,7 @@ fn run() -> Result<()> {
                     Some("hook"),
                     &typed_agent,
                     typed_global,
+                    hook_file.as_deref(),
                 )
             }
             Some(AddCommand::Workflow {
@@ -429,6 +443,7 @@ fn run() -> Result<()> {
                     Some("workflow"),
                     &typed_agent,
                     typed_global,
+                    None,
                 )
             }
         },

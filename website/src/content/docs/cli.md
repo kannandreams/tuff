@@ -139,12 +139,19 @@ coral add skill https://github.com/owner/repo rust-implement --agent open-agents
 Use the same structure for a tool, hook, or workflow by replacing `skill` with
 the corresponding capability type.
 
+For harness-native hooks, pass the hook fragment explicitly:
+
+```sh frame="terminal"
+coral add hook ./claude-session-start --agent claude --hook-file settings.json
+```
+
 #### Flags
 
 | Flag | Description |
 |---|---|
 | `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
 | `-g, --global` | Install to global scope (`~/.coral/`) |
+| `--hook-file <path>` | Hook-only native settings fragment, relative to the hook source directory |
 
 The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
 `workflow`) rather than a `--type` flag. For a typed local source, the name is
