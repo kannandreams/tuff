@@ -72,11 +72,25 @@ fn cmd_add_git(
         name.ok_or_else(|| CoralError::new("--name is required when installing from a git URL"))?;
 
     let (cache_dir, clean_url) = git::clone_or_fetch(url)?;
+    let source_path = git::source_subdirectory(url);
     let commit_sha = git::resolve_ref(&cache_dir)?;
     let cap_type = capability_type
         .and_then(CapabilityType::from_str)
         .unwrap_or(CapabilityType::Skill);
-    let skill_dir = git::discover_capability(&cache_dir, name, cap_type)?;
+    let skill_dir = if let Some(path) = source_path.as_deref() {
+        crate::tool::check_path_traversal(path)?;
+        let path = cache_dir.join(path);
+        if !path.is_dir() {
+            return Err(CoralError::new(format!(
+                "capability directory not found in repository: {}",
+                path.display()
+            )));
+        }
+        path
+    } else {
+        git::discover_capability(&cache_dir, name, cap_type)?
+    };
+    let source_skill = source_path.as_deref().unwrap_or(name);
 
     let manifest = if cap_type == CapabilityType::Hook && hook_file.is_some() {
         synthetic_local_manifest(&skill_dir, Some(cap_type))?
@@ -105,7 +119,7 @@ fn cmd_add_git(
             source_type: "git".to_string(),
             url: clean_url,
             source_ref: commit_sha,
-            skill: name.to_string(),
+            skill: source_skill.to_string(),
         }),
     )
 }
@@ -250,7 +264,7 @@ fn resolve_native_hook_capability(
     crate::tool::check_path_traversal(&hook_rel)?;
 
     let fragment: serde_json::Value = serde_json::from_str(&fs::read_to_string(&hook_path)?)?;
-    let source_files = collect_native_hook_source_files(capability_dir, &hook_path)?;
+    let source_files = collect_native_hook_source_files(capability_dir, &hook_path, &id)?;
 
     Ok(adapter::ResolvedCapability {
         id,
@@ -271,9 +285,16 @@ fn resolve_native_hook_capability(
 fn collect_native_hook_source_files(
     capability_dir: &Path,
     hook_path: &Path,
+    capability_id: &str,
 ) -> Result<Vec<(String, Vec<u8>)>> {
     let mut files = Vec::new();
-    collect_native_hook_source_files_inner(capability_dir, capability_dir, hook_path, &mut files)?;
+    collect_native_hook_source_files_inner(
+        capability_dir,
+        capability_dir,
+        hook_path,
+        capability_id,
+        &mut files,
+    )?;
     files.sort_by(|left, right| left.0.cmp(&right.0));
     if files.is_empty() {
         eprintln!(
@@ -287,13 +308,14 @@ fn collect_native_hook_source_files_inner(
     root: &Path,
     current: &Path,
     hook_path: &Path,
+    capability_id: &str,
     files: &mut Vec<(String, Vec<u8>)>,
 ) -> Result<()> {
     for entry in fs::read_dir(current)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            collect_native_hook_source_files_inner(root, &path, hook_path, files)?;
+            collect_native_hook_source_files_inner(root, &path, hook_path, capability_id, files)?;
             continue;
         }
         if !path.is_file() || same_file_path(&path, hook_path) {
@@ -308,9 +330,32 @@ fn collect_native_hook_source_files_inner(
         if rel == "coral.toml" {
             continue;
         }
+        let Some(rel) = normalize_native_hook_path(&rel, capability_id) else {
+            continue;
+        };
         files.push((rel, fs::read(&path)?));
     }
     Ok(())
+}
+
+fn normalize_native_hook_path(path: &str, capability_id: &str) -> Option<String> {
+    const SOURCE_HOOK_ROOTS: &[&str] = &[
+        ".codex/hooks/",
+        ".claude/hooks/",
+        ".agents/hooks/",
+        "hooks/",
+    ];
+
+    SOURCE_HOOK_ROOTS
+        .iter()
+        .find_map(|prefix| path.strip_prefix(prefix).map(str::to_string))
+        .or_else(|| Some(path.to_string()))
+        .map(|path| {
+            path.strip_prefix(&format!("{capability_id}/"))
+                .unwrap_or(&path)
+                .to_string()
+        })
+        .filter(|path| !path.is_empty())
 }
 
 fn same_file_path(left: &Path, right: &Path) -> bool {
@@ -387,6 +432,7 @@ fn adopt_capability_in_place(
         inferred_target.to_string(),
         lockfile::TargetLockEntry {
             emitted_files,
+            managed_hooks: Vec::new(),
             ownership: lockfile::TargetOwnership::Imported,
         },
     );
@@ -496,6 +542,40 @@ pub(crate) fn install_capability(
 
     for (adapter, planned_files) in &plans {
         let mut emitted = Vec::new();
+        let mut managed_hooks = Vec::new();
+
+        if let CapabilityKind::Hook { hook } = &capability.kind {
+            let hook_root = install_root
+                .join(adapter.dir_prefix())
+                .join("hooks")
+                .join(&capability.id);
+            let hook_root_rel = lockfile::relative_or_absolute_fs(&hook_root, install_root);
+            let fragment = match hook {
+                HookDefinition::Native(native) => {
+                    adapter::replace_hook_dir_placeholder(native.fragment.clone(), &hook_root_rel)
+                }
+                HookDefinition::Command(hook_cfg) => serde_json::json!({
+                    "hooks": {
+                        hook_cfg.event.clone(): [{
+                            "hooks": [{
+                                "type": "command",
+                                "command": format!(
+                                    "sh {}/hooks/{}/run.sh",
+                                    adapter.dir_prefix(), capability.id
+                                )
+                            }]
+                        }]
+                    }
+                }),
+            };
+            let settings_path = if *adapter == AdapterKind::Claude {
+                crate::adapters::claude::SETTINGS_RELPATH
+            } else {
+                crate::adapters::open_agents::HOOK_SETTINGS_RELPATH
+            };
+            managed_hooks =
+                lockfile::managed_hooks_from_fragment(install_root, settings_path, &fragment)?;
+        }
 
         for planned in planned_files {
             let target_path = install_root.join(&planned.path);
@@ -505,11 +585,16 @@ pub(crate) fn install_capability(
             std::fs::write(&target_path, &planned.content)?;
 
             let hash = lockfile::hash_bytes(&planned.content);
-            emitted.push(adapter::EmittedFile {
-                path: planned.path.clone(),
-                hash,
-                baseline_hash: lockfile::write_baseline_object(install_root, &planned.content)?,
-            });
+            let shared_settings = managed_hooks
+                .iter()
+                .any(|hook| hook.settings_path == planned.path);
+            if !shared_settings {
+                emitted.push(adapter::EmittedFile {
+                    path: planned.path.clone(),
+                    hash,
+                    baseline_hash: lockfile::write_baseline_object(install_root, &planned.content)?,
+                });
+            }
 
             if should_print_installed_file(capability, planned) {
                 println!(
@@ -525,6 +610,7 @@ pub(crate) fn install_capability(
             adapter.id().to_string(),
             TargetLockEntry {
                 emitted_files: emitted,
+                managed_hooks,
                 ownership: target_ownership_for(capability, install_root, *adapter),
             },
         );
@@ -649,4 +735,33 @@ fn is_path_under(path: &Path, root: &Path) -> bool {
     let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     canonical_path.starts_with(canonical_root)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_native_hook_path;
+
+    #[test]
+    fn native_hook_paths_strip_source_harness_roots() {
+        assert_eq!(
+            normalize_native_hook_path(".codex/hooks/change-logger/run.sh", "change-logger"),
+            Some("run.sh".to_string())
+        );
+        assert_eq!(
+            normalize_native_hook_path(".claude/hooks/run.sh", "change-logger"),
+            Some("run.sh".to_string())
+        );
+        assert_eq!(
+            normalize_native_hook_path("hooks/run.sh", "change-logger"),
+            Some("run.sh".to_string())
+        );
+    }
+
+    #[test]
+    fn native_hook_paths_preserve_runtime_paths() {
+        assert_eq!(
+            normalize_native_hook_path("config/change-logger.json", "change-logger"),
+            Some("config/change-logger.json".to_string())
+        );
+    }
 }

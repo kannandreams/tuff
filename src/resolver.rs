@@ -58,14 +58,16 @@ pub fn resolve_entry(
     repo_root: &Path,
 ) -> Result<Option<(Scope, lockfile::CapabilityLockEntry)>> {
     if let Some(project_lf) = read_lockfile(Scope::Project, Some(repo_root))?
-        && let Some(entry) = project_lf.capabilities.get(id) {
-            return Ok(Some((Scope::Project, entry.clone())));
-        }
+        && let Some(entry) = project_lf.capabilities.get(id)
+    {
+        return Ok(Some((Scope::Project, entry.clone())));
+    }
 
     if let Some(global_lf) = read_lockfile(Scope::Global, None)?
-        && let Some(entry) = global_lf.capabilities.get(id) {
-            return Ok(Some((Scope::Global, entry.clone())));
-        }
+        && let Some(entry) = global_lf.capabilities.get(id)
+    {
+        return Ok(Some((Scope::Global, entry.clone())));
+    }
 
     Ok(None)
 }
@@ -143,8 +145,7 @@ mod tests {
             capabilities: std::collections::BTreeMap::new(),
         };
         for (id, capability_type, version) in entries {
-            let ct = CapabilityType::from_str(capability_type)
-                .unwrap_or(CapabilityType::Skill);
+            let ct = CapabilityType::from_str(capability_type).unwrap_or(CapabilityType::Skill);
             lf.capabilities.insert(
                 id.to_string(),
                 lockfile::CapabilityLockEntry {

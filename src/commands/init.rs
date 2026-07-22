@@ -67,6 +67,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                         hash,
                         baseline_hash,
                     }],
+                    managed_hooks: Vec::new(),
                     ownership: lockfile::TargetOwnership::Generated,
                 },
             );

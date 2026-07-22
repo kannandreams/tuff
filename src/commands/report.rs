@@ -75,9 +75,7 @@ pub fn cmd_generate_report(repo_root: &Path, output: Option<&Path>) -> Result<()
 }
 
 fn default_index_path(repo_root: &Path, adapter: AdapterKind) -> PathBuf {
-    repo_root
-        .join(adapter.dir_prefix())
-        .join("CAPABILITIES.md")
+    repo_root.join(adapter.dir_prefix()).join("CAPABILITIES.md")
 }
 
 fn write_generated_file(path: &Path, content: &str) -> Result<()> {

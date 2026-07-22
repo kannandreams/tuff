@@ -1,6 +1,119 @@
 {
-  "version": 2,
+  "version": 3,
   "capabilities": {
+    "change-logger": {
+      "type": "hook",
+      "installedVersion": "9f954c3b63fda0d1875252009c196bf15072c1ca",
+      "description": "Added from native hook fragment.",
+      "sourcePath": "",
+      "targets": {
+        "open-agents": {
+          "emittedFiles": [
+            {
+              "path": ".agents/hooks/change-logger/README.md",
+              "hash": "ff29d693017e5c38860add0b5ce9f2fd923f89bb616ba594d72f1bacc717e9ac",
+              "baselineHash": "ff29d693017e5c38860add0b5ce9f2fd923f89bb616ba594d72f1bacc717e9ac"
+            },
+            {
+              "path": ".agents/hooks/change-logger/_shared/run-with-hook-env.sh",
+              "hash": "e831c90ecd13096b3c11886371871c7f3132d1cf218b0238ae3b118df7fa6be3",
+              "baselineHash": "e831c90ecd13096b3c11886371871c7f3132d1cf218b0238ae3b118df7fa6be3"
+            },
+            {
+              "path": ".agents/hooks/change-logger/automation-change-logger-posttooluse-posttooluse-1-1.sh",
+              "hash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f",
+              "baselineHash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f"
+            },
+            {
+              "path": ".agents/hooks/change-logger/automation-change-logger-posttooluse-posttooluse-2-1.sh",
+              "hash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f",
+              "baselineHash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f"
+            },
+            {
+              "path": ".agents/hooks/change-logger/automation-change-logger-posttooluse-posttooluse-3-1.sh",
+              "hash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f",
+              "baselineHash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f"
+            },
+            {
+              "path": ".agents/hooks/change-logger/automation-change-logger-posttooluse-posttooluse-4-1.sh",
+              "hash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f",
+              "baselineHash": "c802cf879850c0ed0f0732604428181c2cc74e0c38c0832f56de785c80c0a80f"
+            },
+            {
+              "path": ".agents/hooks/change-logger/bundle.json",
+              "hash": "3e809afe9c65fa02615189b510383fd5a457d35fbe16de7575991ed2280d7ae7",
+              "baselineHash": "3e809afe9c65fa02615189b510383fd5a457d35fbe16de7575991ed2280d7ae7"
+            },
+            {
+              "path": ".agents/hooks/change-logger/change-logger.py",
+              "hash": "7aa3a9e1b59357f352fbc67ffa0db80684c13d46286b7e35d90f0668bcba8e38",
+              "baselineHash": "7aa3a9e1b59357f352fbc67ffa0db80684c13d46286b7e35d90f0668bcba8e38"
+            }
+          ],
+          "managedHooks": [
+            {
+              "settingsPath": ".agents/hook.json",
+              "event": "PostToolUse",
+              "command": "./.codex/hooks/automation-change-logger-posttooluse-posttooluse-1-1.sh",
+              "baselineHash": "8b04bd3c9a7ba8eb2d5031eee8f5392a487f10ca42a5ec4278ae35c3a4c18220"
+            },
+            {
+              "settingsPath": ".agents/hook.json",
+              "event": "PostToolUse",
+              "command": "./.codex/hooks/automation-change-logger-posttooluse-posttooluse-2-1.sh",
+              "baselineHash": "0353964c7e32962e09437a34b50f4a22558932cec4bac4d8e320ad9d9a1c2c53"
+            },
+            {
+              "settingsPath": ".agents/hook.json",
+              "event": "PostToolUse",
+              "command": "./.codex/hooks/automation-change-logger-posttooluse-posttooluse-3-1.sh",
+              "baselineHash": "ed89dd3e169f84abd924e851bbad0743b94c916c321f69d0d30072fce7fc658c"
+            },
+            {
+              "settingsPath": ".agents/hook.json",
+              "event": "PostToolUse",
+              "command": "./.codex/hooks/automation-change-logger-posttooluse-posttooluse-4-1.sh",
+              "baselineHash": "2ee3567f024a8cfa2ca32aa46a42d737ecc362c0bd131657d8b8a0180db205fc"
+            }
+          ],
+          "ownership": "generated"
+        }
+      },
+      "source": {
+        "type": "git",
+        "url": "https://github.com/am-will/codex-skills",
+        "ref": "9f954c3b63fda0d1875252009c196bf15072c1ca",
+        "skill": "hooks/aitmpl-codex/automation/change-logger"
+      },
+      "scope": "project"
+    },
+    "claude-session-start": {
+      "type": "hook",
+      "installedVersion": "0.1.0",
+      "description": "Added from native hook fragment.",
+      "sourcePath": "examples/hooks/claude-session-start",
+      "targets": {
+        "claude": {
+          "emittedFiles": [
+            {
+              "path": ".claude/hooks/claude-session-start/session-start.sh",
+              "hash": "5b463d9fc16ba2fb47797e249d9830849cf6bc699548461f752434b9cdea5c6a",
+              "baselineHash": "5b463d9fc16ba2fb47797e249d9830849cf6bc699548461f752434b9cdea5c6a"
+            }
+          ],
+          "managedHooks": [
+            {
+              "settingsPath": ".claude/settings.json",
+              "event": "SessionStart",
+              "command": "sh .claude/hooks/claude-session-start/session-start.sh",
+              "baselineHash": "575daaef12b57b7505569592a4b15f6a8d48f3752dbbcb54832e3318c108146d"
+            }
+          ],
+          "ownership": "generated"
+        }
+      },
+      "scope": "project"
+    },
     "cli-first-tool-design": {
       "type": "skill",
       "installedVersion": "0.1.0",
