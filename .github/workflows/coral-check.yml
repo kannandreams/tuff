@@ -18,10 +18,10 @@ jobs:
           toolchain: stable
 
       - name: Build coral
-        run: cargo build --release
+        run: cargo build -p coral --release
 
       - name: Run tests
         run: cargo test
 
       - name: Validate capabilities
-        run: cargo run -- check --json
+        run: cargo run -p coral -- check --json

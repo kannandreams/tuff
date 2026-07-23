@@ -1,4 +1,4 @@
-const CORAL_WORDMARK_ASCII: &str = include_str!("../assets/coral-alien-block.txt");
+const CORAL_WORDMARK_ASCII: &str = include_str!("../../../assets/coral-alien-block.txt");
 
 const WORDMARK_GRADIENT: [(f64, (u8, u8, u8)); 5] = [
     (0.00, (255, 128, 0)),

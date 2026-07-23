@@ -4,8 +4,9 @@ use coral_hooks_spec::{
     CompatibilityEntry, CompatibilityMatrix, CoverageLevel, HookEvent, SPEC_VERSION,
 };
 
-use crate::manifest::CapabilityType;
-use crate::{
+use coral_core::adapter::AgentAdapter;
+use coral_core::manifest::{CapabilityType, HookConfig};
+use coral_core::{
     error::{CoralError, Result},
     lockfile,
 };
@@ -13,6 +14,7 @@ use crate::{
 pub const ID: &str = "claude";
 pub const DISPLAY_NAME: &str = "Claude";
 pub const SETTINGS_RELPATH: &str = ".claude/settings.json";
+pub struct Claude;
 pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::Skill,
     CapabilityType::Tool,
@@ -250,6 +252,86 @@ fn validate_hook_fragment(fragment: &serde_json::Value) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+impl AgentAdapter for Claude {
+    fn id(&self) -> &'static str {
+        ID
+    }
+
+    fn display_name(&self) -> &'static str {
+        DISPLAY_NAME
+    }
+
+    fn dir_prefix(&self) -> &'static str {
+        ".claude"
+    }
+
+    fn mcp_config_relpath(&self) -> &'static str {
+        ".mcp.json"
+    }
+
+    fn supported_agents(&self) -> &[&'static str] {
+        SUPPORTED_AGENTS
+    }
+
+    fn kinds_supported(&self) -> &[CapabilityType] {
+        SUPPORTED_TYPES
+    }
+
+    fn hook_compatibility(&self) -> &'static CompatibilityMatrix {
+        &HOOK_COMPATIBILITY
+    }
+
+    fn hook_settings_relpath(&self) -> &'static str {
+        SETTINGS_RELPATH
+    }
+
+    fn scaffold_hook_event(&self) -> &'static str {
+        "SessionStart"
+    }
+
+    fn hook_filename(&self) -> &'static str {
+        "run.sh"
+    }
+
+    fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>> {
+        Ok(format!(
+            "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
+            hook_cfg.working_directory, hook_cfg.command
+        )
+        .into_bytes())
+    }
+
+    fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value {
+        serde_json::json!({
+            "hooks": {
+                native_event: [{
+                    "hooks": [{"type": "command", "command": command}]
+                }]
+            }
+        })
+    }
+
+    fn merge_hook_fragment(
+        &self,
+        existing: Option<&[u8]>,
+        fragment: &serde_json::Value,
+    ) -> Result<Vec<u8>> {
+        merge_hook_fragment(existing, fragment)
+    }
+
+    fn remove_hook_settings(
+        &self,
+        repo_root: &Path,
+        managed_hooks: &[lockfile::ManagedHook],
+    ) -> Result<()> {
+        remove_hook_settings(repo_root, managed_hooks)
+    }
+
+    fn detect(&self, repo_root: &Path) -> bool {
+        detect(repo_root)
+    }
 }
 
 #[cfg(test)]

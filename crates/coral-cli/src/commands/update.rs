@@ -205,7 +205,7 @@ pub fn cmd_update(
     force: bool,
 ) -> Result<()> {
     let (scope, entry, scope_root) = if let Some(s) = scope_str {
-        let scope = resolver::Scope::from_str(s)
+        let scope = resolver::Scope::parse(s)
             .ok_or_else(|| CoralError::new(format!("invalid scope '{}'", s)))?;
         let root = match scope {
             Scope::Project => repo_root.to_path_buf(),

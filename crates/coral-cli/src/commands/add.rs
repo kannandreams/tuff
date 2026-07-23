@@ -79,7 +79,7 @@ fn cmd_add_git(
     let source_path = git::source_subdirectory(url);
     let commit_sha = git::resolve_ref(&cache_dir)?;
     let cap_type = capability_type
-        .and_then(CapabilityType::from_str)
+        .and_then(CapabilityType::parse)
         .unwrap_or(CapabilityType::Skill);
     let skill_dir = if let Some(path) = source_path.as_deref() {
         crate::tool::check_path_traversal(path)?;
@@ -145,7 +145,7 @@ fn cmd_add_local(
     hook_file: Option<&Path>,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability_path);
-    let parsed_type = capability_type.and_then(CapabilityType::from_str);
+    let parsed_type = capability_type.and_then(CapabilityType::parse);
     let inferred = infer_from_path(&capability_dir);
     let resolved_type = parsed_type.or(Some(inferred.0));
     let manifest = load_or_synthetic_manifest(&capability_dir, resolved_type)?;
@@ -561,25 +561,12 @@ pub(crate) fn install_capability(
                 HookDefinition::Native(native) => {
                     adapter::replace_hook_dir_placeholder(native.fragment.clone(), &hook_root_rel)
                 }
-                HookDefinition::Command(hook_cfg) => serde_json::json!({
-                    "hooks": {
-                        (adapter.native_hook_event(&hook_cfg.event)?): [{
-                            "hooks": [{
-                                "type": "command",
-                                "command": format!(
-                                    "sh {}/hooks/{}/run.sh",
-                                    adapter.dir_prefix(), capability.id
-                                )
-                            }]
-                        }]
-                    }
-                }),
+                HookDefinition::Command(hook_cfg) => adapter.command_hook_fragment(
+                    adapter.native_hook_event(&hook_cfg.event)?,
+                    &format!("sh {}/hooks/{}/run.sh", adapter.dir_prefix(), capability.id),
+                ),
             };
-            let settings_path = if *adapter == AdapterKind::Claude {
-                crate::adapters::claude::SETTINGS_RELPATH
-            } else {
-                crate::adapters::open_agents::HOOK_SETTINGS_RELPATH
-            };
+            let settings_path = adapter.hook_settings_relpath();
             managed_hooks =
                 lockfile::managed_hooks_from_fragment(install_root, settings_path, &fragment)?;
         }

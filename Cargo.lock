@@ -184,13 +184,64 @@ version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "clap",
+ "coral-adapter-claude",
+ "coral-adapter-codex",
+ "coral-adapter-cursor",
+ "coral-adapter-open-agents",
+ "coral-core",
  "coral-hooks-spec",
- "git2",
  "predicates",
  "serde",
  "serde_json",
- "sha2",
  "tabled",
+ "tempfile",
+]
+
+[[package]]
+name = "coral-adapter-claude"
+version = "0.1.0"
+dependencies = [
+ "coral-core",
+ "coral-hooks-spec",
+ "serde_json",
+]
+
+[[package]]
+name = "coral-adapter-codex"
+version = "0.1.0"
+dependencies = [
+ "coral-core",
+ "coral-hooks-spec",
+ "serde_json",
+]
+
+[[package]]
+name = "coral-adapter-cursor"
+version = "0.1.0"
+dependencies = [
+ "coral-core",
+ "coral-hooks-spec",
+ "serde_json",
+]
+
+[[package]]
+name = "coral-adapter-open-agents"
+version = "0.1.0"
+dependencies = [
+ "coral-core",
+ "coral-hooks-spec",
+ "serde_json",
+]
+
+[[package]]
+name = "coral-core"
+version = "0.1.0"
+dependencies = [
+ "coral-hooks-spec",
+ "git2",
+ "serde",
+ "serde_json",
+ "sha2",
  "tempfile",
  "toml",
  "url",

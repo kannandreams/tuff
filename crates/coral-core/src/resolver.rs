@@ -17,7 +17,7 @@ impl Scope {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "project" => Some(Self::Project),
             "global" => Some(Self::Global),
@@ -136,7 +136,7 @@ mod tests {
             capabilities: std::collections::BTreeMap::new(),
         };
         for (id, capability_type, version) in entries {
-            let ct = CapabilityType::from_str(capability_type).unwrap_or(CapabilityType::Skill);
+            let ct = CapabilityType::parse(capability_type).unwrap_or(CapabilityType::Skill);
             lf.capabilities.insert(
                 id.to_string(),
                 lockfile::CapabilityLockEntry {
@@ -164,9 +164,9 @@ mod tests {
 
     #[test]
     fn scope_from_str_valid() {
-        assert_eq!(Scope::from_str("project"), Some(Scope::Project));
-        assert_eq!(Scope::from_str("global"), Some(Scope::Global));
-        assert_eq!(Scope::from_str("invalid"), None);
+        assert_eq!(Scope::parse("project"), Some(Scope::Project));
+        assert_eq!(Scope::parse("global"), Some(Scope::Global));
+        assert_eq!(Scope::parse("invalid"), None);
     }
 
     #[test]

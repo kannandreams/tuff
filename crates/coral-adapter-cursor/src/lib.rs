@@ -4,14 +4,15 @@ use coral_hooks_spec::{
     CompatibilityEntry, CompatibilityMatrix, CoverageLevel, HookEvent, SPEC_VERSION,
 };
 
-use crate::manifest::CapabilityType;
-use crate::{
+use coral_core::adapter::AgentAdapter;
+use coral_core::manifest::{CapabilityType, HookConfig};
+use coral_core::{
     error::{CoralError, Result},
     lockfile,
 };
 
-pub const ID: &str = "open-agents";
-pub const DISPLAY_NAME: &str = "Open Agents";
+pub const ID: &str = "cursor";
+pub const DISPLAY_NAME: &str = "Cursor";
 pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::Skill,
     CapabilityType::Tool,
@@ -19,97 +20,90 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::Workflow,
 ];
 
-pub const SUPPORTED_AGENTS: &[&str] = &[
-    "Codex",
-    "Cursor",
-    "OpenCode",
-    "GitHub Copilot",
-    "Gemini CLI",
-    "Roo",
-    "Cline",
-    "Windsurf",
-];
+pub const SUPPORTED_AGENTS: &[&str] = &["Cursor"];
 
-pub const HOOK_SETTINGS_RELPATH: &str = ".agents/hook.json";
+pub const HOOK_SETTINGS_RELPATH: &str = ".cursor/hooks.json";
+
+pub struct Cursor;
 
 pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
     spec_version: SPEC_VERSION,
     adapter: ID,
     events: &[
         CompatibilityEntry {
-            event: HookEvent::BeforeFinish,
-            native_event: Some("before_finish"),
-            aliases: &[],
-            coverage: CoverageLevel::Full,
-            scope: &[],
-            caveat: None,
-            source: None,
-            since_harness_version: None,
-            until_harness_version: None,
-        },
-        CompatibilityEntry {
-            event: HookEvent::AfterSave,
-            native_event: Some("after_save"),
-            aliases: &[],
-            coverage: CoverageLevel::Full,
-            scope: &[],
-            caveat: None,
-            source: None,
-            since_harness_version: None,
-            until_harness_version: None,
-        },
-        CompatibilityEntry {
-            event: HookEvent::PreToolUse,
-            native_event: Some("pre_tool_execution"),
-            aliases: &["pre_tool_execution"],
-            coverage: CoverageLevel::Partial,
-            scope: &["local function tools", "Bash", "Edit", "Write", "MCP"],
-            caveat: Some("Codex hosted tools do not use the local function-tool hook path."),
-            source: Some("https://learn.chatgpt.com/docs/hooks.md"),
-            since_harness_version: None,
-            until_harness_version: None,
-        },
-        CompatibilityEntry {
-            event: HookEvent::PostToolUse,
-            native_event: Some("post_tool_execution"),
-            aliases: &["post_tool_execution"],
-            coverage: CoverageLevel::Partial,
-            scope: &["local function tools", "Bash", "Edit", "Write", "MCP"],
-            caveat: Some("Codex hosted tools do not use the local function-tool hook path."),
-            source: Some("https://learn.chatgpt.com/docs/hooks.md"),
-            since_harness_version: None,
-            until_harness_version: None,
-        },
-        CompatibilityEntry {
             event: HookEvent::SessionStart,
-            native_event: None,
+            native_event: Some("sessionStart"),
             aliases: &[],
-            coverage: CoverageLevel::Unsupported,
+            coverage: CoverageLevel::Full,
             scope: &[],
-            caveat: Some("Open Agents hook.json does not currently define a session-start event."),
-            source: None,
+            caveat: None,
+            source: Some("https://cursor.com/blog/agent-best-practices"),
             since_harness_version: None,
             until_harness_version: None,
         },
         CompatibilityEntry {
             event: HookEvent::SessionEnd,
+            native_event: Some("sessionEnd"),
+            aliases: &[],
+            coverage: CoverageLevel::Full,
+            scope: &["session lifecycle"],
+            caveat: None,
+            source: Some("https://cursor.com/blog/agent-best-practices"),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::PreToolUse,
+            native_event: Some("preToolUse"),
+            aliases: &[],
+            coverage: CoverageLevel::Full,
+            scope: &["agent tool calls"],
+            caveat: Some("A native matcher can narrow the tools that receive the hook."),
+            source: Some("https://cursor.com/blog/agent-best-practices"),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::PostToolUse,
+            native_event: Some("postToolUse"),
+            aliases: &[],
+            coverage: CoverageLevel::Full,
+            scope: &["agent tool calls"],
+            caveat: Some("A native matcher can narrow the tools that receive the hook."),
+            source: Some("https://cursor.com/blog/agent-best-practices"),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::AfterSave,
             native_event: None,
             aliases: &[],
             coverage: CoverageLevel::Unsupported,
             scope: &[],
-            caveat: Some("Open Agents hook.json does not currently define a session-end event."),
+            caveat: Some("Cursor does not expose a direct after-save hook in this adapter."),
             source: None,
             since_harness_version: None,
             until_harness_version: None,
         },
         CompatibilityEntry {
+            event: HookEvent::BeforeFinish,
+            native_event: Some("stop"),
+            aliases: &["stop"],
+            coverage: CoverageLevel::Partial,
+            scope: &["agent completion"],
+            caveat: Some("Cursor stop can request continuation rather than block a prior action."),
+            source: Some("https://cursor.com/blog/agent-best-practices"),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
             event: HookEvent::Stop,
-            native_event: None,
+            native_event: Some("stop"),
             aliases: &[],
-            coverage: CoverageLevel::Unsupported,
-            scope: &[],
-            caveat: Some("Open Agents hook.json does not currently define a stop event."),
-            source: None,
+            coverage: CoverageLevel::Full,
+            scope: &["agent completion"],
+            caveat: None,
+            source: Some("https://cursor.com/blog/agent-best-practices"),
             since_harness_version: None,
             until_harness_version: None,
         },
@@ -117,7 +111,7 @@ pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
 };
 
 pub fn detect(repo_root: &Path) -> bool {
-    repo_root.join(".agents").join("skills").exists()
+    repo_root.join(".cursor").exists()
 }
 
 pub fn merge_hook_fragment(
@@ -127,11 +121,14 @@ pub fn merge_hook_fragment(
     validate_hook_fragment(fragment)?;
     let mut settings = match existing {
         Some(bytes) if !bytes.is_empty() => serde_json::from_slice(bytes)?,
-        _ => serde_json::json!({}),
+        _ => serde_json::json!({"version": 1}),
     };
     let settings_obj = settings
         .as_object_mut()
-        .ok_or_else(|| CoralError::new(".agents/hook.json must be a JSON object"))?;
+        .ok_or_else(|| CoralError::new(".cursor/hooks.json must be a JSON object"))?;
+    settings_obj
+        .entry("version")
+        .or_insert_with(|| serde_json::json!(1));
     let fragment_hooks = fragment["hooks"]
         .as_object()
         .expect("validated hooks object");
@@ -149,7 +146,7 @@ pub fn merge_hook_fragment(
             .or_insert_with(|| serde_json::json!([]))
             .as_array_mut()
             .ok_or_else(|| {
-                CoralError::new(format!(".agents/hook.json hooks.{event} must be an array"))
+                CoralError::new(format!(".cursor/hooks.json hooks.{event} must be an array"))
             })?
             .extend(additions.iter().cloned());
     }
@@ -182,24 +179,11 @@ pub fn remove_hook_settings(
                 .iter()
                 .filter(|hook| hook.settings_path == HOOK_SETTINGS_RELPATH && hook.event == *event)
                 .collect();
-            for group in groups.iter_mut() {
-                if let Some(entries) = group
-                    .get_mut("hooks")
-                    .and_then(|value| value.as_array_mut())
-                {
-                    entries.retain(|entry| {
-                        !registrations.iter().any(|hook| {
-                            entry.get("command").and_then(serde_json::Value::as_str)
-                                == Some(hook.command.as_str())
-                        })
-                    });
-                }
-            }
             groups.retain(|group| {
-                group
-                    .get("hooks")
-                    .and_then(|value| value.as_array())
-                    .is_none_or(|entries| !entries.is_empty())
+                !registrations.iter().any(|hook| {
+                    group.get("command").and_then(serde_json::Value::as_str)
+                        == Some(hook.command.as_str())
+                })
             });
             if groups.is_empty() {
                 empty_events.push(event.clone());
@@ -214,7 +198,7 @@ pub fn remove_hook_settings(
         serde_json::to_string_pretty(&settings)? + "\n",
     )?;
     eprintln!(
-        "updated Open Agents hook settings -> {}",
+        "updated Cursor hook settings -> {}",
         lockfile::relative_or_absolute_fs(&settings_path, repo_root)
     );
     Ok(())
@@ -224,8 +208,10 @@ fn validate_hook_fragment(fragment: &serde_json::Value) -> Result<()> {
     let obj = fragment
         .as_object()
         .ok_or_else(|| CoralError::new("--hook-file fragment must be a JSON object"))?;
-    if !obj.contains_key("hooks") || obj.keys().any(|key| key != "hooks") {
-        return Err(CoralError::new("--hook-file must be a hooks-only fragment"));
+    if !obj.contains_key("hooks") || obj.keys().any(|key| key != "hooks" && key != "version") {
+        return Err(CoralError::new(
+            "--hook-file must contain only 'hooks' and optional 'version'",
+        ));
     }
     if !fragment["hooks"].is_object() {
         return Err(CoralError::new(
@@ -233,6 +219,80 @@ fn validate_hook_fragment(fragment: &serde_json::Value) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+impl AgentAdapter for Cursor {
+    fn id(&self) -> &'static str {
+        ID
+    }
+
+    fn display_name(&self) -> &'static str {
+        DISPLAY_NAME
+    }
+
+    fn dir_prefix(&self) -> &'static str {
+        ".cursor"
+    }
+
+    fn mcp_config_relpath(&self) -> &'static str {
+        ".cursor/mcp.json"
+    }
+
+    fn supported_agents(&self) -> &[&'static str] {
+        SUPPORTED_AGENTS
+    }
+
+    fn kinds_supported(&self) -> &[CapabilityType] {
+        SUPPORTED_TYPES
+    }
+
+    fn hook_compatibility(&self) -> &'static CompatibilityMatrix {
+        &HOOK_COMPATIBILITY
+    }
+
+    fn hook_settings_relpath(&self) -> &'static str {
+        HOOK_SETTINGS_RELPATH
+    }
+
+    fn scaffold_hook_event(&self) -> &'static str {
+        "sessionStart"
+    }
+
+    fn hook_filename(&self) -> &'static str {
+        "run.sh"
+    }
+
+    fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>> {
+        Ok(format!(
+            "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
+            hook_cfg.working_directory, hook_cfg.command
+        )
+        .into_bytes())
+    }
+
+    fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value {
+        serde_json::json!({"version": 1, "hooks": {native_event: [{"command": command}]}})
+    }
+
+    fn merge_hook_fragment(
+        &self,
+        existing: Option<&[u8]>,
+        fragment: &serde_json::Value,
+    ) -> Result<Vec<u8>> {
+        merge_hook_fragment(existing, fragment)
+    }
+
+    fn remove_hook_settings(
+        &self,
+        repo_root: &Path,
+        managed_hooks: &[lockfile::ManagedHook],
+    ) -> Result<()> {
+        remove_hook_settings(repo_root, managed_hooks)
+    }
+
+    fn detect(&self, repo_root: &Path) -> bool {
+        detect(repo_root)
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,27 @@
+[package]
+name = "coral"
+version = "0.1.0"
+edition = "2024"
+description = "Capability lifecycle manager for coding agents."
+license = "MIT"
+
+[[bin]]
+name = "coral"
+path = "src/main.rs"
+
+[dependencies]
+coral-core = { path = "../coral-core" }
+coral-hooks-spec = { path = "../coral-hooks-spec" }
+coral-adapter-open-agents = { path = "../coral-adapter-open-agents" }
+coral-adapter-claude = { path = "../coral-adapter-claude" }
+coral-adapter-codex = { path = "../coral-adapter-codex" }
+coral-adapter-cursor = { path = "../coral-adapter-cursor" }
+clap = { version = "4.5.53", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tabled = "0.18"
+tempfile = "3.23.0"
+
+[dev-dependencies]
+assert_cmd = "2.1.1"
+predicates = "3.1.3"

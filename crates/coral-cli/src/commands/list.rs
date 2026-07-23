@@ -43,7 +43,7 @@ pub(crate) struct InventoryRow {
 }
 
 pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>) -> Result<()> {
-    let kind_type = kind_filter.and_then(CapabilityType::from_str);
+    let kind_type = kind_filter.and_then(CapabilityType::parse);
 
     let show_project = scope_filter == "all" || scope_filter == "project";
     let show_global = scope_filter == "all" || scope_filter == "global";

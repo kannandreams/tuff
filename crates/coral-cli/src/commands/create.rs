@@ -3,7 +3,6 @@ use std::fs;
 use std::path::Path;
 
 use crate::adapter::{self, AdapterKind, AgentAdapter};
-use crate::adapters::{claude, open_agents};
 use crate::config;
 use crate::error::{CoralError, Result};
 use crate::lockfile::{self, TargetLockEntry};
@@ -89,10 +88,7 @@ pub fn cmd_create(
         }
 
         #[cfg(unix)]
-        if kind == CapabilityType::Tool
-            || (kind == CapabilityType::Hook
-                && (*adapter == AdapterKind::Claude || *adapter == AdapterKind::OpenAgents))
-        {
+        if kind == CapabilityType::Tool || kind == CapabilityType::Hook {
             use std::os::unix::fs::PermissionsExt;
             let run_sh = root.join("run.sh");
             let mut permissions = fs::metadata(&run_sh)?.permissions();
@@ -115,40 +111,20 @@ pub fn cmd_create(
             });
         }
 
-        if kind == CapabilityType::Hook
-            && (*adapter == AdapterKind::Claude || *adapter == AdapterKind::OpenAgents)
-        {
-            let settings_relpath = if *adapter == AdapterKind::Claude {
-                claude::SETTINGS_RELPATH
-            } else {
-                open_agents::HOOK_SETTINGS_RELPATH
-            };
+        if kind == CapabilityType::Hook {
+            let settings_relpath = adapter.hook_settings_relpath();
             let settings_path = repo_root.join(settings_relpath);
-            let event = if *adapter == AdapterKind::Claude {
-                "SessionStart"
-            } else {
-                "before_finish"
-            };
-            let fragment = serde_json::json!({
-                "hooks": {
-                    event: [{
-                        "hooks": [{
-                            "type": "command",
-                            "command": format!("sh {}/hooks/{id}/run.sh", adapter.dir_prefix())
-                        }]
-                    }]
-                }
-            });
+            let event = adapter.scaffold_hook_event();
+            let fragment = adapter.command_hook_fragment(
+                event,
+                &format!("sh {}/hooks/{id}/run.sh", adapter.dir_prefix()),
+            );
             let existing = if settings_path.is_file() {
                 Some(fs::read(&settings_path)?)
             } else {
                 None
             };
-            let merged = if *adapter == AdapterKind::Claude {
-                claude::merge_hook_fragment(existing.as_deref(), &fragment)?
-            } else {
-                open_agents::merge_hook_fragment(existing.as_deref(), &fragment)?
-            };
+            let merged = adapter.merge_hook_fragment(existing.as_deref(), &fragment)?;
             if let Some(parent) = settings_path.parent() {
                 fs::create_dir_all(parent)?;
             }

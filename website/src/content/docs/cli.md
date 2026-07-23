@@ -488,12 +488,14 @@ coral agent list --global
 ```sh frame="terminal"
 coral agent add open-agents
 coral agent add claude
+coral agent add codex
+coral agent add cursor
 ```
 
 Registering an agent also creates its project directory (`.agents/` or
 `.claude/`) if it does not already exist.
 
-Legacy aliases (`codex`, `claude-code`) are accepted and map to the current agent names.
+`claude-code` remains an alias for `claude`. `codex` and `cursor` are dedicated adapter IDs.
 
 The `REGISTERED` column shows which agents are available for Coral operations in
 the selected config. The `DEFAULT` column shows which registered agent is used

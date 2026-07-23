@@ -156,6 +156,18 @@ Manifest-style Coral-standard hooks can use canonical event names. Coral maps al
 | `pre_tool_execution` | Native rendering for canonical `pre_tool_use` |
 | `post_tool_execution` | Native rendering for canonical `post_tool_use` |
 
+### Codex (`codex`)
+
+Codex has a dedicated adapter and compatibility matrix even though it uses the `.agents/` output
+family. Its local function-tool coverage is reported separately from the generic Open Agents
+adapter.
+
+### Cursor (`cursor`)
+
+Cursor hooks are rendered into `.cursor/hooks.json` using native event names such as `sessionStart`,
+`preToolUse`, `postToolUse`, and `stop`. Cursor hook groups contain a direct `command` field rather
+than the nested `hooks` array used by Claude and Open Agents.
+
 ### Claude (`claude`)
 
 For native hook fragments, Coral reads the event names from the fragment and merges them into the
@@ -183,6 +195,8 @@ created and tracked hook 'review-hook' (open-agents) -> .agents/hook.json
 |---|---|---|
 | `open-agents` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Native JSON (development format) |
 | `claude` | `.claude/hooks/<id>/...` plus `.claude/settings.json` | Native Claude JSON |
+| `codex` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Codex hook JSON |
+| `cursor` | `.cursor/hooks/<id>/run.sh` plus `.cursor/hooks.json` | Cursor Hooks JSON |
 
 ## Filtering
 

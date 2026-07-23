@@ -8,7 +8,7 @@ use crate::resolver::{self, Scope};
 use super::{home_dir, resolve_agent_selection};
 
 fn resolve_cleanup_scope(repo_root: &Path, scope_str: &str) -> Result<(Scope, PathBuf)> {
-    let scope = resolver::Scope::from_str(scope_str)
+    let scope = resolver::Scope::parse(scope_str)
         .ok_or_else(|| CoralError::new(format!("invalid scope '{}'", scope_str)))?;
     let scope_root = match scope {
         Scope::Project => repo_root.to_path_buf(),

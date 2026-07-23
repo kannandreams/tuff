@@ -70,7 +70,7 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
                         if line.starts_with("type = \"") {
                             let raw_type =
                                 line.trim_start_matches("type = \"").trim_end_matches('"');
-                            if let Some(parsed) = CapabilityType::from_str(raw_type)
+                            if let Some(parsed) = CapabilityType::parse(raw_type)
                                 && !current_id.is_empty()
                                 && parsed != CapabilityType::Workflow
                             {

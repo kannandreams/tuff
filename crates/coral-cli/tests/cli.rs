@@ -954,7 +954,7 @@ fn add_git_subfolder_skill() {
 }
 
 #[test]
-fn legacy_alias_codex_works() {
+fn dedicated_codex_adapter_works() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
 
@@ -970,7 +970,7 @@ fn legacy_alias_codex_works() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "installed example (open-agents) -> .agents/skills/example/SKILL.md",
+            "installed example (codex) -> .agents/skills/example/SKILL.md",
         ));
 
     assert!(
@@ -1478,6 +1478,7 @@ fn add_tool_multi_agent_with_mcp() {
 fn example_tools_install_and_register_mcp_entries() {
     let temp = TempDir::new().unwrap();
     let examples_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
         .join("examples")
         .join("tools");
     let examples = [
@@ -1697,6 +1698,39 @@ fn add_hook_renders_canonical_event_to_native_event() {
         "canonical pre_tool_use should render to open-agents pre_tool_execution"
     );
     assert!(settings["hooks"]["pre_tool_use"].is_null());
+}
+
+#[test]
+fn add_hook_renders_cursor_hooks_json_shape() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive_with_event(temp.path(), "cursor-policy", "pre_tool_use");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["agent", "add", "cursor"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--agent", "cursor"])
+        .assert()
+        .success();
+
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".cursor/hooks.json")).unwrap())
+            .unwrap();
+    assert_eq!(settings["version"], 1);
+    assert!(
+        settings["hooks"]["preToolUse"][0]["command"]
+            .as_str()
+            .is_some_and(|command| command.contains(".cursor/hooks/cursor-policy/run.sh"))
+    );
 }
 
 #[test]

@@ -94,9 +94,10 @@ pub fn managed_hooks_from_fragment(
             continue;
         };
         for group in groups {
-            let Some(hooks) = group.get("hooks").and_then(serde_json::Value::as_array) else {
-                continue;
-            };
+            let hooks = group
+                .get("hooks")
+                .and_then(serde_json::Value::as_array)
+                .map_or_else(|| vec![group], |hooks| hooks.iter().collect());
             for hook in hooks {
                 let Some(command) = hook.get("command").and_then(serde_json::Value::as_str) else {
                     continue;
@@ -132,9 +133,10 @@ pub fn managed_hook_status(repo_root: &Path, hook: &ManagedHook) -> &'static str
     };
 
     for group in groups {
-        let Some(entries) = group.get("hooks").and_then(serde_json::Value::as_array) else {
-            continue;
-        };
+        let entries = group
+            .get("hooks")
+            .and_then(serde_json::Value::as_array)
+            .map_or_else(|| vec![group], |entries| entries.iter().collect());
         for entry in entries {
             if entry.get("command").and_then(serde_json::Value::as_str)
                 == Some(hook.command.as_str())

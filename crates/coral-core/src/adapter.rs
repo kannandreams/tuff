@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use coral_hooks_spec::CompatibilityMatrix;
 
-use crate::adapters::{claude, open_agents};
 use crate::error::{CoralError, Result};
 use crate::manifest::{CapabilityManifest, CapabilityType};
 
@@ -57,10 +56,6 @@ pub enum HookDefinition {
 pub enum CapabilityKind {
     Skill,
     Tool {
-        #[expect(
-            dead_code,
-            reason = "parameters JSON Schema is consumed by the agent at runtime, not by Coral itself"
-        )]
         parameters: serde_json::Value,
         implementation: crate::manifest::ImplementationConfig,
     },
@@ -73,10 +68,6 @@ pub enum CapabilityKind {
 }
 
 impl CapabilityKind {
-    #[expect(
-        dead_code,
-        reason = "utility method for code that only has a CapabilityKind value"
-    )]
     pub fn capability_type(&self) -> CapabilityType {
         match self {
             Self::Skill => CapabilityType::Skill,
@@ -146,12 +137,21 @@ pub trait AgentAdapter {
     fn mcp_config_relpath(&self) -> &'static str;
     fn supported_agents(&self) -> &[&'static str];
     fn hook_compatibility(&self) -> &'static CompatibilityMatrix;
+    fn hook_settings_relpath(&self) -> &'static str;
+    fn scaffold_hook_event(&self) -> &'static str;
     fn hook_filename(&self) -> &'static str;
     fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>>;
-    #[expect(
-        dead_code,
-        reason = "part of public adapter API; may be used by external callers"
-    )]
+    fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value;
+    fn merge_hook_fragment(
+        &self,
+        existing: Option<&[u8]>,
+        fragment: &serde_json::Value,
+    ) -> Result<Vec<u8>>;
+    fn remove_hook_settings(
+        &self,
+        repo_root: &Path,
+        managed_hooks: &[crate::lockfile::ManagedHook],
+    ) -> Result<()>;
     fn detect(&self, repo_root: &Path) -> bool;
 
     fn kinds_supported(&self) -> &[CapabilityType];
@@ -210,16 +210,8 @@ pub trait AgentAdapter {
         for kind in &["skills", "tools", "hooks", "workflows"] {
             self.remove_dir(repo_root, prefix, kind, primitive_id)?;
         }
-        crate::adapters::mcp_remove_tool(
-            repo_root,
-            &repo_root.join(self.mcp_config_relpath()),
-            primitive_id,
-        )?;
-        match self.id() {
-            claude::ID => claude::remove_hook_settings(repo_root, managed_hooks)?,
-            open_agents::ID => open_agents::remove_hook_settings(repo_root, managed_hooks)?,
-            _ => {}
-        }
+        crate::mcp::remove_tool(&repo_root.join(self.mcp_config_relpath()), primitive_id)?;
+        self.remove_hook_settings(repo_root, managed_hooks)?;
         Ok(())
     }
 
@@ -303,32 +295,18 @@ pub trait AgentAdapter {
                     .join(&capability.id)
                     .join("run.sh");
                 let script = self.hook_file_content(hook_cfg)?;
-                let settings_relpath = if self.id() == claude::ID {
-                    claude::SETTINGS_RELPATH
-                } else {
-                    open_agents::HOOK_SETTINGS_RELPATH
-                };
-                let fragment = serde_json::json!({
-                    "hooks": {
-                        (native_event): [{
-                            "hooks": [{
-                                "type": "command",
-                                "command": format!("sh {}/hooks/{}/run.sh", self.dir_prefix(), capability.id)
-                            }]
-                        }]
-                    }
-                });
+                let settings_relpath = self.hook_settings_relpath();
+                let fragment = self.command_hook_fragment(
+                    native_event,
+                    &format!("sh {}/hooks/{}/run.sh", self.dir_prefix(), capability.id),
+                );
                 let settings_path = repo_root.join(settings_relpath);
                 let existing = if settings_path.is_file() {
                     Some(std::fs::read(&settings_path)?)
                 } else {
                     None
                 };
-                let merged = if self.id() == claude::ID {
-                    claude::merge_hook_fragment(existing.as_deref(), &fragment)?
-                } else {
-                    open_agents::merge_hook_fragment(existing.as_deref(), &fragment)?
-                };
+                let merged = self.merge_hook_fragment(existing.as_deref(), &fragment)?;
 
                 let mut files = vec![PlannedFile::new(
                     relative_or_absolute_fs(&target_path, repo_root),
@@ -361,13 +339,6 @@ pub trait AgentAdapter {
         native: &NativeHookConfig,
         repo_root: &Path,
     ) -> Result<Vec<PlannedFile>> {
-        if self.id() != claude::ID && self.id() != open_agents::ID {
-            return Err(CoralError::new(format!(
-                "--hook-file is not supported for '{}' hooks yet",
-                self.id()
-            )));
-        }
-
         let hook_root = repo_root
             .join(self.dir_prefix())
             .join("hooks")
@@ -396,22 +367,14 @@ pub trait AgentAdapter {
         }
 
         let fragment = replace_hook_dir_placeholder(native.fragment.clone(), &hook_root_rel);
-        let settings_relpath = if self.id() == claude::ID {
-            claude::SETTINGS_RELPATH
-        } else {
-            open_agents::HOOK_SETTINGS_RELPATH
-        };
+        let settings_relpath = self.hook_settings_relpath();
         let settings_path = repo_root.join(settings_relpath);
         let existing = if settings_path.is_file() {
             Some(std::fs::read(&settings_path)?)
         } else {
             None
         };
-        let merged = if self.id() == claude::ID {
-            claude::merge_hook_fragment(existing.as_deref(), &fragment)?
-        } else {
-            open_agents::merge_hook_fragment(existing.as_deref(), &fragment)?
-        };
+        let merged = self.merge_hook_fragment(existing.as_deref(), &fragment)?;
         files.push(PlannedFile::mergeable(
             relative_or_absolute_fs(&settings_path, repo_root),
             merged,
@@ -498,7 +461,7 @@ fn path_is_under(path: &Path, root: &Path) -> bool {
     canonical_path.starts_with(canonical_root)
 }
 
-pub(crate) fn replace_hook_dir_placeholder(
+pub fn replace_hook_dir_placeholder(
     mut value: serde_json::Value,
     hook_dir: &str,
 ) -> serde_json::Value {
@@ -521,185 +484,6 @@ pub(crate) fn replace_hook_dir_placeholder(
     value
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AdapterKind {
-    OpenAgents,
-    Claude,
-}
-
-impl AgentAdapter for AdapterKind {
-    fn id(&self) -> &'static str {
-        match self {
-            Self::OpenAgents => open_agents::ID,
-            Self::Claude => claude::ID,
-        }
-    }
-
-    fn display_name(&self) -> &'static str {
-        match self {
-            Self::OpenAgents => open_agents::DISPLAY_NAME,
-            Self::Claude => claude::DISPLAY_NAME,
-        }
-    }
-
-    fn dir_prefix(&self) -> &'static str {
-        match self {
-            Self::OpenAgents => ".agents",
-            Self::Claude => ".claude",
-        }
-    }
-
-    fn mcp_config_relpath(&self) -> &'static str {
-        match self {
-            Self::OpenAgents => ".agents/mcp.json",
-            Self::Claude => ".mcp.json",
-        }
-    }
-
-    fn supported_agents(&self) -> &[&'static str] {
-        match self {
-            Self::OpenAgents => open_agents::SUPPORTED_AGENTS,
-            Self::Claude => claude::SUPPORTED_AGENTS,
-        }
-    }
-
-    fn kinds_supported(&self) -> &[CapabilityType] {
-        match self {
-            Self::OpenAgents => open_agents::SUPPORTED_TYPES,
-            Self::Claude => claude::SUPPORTED_TYPES,
-        }
-    }
-
-    fn hook_compatibility(&self) -> &'static CompatibilityMatrix {
-        match self {
-            Self::OpenAgents => &open_agents::HOOK_COMPATIBILITY,
-            Self::Claude => &claude::HOOK_COMPATIBILITY,
-        }
-    }
-
-    fn hook_filename(&self) -> &'static str {
-        match self {
-            Self::OpenAgents => "run.sh",
-            Self::Claude => "run.sh",
-        }
-    }
-
-    fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>> {
-        match self {
-            Self::OpenAgents => Ok(format!(
-                "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
-                hook_cfg.working_directory, hook_cfg.command
-            )
-            .into_bytes()),
-            Self::Claude => Ok(format!(
-                "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
-                hook_cfg.working_directory, hook_cfg.command
-            )
-            .into_bytes()),
-        }
-    }
-
-    fn detect(&self, repo_root: &Path) -> bool {
-        match self {
-            Self::OpenAgents => open_agents::detect(repo_root),
-            Self::Claude => claude::detect(repo_root),
-        }
-    }
-}
-
-impl AdapterKind {
-    pub fn all() -> Vec<Self> {
-        vec![Self::OpenAgents, Self::Claude]
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        match id {
-            open_agents::ID => Some(Self::OpenAgents),
-            "codex" => Some(Self::OpenAgents),
-            claude::ID => Some(Self::Claude),
-            "claude-code" => Some(Self::Claude),
-            _ => None,
-        }
-    }
-}
-
 fn relative_or_absolute_fs(path: &Path, repo_root: &Path) -> String {
     crate::lockfile::relative_or_absolute_fs(path, repo_root)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn from_id_returns_open_agents_for_codex_alias() {
-        assert_eq!(AdapterKind::from_id("codex"), Some(AdapterKind::OpenAgents));
-        assert_eq!(
-            AdapterKind::from_id("open-agents"),
-            Some(AdapterKind::OpenAgents)
-        );
-    }
-
-    #[test]
-    fn from_id_returns_claude_for_claude_code_alias() {
-        assert_eq!(
-            AdapterKind::from_id("claude-code"),
-            Some(AdapterKind::Claude)
-        );
-        assert_eq!(AdapterKind::from_id("claude"), Some(AdapterKind::Claude));
-    }
-
-    #[test]
-    fn from_id_returns_none_for_unknown() {
-        assert_eq!(AdapterKind::from_id("nonexistent"), None);
-    }
-
-    #[test]
-    fn all_returns_two_adapters() {
-        let all = AdapterKind::all();
-        assert_eq!(all.len(), 2);
-    }
-
-    #[test]
-    fn display_name_not_empty() {
-        for a in AdapterKind::all() {
-            assert!(!a.id().is_empty());
-            assert!(!a.display_name().is_empty());
-        }
-    }
-
-    #[test]
-    fn trait_plan_delegates_to_variant() {
-        use tempfile::TempDir;
-
-        let tmp = TempDir::new().unwrap();
-        let cap = ResolvedCapability {
-            id: "test".into(),
-            capability_type: CapabilityType::Skill,
-            version: "1".into(),
-            description: "d".into(),
-            source_files: vec![("SKILL.md".into(), b"hello".to_vec())],
-            source_dir: tmp.path().to_path_buf(),
-            kind: CapabilityKind::Skill,
-        };
-
-        for a in AdapterKind::all() {
-            let planned = a.plan(&cap, tmp.path()).unwrap();
-            assert_eq!(planned.len(), 1);
-            assert!(planned[0].path.contains("SKILL.md"));
-        }
-    }
-
-    #[test]
-    fn trait_remove_cleans_directories() {
-        use tempfile::TempDir;
-
-        let tmp = TempDir::new().unwrap();
-        for a in AdapterKind::all() {
-            let dir = tmp.path().join(a.dir_prefix()).join("tools").join("test");
-            std::fs::create_dir_all(&dir).unwrap();
-            assert!(a.remove("test", tmp.path(), &[]).is_ok());
-            assert!(!dir.exists());
-        }
-    }
 }

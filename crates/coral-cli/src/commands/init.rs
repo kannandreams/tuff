@@ -10,7 +10,7 @@ use crate::manifest::CapabilityType;
 
 use super::home_dir;
 
-const CORAL_GUIDE_CONTENT: &str = include_str!("../../assets/coral-cli-guide.md");
+const CORAL_GUIDE_CONTENT: &str = include_str!("../../../../assets/coral-cli-guide.md");
 
 pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {

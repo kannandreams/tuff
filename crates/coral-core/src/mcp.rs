@@ -1,12 +1,8 @@
-pub mod claude;
-pub mod open_agents;
-
 use std::path::Path;
 
 use crate::error::Result;
 
-pub fn mcp_register_tool(
-    _repo_root: &Path,
+pub fn register_tool(
     mcp_config_path: &Path,
     tool_id: &str,
     command: &str,
@@ -25,19 +21,17 @@ pub fn mcp_register_tool(
 
     let servers = config
         .as_object_mut()
-        .and_then(|o| {
-            o.entry("mcpServers")
+        .and_then(|object| {
+            object
+                .entry("mcpServers")
                 .or_insert_with(|| serde_json::json!({}))
                 .as_object_mut()
         })
-        .unwrap();
+        .expect("new JSON object always has a mutable object map");
 
     servers.insert(
         tool_id.to_string(),
-        serde_json::json!({
-            "command": command,
-            "args": args,
-        }),
+        serde_json::json!({"command": command, "args": args}),
     );
 
     if let Some(parent) = mcp_config_path.parent() {
@@ -47,13 +41,10 @@ pub fn mcp_register_tool(
         mcp_config_path,
         serde_json::to_string_pretty(&config)? + "\n",
     )?;
-
     Ok(())
 }
 
-pub fn mcp_remove_tool(repo_root: &Path, mcp_config_path: &Path, tool_id: &str) -> Result<()> {
-    let _ = repo_root;
-
+pub fn remove_tool(mcp_config_path: &Path, tool_id: &str) -> Result<()> {
     if !mcp_config_path.exists() {
         return Ok(());
     }
@@ -63,8 +54,8 @@ pub fn mcp_remove_tool(repo_root: &Path, mcp_config_path: &Path, tool_id: &str) 
 
     if let Some(servers) = config
         .as_object_mut()
-        .and_then(|o| o.get_mut("mcpServers"))
-        .and_then(|v| v.as_object_mut())
+        .and_then(|object| object.get_mut("mcpServers"))
+        .and_then(serde_json::Value::as_object_mut)
     {
         servers.remove(tool_id);
     }
@@ -73,6 +64,5 @@ pub fn mcp_remove_tool(repo_root: &Path, mcp_config_path: &Path, tool_id: &str) 
         mcp_config_path,
         serde_json::to_string_pretty(&config)? + "\n",
     )?;
-
     Ok(())
 }

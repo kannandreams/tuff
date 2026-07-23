@@ -1,18 +1,11 @@
 mod adapter;
 mod adapters;
-mod cache;
-mod check;
 mod commands;
-mod config;
 mod display;
-mod error;
-mod git;
-mod lockfile;
-mod manifest;
-mod paths;
-mod resolver;
-mod tool;
-mod tree_diff;
+
+pub use coral_core::{
+    cache, check, config, error, git, lockfile, manifest, paths, resolver, tool, tree_diff,
+};
 
 use std::path::PathBuf;
 
