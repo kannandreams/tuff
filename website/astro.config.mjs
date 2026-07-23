@@ -34,6 +34,7 @@ export default defineConfig({
             { label: 'Installation', slug: 'installation' },
             { label: 'Getting Started', slug: 'getting-started' },
             { label: 'CLI Reference', slug: 'cli' },
+            { label: 'Harness Config', slug: 'harness-cli-cheatsheet' },
           ],
         },
         {

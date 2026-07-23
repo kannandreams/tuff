@@ -17,7 +17,7 @@ complete command and flag reference.
 | Inspect and generate | [`coral list`](#coral-list), [`coral status`](#coral-status), [`coral generate`](#coral-generate), [`coral outdated`](#coral-outdated) |
 | Diff and update | [`coral diff`](#coral-diff), [`coral update`](#coral-update) |
 | Validate in CI | [`coral check`](#coral-check) |
-| Clean up | [`coral delete`](#coral-delete), [`coral untrack`](#coral-untrack) |
+| Clean up | [`coral delete`](#coral-delete), [`coral untrack`](#coral-untrack), [`coral cache clear`](#coral-cache-clear) |
 | Configure agents and scope | [`coral agent`](#coral-agent), [scope behavior](/concepts/scopes) |
 
 ## Start
@@ -282,7 +282,7 @@ Generated files are derived output. The source of truth is
 
 ### `coral outdated`
 
-Show all installed capabilitys and whether upstream updates are available.
+Show all installed capabilities and whether upstream updates are available.
 Read-only; never modifies files.
 
 ```sh frame="terminal"
@@ -437,6 +437,15 @@ coral untrack my-skill -a open-agents --scope global
 `untrack` removes the selected lockfile entry and baseline. It preserves the
 capability files, source directories, and MCP configuration.
 The lockfile itself remains in place, even when it contains no capabilities.
+
+### `coral cache clear`
+
+Delete Coral's disposable machine-local cache of materialized trees and source
+clones. This does not remove project capability files or lockfile entries:
+
+```sh frame="terminal"
+coral cache clear
+```
 
 ## Configure Agents and Scope
 
