@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::adapter;
@@ -16,18 +16,40 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {
         display::print_init_banner();
         let home = home_dir()?;
-        let lock_path = home.join(".coral").join("coral.lock");
+        let lock_path = crate::paths::global_lockfile(&home);
         lockfile::init_lockfile_at(&lock_path)?;
-        let _ = config::read_config(&home)?;
-        println!("initialized ~/.coral/coral.lock");
+        let _ = config::read_global_config(&home)?;
+        println!("initialized global Coral state");
     } else {
         display::print_init_banner();
         let lock_path = lockfile::init_lockfile(repo_root)?;
+        let had_config = crate::paths::project_config(repo_root).exists();
         let mut config = config::read_config(repo_root)?;
         if !config.agents.iter().any(|agent| agent == "open-agents") {
             config.agents.push("open-agents".to_string());
-            config::write_config(repo_root, &config)?;
         }
+
+        // Project adapter registration is reconstructed from coral.lock so a
+        // clone remains usable even when project preferences are absent.
+        let lock = lockfile::read_lockfile_at(&lock_path)?;
+        let targets: BTreeSet<String> = lock
+            .capabilities
+            .values()
+            .flat_map(|entry| entry.targets.keys().cloned())
+            .collect();
+        for target in &targets {
+            if !config.agents.iter().any(|agent| agent == target) {
+                config.agents.push(target.clone());
+            }
+        }
+        if !had_config && !targets.is_empty() && !targets.contains(&config.default_agent) {
+            config.default_agent = targets
+                .iter()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| config.default_agent.clone());
+        }
+        config::write_config(repo_root, &config)?;
 
         for dir in &["skills", "tools", "hooks", "workflows"] {
             let path = repo_root.join(".agents").join(dir);
@@ -35,8 +57,6 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                 std::fs::create_dir_all(&path)?;
             }
         }
-
-        ensure_coral_gitignore(repo_root)?;
 
         println!(
             "initialized {}",
@@ -94,24 +114,6 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
 
             lockfile::write_lockfile(repo_root, &lf)?;
         }
-    }
-    Ok(())
-}
-
-fn ensure_coral_gitignore(repo_root: &Path) -> Result<()> {
-    let path = repo_root.join(".gitignore");
-    let existing = if path.exists() {
-        std::fs::read_to_string(&path)?
-    } else {
-        String::new()
-    };
-    if !existing.lines().any(|line| line.trim() == ".coral/") {
-        let mut content = existing;
-        if !content.is_empty() && !content.ends_with('\n') {
-            content.push('\n');
-        }
-        content.push_str(".coral/\n");
-        std::fs::write(path, content)?;
     }
     Ok(())
 }

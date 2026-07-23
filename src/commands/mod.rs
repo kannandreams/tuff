@@ -180,9 +180,18 @@ pub(crate) fn home_dir_opt() -> Option<PathBuf> {
     std::env::var("HOME").ok().map(PathBuf::from)
 }
 
-pub(crate) fn resolve_agent_selection(root: &Path, requested: &[String]) -> Result<Vec<String>> {
+pub(crate) fn resolve_agent_selection(
+    root: &Path,
+    requested: &[String],
+    global: bool,
+) -> Result<Vec<String>> {
     let values = if requested.is_empty() {
-        vec![config::read_config(root)?.default_agent]
+        let config = if global {
+            config::read_global_config(root)?
+        } else {
+            config::read_config(root)?
+        };
+        vec![config.default_agent]
     } else {
         requested.to_vec()
     };

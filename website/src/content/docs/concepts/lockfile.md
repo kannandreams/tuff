@@ -4,16 +4,16 @@ description: What Coral records in project state.
 ---
 
 Coral records committed capability identity in `coral.lock` at the root of your project.
-Disposable materialized baselines live in `~/.coral/cache/` and can be deleted at any time.
+Disposable materialized baselines live in Coral's user cache directory and can be deleted at any time.
 
 ## Directory structure
 
 | File | Purpose | Commit to git? |
 |---|---|---|
 | `coral.lock` | Installed capability identity, source, target, and materialized hash | Yes |
-| `.coral/` | Local Coral configuration and scratch state | No |
-| `~/.coral/coral.lock` | Global scope: personal, across all projects | No |
-| `~/.coral/cache/sha256/` | Verified materialized baseline trees | No |
+| `coral.config.json` | Optional project adapter preferences | Usually yes |
+| User config/state directories | Global preferences and lockfile | No |
+| User cache directory | Verified materialized baseline trees | No |
 
 Commit `coral.lock` so your team can verify installations. A cold or deleted cache is
 refilled by refetching and verifying the recorded source.

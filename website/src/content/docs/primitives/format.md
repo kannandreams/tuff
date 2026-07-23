@@ -9,7 +9,7 @@ type, files, and metadata from the filesystem or from `--type` and `--name`
 flags passed at install time.
 
 Tracking metadata lives exclusively in `coral.lock` and
-`.coral/objects/`. No tracking files are emitted into agent directories
+the user cache directory. No tracking files are emitted into agent directories
 (`.agents/`, `.claude/`). Coral regenerates derived artifacts like
 `CAPABILITIES.md` on demand with `coral generate index`.
 
@@ -38,7 +38,7 @@ It records an install-time materialized-tree hash in `coral.lock`; the disposabl
 verified tree cache is machine-global:
 
 ```text
-~/.coral/cache/sha256/a1/b2c3...
+<user-cache>/coral/sha256/a1/b2c3...
 ```
 
 Capabilities tracked from existing project files (e.g., `scripts/deploy.sh`)

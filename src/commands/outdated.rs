@@ -82,7 +82,7 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     }
 
     if let Some(home) = home_dir_opt() {
-        let lock_path = home.join(".coral").join("coral.lock");
+        let lock_path = crate::paths::global_lockfile(&home);
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             for (id, entry) in &lf.capabilities {
                 for target_id in entry.targets.keys() {

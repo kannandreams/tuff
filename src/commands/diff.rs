@@ -60,7 +60,7 @@ pub fn cmd_diff(
     let requested = target
         .map(|value| vec![value.to_string()])
         .unwrap_or_default();
-    let targets = resolve_agent_selection(&scope_root, &requested)?;
+    let targets = resolve_agent_selection(&scope_root, &requested, scope == Scope::Global)?;
     let mut unified = String::new();
     let mut json = Vec::new();
 

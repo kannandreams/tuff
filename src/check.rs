@@ -33,7 +33,7 @@ pub fn run_checks(repo_root: &Path) -> Result<CheckOutcome> {
 
     // Global scope
     if let Some(home) = home_dir() {
-        let lock_path = home.join(".coral").join("coral.lock");
+        let lock_path = crate::paths::global_lockfile(&home);
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             check_lockfile(&home, &lf, &mut results);
         }

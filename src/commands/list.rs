@@ -57,7 +57,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
     }
 
     if show_global && let Some(home) = home_dir_opt() {
-        let lock_path = home.join(".coral").join("coral.lock");
+        let lock_path = crate::paths::global_lockfile(&home);
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             inventory.extend(collect_lockfile_inventory(
                 &home,

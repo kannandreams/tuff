@@ -26,14 +26,10 @@ impl Scope {
     }
 }
 
-pub fn home_coral_dir() -> Option<PathBuf> {
-    dirs_home().map(|h| h.join(".coral"))
-}
-
 pub fn lockfile_path_for(scope: Scope, repo_root: Option<&Path>) -> Option<PathBuf> {
     match scope {
         Scope::Project => repo_root.map(|root| root.join("coral.lock")),
-        Scope::Global => home_coral_dir().map(|dir| dir.join("coral.lock")),
+        Scope::Global => dirs_home().map(|home| crate::paths::global_lockfile(&home)),
     }
 }
 
@@ -217,10 +213,5 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let result = check_collision("test", tmp.path(), Some("https://github.com/a/b")).unwrap();
         assert!(result.is_none());
-    }
-
-    #[test]
-    fn home_coral_dir_returns_some() {
-        assert!(home_coral_dir().is_some());
     }
 }

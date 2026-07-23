@@ -14,22 +14,21 @@ The important rule is simple: project scope wins.
 
 ### Project scope
 
-Project-scoped capabilities live in the repository and are tracked by files under:
+Project-scoped capabilities live in the repository and are tracked by:
 
 - `coral.lock`
-- `.coral/objects/`
-- `.coral/config.json`
+- `coral.config.json` (optional project preferences)
 
 This is the default scope for `coral add`, `coral list`, `coral diff`, and
 `coral update`.
 
 ### Global scope
 
-Global scope is for personal capabilities shared across projects. It lives under your home
-directory:
+Global scope is for personal capabilities shared across projects. It uses the platform's
+XDG-style Coral config, state, and cache directories:
 
-- `~/.coral/coral.lock`
-- `~/.coral/objects/`
+- `coral.lock` in Coral's user state directory
+- verified trees in Coral's user cache directory
 - `~/.agents/` or other global emitted files
 
 Use it explicitly:

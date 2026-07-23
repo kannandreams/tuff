@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use crate::error::{CoralError, Result};
 
 pub fn cache_root(home: &Path) -> PathBuf {
-    home.join(".coral").join("cache").join("sha256")
+    crate::paths::user_cache(home).join("sha256")
 }
 
 pub fn cache_path(home: &Path, hash: &str) -> Result<PathBuf> {
@@ -106,7 +106,7 @@ pub fn read_verified(home: &Path, hash: &str) -> Result<Option<PathBuf>> {
 }
 
 pub fn clear(home: &Path) -> Result<()> {
-    let root = home.join(".coral").join("cache");
+    let root = crate::paths::user_cache(home);
     if root.exists() {
         std::fs::remove_dir_all(root)?;
     }

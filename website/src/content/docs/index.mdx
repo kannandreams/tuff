@@ -85,8 +85,8 @@ and merge-aware update through `coral create`, `coral add`, `coral update`, and
 
 ### Scope and team workflows
 
-- **Project scope**: `coral.lock` is committed to the repo; `.coral/` is local scratch state.
-- **Global scope**: `~/.coral/` for personal capabilities available across all projects.
+- **Project scope**: `coral.lock` is committed to the repo; project preferences use `coral.config.json`.
+- **Global scope**: Coral's user config/state/cache directories hold personal capabilities and caches.
 - Project always wins when both exist. `coral status` flags shadowed globals.
 
 ### CI-ready validation

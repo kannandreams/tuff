@@ -45,7 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh 
 # Initialize the project
 cd my-project
 coral init
-# → creates .coral/ state, registers open-agents, and scaffolds .agents/ directories
+# → creates coral.lock, registers open-agents, and scaffolds .agents/ directories
 # → auto-installs coral-cli-guide; your agent now knows Coral commands
 
 # Register agent harnesses

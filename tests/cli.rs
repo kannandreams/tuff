@@ -535,10 +535,9 @@ fn configured_default_agent_is_used_when_agent_is_omitted() {
             .exists()
     );
 
-    let config: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
-    )
-    .unwrap();
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join("coral.config.json")).unwrap())
+            .unwrap();
     assert_eq!(config["defaultAgent"], "claude");
 
     coral()
@@ -1043,7 +1042,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
             "installed global-skill (open-agents)",
         ));
 
-    assert!(home.path().join(".coral").join("coral.lock").exists());
+    assert!(home.path().join(".local/state/coral/coral.lock").exists());
 }
 
 #[test]
@@ -1708,7 +1707,7 @@ fn multifile_hook_diff_uses_directory_tree_and_json_hashes() {
     assert!(value[0]["changes"][0]["old_hash"].is_string());
     assert!(value[0]["changes"][0]["new_hash"].is_string());
     assert!(temp.path().join("coral.lock").exists());
-    assert!(!temp.path().join(".coral/objects").exists());
+    assert!(!temp.path().join(".coral").exists());
 }
 
 #[test]
@@ -1734,7 +1733,7 @@ fn diff_refetches_baseline_after_cache_is_deleted() {
         "# Changed\n",
     )
     .unwrap();
-    fs::remove_dir_all(home.join(".coral/cache")).unwrap();
+    fs::remove_dir_all(home.join(".cache/coral")).unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1765,7 +1764,7 @@ fn local_baseline_refetch_verifies_source_and_never_uses_live_tree() {
         .assert()
         .success();
 
-    fs::remove_dir_all(home.join(".coral/cache")).unwrap();
+    fs::remove_dir_all(home.join(".cache/coral")).unwrap();
     fs::write(source.join("src/SKILL.md"), "# Changed source\n").unwrap();
     coral()
         .current_dir(temp.path())
@@ -1807,7 +1806,7 @@ fn upstream_diff_refetches_source_after_cache_is_deleted() {
         .args(["add", "skill", &url, "test-skill", "--agent", "open-agents"])
         .assert()
         .success();
-    fs::remove_dir_all(home.join(".coral/cache")).unwrap();
+    fs::remove_dir_all(home.join(".cache/coral")).unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -1851,7 +1850,36 @@ fn cache_clear_is_safe_and_lockfile_is_deterministic() {
         .args(["cache", "clear"])
         .assert()
         .success();
-    assert!(!home.join(".coral/cache").exists());
+    assert!(!home.join(".cache/coral").exists());
+}
+
+#[test]
+fn init_reconstructs_project_targets_from_lockfile_without_coral_directory() {
+    let temp = TempDir::new().unwrap();
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "clone-target", "-a", "claude"])
+        .assert()
+        .success();
+    fs::remove_file(temp.path().join("coral.config.json")).unwrap();
+    assert!(!temp.path().join(".coral").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join("coral.config.json")).unwrap())
+            .unwrap();
+    assert!(
+        config["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|agent| agent == "claude")
+    );
 }
 
 #[test]
@@ -2604,16 +2632,10 @@ fn generate_report_writes_project_report_with_status_summary() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "generated report -> .coral/reports/coral-report.md",
+            "generated report -> coral-report.md",
         ));
 
-    let report = fs::read_to_string(
-        temp.path()
-            .join(".coral")
-            .join("reports")
-            .join("coral-report.md"),
-    )
-    .unwrap();
+    let report = fs::read_to_string(temp.path().join("coral-report.md")).unwrap();
     assert!(report.contains("# Coral Report"));
     assert!(report.contains("- Modified files: 1"));
     assert!(report.contains("`reported-skill`"));
@@ -2788,10 +2810,9 @@ fn create_skill_can_select_claude_agent() {
             .exists()
     );
 
-    let config: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
-    )
-    .unwrap();
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join("coral.config.json")).unwrap())
+            .unwrap();
     assert_eq!(config["agents"][0], "claude");
     assert_eq!(config["defaultAgent"], "open-agents");
 }

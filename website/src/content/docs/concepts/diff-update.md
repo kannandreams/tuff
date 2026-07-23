@@ -3,7 +3,7 @@ title: Diffing & Updates
 description: How Coral shows local drift, accepts local baselines, and updates git-sourced capabilities.
 ---
 
-Coral uses verified materialized trees from `~/.coral/cache/` as the reference point for both
+Coral uses verified materialized trees from its user cache directory as the reference point for both
 local diffing and upstream-aware updates. Diffing uses temporary Git trees through libgit2;
 the consuming project does not need to be a Git repository.
 

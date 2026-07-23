@@ -26,13 +26,13 @@ pub fn cmd_add(
     let source = source.ok_or_else(|| CoralError::new("source path or URL is required"))?;
     let (scope, install_root) = if global {
         let home = home_dir()?;
-        let lock_path = home.join(".coral").join("coral.lock");
+        let lock_path = crate::paths::global_lockfile(&home);
         lockfile::init_lockfile_at(&lock_path)?;
         (Scope::Global, home)
     } else {
         (Scope::Project, repo_root.to_path_buf())
     };
-    let target_ids = resolve_agent_selection(&install_root, target_ids)?;
+    let target_ids = resolve_agent_selection(&install_root, target_ids, global)?;
 
     if git::is_git_url(&source.to_string_lossy()) {
         return cmd_add_git(
@@ -58,6 +58,10 @@ pub fn cmd_add(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "CLI dispatch passes source and install context"
+)]
 fn cmd_add_git(
     install_root: &Path,
     scope: Scope,
@@ -126,6 +130,10 @@ fn cmd_add_git(
     result
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "CLI dispatch passes source and install context"
+)]
 fn cmd_add_local(
     install_root: &Path,
     scope: Scope,

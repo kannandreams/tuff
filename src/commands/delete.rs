@@ -40,7 +40,7 @@ pub fn cmd_delete(
     force: bool,
 ) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = resolve_agent_selection(&scope_root, targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets, scope == Scope::Global)?;
 
     let mut lf = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {
@@ -115,7 +115,7 @@ pub fn cmd_delete(
 
 pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[String]) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = resolve_agent_selection(&scope_root, targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets, scope == Scope::Global)?;
 
     let mut lf = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {

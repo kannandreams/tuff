@@ -22,7 +22,7 @@ pub fn cmd_create(
         return Err(CoralError::new("capability name must not be empty"));
     }
 
-    let target_ids = resolve_agent_selection(repo_root, target_ids)?;
+    let target_ids = resolve_agent_selection(repo_root, target_ids, false)?;
     let mut adapters = Vec::new();
     for target in &target_ids {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
@@ -170,7 +170,7 @@ pub fn cmd_create(
                 managed_hooks,
                 ownership: lockfile::TargetOwnership::Generated,
                 sha256: baseline_hash,
-                installed_path: lockfile::relative_or_absolute_fs(&root, repo_root),
+                installed_path: lockfile::relative_or_absolute_fs(root, repo_root),
             },
         );
         if !config.agents.iter().any(|agent| agent == adapter.id()) {

@@ -162,9 +162,9 @@ pub enum TargetOwnership {
 }
 
 pub fn lockfile_path(repo_root: &Path) -> PathBuf {
-    let scoped = repo_root.join(".coral").join("coral.lock");
-    if scoped.exists() {
-        scoped
+    let global = crate::paths::global_lockfile(repo_root);
+    if global.exists() {
+        global
     } else {
         repo_root.join("coral.lock")
     }

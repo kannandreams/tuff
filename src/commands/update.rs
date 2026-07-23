@@ -235,7 +235,8 @@ pub fn cmd_update(
         }
     };
 
-    let target_ids = resolve_agent_selection(&scope_root, requested_targets)?;
+    let target_ids =
+        resolve_agent_selection(&scope_root, requested_targets, scope == Scope::Global)?;
 
     if entry.source.is_none() && is_in_place_source_path(&entry.source_path) {
         return update_local_baseline(&scope_root, id, &target_ids, check, force);

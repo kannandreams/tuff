@@ -4,12 +4,12 @@ mod cache;
 mod check;
 mod commands;
 mod config;
-mod diff;
 mod display;
 mod error;
 mod git;
 mod lockfile;
 mod manifest;
+mod paths;
 mod resolver;
 mod tool;
 mod tree_diff;
@@ -35,9 +35,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Initialize .coral state.
+    /// Initialize project Coral state.
     Init {
-        /// Initialize global scope (~/.coral/).
+        /// Initialize global scope.
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
@@ -61,7 +61,7 @@ enum Command {
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
 
-        /// Install to global scope (~/.coral/).
+        /// Install to global scope.
         #[arg(short = 'g', long = "global")]
         global: bool,
 
@@ -213,7 +213,7 @@ enum GenerateCommand {
 
     /// Generate a project capability report.
     Report {
-        /// Output path. Defaults to .coral/reports/coral-report.md.
+        /// Output path. Defaults to coral-report.md.
         #[arg(short = 'o', long = "output")]
         output: Option<PathBuf>,
     },
@@ -266,7 +266,7 @@ enum AddCommand {
         /// Agent harness to emit for (repeatable).
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
-        /// Install to global scope (~/.coral/).
+        /// Install to global scope.
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
@@ -342,7 +342,7 @@ enum AgentCommand {
         /// Agent adapter id.
         id: String,
 
-        /// Set the default for global operations (~/.coral/).
+        /// Set the default for global operations.
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
