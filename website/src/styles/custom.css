@@ -27,8 +27,8 @@
   --sl-color-text-secondary: var(--sl-color-gray-2);
   --sl-color-text-dimmed: var(--sl-color-gray-3);
   --sl-nav-height: 4rem;
-  --sl-sidebar-width: 19rem;
-  --sl-content-width: 52rem;
+  --sl-sidebar-width: 20rem;
+  --sl-content-width: 58rem;
   --sl-text-5xl: 2.625rem;
   --sl-text-h1: 2.75rem;
   --sl-text-h2: 1.8125rem;
@@ -111,11 +111,12 @@ nav.sidebar .sidebar-pane,
 }
 
 .right-sidebar {
-  width: 21rem;
+  width: 11rem;
   background: transparent;
 }
 
 .right-sidebar-panel {
+  width: 11rem;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -435,6 +436,91 @@ dialog[aria-label='Search'] {
   border-color: var(--sl-color-hairline);
 }
 
+.sl-markdown-content table {
+  display: table;
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.65rem;
+  border-spacing: 0;
+  background: color-mix(in srgb, var(--sl-color-bg) 82%, white 3%);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sl-color-gray-4) transparent;
+}
+
+.sl-markdown-content table thead {
+  background: color-mix(in srgb, var(--sl-color-accent-low) 72%, var(--sl-color-bg));
+}
+
+.sl-markdown-content table th,
+.sl-markdown-content table td {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--sl-color-hairline-light);
+  vertical-align: top;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.sl-markdown-content table th:first-child,
+.sl-markdown-content table td:first-child {
+  width: 22%;
+}
+
+.sl-markdown-content table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--sl-color-gray-6) 42%, transparent);
+}
+
+.sl-markdown-content table tbody tr:hover {
+  background: color-mix(in srgb, var(--sl-color-accent-low) 34%, transparent);
+}
+
+.sl-markdown-content table tr:last-child td {
+  border-bottom: 0;
+}
+
+.sl-markdown-content table code {
+  white-space: nowrap;
+}
+
+.sl-markdown-content table th {
+  color: var(--sl-color-text);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+:root[data-theme='light'] .sl-markdown-content table {
+  background: #ffffff;
+}
+
+:root[data-theme='light'] .sl-markdown-content table thead {
+  background: #eff6ff;
+}
+
+:root[data-theme='light'] .sl-markdown-content table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+@media (max-width: 50rem) {
+  .sl-markdown-content table {
+    display: block;
+    margin-inline: 0;
+    min-width: 100%;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+    table-layout: auto;
+    border-radius: 0.5rem;
+  }
+
+  .sl-markdown-content table th,
+  .sl-markdown-content table td {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.9rem;
+  }
+}
+
 .sl-markdown-content pre {
   border-radius: 8px;
   background: #0f172a;
@@ -489,7 +575,31 @@ dialog[aria-label='Search'] {
 .expressive-code .frame.is-terminal pre {
   border-radius: 0;
   border: 0;
-  background: #24292e;
+  background: #111827;
+}
+
+.expressive-code .frame.is-terminal .header {
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+  background: #1f2937;
+}
+
+.expressive-code .frame.is-terminal .header::before,
+.expressive-code .frame.is-terminal .header::after {
+  content: '';
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  box-shadow: 1.05rem 0 0 #fbbf24, 2.1rem 0 0 #34d399;
+  background: #fb7185;
+}
+
+.expressive-code .frame.is-terminal .header::after {
+  display: none;
+}
+
+:root[data-theme='light'] .expressive-code .frame.is-terminal pre {
+  background: #ffffff;
 }
 
 :root[data-theme='light'] .expressive-code .frame.is-terminal .header {
