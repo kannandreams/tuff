@@ -46,15 +46,15 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 - `coral remove <id>` — remove a capability
 - `coral agent list` — show available agent harnesses
 - `coral agent add <id>` — register an agent and initialize its project directory
-- `coral init --global` — initialize global scope (~/.coral/)
+- `coral init --global` — initialize global scope
 
 ### Agents
 - `open-agents` — Codex, Cursor, OpenCode, Copilot, Gemini CLI, Roo, Cline
 - `claude` — Claude Code
 
 ### Scope
-- Project (default): `.coral/` in repo root — committed with project
-- Global: `~/.coral/` in home directory — available across all projects
+- Project (default): `coral.lock` in repo root — committed with project
+- Global state: XDG config/state/cache Coral directories — available across all projects
 - Project always wins when both exist
 
 ## Directory Model
@@ -62,7 +62,8 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 - `.agents/tools/` — create and edit tools here
 - `.agents/hooks/` — create and edit hooks here
 - `.agents/workflows/` — create and edit workflows here
-- `.coral/` — coral state (committed)
+- `coral.lock` — committed capability identity and lifecycle metadata
+- `coral.config.json` — project preferences; `coral.lock` remains the project source of truth
 - No separate source directory — agent files are the source
 
 ## Status Values

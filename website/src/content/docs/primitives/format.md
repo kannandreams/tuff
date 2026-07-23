@@ -8,8 +8,8 @@ Coral discovers capabilities from directory structure and, optionally, a source
 type, files, and metadata from the filesystem or from `--type` and `--name`
 flags passed at install time.
 
-Tracking metadata lives exclusively in `.coral/coral-lock.json` and
-`.coral/objects/`. No tracking files are emitted into agent directories
+Tracking metadata lives exclusively in `coral.lock` and
+the user cache directory. No tracking files are emitted into agent directories
 (`.agents/`, `.claude/`). Coral regenerates derived artifacts like
 `CAPABILITIES.md` on demand with `coral generate index`.
 
@@ -34,27 +34,25 @@ For a skill with `id = "python-uv-default"`, Coral installs:
 .agents/skills/python-uv-default/SKILL.md
 ```
 
-It records an install-time baseline as a content-addressed object under
-`.coral/objects/` so later edits can be reported as drift:
+It records an install-time materialized-tree hash in `coral.lock`; the disposable
+verified tree cache is machine-global:
 
 ```text
-.coral/objects/sha256/a1/b2c3...
+<user-cache>/coral/sha256/a1/b2c3...
 ```
 
 Capabilities tracked from existing project files (e.g., `scripts/deploy.sh`)
 are tracked in-place without copying. The lockfile records their source path:
 
 ```jsonc
-"prod-deploy": {
-    "type": "tool",
-    "sourcePath": "scripts/deploy.sh",
-    "targets": {
-        "open-agents": {
-            "emittedFiles": [],
-            "ownership": "imported"
-        }
-    }
-}
+[[capabilities]]
+name = "prod-deploy"
+type = "tool"
+source = "local"
+source_path = "scripts/deploy.sh"
+sha256 = "..."
+target = "open-agents"
+installed_path = ".agents/tools/prod-deploy"
 ```
 
 ## Where capabilities should live

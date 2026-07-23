@@ -37,6 +37,12 @@ impl From<toml::de::Error> for CoralError {
     }
 }
 
+impl From<toml::ser::Error> for CoralError {
+    fn from(error: toml::ser::Error) -> Self {
+        Self(format!("could not serialize TOML: {error}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

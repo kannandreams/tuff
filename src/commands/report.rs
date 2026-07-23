@@ -18,7 +18,7 @@ pub fn cmd_generate_index(
     let requested = agent
         .map(|value| vec![value.to_string()])
         .unwrap_or_default();
-    let selected = resolve_agent_selection(repo_root, &requested)?;
+    let selected = resolve_agent_selection(repo_root, &requested, false)?;
     let adapter = AdapterKind::from_id(&selected[0]).ok_or_else(|| {
         CoralError::new(format!(
             "unknown agent '{}'; use 'coral agent list' to see available agents",
@@ -60,12 +60,9 @@ pub fn cmd_generate_report(repo_root: &Path, output: Option<&Path>) -> Result<()
             .then_with(|| a.path.cmp(&b.path))
     });
 
-    let output_path = output.map(Path::to_path_buf).unwrap_or_else(|| {
-        repo_root
-            .join(".coral")
-            .join("reports")
-            .join("coral-report.md")
-    });
+    let output_path = output
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| repo_root.join("coral-report.md"));
     write_generated_file(&output_path, &render_report_markdown(&rows))?;
     println!(
         "generated report -> {}",
@@ -283,5 +280,6 @@ fn capability_type_heading(capability_type: CapabilityType) -> String {
         CapabilityType::Tool => "Tools".to_string(),
         CapabilityType::Hook => "Hooks".to_string(),
         CapabilityType::Workflow => "Workflows".to_string(),
+        CapabilityType::Policy => "Policies".to_string(),
     }
 }

@@ -13,7 +13,11 @@ pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
     } else {
         repo_root.to_path_buf()
     };
-    let config = config::read_config(&config_root)?;
+    let config = if global {
+        config::read_global_config(&config_root)?
+    } else {
+        config::read_config(&config_root)?
+    };
     let registered: HashSet<&str> = config.agents.iter().map(|s| s.as_str()).collect();
 
     let table_rows: Vec<Vec<String>> = AdapterKind::all()
@@ -123,9 +127,17 @@ pub fn cmd_agent_set_default(repo_root: &Path, id: &str, global: bool) -> Result
     } else {
         repo_root.to_path_buf()
     };
-    let mut config = config::read_config(&config_root)?;
+    let mut config = if global {
+        config::read_global_config(&config_root)?
+    } else {
+        config::read_config(&config_root)?
+    };
     config.default_agent = adapter.id().to_string();
-    config::write_config(&config_root, &config)?;
+    if global {
+        config::write_global_config(&config_root, &config)?;
+    } else {
+        config::write_config(&config_root, &config)?;
+    }
     println!(
         "set default agent '{}' ({})",
         adapter.id(),

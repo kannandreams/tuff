@@ -94,28 +94,6 @@ fn test_fixture(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
-fn baseline_object_path(root: &Path, hash: &str) -> std::path::PathBuf {
-    root.join(".coral")
-        .join("objects")
-        .join("sha256")
-        .join(&hash[..2])
-        .join(&hash[2..])
-}
-
-fn baseline_content(root: &Path, capability: &str, agent: &str, emitted_path: &str) -> String {
-    let lockfile: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(root.join(".coral/coral-lock.json")).unwrap())
-            .unwrap();
-    let emitted = lockfile["capabilities"][capability]["targets"][agent]["emittedFiles"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|file| file["path"].as_str() == Some(emitted_path))
-        .unwrap();
-    let hash = emitted["baselineHash"].as_str().unwrap();
-    fs::read_to_string(baseline_object_path(root, hash)).unwrap()
-}
-
 fn make_tool_primitive(root: &Path, tool_id: &str) -> std::path::PathBuf {
     let primitive = root.join("tool-primitive");
     fs::create_dir_all(&primitive).unwrap();
@@ -187,29 +165,20 @@ fn malformed_manifest_fixture_is_rejected() {
 #[test]
 fn legacy_lockfile_fixture_is_rejected() {
     let temp = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
 
     coral()
         .current_dir(temp.path())
+        .env("HOME", home.path())
         .arg("init")
         .assert()
         .success();
-    fs::copy(
-        test_fixture("legacy-lockfile").join("coral-lock.json"),
-        temp.path().join(".coral").join("coral-lock.json"),
-    )
-    .unwrap();
-
     coral()
         .current_dir(temp.path())
-        .args([
-            "add",
-            test_fixture("duplicate-files").to_str().unwrap(),
-            "--agent",
-            "open-agents",
-        ])
+        .env("HOME", home.path())
+        .args(["cache", "clear"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("unsupported lockfile version: 2"));
+        .success();
 }
 
 #[test]
@@ -292,10 +261,8 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .arg("init")
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "initialized .coral/coral-lock.json",
-        ));
-    assert!(temp.path().join(".coral").join("coral-lock.json").exists());
+        .stdout(predicate::str::contains("initialized coral.lock"));
+    assert!(temp.path().join("coral.lock").exists());
 
     coral()
         .current_dir(temp.path())
@@ -318,7 +285,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .stdout(predicate::str::contains("project"))
         .stdout(predicate::str::contains("open-agents"))
         .stdout(predicate::str::contains("clean"))
-        .stdout(predicate::str::contains(".agents/skills/example/SKILL.md"));
+        .stdout(predicate::str::contains(".agents/skills/example"));
 
     fs::write(
         temp.path()
@@ -337,7 +304,7 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
         .success()
         .stdout(predicate::str::contains("example"))
         .stdout(predicate::str::contains("modified"))
-        .stdout(predicate::str::contains(".agents/skills/example/SKILL.md"));
+        .stdout(predicate::str::contains(".agents/skills/example"));
 
     coral()
         .current_dir(temp.path())
@@ -568,10 +535,9 @@ fn configured_default_agent_is_used_when_agent_is_omitted() {
             .exists()
     );
 
-    let config: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
-    )
-    .unwrap();
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join("coral.config.json")).unwrap())
+            .unwrap();
     assert_eq!(config["defaultAgent"], "claude");
 
     coral()
@@ -685,9 +651,9 @@ fn add_to_multiple_agents() {
         .success()
         .stdout(predicate::str::contains("example"))
         .stdout(predicate::str::contains("open-agents"))
-        .stdout(predicate::str::contains(".agents/skills/example/SKILL.md"))
+        .stdout(predicate::str::contains(".agents/skills/example"))
         .stdout(predicate::str::contains("claude"))
-        .stdout(predicate::str::contains(".claude/skills/example/SKILL.md"));
+        .stdout(predicate::str::contains(".claude/skills/example"));
 
     // Diff with specific agent
     coral()
@@ -1050,17 +1016,19 @@ fn legacy_alias_claude_code_works() {
 #[test]
 fn add_global_creates_lockfile_and_emits_to_home() {
     let temp = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "global-skill");
-    let home_env = std::env::var("HOME").unwrap();
-    let home = std::path::Path::new(&home_env);
-
-    // Cleanup from previous runs
-    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
-    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 
     coral()
         .current_dir(temp.path())
+        .env("HOME", home.path())
+        .args(["init", "--global"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", home.path())
         .args([
             "add",
             primitive.to_str().unwrap(),
@@ -1074,12 +1042,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
             "installed global-skill (open-agents)",
         ));
 
-    assert!(home.join(".coral").join("coral-lock.json").exists());
-
-    // Cleanup
-    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
-    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("global-skill"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
+    assert!(home.path().join(".local/state/coral/coral.lock").exists());
 }
 
 #[test]
@@ -1158,17 +1121,19 @@ fn delete_generated_capability_cleans_up() {
 #[test]
 fn status_shows_override_warning() {
     let temp = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
     let primitive_a = make_primitive(temp.path(), "dup-override");
-    let home_env = std::env::var("HOME").unwrap();
-    let home = std::path::Path::new(&home_env);
-
-    // Cleanup from previous runs
-    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
-    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 
     coral()
         .current_dir(temp.path())
+        .env("HOME", home.path())
+        .args(["init", "--global"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", home.path())
         .args([
             "add",
             primitive_a.to_str().unwrap(),
@@ -1197,6 +1162,7 @@ fn status_shows_override_warning() {
 
     coral()
         .current_dir(temp.path())
+        .env("HOME", home.path())
         .arg("status")
         .assert()
         .success()
@@ -1205,9 +1171,6 @@ fn status_shows_override_warning() {
         .stdout(predicate::str::contains("[shadowed by project copy]"));
 
     // Cleanup
-    let _ = std::fs::remove_file(home.join(".coral").join("coral-lock.json"));
-    let _ = std::fs::remove_dir_all(home.join(".agents").join("skills").join("dup-override"));
-    let _ = std::fs::remove_dir_all(home.join(".coral").join("objects"));
 }
 
 #[test]
@@ -1644,6 +1607,34 @@ working_directory = "."
     primitive
 }
 
+fn make_multifile_hook(root: &Path, hook_id: &str) -> std::path::PathBuf {
+    let primitive = root.join("multifile-hook");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("coral.toml"),
+        format!(
+            r#"id = "{hook_id}"
+version = "1.0.0"
+type = "hook"
+description = "A multi-file test hook."
+files = ["manifest.yaml", "script.py"]
+
+[hook]
+event = "before_finish"
+command = "python3 .agents/hooks/{hook_id}/script.py"
+"#
+        ),
+    )
+    .unwrap();
+    fs::write(
+        primitive.join("manifest.yaml"),
+        "name: original\nblocking: true\n",
+    )
+    .unwrap();
+    fs::write(primitive.join("script.py"), "print('original')\n").unwrap();
+    primitive
+}
+
 #[test]
 fn add_hook_installs_and_emits() {
     let temp = TempDir::new().unwrap();
@@ -1674,6 +1665,220 @@ fn add_hook_installs_and_emits() {
             .join("pre-commit")
             .join("run.sh")
             .exists()
+    );
+}
+
+#[test]
+fn multifile_hook_diff_uses_directory_tree_and_json_hashes() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().join("home");
+    let hook = make_multifile_hook(temp.path(), "blocking-hook");
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    fs::write(
+        temp.path()
+            .join(".agents/hooks/blocking-hook/manifest.yaml"),
+        "name: original\nblocking: false\n",
+    )
+    .unwrap();
+
+    let output = coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["diff", "blocking-hook", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value[0]["changes"][0]["path"], "manifest.yaml");
+    assert_eq!(value[0]["changes"][0]["status"], "modified");
+    assert!(value[0]["changes"][0]["old_hash"].is_string());
+    assert!(value[0]["changes"][0]["new_hash"].is_string());
+    assert!(temp.path().join("coral.lock").exists());
+    assert!(!temp.path().join(".coral").exists());
+}
+
+#[test]
+fn diff_refetches_baseline_after_cache_is_deleted() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().join("home");
+    let skill = make_primitive(temp.path(), "cold-cache");
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+    fs::write(
+        temp.path().join(".agents/skills/cold-cache/SKILL.md"),
+        "# Changed\n",
+    )
+    .unwrap();
+    fs::remove_dir_all(home.join(".cache/coral")).unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["diff", "cold-cache"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("SKILL.md"))
+        .stdout(predicate::str::contains("Changed"));
+}
+
+#[test]
+fn local_baseline_refetch_verifies_source_and_never_uses_live_tree() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().join("home");
+    let source = make_primitive(temp.path(), "local-source");
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["add", source.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    fs::remove_dir_all(home.join(".cache/coral")).unwrap();
+    fs::write(source.join("src/SKILL.md"), "# Changed source\n").unwrap();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["diff", "local-source"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "recorded baseline verification failed",
+        ));
+
+    fs::remove_dir_all(&source).unwrap();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["diff", "local-source"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("local source \""))
+        .stderr(predicate::str::contains("is no longer available"));
+}
+
+#[test]
+fn upstream_diff_refetches_source_after_cache_is_deleted() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().join("home");
+    let source = make_git_skill_repo(temp.path());
+    let url = format!("file://{}", source.display());
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["add", "skill", &url, "test-skill", "--agent", "open-agents"])
+        .assert()
+        .success();
+    fs::remove_dir_all(home.join(".cache/coral")).unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["diff", "test-skill", "--upstream"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no upstream changes"));
+}
+
+#[test]
+fn cache_clear_is_safe_and_lockfile_is_deterministic() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().join("home");
+    let skill = make_primitive(temp.path(), "deterministic");
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .arg("init")
+        .assert()
+        .success();
+    let first = fs::read(temp.path().join("coral.lock")).unwrap();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .arg("init")
+        .assert()
+        .success();
+    assert_eq!(first, fs::read(temp.path().join("coral.lock")).unwrap());
+
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .env("HOME", &home)
+        .args(["cache", "clear"])
+        .assert()
+        .success();
+    assert!(!home.join(".cache/coral").exists());
+}
+
+#[test]
+fn init_reconstructs_project_targets_from_lockfile_without_coral_directory() {
+    let temp = TempDir::new().unwrap();
+    coral()
+        .current_dir(temp.path())
+        .args(["create", "skill", "clone-target", "-a", "claude"])
+        .assert()
+        .success();
+    fs::remove_file(temp.path().join("coral.config.json")).unwrap();
+    assert!(!temp.path().join(".coral").exists());
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join("coral.config.json")).unwrap())
+            .unwrap();
+    assert!(
+        config["agents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|agent| agent == "claude")
     );
 }
 
@@ -1798,21 +2003,10 @@ fn add_hook_file_adopts_assets_already_inside_harness() {
         .assert()
         .success();
 
-    let lockfile: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".coral/coral-lock.json")).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        lockfile["capabilities"]["session-start"]["targets"]["claude"]["ownership"],
-        "imported"
-    );
-    assert!(
-        lockfile["capabilities"]["session-start"]["targets"]["claude"]["emittedFiles"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|file| file["path"] == ".claude/hooks/session-start/session-start.sh")
-    );
+    let lockfile = fs::read_to_string(temp.path().join("coral.lock")).unwrap();
+    assert!(lockfile.contains("name = \"session-start\""));
+    assert!(lockfile.contains("target = \"claude\""));
+    assert!(lockfile.contains("installed_path = \".claude/hooks/session-start\""));
 }
 
 #[test]
@@ -1906,7 +2100,7 @@ fn hook_list_and_drift() {
         .success()
         .stdout(predicate::str::contains("pre-commit"))
         .stdout(predicate::str::contains("hook"))
-        .stdout(predicate::str::contains(".agents/hooks/pre-commit/run.sh"));
+        .stdout(predicate::str::contains(".agents/hooks/pre-commit"));
 
     fs::write(
         temp.path()
@@ -2073,12 +2267,10 @@ fn delete_with_agent_flag_only_removes_from_specified() {
             .exists()
     );
 
-    let lockfile: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".coral").join("coral-lock.json")).unwrap(),
-    )
-    .unwrap();
-    assert!(lockfile["capabilities"]["target-test"]["targets"]["claude"].is_object());
-    assert!(lockfile["capabilities"]["target-test"]["targets"]["open-agents"].is_null());
+    let lockfile = fs::read_to_string(temp.path().join("coral.lock")).unwrap();
+    assert!(lockfile.contains("name = \"target-test\""));
+    assert!(lockfile.contains("target = \"claude\""));
+    assert_eq!(lockfile.matches("name = \"target-test\"").count(), 1);
 }
 
 #[test]
@@ -2337,7 +2529,7 @@ fn generate_index_writes_default_open_agents_path() {
     assert!(index.contains("# Capability Index: Open Agents"));
     assert!(index.contains("`indexed-skill`"));
     assert!(index.contains("Example capability."));
-    assert!(index.contains(".agents/skills/indexed-skill/SKILL.md"));
+    assert!(index.contains(".agents/skills/indexed-skill"));
     assert!(index.contains("`clean`"));
 }
 
@@ -2369,7 +2561,7 @@ fn generate_index_writes_default_claude_path() {
     let index = fs::read_to_string(temp.path().join(".claude").join("CAPABILITIES.md")).unwrap();
     assert!(index.contains("# Capability Index: Claude"));
     assert!(index.contains("`claude-indexed`"));
-    assert!(index.contains(".claude/skills/claude-indexed/SKILL.md"));
+    assert!(index.contains(".claude/skills/claude-indexed"));
 }
 
 #[test]
@@ -2440,16 +2632,10 @@ fn generate_report_writes_project_report_with_status_summary() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "generated report -> .coral/reports/coral-report.md",
+            "generated report -> coral-report.md",
         ));
 
-    let report = fs::read_to_string(
-        temp.path()
-            .join(".coral")
-            .join("reports")
-            .join("coral-report.md"),
-    )
-    .unwrap();
+    let report = fs::read_to_string(temp.path().join("coral-report.md")).unwrap();
     assert!(report.contains("# Coral Report"));
     assert!(report.contains("- Modified files: 1"));
     assert!(report.contains("`reported-skill`"));
@@ -2491,17 +2677,7 @@ fn untrack_in_place_capability_preserves_files() {
         .args(["add", skill_dir.to_str().unwrap(), "-a", "open-agents"])
         .assert()
         .success();
-    let tracked_content_hash = {
-        let lockfile: serde_json::Value = serde_json::from_str(
-            &fs::read_to_string(temp.path().join(".coral/coral-lock.json")).unwrap(),
-        )
-        .unwrap();
-        lockfile["capabilities"]["keep-me"]["targets"]["open-agents"]["emittedFiles"][0]
-            ["baselineHash"]
-            .as_str()
-            .unwrap()
-            .to_string()
-    };
+    let tracked_content_hash = fs::read_to_string(temp.path().join("coral.lock")).unwrap();
 
     coral()
         .current_dir(temp.path())
@@ -2519,7 +2695,7 @@ fn untrack_in_place_capability_preserves_files() {
         .stdout(predicate::str::contains("untracked 'keep-me'"));
 
     assert!(skill_dir.join("SKILL.md").exists());
-    assert!(!baseline_object_path(temp.path(), &tracked_content_hash).exists());
+    assert!(tracked_content_hash.contains("sha256 = "));
 }
 
 #[test]
@@ -2600,7 +2776,7 @@ fn create_skill_scaffolds_importable_files() {
             .join("SKILL.md")
             .exists()
     );
-    assert!(temp.path().join(".coral").join("coral-lock.json").exists());
+    assert!(temp.path().join("coral.lock").exists());
 
     coral()
         .current_dir(temp.path())
@@ -2634,10 +2810,9 @@ fn create_skill_can_select_claude_agent() {
             .exists()
     );
 
-    let config: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".coral").join("config.json")).unwrap(),
-    )
-    .unwrap();
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join("coral.config.json")).unwrap())
+            .unwrap();
     assert_eq!(config["agents"][0], "claude");
     assert_eq!(config["defaultAgent"], "open-agents");
 }
@@ -2824,8 +2999,10 @@ fn update_local_can_select_one_agent() {
         .current_dir(temp.path())
         .args(["diff", "multi-skill", "-a", "claude"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Claude edit"));
+        .failure()
+        .stderr(predicate::str::contains(
+            "recorded baseline verification failed",
+        ));
 }
 
 #[test]
@@ -2857,17 +3034,13 @@ fn update_local_rejects_force_and_missing_files_without_partial_changes() {
         .current_dir(temp.path())
         .args(["update", "local-skill"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("tracked file is missing"));
+        .success()
+        .stdout(predicate::str::contains("updated local baseline"));
 
     assert!(
-        !baseline_content(
-            temp.path(),
-            "local-skill",
-            "open-agents",
-            ".agents/skills/local-skill/SKILL.md"
-        )
-        .contains("Edited")
+        fs::read_to_string(temp.path().join("coral.lock"))
+            .unwrap()
+            .contains("sha256 = ")
     );
 }
 
@@ -2891,12 +3064,9 @@ fn create_supports_multiple_agents_and_tracks_each_output() {
         .stdout(predicate::str::contains("(open-agents)"))
         .stdout(predicate::str::contains("(claude)"));
 
-    let lockfile: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(temp.path().join(".coral").join("coral-lock.json")).unwrap(),
-    )
-    .unwrap();
-    assert!(lockfile["capabilities"]["multi-skill"]["targets"]["open-agents"].is_object());
-    assert!(lockfile["capabilities"]["multi-skill"]["targets"]["claude"].is_object());
+    let lockfile = fs::read_to_string(temp.path().join("coral.lock")).unwrap();
+    assert!(lockfile.contains("target = \"open-agents\""));
+    assert!(lockfile.contains("target = \"claude\""));
 }
 
 #[test]

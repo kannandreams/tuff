@@ -40,7 +40,7 @@ pub fn cmd_delete(
     force: bool,
 ) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = resolve_agent_selection(&scope_root, targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets, scope == Scope::Global)?;
 
     let mut lf = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {
@@ -63,10 +63,15 @@ pub fn cmd_delete(
             )));
         }
 
-        let modified = target_entry
-            .emitted_files
-            .iter()
-            .any(|emitted| lockfile::drift_status(&scope_root, emitted) == "modified");
+        let modified_tree = !target_entry.installed_path.is_empty()
+            && crate::cache::hash_tree(&scope_root.join(&target_entry.installed_path))
+                .map(|hash| hash != target_entry.sha256)
+                .unwrap_or(true);
+        let modified = modified_tree
+            || target_entry
+                .emitted_files
+                .iter()
+                .any(|emitted| lockfile::drift_status(&scope_root, emitted) == "modified");
         let modified_hook = target_entry
             .managed_hooks
             .iter()
@@ -110,7 +115,7 @@ pub fn cmd_delete(
 
 pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[String]) -> Result<()> {
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
-    let target_ids = resolve_agent_selection(&scope_root, targets)?;
+    let target_ids = resolve_agent_selection(&scope_root, targets, scope == Scope::Global)?;
 
     let mut lf = lockfile::require_lockfile(&scope_root)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {

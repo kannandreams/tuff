@@ -3,6 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
+use crate::paths;
 
 pub const DEFAULT_AGENT: &str = "open-agents";
 
@@ -24,27 +25,37 @@ impl Default for CoralConfig {
     }
 }
 
-fn config_path(repo_root: &Path) -> std::path::PathBuf {
-    repo_root.join(".coral").join("config.json")
+pub fn read_config(repo_root: &Path) -> Result<CoralConfig> {
+    read_config_at(&paths::project_config(repo_root))
 }
 
-pub fn read_config(repo_root: &Path) -> Result<CoralConfig> {
-    let path = config_path(repo_root);
+pub fn read_global_config(home: &Path) -> Result<CoralConfig> {
+    read_config_at(&paths::user_config(home))
+}
+
+fn read_config_at(path: &Path) -> Result<CoralConfig> {
     if path.exists() {
-        let config: CoralConfig = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
+        let config: CoralConfig = serde_json::from_str(&std::fs::read_to_string(path)?)?;
         Ok(config)
     } else {
         let default = CoralConfig::default();
-        write_config(repo_root, &default)?;
+        write_config_at(path, &default)?;
         Ok(default)
     }
 }
 
 pub fn write_config(repo_root: &Path, config: &CoralConfig) -> Result<()> {
-    let path = config_path(repo_root);
+    write_config_at(&paths::project_config(repo_root), config)
+}
+
+pub fn write_global_config(home: &Path, config: &CoralConfig) -> Result<()> {
+    write_config_at(&paths::user_config(home), config)
+}
+
+fn write_config_at(path: &Path, config: &CoralConfig) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&path, serde_json::to_string_pretty(config)? + "\n")?;
+    std::fs::write(path, serde_json::to_string_pretty(config)? + "\n")?;
     Ok(())
 }

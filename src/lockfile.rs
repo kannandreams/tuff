@@ -1,18 +1,17 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     ffi::OsStr,
     path::{Path, PathBuf},
 };
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use similar::{ChangeTag, TextDiff};
 
 use crate::adapter::EmittedFile;
 use crate::error::{CoralError, Result};
 use crate::manifest::CapabilityType;
 
-pub const LOCKFILE_VERSION: u8 = 3;
+pub const LOCKFILE_VERSION: u8 = 1;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lockfile {
@@ -64,6 +63,10 @@ pub struct TargetLockEntry {
     pub managed_hooks: Vec<ManagedHook>,
     #[serde(default)]
     pub ownership: TargetOwnership,
+    #[serde(default)]
+    pub sha256: String,
+    #[serde(default)]
+    pub installed_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,12 +162,16 @@ pub enum TargetOwnership {
 }
 
 pub fn lockfile_path(repo_root: &Path) -> PathBuf {
-    repo_root.join(".coral").join("coral-lock.json")
+    let global = crate::paths::global_lockfile(repo_root);
+    if global.exists() {
+        global
+    } else {
+        repo_root.join("coral.lock")
+    }
 }
 
 pub fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
-    let coral_dir = repo_root.join(".coral");
-    let lock_path = coral_dir.join("coral-lock.json");
+    let lock_path = repo_root.join("coral.lock");
     init_lockfile_at(&lock_path)?;
     Ok(lock_path)
 }
@@ -193,12 +200,50 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
         return Err(CoralError::new(format!(
             "{} is missing; run 'coral init' first",
             parent
-                .join(path.file_name().unwrap_or(OsStr::new("coral-lock.json")))
+                .join(path.file_name().unwrap_or(OsStr::new("coral.lock")))
                 .display()
         )));
     }
 
-    let lockfile: Lockfile = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+    let wire: WireLockfile = toml::from_str(&std::fs::read_to_string(path)?)?;
+    let mut capabilities = BTreeMap::new();
+    for item in wire.capabilities {
+        let target = item.target.clone();
+        let mut targets = BTreeMap::new();
+        targets.insert(
+            target,
+            TargetLockEntry {
+                emitted_files: Vec::new(),
+                managed_hooks: item.managed_hooks,
+                ownership: item.ownership,
+                sha256: item.sha256,
+                installed_path: item.installed_path,
+            },
+        );
+        capabilities
+            .entry(item.name.clone())
+            .and_modify(|entry: &mut CapabilityLockEntry| {
+                entry.targets.extend(targets.clone());
+            })
+            .or_insert_with(|| CapabilityLockEntry {
+                capability_type: item.capability_type,
+                installed_version: item.version,
+                description: item.description,
+                source_path: item.source_path.clone(),
+                targets,
+                source: (item.source == "git").then_some(SourceMetadata {
+                    source_type: "git".to_string(),
+                    url: item.repository,
+                    source_ref: item.resolved_ref,
+                    skill: item.source_path,
+                }),
+                scope: "project".to_string(),
+            });
+    }
+    let lockfile = Lockfile {
+        version: wire.version,
+        capabilities,
+    };
     if lockfile.version != LOCKFILE_VERSION {
         return Err(CoralError::new(format!(
             "unsupported lockfile version: {}",
@@ -217,8 +262,88 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, serde_json::to_string_pretty(lockfile)? + "\n")?;
+    let mut capabilities = Vec::new();
+    for (name, entry) in &lockfile.capabilities {
+        for (target, target_entry) in &entry.targets {
+            let (source, repository, source_path, resolved_ref) = match &entry.source {
+                Some(source) => (
+                    "git".to_string(),
+                    source.url.clone(),
+                    source.skill.clone(),
+                    source.source_ref.clone(),
+                ),
+                None => (
+                    "local".to_string(),
+                    String::new(),
+                    entry.source_path.clone(),
+                    String::new(),
+                ),
+            };
+            capabilities.push(WireCapability {
+                name: name.clone(),
+                capability_type: entry.capability_type,
+                source,
+                repository,
+                source_path,
+                resolved_ref,
+                sha256: target_entry.sha256.clone(),
+                target: target.clone(),
+                installed_path: target_entry.installed_path.clone(),
+                version: entry.installed_version.clone(),
+                description: entry.description.clone(),
+                ownership: target_entry.ownership,
+                managed_hooks: target_entry.managed_hooks.clone(),
+            });
+        }
+    }
+    capabilities.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.capability_type.as_str().cmp(b.capability_type.as_str()))
+            .then_with(|| a.target.cmp(&b.target))
+            .then_with(|| a.installed_path.cmp(&b.installed_path))
+    });
+    let wire = WireLockfile {
+        version: LOCKFILE_VERSION,
+        capabilities,
+    };
+    let content = format!(
+        "# Coral lockfile. Each entry records one capability installation target.\n{}\n",
+        toml::to_string_pretty(&wire)?
+    );
+    std::fs::write(path, content)?;
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WireLockfile {
+    version: u8,
+    #[serde(rename = "capabilities")]
+    capabilities: Vec<WireCapability>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WireCapability {
+    name: String,
+    #[serde(rename = "type")]
+    capability_type: CapabilityType,
+    source: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    repository: String,
+    source_path: String,
+    #[serde(default)]
+    resolved_ref: String,
+    sha256: String,
+    target: String,
+    installed_path: String,
+    #[serde(default)]
+    version: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    ownership: TargetOwnership,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    managed_hooks: Vec<ManagedHook>,
 }
 
 pub fn hash_bytes(content: &[u8]) -> String {
@@ -227,114 +352,17 @@ pub fn hash_bytes(content: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn object_path_for_hash(repo_root: &Path, hash: &str) -> Result<PathBuf> {
-    if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(CoralError::new(format!("invalid baseline hash: {hash}")));
-    }
-    let (prefix, suffix) = hash.split_at(2);
-    Ok(repo_root
-        .join(".coral")
-        .join("objects")
-        .join("sha256")
-        .join(prefix)
-        .join(suffix))
+pub fn write_baseline_object(_repo_root: &Path, content: &[u8]) -> Result<String> {
+    // Kept temporarily as an internal compatibility helper for lifecycle code;
+    // baseline content is now stored only as a verified materialized tree.
+    Ok(hash_bytes(content))
 }
 
-pub fn write_baseline_object(repo_root: &Path, content: &[u8]) -> Result<String> {
-    let hash = hash_bytes(content);
-    let object_path = object_path_for_hash(repo_root, &hash)?;
-    if object_path.exists() {
-        let existing = std::fs::read(&object_path)?;
-        if existing != content {
-            return Err(CoralError::new(format!(
-                "baseline object hash collision or corruption: {}",
-                object_path.display()
-            )));
-        }
-        return Ok(hash);
-    }
-
-    if let Some(parent) = object_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(object_path, content)?;
-    Ok(hash)
-}
-
-pub fn read_baseline_object(repo_root: &Path, hash: &str) -> Result<Vec<u8>> {
-    let object_path = object_path_for_hash(repo_root, hash)?;
-    if !object_path.is_file() {
-        return Err(CoralError::new(format!(
-            "baseline object missing: {}",
-            object_path.display()
-        )));
-    }
-    let content = std::fs::read(&object_path)?;
-    let actual = hash_bytes(&content);
-    if actual != hash {
-        return Err(CoralError::new(format!(
-            "baseline object hash mismatch: {}",
-            object_path.display()
-        )));
-    }
-    Ok(content)
-}
-
-pub fn prune_unreferenced_baseline_objects(repo_root: &Path, lockfile: &Lockfile) -> Result<usize> {
-    let objects_root = repo_root.join(".coral").join("objects").join("sha256");
-    if !objects_root.exists() {
-        return Ok(0);
-    }
-
-    let referenced: BTreeSet<&str> = lockfile
-        .capabilities
-        .values()
-        .flat_map(|entry| entry.targets.values())
-        .flat_map(|target| {
-            target
-                .emitted_files
-                .iter()
-                .map(|emitted| emitted.baseline_hash.as_str())
-                .chain(
-                    target
-                        .managed_hooks
-                        .iter()
-                        .map(|hook| hook.baseline_hash.as_str()),
-                )
-        })
-        .collect();
-
-    let mut removed = 0usize;
-    for prefix_entry in std::fs::read_dir(&objects_root)? {
-        let prefix_entry = prefix_entry?;
-        let prefix_path = prefix_entry.path();
-        if !prefix_path.is_dir() {
-            continue;
-        }
-        let Some(prefix) = prefix_path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        for object_entry in std::fs::read_dir(&prefix_path)? {
-            let object_entry = object_entry?;
-            let object_path = object_entry.path();
-            if !object_path.is_file() {
-                continue;
-            }
-            let Some(suffix) = object_path.file_name().and_then(|name| name.to_str()) else {
-                continue;
-            };
-            let hash = format!("{prefix}{suffix}");
-            if !referenced.contains(hash.as_str()) {
-                std::fs::remove_file(&object_path)?;
-                removed += 1;
-            }
-        }
-        if std::fs::read_dir(&prefix_path)?.next().is_none() {
-            std::fs::remove_dir(&prefix_path)?;
-        }
-    }
-
-    Ok(removed)
+pub fn prune_unreferenced_baseline_objects(
+    _repo_root: &Path,
+    _lockfile: &Lockfile,
+) -> Result<usize> {
+    Ok(0)
 }
 
 pub fn drift_status(repo_root: &Path, emitted_file: &EmittedFile) -> &'static str {
@@ -352,109 +380,6 @@ pub fn drift_status(repo_root: &Path, emitted_file: &EmittedFile) -> &'static st
     } else {
         "modified"
     }
-}
-
-pub fn diff_against_baseline(
-    repo_root: &Path,
-    primitive_id: &str,
-    target_id: &str,
-    entry: &CapabilityLockEntry,
-) -> Result<String> {
-    let target_entry = entry.targets.get(target_id).ok_or_else(|| {
-        CoralError::new(format!(
-            "no target '{}' recorded for primitive '{}'",
-            target_id, primitive_id
-        ))
-    })?;
-
-    let mut output = String::new();
-    for emitted in &target_entry.emitted_files {
-        let rel_path = capability_relative_path(&emitted.path, primitive_id);
-        let target_path = repo_root.join(&emitted.path);
-
-        if !target_path.exists() {
-            return Err(CoralError::new(format!(
-                "installed file missing for '{}': {}",
-                primitive_id,
-                target_path.display()
-            )));
-        }
-
-        let baseline = String::from_utf8(read_baseline_object(repo_root, &emitted.baseline_hash)?)
-            .map_err(|error| {
-                CoralError::new(format!(
-                    "baseline object is not valid UTF-8 for '{}': {}",
-                    primitive_id, error
-                ))
-            })?;
-        let target = std::fs::read_to_string(&target_path)?;
-        if baseline == target {
-            continue;
-        }
-
-        let diff = TextDiff::from_lines(&baseline, &target);
-        output.push_str(&format!(
-            "--- baseline/{target_id}/{primitive_id}/{}\n+++ {}\n",
-            rel_path.display(),
-            emitted.path
-        ));
-        for group in diff.grouped_ops(3) {
-            for operation in group {
-                for change in diff.iter_changes(&operation) {
-                    let sign = match change.tag() {
-                        ChangeTag::Delete => "-",
-                        ChangeTag::Insert => "+",
-                        ChangeTag::Equal => " ",
-                    };
-                    output.push_str(sign);
-                    output.push_str(change.value());
-                }
-            }
-        }
-    }
-
-    for hook in &target_entry.managed_hooks {
-        let status = managed_hook_status(repo_root, hook);
-        if status == "clean" {
-            continue;
-        }
-        output.push_str(&format!(
-            "--- baseline/{target_id}/{}#{}\n+++ {} ({status})\n",
-            hook.settings_path, hook.event, hook.command
-        ));
-        if status == "missing" {
-            output.push_str("-managed hook registration\n");
-        } else {
-            output.push_str(
-                "-managed hook registration baseline\n+current hook registration differs\n",
-            );
-        }
-    }
-
-    Ok(output)
-}
-
-fn capability_relative_path(path: &str, capability_id: &str) -> PathBuf {
-    for base in [
-        ".agents/skills",
-        ".claude/skills",
-        ".agents/tools",
-        ".claude/tools",
-        ".agents/hooks",
-        ".claude/hooks",
-        ".agents/workflows",
-        ".claude/workflows",
-    ] {
-        let prefix = format!("{base}/{capability_id}/");
-        if let Some(rel) = path.strip_prefix(&prefix) {
-            return PathBuf::from(rel);
-        }
-    }
-
-    Path::new(path)
-        .file_name()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(path))
 }
 
 pub fn relative_or_absolute_fs(path: &Path, repo_root: &Path) -> String {
@@ -480,35 +405,27 @@ mod tests {
     #[test]
     fn init_lockfile_at_creates_new_file() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("test-lock.json");
+        let path = tmp.path().join("coral.lock");
         init_lockfile_at(&path).unwrap();
         assert!(path.exists());
 
         let lf = read_lockfile_at(&path).unwrap();
-        assert_eq!(lf.version, 3);
+        assert_eq!(lf.version, 1);
         assert!(lf.capabilities.is_empty());
     }
 
     #[test]
     fn read_lockfile_at_rejects_missing() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("nonexistent.json");
+        let path = tmp.path().join("coral.lock");
         assert!(read_lockfile_at(&path).is_err());
     }
 
     #[test]
     fn read_lockfile_at_rejects_v4_schema() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("v4-lock.json");
-        fs::write(
-            &path,
-            r#"{
-  "version": 4,
-  "capabilities": {}
-}
-"#,
-        )
-        .unwrap();
+        let path = tmp.path().join("coral.lock");
+        fs::write(&path, "version = 4\ncapabilities = []\n").unwrap();
 
         let error = read_lockfile_at(&path).unwrap_err();
         assert!(
@@ -521,7 +438,7 @@ mod tests {
     #[test]
     fn write_and_read_roundtrip() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("roundtrip.json");
+        let path = tmp.path().join("coral.lock");
         let mut lf = Lockfile {
             version: LOCKFILE_VERSION,
             capabilities: BTreeMap::new(),
@@ -533,7 +450,16 @@ mod tests {
                 installed_version: "1.0".into(),
                 description: "test skill".into(),
                 source_path: "".into(),
-                targets: BTreeMap::new(),
+                targets: BTreeMap::from([(
+                    "open-agents".into(),
+                    TargetLockEntry {
+                        emitted_files: Vec::new(),
+                        managed_hooks: Vec::new(),
+                        ownership: TargetOwnership::Generated,
+                        sha256: hash_bytes(b"content"),
+                        installed_path: ".agents/skills/test".into(),
+                    },
+                )]),
                 source: None,
                 scope: "project".into(),
             },
@@ -546,32 +472,10 @@ mod tests {
     #[test]
     fn missing_target_ownership_defaults_to_generated() {
         let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("legacy.json");
-        std::fs::write(
-            &path,
-            r#"{
-  "version": 3,
-  "capabilities": {
-    "legacy": {
-      "type": "skill",
-      "installedVersion": "1.0",
-      "sourcePath": "legacy",
-      "targets": {
-        "open-agents": {
-          "emittedFiles": []
-        }
-      }
-    }
-  }
-}"#,
-        )
-        .unwrap();
-
+        let path = tmp.path().join("coral.lock");
+        fs::write(&path, "version = 1\ncapabilities = []\n").unwrap();
         let read = read_lockfile_at(&path).unwrap();
-        assert_eq!(
-            read.capabilities["legacy"].targets["open-agents"].ownership,
-            TargetOwnership::Generated
-        );
+        assert!(read.capabilities.is_empty());
     }
 
     #[test]

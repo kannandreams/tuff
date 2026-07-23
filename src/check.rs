@@ -33,7 +33,7 @@ pub fn run_checks(repo_root: &Path) -> Result<CheckOutcome> {
 
     // Global scope
     if let Some(home) = home_dir() {
-        let lock_path = home.join(".coral").join("coral-lock.json");
+        let lock_path = crate::paths::global_lockfile(&home);
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             check_lockfile(&home, &lf, &mut results);
         }
@@ -47,6 +47,16 @@ fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<
     for (id, entry) in lf.capabilities.iter() {
         for (target_id, target_entry) in entry.targets.iter() {
             let mut failing_files = Vec::new();
+
+            if target_entry.installed_path.is_empty() {
+                failing_files.push(id.clone());
+            } else {
+                let path = scope_root.join(&target_entry.installed_path);
+                match crate::cache::hash_tree(&path) {
+                    Ok(hash) if hash == target_entry.sha256 => {}
+                    Ok(_) | Err(_) => failing_files.push(target_entry.installed_path.clone()),
+                }
+            }
 
             for emitted in &target_entry.emitted_files {
                 let file_path = scope_root.join(&emitted.path);

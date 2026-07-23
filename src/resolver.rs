@@ -26,19 +26,11 @@ impl Scope {
     }
 }
 
-pub fn home_coral_dir() -> Option<PathBuf> {
-    dirs_home().map(|h| h.join(".coral"))
-}
-
-pub fn coral_dir(scope: Scope, repo_root: Option<&Path>) -> Option<PathBuf> {
-    match scope {
-        Scope::Project => repo_root.map(|r| r.join(".coral")),
-        Scope::Global => home_coral_dir(),
-    }
-}
-
 pub fn lockfile_path_for(scope: Scope, repo_root: Option<&Path>) -> Option<PathBuf> {
-    coral_dir(scope, repo_root).map(|d| d.join("coral-lock.json"))
+    match scope {
+        Scope::Project => repo_root.map(|root| root.join("coral.lock")),
+        Scope::Global => dirs_home().map(|home| crate::paths::global_lockfile(&home)),
+    }
 }
 
 pub fn read_lockfile(scope: Scope, repo_root: Option<&Path>) -> Result<Option<lockfile::Lockfile>> {
@@ -136,7 +128,6 @@ mod tests {
     use super::*;
     use crate::lockfile;
     use crate::manifest::CapabilityType;
-    use std::fs;
     use tempfile::TempDir;
 
     fn create_lockfile(path: &std::path::Path, entries: &[(&str, &str, &str)]) {
@@ -153,14 +144,22 @@ mod tests {
                     installed_version: version.to_string(),
                     description: String::new(),
                     source_path: "".into(),
-                    targets: std::collections::BTreeMap::new(),
+                    targets: std::collections::BTreeMap::from([(
+                        "open-agents".to_string(),
+                        lockfile::TargetLockEntry {
+                            emitted_files: Vec::new(),
+                            managed_hooks: Vec::new(),
+                            ownership: lockfile::TargetOwnership::Generated,
+                            sha256: String::new(),
+                            installed_path: String::new(),
+                        },
+                    )]),
                     source: None,
                     scope: "project".into(),
                 },
             );
         }
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, serde_json::to_string_pretty(&lf).unwrap() + "\n").unwrap();
+        lockfile::write_lockfile_at(path, &lf).unwrap();
     }
 
     #[test]
@@ -179,7 +178,7 @@ mod tests {
     #[test]
     fn resolve_entry_project_wins_over_global() {
         let tmp = TempDir::new().unwrap();
-        let proj_lock = tmp.path().join(".coral").join("coral-lock.json");
+        let proj_lock = tmp.path().join("coral.lock");
         create_lockfile(&proj_lock, &[("test", "skill", "1.0-project")]);
 
         // Create a fake global lockfile that won't be checked
@@ -193,7 +192,7 @@ mod tests {
     #[test]
     fn resolve_entry_not_found_returns_none() {
         let tmp = TempDir::new().unwrap();
-        let proj_lock = tmp.path().join(".coral").join("coral-lock.json");
+        let proj_lock = tmp.path().join("coral.lock");
         create_lockfile(&proj_lock, &[("other", "skill", "1.0")]);
 
         let result = resolve_entry("missing", tmp.path()).unwrap();
@@ -203,7 +202,7 @@ mod tests {
     #[test]
     fn overrides_global_false_when_no_conflict() {
         let tmp = TempDir::new().unwrap();
-        let proj_lock = tmp.path().join(".coral").join("coral-lock.json");
+        let proj_lock = tmp.path().join("coral.lock");
         create_lockfile(&proj_lock, &[("test", "skill", "1.0")]);
 
         assert!(!overrides_global("test", tmp.path()).unwrap());
@@ -214,10 +213,5 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let result = check_collision("test", tmp.path(), Some("https://github.com/a/b")).unwrap();
         assert!(result.is_none());
-    }
-
-    #[test]
-    fn home_coral_dir_returns_some() {
-        assert!(home_coral_dir().is_some());
     }
 }

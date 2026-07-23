@@ -14,6 +14,13 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
         for (id, entry) in &lf.capabilities {
             let mut flags = Vec::new();
             for target_entry in entry.targets.values() {
+                if !target_entry.installed_path.is_empty() {
+                    let path = repo_root.join(&target_entry.installed_path);
+                    match crate::cache::hash_tree(&path) {
+                        Ok(hash) if hash == target_entry.sha256 => {}
+                        Ok(_) | Err(_) => flags.push("modified"),
+                    }
+                }
                 for emitted in &target_entry.emitted_files {
                     let s = lockfile::drift_status(repo_root, emitted);
                     if s != "clean" {
@@ -106,11 +113,18 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
     }
 
     if let Some(home) = home_dir_opt() {
-        let lock_path = home.join(".coral").join("coral-lock.json");
+        let lock_path = crate::paths::global_lockfile(&home);
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             for (id, entry) in &lf.capabilities {
                 let mut flags = Vec::new();
                 for target_entry in entry.targets.values() {
+                    if !target_entry.installed_path.is_empty() {
+                        let path = home.join(&target_entry.installed_path);
+                        match crate::cache::hash_tree(&path) {
+                            Ok(hash) if hash == target_entry.sha256 => {}
+                            Ok(_) | Err(_) => flags.push("modified"),
+                        }
+                    }
                     for emitted in &target_entry.emitted_files {
                         let s = lockfile::drift_status(&home, emitted);
                         if s != "clean" {

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::adapter;
@@ -16,18 +16,40 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {
         display::print_init_banner();
         let home = home_dir()?;
-        let lock_path = home.join(".coral").join("coral-lock.json");
+        let lock_path = crate::paths::global_lockfile(&home);
         lockfile::init_lockfile_at(&lock_path)?;
-        let _ = config::read_config(&home)?;
-        println!("initialized ~/.coral/coral-lock.json");
+        let _ = config::read_global_config(&home)?;
+        println!("initialized global Coral state");
     } else {
         display::print_init_banner();
         let lock_path = lockfile::init_lockfile(repo_root)?;
+        let had_config = crate::paths::project_config(repo_root).exists();
         let mut config = config::read_config(repo_root)?;
         if !config.agents.iter().any(|agent| agent == "open-agents") {
             config.agents.push("open-agents".to_string());
-            config::write_config(repo_root, &config)?;
         }
+
+        // Project adapter registration is reconstructed from coral.lock so a
+        // clone remains usable even when project preferences are absent.
+        let lock = lockfile::read_lockfile_at(&lock_path)?;
+        let targets: BTreeSet<String> = lock
+            .capabilities
+            .values()
+            .flat_map(|entry| entry.targets.keys().cloned())
+            .collect();
+        for target in &targets {
+            if !config.agents.iter().any(|agent| agent == target) {
+                config.agents.push(target.clone());
+            }
+        }
+        if !had_config && !targets.is_empty() && !targets.contains(&config.default_agent) {
+            config.default_agent = targets
+                .iter()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| config.default_agent.clone());
+        }
+        config::write_config(repo_root, &config)?;
 
         for dir in &["skills", "tools", "hooks", "workflows"] {
             let path = repo_root.join(".agents").join(dir);
@@ -51,6 +73,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             std::fs::write(guide_path.join("SKILL.md"), CORAL_GUIDE_CONTENT)?;
 
             let hash = lockfile::hash_bytes(CORAL_GUIDE_CONTENT.as_bytes());
+            let baseline_tree_hash = crate::cache::hash_tree(&guide_path)?;
+            crate::cache::populate(&home_dir()?, &baseline_tree_hash, &guide_path)?;
             let baseline_hash =
                 lockfile::write_baseline_object(repo_root, CORAL_GUIDE_CONTENT.as_bytes())?;
             let mut lf = lockfile::require_lockfile(repo_root).unwrap_or(lockfile::Lockfile {
@@ -69,6 +93,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                     }],
                     managed_hooks: Vec::new(),
                     ownership: lockfile::TargetOwnership::Generated,
+                    sha256: baseline_tree_hash,
+                    installed_path: ".agents/skills/coral-cli-guide".into(),
                 },
             );
 

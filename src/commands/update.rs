@@ -9,7 +9,7 @@ use crate::manifest::{self, load_manifest};
 use crate::resolver::{self, Scope};
 
 use super::add::{SourceMetaInput, install_capability};
-use super::{capability_relative_path, home_dir, resolve_agent_selection};
+use super::{home_dir, resolve_agent_selection};
 
 fn update_local_baseline(
     scope_root: &Path,
@@ -41,23 +41,18 @@ fn update_local_baseline(
             ))
         })?;
 
-        for emitted in &target_entry.emitted_files {
-            let local_path = scope_root.join(&emitted.path);
-            if !local_path.is_file() {
-                return Err(CoralError::new(format!(
-                    "tracked file is missing for '{}': {}",
-                    id,
-                    local_path.display()
-                )));
-            }
-
-            let content = fs::read(&local_path)?;
-            let baseline = lockfile::read_baseline_object(scope_root, &emitted.baseline_hash)?;
-            if content != baseline {
+        if !target_entry.installed_path.is_empty() {
+            let path = scope_root.join(&target_entry.installed_path);
+            let current_hash = crate::cache::hash_tree(&path)?;
+            if current_hash != target_entry.sha256 {
                 changed_files += 1;
             }
-            updates.push((target_id.clone(), emitted.path.clone(), content));
+            updates.push((target_id.clone(), current_hash));
+            continue;
         }
+        return Err(CoralError::new(format!(
+            "lock entry for '{id}' and target '{target_id}' has no installed path"
+        )));
     }
 
     if check {
@@ -77,20 +72,21 @@ fn update_local_baseline(
         .capabilities
         .get_mut(id)
         .ok_or_else(|| CoralError::new(format!("'{}' is not installed", id)))?;
-    for (target_id, path, content) in updates {
+    for (target_id, update) in updates {
         let target_entry = installed.targets.get_mut(&target_id).ok_or_else(|| {
             CoralError::new(format!(
                 "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
         })?;
-        let emitted = target_entry
-            .emitted_files
-            .iter_mut()
-            .find(|emitted| emitted.path == path)
-            .ok_or_else(|| CoralError::new(format!("tracked file disappeared: {}", path)))?;
-        emitted.hash = lockfile::hash_bytes(&content);
-        emitted.baseline_hash = lockfile::write_baseline_object(scope_root, &content)?;
+        if !target_entry.installed_path.is_empty() {
+            target_entry.sha256 = update.clone();
+            crate::cache::populate(
+                &super::home_dir()?,
+                &update,
+                &scope_root.join(&target_entry.installed_path),
+            )?;
+        }
     }
     lockfile::write_lockfile(scope_root, &lf)?;
     lockfile::prune_unreferenced_baseline_objects(scope_root, &lf)?;
@@ -239,7 +235,8 @@ pub fn cmd_update(
         }
     };
 
-    let target_ids = resolve_agent_selection(&scope_root, requested_targets)?;
+    let target_ids =
+        resolve_agent_selection(&scope_root, requested_targets, scope == Scope::Global)?;
 
     if entry.source.is_none() && is_in_place_source_path(&entry.source_path) {
         return update_local_baseline(&scope_root, id, &target_ids, check, force);
@@ -251,7 +248,7 @@ pub fn cmd_update(
 
     let source = entry.source.as_ref().expect("source checked above");
 
-    let (cache_dir, _clean_url) = git::clone_or_fetch(&source.url)?;
+    let (_source_guard, cache_dir, _clean_url) = git::clone_to_temp(&source.url, None)?;
     let latest_sha = git::resolve_ref(&cache_dir)?;
 
     if latest_sha == entry.installed_version {
@@ -280,9 +277,6 @@ pub fn cmd_update(
     }
 
     let mut all_clean = true;
-    let mut had_conflicts = false;
-    let mut would_overwrite = false;
-
     for target_id in &target_ids {
         let target_entry = entry.targets.get(target_id).ok_or_else(|| {
             CoralError::new(format!(
@@ -290,66 +284,18 @@ pub fn cmd_update(
                 id, target_id
             ))
         })?;
-        for emitted in &target_entry.emitted_files {
-            let rel_path = capability_relative_path(&emitted.path, id);
-
-            let local_path = scope_root.join(&emitted.path);
-            let upstream_path = skill_dir.join(&rel_path);
-
-            let local_content = std::fs::read_to_string(&local_path).unwrap_or_default();
-            let baseline_content = String::from_utf8(lockfile::read_baseline_object(
-                &scope_root,
-                &emitted.baseline_hash,
-            )?)
-            .map_err(|error| {
-                CoralError::new(format!(
-                    "baseline object is not valid UTF-8 for '{}': {}",
-                    emitted.path, error
-                ))
-            })?;
-            let upstream_content = std::fs::read_to_string(&upstream_path).unwrap_or_default();
-
-            if local_content == upstream_content {
-                continue;
-            }
-
-            let local_status = lockfile::drift_status(&scope_root, emitted);
-            if local_status != "clean" || local_content != baseline_content {
-                all_clean = false;
-                would_overwrite = true;
-            }
-
-            if !check {
-                let report = crate::diff::merge_with_baseline_content(
-                    &baseline_content,
-                    &local_path,
-                    &upstream_path,
-                )?;
-
-                if let Some(reports) = report {
-                    had_conflicts = true;
-                    for r in reports {
-                        for c in &r.conflicts {
-                            eprintln!("  ✗ {}: {}", r.file_path, c.description);
-                            eprintln!("    <<<<<< local\n{}\n    ======", c.local.trim());
-                            eprintln!("    {}\n    >>>>>> upstream", c.upstream.trim());
-                        }
-                    }
-                    eprintln!(
-                        "\n  To write conflict markers: coral update {} --write-conflicts",
-                        id
-                    );
-                }
-            }
+        let current = scope_root.join(&target_entry.installed_path);
+        if crate::cache::hash_tree(&current)? != target_entry.sha256 {
+            all_clean = false;
         }
     }
 
     if check {
         if all_clean {
             println!("'{}' can be updated cleanly (no local changes)", id);
-        } else if would_overwrite {
+        } else if !all_clean {
             println!(
-                "'{}' has local changes — update would attempt three-way merge",
+                "'{}' has local changes — update would replace the materialized tree",
                 id
             );
         } else {
@@ -358,10 +304,10 @@ pub fn cmd_update(
         return Ok(());
     }
 
-    if had_conflicts {
-        return Err(CoralError::new(
-            "conflicts found — local files have not been modified. Resolve conflicts manually or use --force to overwrite.",
-        ));
+    if !all_clean {
+        return Err(CoralError::new(format!(
+            "'{id}' has local changes; run 'coral diff {id}' first or use --force to reload from source"
+        )));
     }
 
     let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;

@@ -1,5 +1,6 @@
 mod add;
 mod agent;
+mod cache;
 mod check_cmd;
 mod create;
 mod delete;
@@ -13,6 +14,7 @@ mod update;
 
 pub use add::*;
 pub use agent::*;
+pub use cache::*;
 pub use check_cmd::*;
 pub use create::*;
 pub use delete::*;
@@ -62,6 +64,7 @@ pub(crate) fn style_capability_type(capability_type: CapabilityType) -> String {
         CapabilityType::Tool => "35",
         CapabilityType::Hook => "33",
         CapabilityType::Workflow => "34",
+        CapabilityType::Policy => "31",
     };
     paint(s, code)
 }
@@ -177,9 +180,18 @@ pub(crate) fn home_dir_opt() -> Option<PathBuf> {
     std::env::var("HOME").ok().map(PathBuf::from)
 }
 
-pub(crate) fn resolve_agent_selection(root: &Path, requested: &[String]) -> Result<Vec<String>> {
+pub(crate) fn resolve_agent_selection(
+    root: &Path,
+    requested: &[String],
+    global: bool,
+) -> Result<Vec<String>> {
     let values = if requested.is_empty() {
-        vec![config::read_config(root)?.default_agent]
+        let config = if global {
+            config::read_global_config(root)?
+        } else {
+            config::read_config(root)?
+        };
+        vec![config.default_agent]
     } else {
         requested.to_vec()
     };
@@ -197,29 +209,6 @@ pub(crate) fn resolve_agent_selection(root: &Path, requested: &[String]) -> Resu
         }
     }
     Ok(selected)
-}
-
-pub(crate) fn capability_relative_path(path: &str, capability_id: &str) -> PathBuf {
-    for base in [
-        ".agents/skills",
-        ".claude/skills",
-        ".agents/tools",
-        ".claude/tools",
-        ".agents/hooks",
-        ".claude/hooks",
-        ".agents/workflows",
-        ".claude/workflows",
-    ] {
-        let prefix = format!("{base}/{capability_id}/");
-        if let Some(rel) = path.strip_prefix(&prefix) {
-            return PathBuf::from(rel);
-        }
-    }
-
-    Path::new(path)
-        .file_name()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(path))
 }
 
 pub(crate) fn infer_from_path(path: &Path) -> (CapabilityType, String) {

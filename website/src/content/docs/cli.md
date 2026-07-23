@@ -44,7 +44,7 @@ Initialize global scope (for primitives shared across all projects):
 coral init --global
 ```
 
-Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global),
+Creates `coral.lock` (and a user-state lockfile for global scope),
 scaffolds `.agents/`, and configures `open-agents` as the default agent.
 
 ## Create or Add Capabilities
@@ -150,7 +150,7 @@ coral add hook ./claude-session-start --agent claude --hook-file settings.json
 | Flag | Description |
 |---|---|
 | `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
-| `-g, --global` | Install to global scope (`~/.coral/`) |
+| `-g, --global` | Install to global user scope |
 | `--hook-file <path>` | Hook-only native settings fragment, relative to the hook source directory |
 
 The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
@@ -176,8 +176,8 @@ Before add:
 After coral add --agent open-agents .agents/skills/python-uv:
 .agents/skills/python-uv/
   └── SKILL.md                ← untouched
-.coral/
-  ├── coral-lock.json         ← entry added
+coral.config.json
+  ├── coral.lock              ← entry added
   └── objects/
     └── sha256/
       └── a1/
@@ -273,12 +273,12 @@ The generated index is intended for agent context. Point `AGENTS.md`,
 `CAPABILITIES.md` file when you want the agent to see a compact inventory of
 tracked capabilities.
 
-`coral generate report` writes `.coral/reports/coral-report.md` by default.
+`coral generate report` writes `coral-report.md` by default.
 The report includes installed capabilities, agents, source type, emitted paths,
 and clean/modified/missing status summaries.
 
 Generated files are derived output. The source of truth is
-`.coral/coral-lock.json` tracking state.
+`coral.lock` tracking state.
 
 ### `coral outdated`
 
@@ -389,7 +389,7 @@ jobs:
         run: coral check --json
 ```
 
-Commit `.coral/coral-lock.json`, `.coral/config.json`, and `.coral/objects/` to your repo so
+Commit `coral.lock` to your repo so
 `coral check` runs against the committed state. See the [lockfile reference](/concepts/lockfile)
 for what to commit.
 
@@ -498,8 +498,8 @@ Coral supports two scopes:
 
 | Scope | Location | Use |
 |---|---|---|
-| `project` | `.coral/` in repo root | Shared with team via version control |
-| `global` | `~/.coral/` in home directory | Available across all projects |
+| `project` | `coral.lock` in repo root | Shared with team via version control |
+| `global` | Coral user state directory | Available across all projects |
 
 Resolution order: **project always wins**. If the same primitive exists at both scopes,
 the project copy shadows the global one. `coral status` flags shadowed primitives.

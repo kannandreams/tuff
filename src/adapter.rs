@@ -120,6 +120,11 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
                     CoralError::new("workflow capability requires [workflow] section")
                 })?,
             },
+            CapabilityType::Policy => {
+                return Err(CoralError::new(
+                    "policy capabilities are not installable yet",
+                ));
+            }
         };
     Ok(ResolvedCapability {
         id: manifest.id.clone(),
@@ -162,6 +167,9 @@ pub trait AgentAdapter {
             CapabilityType::Tool => self.plan_tool(capability, repo_root),
             CapabilityType::Hook => self.plan_hook(capability, repo_root),
             CapabilityType::Workflow => self.plan_workflow(capability, repo_root),
+            CapabilityType::Policy => Err(CoralError::new(
+                "policy capabilities are not installable yet",
+            )),
             _ => self.plan_skill(capability, repo_root),
         }
     }
@@ -295,13 +303,26 @@ pub trait AgentAdapter {
                     open_agents::merge_hook_fragment(existing.as_deref(), &fragment)?
                 };
 
-                Ok(vec![
-                    PlannedFile::new(relative_or_absolute_fs(&target_path, repo_root), script),
-                    PlannedFile::mergeable(
-                        relative_or_absolute_fs(&settings_path, repo_root),
-                        merged,
-                    ),
-                ])
+                let mut files = vec![PlannedFile::new(
+                    relative_or_absolute_fs(&target_path, repo_root),
+                    script,
+                )];
+                for (relative, content) in &capability.source_files {
+                    let path = repo_root
+                        .join(self.dir_prefix())
+                        .join("hooks")
+                        .join(&capability.id)
+                        .join(relative);
+                    files.push(PlannedFile::new(
+                        relative_or_absolute_fs(&path, repo_root),
+                        content.clone(),
+                    ));
+                }
+                files.push(PlannedFile::mergeable(
+                    relative_or_absolute_fs(&settings_path, repo_root),
+                    merged,
+                ));
+                Ok(files)
             }
             HookDefinition::Native(native) => self.plan_native_hook(capability, native, repo_root),
         }

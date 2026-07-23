@@ -3,7 +3,7 @@ use std::{
     process::Command,
 };
 
-use sha2::{Digest, Sha256};
+use tempfile::TempDir;
 use url::Url;
 
 use crate::error::{CoralError, Result};
@@ -14,12 +14,6 @@ pub fn is_git_url(s: &str) -> bool {
         || s.starts_with("https://")
         || s.starts_with("git@")
         || s.starts_with("file://")
-}
-
-fn hash_url(url: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(url.as_bytes());
-    format!("{:x}", hasher.finalize())
 }
 
 fn clean_git_url(raw: &str) -> (String, Option<String>) {
@@ -99,45 +93,35 @@ pub fn source_subdirectory(raw: &str) -> Option<String> {
     None
 }
 
-pub fn clone_or_fetch(raw_url: &str) -> Result<(PathBuf, String)> {
+pub fn clone_to_temp(
+    raw_url: &str,
+    resolved_ref: Option<&str>,
+) -> Result<(TempDir, PathBuf, String)> {
     let (clean_url, branch) = clean_git_url(raw_url);
-
-    let home = dirs_home()?;
-    let cache_dir = home
-        .join(".coral")
-        .join("cache")
-        .join("git")
-        .join(hash_url(&clean_url));
-
-    if cache_dir.join(".git").exists() {
-        run_git(
-            Command::new("git")
-                .args(["fetch", "--quiet", "origin"])
-                .current_dir(&cache_dir),
-            &format!("git fetch failed for {clean_url}"),
-        )?;
-        run_git(
-            Command::new("git")
-                .args(["reset", "--hard", "--quiet", "origin/HEAD"])
-                .current_dir(&cache_dir),
-            "git reset --hard failed",
-        )?;
-    } else {
-        std::fs::create_dir_all(cache_dir.parent().unwrap())?;
-
-        let mut cmd = Command::new("git");
-        cmd.args(["clone", "--quiet", "--depth", "1"]);
-        if let Some(ref b) = branch {
-            cmd.args(["--branch", b]);
+    let temp = TempDir::new()?;
+    let checkout = temp.path().join("source");
+    let mut clone = Command::new("git");
+    clone.args(["clone", "--quiet"]);
+    if resolved_ref.is_none() {
+        clone.args(["--depth", "1"]);
+        if let Some(branch) = branch.as_deref() {
+            clone.args(["--branch", branch]);
         }
-        cmd.arg(&clean_url).arg(&cache_dir);
+    }
+    clone.arg(&clean_url).arg(&checkout);
+    run_git(
+        &mut clone,
+        &format!("git clone failed for {clean_url}; is the repo accessible?"),
+    )?;
+    if let Some(reference) = resolved_ref {
         run_git(
-            &mut cmd,
-            &format!("git clone failed for {clean_url}; is the repo accessible?"),
+            Command::new("git")
+                .args(["checkout", "--quiet", "--detach", reference])
+                .current_dir(&checkout),
+            &format!("could not check out recorded ref {reference}"),
         )?;
     }
-
-    Ok((cache_dir, clean_url))
+    Ok((temp, checkout, clean_url))
 }
 
 fn run_git(cmd: &mut Command, context: &str) -> Result<()> {
@@ -267,26 +251,6 @@ fn list_nearby_capabilities(repo: &Path, capability_type: CapabilityType) -> Res
     }
     names.sort();
     Ok(names)
-}
-
-fn dirs_home() -> Result<PathBuf> {
-    #[cfg(unix)]
-    {
-        std::env::var("HOME")
-            .map(PathBuf::from)
-            .map_err(|_| CoralError::new("HOME environment variable not set"))
-    }
-    #[cfg(windows)]
-    {
-        std::env::var("USERPROFILE")
-            .map(PathBuf::from)
-            .or_else(|_| {
-                std::env::var("HOMEDRIVE")
-                    .and_then(|hd| std::env::var("HOMEPATH").map(|hp| format!("{}{}", hd, hp)))
-            })
-            .map(PathBuf::from)
-            .map_err(|_| CoralError::new("home directory not found"))
-    }
 }
 
 #[cfg(test)]
