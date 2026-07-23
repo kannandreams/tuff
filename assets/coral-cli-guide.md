@@ -53,7 +53,7 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 - `claude` — Claude Code
 
 ### Scope
-- Project (default): `.coral/` in repo root — committed with project
+- Project (default): `coral.lock` in repo root — committed with project
 - Global: `~/.coral/` in home directory — available across all projects
 - Project always wins when both exist
 
@@ -62,7 +62,8 @@ or workflows, or when they mention "drift", "baseline", or "coral".
 - `.agents/tools/` — create and edit tools here
 - `.agents/hooks/` — create and edit hooks here
 - `.agents/workflows/` — create and edit workflows here
-- `.coral/` — coral state (committed)
+- `coral.lock` — committed capability identity and lifecycle metadata
+- `.coral/` — ignored local Coral state and disposable cache metadata
 - No separate source directory — agent files are the source
 
 ## Status Values

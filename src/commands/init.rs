@@ -16,10 +16,10 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {
         display::print_init_banner();
         let home = home_dir()?;
-        let lock_path = home.join(".coral").join("coral-lock.json");
+        let lock_path = home.join(".coral").join("coral.lock");
         lockfile::init_lockfile_at(&lock_path)?;
         let _ = config::read_config(&home)?;
-        println!("initialized ~/.coral/coral-lock.json");
+        println!("initialized ~/.coral/coral.lock");
     } else {
         display::print_init_banner();
         let lock_path = lockfile::init_lockfile(repo_root)?;
@@ -36,6 +36,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             }
         }
 
+        ensure_coral_gitignore(repo_root)?;
+
         println!(
             "initialized {}",
             lockfile::relative_or_absolute_fs(&lock_path, repo_root)
@@ -51,6 +53,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             std::fs::write(guide_path.join("SKILL.md"), CORAL_GUIDE_CONTENT)?;
 
             let hash = lockfile::hash_bytes(CORAL_GUIDE_CONTENT.as_bytes());
+            let baseline_tree_hash = crate::cache::hash_tree(&guide_path)?;
+            crate::cache::populate(&home_dir()?, &baseline_tree_hash, &guide_path)?;
             let baseline_hash =
                 lockfile::write_baseline_object(repo_root, CORAL_GUIDE_CONTENT.as_bytes())?;
             let mut lf = lockfile::require_lockfile(repo_root).unwrap_or(lockfile::Lockfile {
@@ -69,6 +73,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                     }],
                     managed_hooks: Vec::new(),
                     ownership: lockfile::TargetOwnership::Generated,
+                    sha256: baseline_tree_hash,
+                    installed_path: ".agents/skills/coral-cli-guide".into(),
                 },
             );
 
@@ -88,6 +94,24 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
 
             lockfile::write_lockfile(repo_root, &lf)?;
         }
+    }
+    Ok(())
+}
+
+fn ensure_coral_gitignore(repo_root: &Path) -> Result<()> {
+    let path = repo_root.join(".gitignore");
+    let existing = if path.exists() {
+        std::fs::read_to_string(&path)?
+    } else {
+        String::new()
+    };
+    if !existing.lines().any(|line| line.trim() == ".coral/") {
+        let mut content = existing;
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(".coral/\n");
+        std::fs::write(path, content)?;
     }
     Ok(())
 }

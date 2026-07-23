@@ -32,8 +32,8 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
         for (id, entry) in &lf.capabilities {
             for target_id in entry.targets.keys() {
                 let (current, latest, status) = if let Some(src) = &entry.source {
-                    let latest_sha = match git::clone_or_fetch(&src.url)
-                        .and_then(|(d, _)| git::resolve_ref(&d))
+                    let latest_sha = match git::clone_to_temp(&src.url, None)
+                        .and_then(|(_guard, d, _)| git::resolve_ref(&d))
                     {
                         Ok(sha) => sha,
                         Err(_) => {
@@ -82,13 +82,13 @@ pub fn cmd_outdated(repo_root: &Path) -> Result<()> {
     }
 
     if let Some(home) = home_dir_opt() {
-        let lock_path = home.join(".coral").join("coral-lock.json");
+        let lock_path = home.join(".coral").join("coral.lock");
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             for (id, entry) in &lf.capabilities {
                 for target_id in entry.targets.keys() {
                     let (current, latest, status) = if let Some(src) = &entry.source {
-                        let latest_sha = match git::clone_or_fetch(&src.url)
-                            .and_then(|(d, _)| git::resolve_ref(&d))
+                        let latest_sha = match git::clone_to_temp(&src.url, None)
+                            .and_then(|(_guard, d, _)| git::resolve_ref(&d))
                         {
                             Ok(sha) => sha,
                             Err(_) => {

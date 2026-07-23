@@ -44,7 +44,7 @@ Initialize global scope (for primitives shared across all projects):
 coral init --global
 ```
 
-Creates `.coral/coral-lock.json` (or `~/.coral/coral-lock.json` for global),
+Creates `coral.lock` (or `~/.coral/coral.lock` for global),
 scaffolds `.agents/`, and configures `open-agents` as the default agent.
 
 ## Create or Add Capabilities
@@ -177,7 +177,7 @@ After coral add --agent open-agents .agents/skills/python-uv:
 .agents/skills/python-uv/
   └── SKILL.md                ← untouched
 .coral/
-  ├── coral-lock.json         ← entry added
+  ├── coral.lock              ← entry added
   └── objects/
     └── sha256/
       └── a1/
@@ -278,7 +278,7 @@ The report includes installed capabilities, agents, source type, emitted paths,
 and clean/modified/missing status summaries.
 
 Generated files are derived output. The source of truth is
-`.coral/coral-lock.json` tracking state.
+`coral.lock` tracking state.
 
 ### `coral outdated`
 
@@ -389,7 +389,7 @@ jobs:
         run: coral check --json
 ```
 
-Commit `.coral/coral-lock.json`, `.coral/config.json`, and `.coral/objects/` to your repo so
+Commit `coral.lock` to your repo so
 `coral check` runs against the committed state. See the [lockfile reference](/concepts/lockfile)
 for what to commit.
 

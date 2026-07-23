@@ -1,10 +1,8 @@
 use std::path::Path;
 
 use diffy::merge;
-use similar::{ChangeTag, TextDiff};
 
-use crate::error::{CoralError, Result};
-use crate::manifest::CapabilityType;
+use crate::error::Result;
 
 pub struct ConflictReport {
     pub file_path: String,
@@ -15,40 +13,6 @@ pub struct ConflictBlock {
     pub description: String,
     pub local: String,
     pub upstream: String,
-}
-
-#[allow(dead_code)]
-pub fn diff_baseline_vs_local(baseline_path: &Path, local_path: &Path) -> Result<String> {
-    let baseline = std::fs::read_to_string(baseline_path)?;
-    let local = std::fs::read_to_string(local_path)?;
-
-    if baseline == local {
-        return Ok(String::new());
-    }
-
-    let diff = TextDiff::from_lines(&baseline, &local);
-    let mut output = format!(
-        "--- baseline/{}\n+++ {}\n",
-        baseline_path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy(),
-        local_path.display()
-    );
-    for group in diff.grouped_ops(3) {
-        for operation in group {
-            for change in diff.iter_changes(&operation) {
-                let sign = match change.tag() {
-                    ChangeTag::Delete => "-",
-                    ChangeTag::Insert => "+",
-                    ChangeTag::Equal => " ",
-                };
-                output.push_str(sign);
-                output.push_str(change.value());
-            }
-        }
-    }
-    Ok(output)
 }
 
 #[allow(dead_code)]
@@ -196,23 +160,6 @@ pub fn merge_with_baseline_content(
     }
 }
 
-pub fn get_upstream_content(
-    cache_dir: &Path,
-    name: &str,
-    capability_type: CapabilityType,
-    file_rel_path: &str,
-) -> Result<String> {
-    let capability_dir = crate::git::discover_capability(cache_dir, name, capability_type)?;
-    let full_path = capability_dir.join(file_rel_path);
-    if !full_path.exists() {
-        return Err(CoralError::new(format!(
-            "upstream file not found: {}",
-            full_path.display()
-        )));
-    }
-    Ok(std::fs::read_to_string(full_path)?)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,28 +190,6 @@ mod tests {
             "line1\nline2\nline3\nline4 upstream",
         );
         assert!(report.is_none());
-    }
-
-    #[test]
-    fn diff_baseline_vs_local_shows_changes() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let base = tmp.path().join("base.md");
-        let local = tmp.path().join("local.md");
-        std::fs::write(&base, "hello world").unwrap();
-        std::fs::write(&local, "hello modified").unwrap();
-        let diff = diff_baseline_vs_local(&base, &local).unwrap();
-        assert!(diff.contains("-hello world"));
-        assert!(diff.contains("+hello modified"));
-    }
-
-    #[test]
-    fn diff_identical_files_returns_empty() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let base = tmp.path().join("base.md");
-        std::fs::write(&base, "same").unwrap();
-        let local = tmp.path().join("local.md");
-        std::fs::write(&local, "same").unwrap();
-        assert!(diff_baseline_vs_local(&base, &local).unwrap().is_empty());
     }
 }
 

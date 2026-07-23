@@ -57,7 +57,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
     }
 
     if show_global && let Some(home) = home_dir_opt() {
-        let lock_path = home.join(".coral").join("coral-lock.json");
+        let lock_path = home.join(".coral").join("coral.lock");
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
             inventory.extend(collect_lockfile_inventory(
                 &home,
@@ -127,6 +127,36 @@ pub(crate) fn collect_lockfile_inventory(
                 .map(|hook| lockfile::managed_hook_status(root, hook))
                 .find(|status| *status != "clean")
                 .unwrap_or("clean");
+            if target_entry.emitted_files.is_empty() {
+                let installed_path = target_entry.installed_path.clone();
+                let status = if installed_path.is_empty() {
+                    "error"
+                } else {
+                    match crate::cache::hash_tree(&root.join(&installed_path)) {
+                        Ok(hash) if hash == target_entry.sha256 => "clean",
+                        Ok(_) | Err(_) => "modified",
+                    }
+                };
+                rows.push(InventoryRow {
+                    id: id.clone(),
+                    capability_type: entry.capability_type,
+                    version: short_sha(&entry.installed_version).to_string(),
+                    scope: scope.to_string(),
+                    target: target_id.clone(),
+                    status: if managed_status == "clean" {
+                        status.to_string()
+                    } else {
+                        managed_status.to_string()
+                    },
+                    path: match path_prefix {
+                        Some(prefix) => format!("{prefix}{installed_path}"),
+                        None => installed_path,
+                    },
+                    description: description.clone(),
+                    source_type: source_type.clone(),
+                });
+                continue;
+            }
             for emitted in &target_entry.emitted_files {
                 let file_status = lockfile::drift_status(root, emitted);
                 let status = if managed_status != "clean" {

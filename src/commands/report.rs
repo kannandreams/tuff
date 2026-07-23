@@ -283,5 +283,6 @@ fn capability_type_heading(capability_type: CapabilityType) -> String {
         CapabilityType::Tool => "Tools".to_string(),
         CapabilityType::Hook => "Hooks".to_string(),
         CapabilityType::Workflow => "Workflows".to_string(),
+        CapabilityType::Policy => "Policies".to_string(),
     }
 }

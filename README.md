@@ -26,7 +26,8 @@ Claude-oriented output.
 
 1. Create a new capability or add an existing one.
 2. Track it for one or more agent harnesses.
-3. Coral records the emitted files and an install-time baseline under `.coral/`.
+3. Coral records install identity in `coral.lock` and keeps verified materialized
+   baselines in the disposable machine-local cache.
 4. Edit the project-owned files normally; `coral list`, `coral status`, and
    `coral diff` report drift.
 5. Use `coral update` to accept intentional local changes or refresh from the
@@ -133,7 +134,7 @@ coral delete python-uv-default
 
 Running `coral` with no arguments shows the terminal banner and starter menu.
 
-`coral init` creates `.coral/coral-lock.json`, configures `open-agents` as the default, registers it, and scaffolds the standard `.agents/`
+`coral init` creates `coral.lock`, configures `open-agents` as the default, registers it, and scaffolds the standard `.agents/`
 directories, and installs the small `coral-cli-guide` reference skill. It does
 not install third-party capabilities or create a user skill for you.
 

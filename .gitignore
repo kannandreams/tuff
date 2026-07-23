@@ -10,3 +10,4 @@ node_modules/
 target/
 website/dist/
 website/.astro/
+.coral/

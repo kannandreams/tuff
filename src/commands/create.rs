@@ -100,6 +100,9 @@ pub fn cmd_create(
             fs::set_permissions(run_sh, permissions)?;
         }
 
+        let baseline_hash = crate::cache::hash_tree(root)?;
+        crate::cache::populate(&super::home_dir()?, &baseline_hash, root)?;
+
         let mut emitted_files = Vec::new();
         let mut managed_hooks = Vec::new();
         for (name, content) in files {
@@ -166,6 +169,8 @@ pub fn cmd_create(
                 emitted_files,
                 managed_hooks,
                 ownership: lockfile::TargetOwnership::Generated,
+                sha256: baseline_hash,
+                installed_path: lockfile::relative_or_absolute_fs(&root, repo_root),
             },
         );
         if !config.agents.iter().any(|agent| agent == adapter.id()) {
@@ -207,6 +212,7 @@ fn default_capability_description(kind: CapabilityType) -> &'static str {
         CapabilityType::Tool => "What this tool does for the agent.",
         CapabilityType::Hook => "What this hook enforces.",
         CapabilityType::Workflow => "When the agent should run this workflow.",
+        CapabilityType::Policy => "Policy capabilities are not scaffolded yet.",
     }
 }
 
@@ -260,6 +266,11 @@ fn create_scaffold_files(
                 "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
             ),
         )],
+        CapabilityType::Policy => {
+            return Err(CoralError::new(
+                "policy capabilities are not scaffolded yet",
+            ));
+        }
     };
     let relative_dir = kind.plural_dir();
     Ok((relative_dir, files))

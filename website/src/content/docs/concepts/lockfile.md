@@ -3,68 +3,59 @@ title: Lockfile Reference
 description: What Coral records in project state.
 ---
 
-Coral records state in the `.coral/` directory at the root of your project. The lockfile
-(`coral-lock.json`) tracks installed capabilities, their versions, where they came from,
-and the hashes needed for drift detection and diffs.
+Coral records committed capability identity in `coral.lock` at the root of your project.
+Disposable materialized baselines live in `~/.coral/cache/` and can be deleted at any time.
 
 ## Directory structure
 
 | File | Purpose | Commit to git? |
 |---|---|---|
-| `.coral/coral-lock.json` | Installed capability state (id, version, targets, source, hashes) | Yes |
-| `.coral/config.json` | Registered agent harnesses and the default agent | Yes |
-| `.coral/objects/sha256/` | Immutable baseline objects used for drift and diffing | Yes |
-| `~/.coral/coral-lock.json` | Global scope: personal, across all projects | No |
-| `~/.coral/cache/git/` | Cloned git repositories for skill discovery | No |
+| `coral.lock` | Installed capability identity, source, target, and materialized hash | Yes |
+| `.coral/` | Local Coral configuration and scratch state | No |
+| `~/.coral/coral.lock` | Global scope: personal, across all projects | No |
+| `~/.coral/cache/sha256/` | Verified materialized baseline trees | No |
 
-Commit the project `.coral/` files so your team can run `coral list`, `coral diff`,
-and `coral update` without re-installing anything. Do not edit `.coral/objects/`
-directly; update baselines with `coral update`.
+Commit `coral.lock` so your team can verify installations. A cold or deleted cache is
+refilled by refetching and verifying the recorded source.
 
 ## Lockfile schema
 
-```json
-{
-  "version": 2,
-  "capabilities": {
-    "python-uv-default": {
-      "type": "skill",
-      "installedVersion": "0.1.0",
-      "sourcePath": "examples/skills/python-uv-default",
-      "scope": "project",
-      "targets": {
-        "open-agents": {
-          "emittedFiles": [
-            {
-              "path": ".agents/skills/python-uv-default/SKILL.md",
-              "hash": "d4e5f6...",
-              "baselineHash": "a1b2c3..."
-            }
-          ],
-          "ownership": "generated"
-        }
-      }
-    }
-  }
-}
+```toml
+version = 1
+
+[[capabilities]]
+name = "python-uv-default"
+type = "skill"
+source = "local"
+source_path = "examples/skills/python-uv-default"
+resolved_ref = ""
+sha256 = "..."
+target = "open-agents"
+installed_path = ".agents/skills/python-uv-default"
+```
+
+Each `[[capabilities]]` entry represents one capability installed to one adapter.
+Entries are deterministically ordered by name, type, target, and installed path.
 ```
 
 ### Per-capability fields
 
 | Field | Description |
 |---|---|
-| `type` | `"skill"`, `"tool"`, `"hook"`, or `"workflow"` |
-| `installedVersion` | Semantic version or git commit SHA |
-| `sourcePath` | Local path to the capability directory (empty for git sources) |
-| `scope` | `"project"` or `"global"` |
-| `targets` | Per-harness emitted files and ownership state |
-| `source` | Git source metadata (`type`, `url`, `ref`, `skill`), absent for local installs |
+| `name` | Capability identifier |
+| `type` | `"skill"`, `"tool"`, `"hook"`, `"workflow"`, or `"policy"` |
+| `source` | `local` or `git` |
+| `source_path` | Local path, or path within the Git repository |
+| `repository` | Git repository URL when `source = "git"` |
+| `resolved_ref` | Commit resolved at install time for Git sources |
+| `sha256` | Hash of the materialized capability directory |
+| `target` | Canonical adapter ID |
+| `installed_path` | Materialized directory written for this target |
 
 ### Per-target fields
 
 | Field | Description |
 |---|---|
-| `emittedFiles` | List of `{ path, hash, baselineHash }` for each file written by the adapter |
 | `ownership` | `generated` when Coral emitted the files, or `imported` when Coral tracks existing files |
 
 ## Config schema

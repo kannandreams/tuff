@@ -26,7 +26,7 @@ pub fn cmd_add(
     let source = source.ok_or_else(|| CoralError::new("source path or URL is required"))?;
     let (scope, install_root) = if global {
         let home = home_dir()?;
-        let lock_path = home.join(".coral").join("coral-lock.json");
+        let lock_path = home.join(".coral").join("coral.lock");
         lockfile::init_lockfile_at(&lock_path)?;
         (Scope::Global, home)
     } else {
@@ -71,7 +71,7 @@ fn cmd_add_git(
     let name =
         name.ok_or_else(|| CoralError::new("--name is required when installing from a git URL"))?;
 
-    let (cache_dir, clean_url) = git::clone_or_fetch(url)?;
+    let (source_guard, cache_dir, clean_url) = git::clone_to_temp(url, None)?;
     let source_path = git::source_subdirectory(url);
     let commit_sha = git::resolve_ref(&cache_dir)?;
     let cap_type = capability_type
@@ -109,7 +109,7 @@ fn cmd_add_git(
         eprintln!("{warning}");
     }
 
-    install_capability(
+    let result = install_capability(
         install_root,
         scope,
         &capability,
@@ -121,7 +121,9 @@ fn cmd_add_git(
             source_ref: commit_sha,
             skill: source_skill.to_string(),
         }),
-    )
+    );
+    drop(source_guard);
+    result
 }
 
 fn cmd_add_local(
@@ -428,12 +430,17 @@ fn adopt_capability_in_place(
     }
 
     let mut targets = BTreeMap::new();
+    let installed_root = capability_dir.to_path_buf();
+    let baseline_hash = crate::cache::hash_tree(&installed_root)?;
+    crate::cache::populate(&super::home_dir()?, &baseline_hash, &installed_root)?;
     targets.insert(
         inferred_target.to_string(),
         lockfile::TargetLockEntry {
             emitted_files,
             managed_hooks: Vec::new(),
             ownership: lockfile::TargetOwnership::Imported,
+            sha256: baseline_hash,
+            installed_path: relative_or_absolute_canonical(capability_dir, install_root),
         },
     );
 
@@ -606,12 +613,20 @@ pub(crate) fn install_capability(
             }
         }
 
+        let installed_root = install_root
+            .join(adapter.dir_prefix())
+            .join(capability.capability_type.plural_dir())
+            .join(&capability.id);
+        let baseline_hash = crate::cache::hash_tree(&installed_root)?;
+        crate::cache::populate(&super::home_dir()?, &baseline_hash, &installed_root)?;
         new_targets.insert(
             adapter.id().to_string(),
             TargetLockEntry {
                 emitted_files: emitted,
                 managed_hooks,
                 ownership: target_ownership_for(capability, install_root, *adapter),
+                sha256: baseline_hash,
+                installed_path: lockfile::relative_or_absolute_fs(&installed_root, install_root),
             },
         );
     }

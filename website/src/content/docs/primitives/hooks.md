@@ -122,7 +122,7 @@ coral add hook https://github.com/acme/coral-hooks claude-session-start \
 
 For Git sources, Coral resolves `settings.json` relative to the named hook directory, copies
 the runtime files into `.claude/hooks/<id>/`, merges the fragment, and records the Git revision
-in `.coral/coral-lock.json`.
+in `coral.lock`.
 
 ## Hook event reference
 

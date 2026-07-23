@@ -1,5 +1,6 @@
 mod adapter;
 mod adapters;
+mod cache;
 mod check;
 mod commands;
 mod config;
@@ -11,15 +12,16 @@ mod lockfile;
 mod manifest;
 mod resolver;
 mod tool;
+mod tree_diff;
 
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_check,
-    cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report, cmd_init, cmd_list,
-    cmd_outdated, cmd_status, cmd_untrack, cmd_update,
+    cmd_add, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default,
+    cmd_cache_clear, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_generate_index,
+    cmd_generate_report, cmd_init, cmd_list, cmd_outdated, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{CoralError, Result};
 use manifest::CapabilityType;
@@ -102,6 +104,10 @@ enum Command {
         /// Diff against latest upstream source instead of baseline.
         #[arg(short = 'u', long = "upstream")]
         upstream: bool,
+
+        /// Diff output format.
+        #[arg(long = "format", value_enum, default_value_t = commands::DiffFormat::Unified)]
+        format: commands::DiffFormat,
     },
 
     /// Reconcile an installed capability with its source or accept local edits.
@@ -178,6 +184,18 @@ enum Command {
         #[command(subcommand)]
         action: AgentCommand,
     },
+
+    /// Manage Coral's disposable machine-local cache.
+    Cache {
+        #[command(subcommand)]
+        action: CacheCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CacheCommand {
+    /// Delete all disposable cached materialized trees and source clones.
+    Clear,
 }
 
 #[derive(Subcommand)]
@@ -462,7 +480,14 @@ fn run() -> Result<()> {
             capability_id,
             agent,
             upstream,
-        }) => cmd_diff(&repo_root, &capability_id, agent.as_deref(), upstream),
+            format,
+        }) => cmd_diff(
+            &repo_root,
+            &capability_id,
+            agent.as_deref(),
+            upstream,
+            format,
+        ),
         Some(Command::Update {
             id,
             scope,
@@ -490,5 +515,8 @@ fn run() -> Result<()> {
                 cmd_agent_set_default(&repo_root, &id, global)
             }
         },
+        Some(Command::Cache {
+            action: CacheCommand::Clear,
+        }) => cmd_cache_clear(),
     }
 }

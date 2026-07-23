@@ -180,7 +180,7 @@ coral check
 | `.agents/tools/` | Tool runtime files | Same |
 | `.agents/hooks/` | Hook runtime files | Same |
 | `.agents/workflows/` | Workflow runtime files | Same |
-| `.coral/` | State: lockfile, baseline objects, and config | `coral init` |
+| `coral.lock` | Committed capability identity and lifecycle metadata | `coral init` |
 | `.claude/skills/` etc. | Claude-specific capabilities | `coral add` or you author |
 
 **One directory, one source of truth.** Agent files live in `.agents/` or `.claude/`.

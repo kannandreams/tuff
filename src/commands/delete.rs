@@ -63,10 +63,15 @@ pub fn cmd_delete(
             )));
         }
 
-        let modified = target_entry
-            .emitted_files
-            .iter()
-            .any(|emitted| lockfile::drift_status(&scope_root, emitted) == "modified");
+        let modified_tree = !target_entry.installed_path.is_empty()
+            && crate::cache::hash_tree(&scope_root.join(&target_entry.installed_path))
+                .map(|hash| hash != target_entry.sha256)
+                .unwrap_or(true);
+        let modified = modified_tree
+            || target_entry
+                .emitted_files
+                .iter()
+                .any(|emitted| lockfile::drift_status(&scope_root, emitted) == "modified");
         let modified_hook = target_entry
             .managed_hooks
             .iter()

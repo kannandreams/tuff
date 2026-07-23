@@ -11,6 +11,7 @@ pub enum CapabilityType {
     Tool,
     Hook,
     Workflow,
+    Policy,
 }
 
 impl CapabilityType {
@@ -20,6 +21,7 @@ impl CapabilityType {
             Self::Tool => "tools",
             Self::Hook => "hooks",
             Self::Workflow => "workflows",
+            Self::Policy => "policies",
         }
     }
 
@@ -29,6 +31,7 @@ impl CapabilityType {
             Self::Tool => "tool",
             Self::Hook => "hook",
             Self::Workflow => "workflow",
+            Self::Policy => "policy",
         }
     }
 
@@ -38,6 +41,7 @@ impl CapabilityType {
             "tool" => Some(Self::Tool),
             "hook" => Some(Self::Hook),
             "workflow" => Some(Self::Workflow),
+            "policy" => Some(Self::Policy),
             _ => None,
         }
     }
@@ -282,6 +286,9 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
                 names.len(),
                 names.join(", ")
             );
+        }
+        CapabilityType::Policy => {
+            return Err(CoralError::new("policy capabilities are not supported yet"));
         }
     }
 
