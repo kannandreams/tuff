@@ -1,5 +1,9 @@
 use std::path::Path;
 
+use coral_hooks_spec::{
+    CompatibilityEntry, CompatibilityMatrix, CoverageLevel, HookEvent, SPEC_VERSION,
+};
+
 use crate::manifest::CapabilityType;
 use crate::{
     error::{CoralError, Result},
@@ -18,7 +22,97 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
 
-pub const SUPPORTED_EVENTS: &[&str] = &["SessionStart", "before_finish", "post_tool_execution"];
+pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
+    spec_version: SPEC_VERSION,
+    adapter: ID,
+    events: &[
+        CompatibilityEntry {
+            event: HookEvent::SessionStart,
+            native_event: Some("SessionStart"),
+            aliases: &["SessionStart"],
+            coverage: CoverageLevel::Full,
+            scope: &["startup", "resume"],
+            caveat: None,
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::BeforeFinish,
+            native_event: Some("before_finish"),
+            aliases: &[],
+            coverage: CoverageLevel::Full,
+            scope: &[],
+            caveat: None,
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::PostToolUse,
+            native_event: Some("post_tool_execution"),
+            aliases: &["post_tool_execution"],
+            coverage: CoverageLevel::Full,
+            scope: &["tool calls"],
+            caveat: None,
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::PreToolUse,
+            native_event: None,
+            aliases: &["pre_tool_execution"],
+            coverage: CoverageLevel::Unsupported,
+            scope: &[],
+            caveat: Some(
+                "Claude adapter support for PreToolUse rendering has not been implemented in Coral yet.",
+            ),
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::AfterSave,
+            native_event: None,
+            aliases: &[],
+            coverage: CoverageLevel::Unsupported,
+            scope: &[],
+            caveat: Some(
+                "Claude adapter support for after-save rendering has not been implemented in Coral yet.",
+            ),
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::SessionEnd,
+            native_event: None,
+            aliases: &[],
+            coverage: CoverageLevel::Unsupported,
+            scope: &[],
+            caveat: Some(
+                "Claude adapter support for session-end rendering has not been implemented in Coral yet.",
+            ),
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::Stop,
+            native_event: None,
+            aliases: &[],
+            coverage: CoverageLevel::Unsupported,
+            scope: &[],
+            caveat: Some(
+                "Claude adapter support for stop rendering has not been implemented in Coral yet.",
+            ),
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+    ],
+};
 
 pub fn detect(repo_root: &Path) -> bool {
     repo_root.join(".claude").exists() || repo_root.join("CLAUDE.md").exists()
@@ -166,7 +260,7 @@ mod tests {
     fn constants_are_not_empty() {
         assert!(!ID.is_empty());
         assert!(!DISPLAY_NAME.is_empty());
-        assert!(!SUPPORTED_EVENTS.is_empty());
+        assert!(!HOOK_COMPATIBILITY.events.is_empty());
     }
 
     #[test]

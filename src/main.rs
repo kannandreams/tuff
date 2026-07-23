@@ -21,7 +21,8 @@ use clap::{Parser, Subcommand};
 use commands::{
     cmd_add, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default,
     cmd_cache_clear, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_generate_index,
-    cmd_generate_report, cmd_init, cmd_list, cmd_outdated, cmd_status, cmd_untrack, cmd_update,
+    cmd_generate_report, cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list,
+    cmd_outdated, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{CoralError, Result};
 use manifest::CapabilityType;
@@ -185,6 +186,12 @@ enum Command {
         action: AgentCommand,
     },
 
+    /// Inspect hook compatibility and portability.
+    Hooks {
+        #[command(subcommand)]
+        action: HooksCommand,
+    },
+
     /// Manage Coral's disposable machine-local cache.
     Cache {
         #[command(subcommand)]
@@ -345,6 +352,22 @@ enum AgentCommand {
         /// Set the default for global operations.
         #[arg(short = 'g', long = "global")]
         global: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum HooksCommand {
+    /// Print hook compatibility for registered agents.
+    Matrix,
+
+    /// Check whether a tracked hook can render on a target agent.
+    CheckPortability {
+        /// Installed hook capability id.
+        id: String,
+
+        /// Registered target adapter id.
+        #[arg(long = "target")]
+        target: String,
     },
 }
 
@@ -513,6 +536,12 @@ fn run() -> Result<()> {
             AgentCommand::Remove { id } => cmd_agent_remove(&repo_root, &id),
             AgentCommand::SetDefault { id, global } => {
                 cmd_agent_set_default(&repo_root, &id, global)
+            }
+        },
+        Some(Command::Hooks { action }) => match action {
+            HooksCommand::Matrix => cmd_hooks_matrix(&repo_root),
+            HooksCommand::CheckPortability { id, target } => {
+                cmd_hooks_check_portability(&repo_root, &id, &target)
             }
         },
         Some(Command::Cache {

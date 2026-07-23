@@ -510,16 +510,8 @@ pub(crate) fn install_capability(
         if let CapabilityKind::Hook {
             hook: HookDefinition::Command(ref hook_cfg),
         } = capability.kind
-            && !adapter
-                .supported_events()
-                .contains(&hook_cfg.event.as_str())
         {
-            return Err(CoralError::new(format!(
-                "{} does not support hook event '{}'. Supported events: {}",
-                adapter.display_name(),
-                hook_cfg.event,
-                adapter.supported_events().join(", ")
-            )));
+            adapter.native_hook_event(&hook_cfg.event)?;
         }
         adapters.push(adapter);
     }
@@ -571,7 +563,7 @@ pub(crate) fn install_capability(
                 }
                 HookDefinition::Command(hook_cfg) => serde_json::json!({
                     "hooks": {
-                        hook_cfg.event.clone(): [{
+                        (adapter.native_hook_event(&hook_cfg.event)?): [{
                             "hooks": [{
                                 "type": "command",
                                 "command": format!(

@@ -1,5 +1,9 @@
 use std::path::Path;
 
+use coral_hooks_spec::{
+    CompatibilityEntry, CompatibilityMatrix, CoverageLevel, HookEvent, SPEC_VERSION,
+};
+
 use crate::manifest::CapabilityType;
 use crate::{
     error::{CoralError, Result},
@@ -26,13 +30,91 @@ pub const SUPPORTED_AGENTS: &[&str] = &[
     "Windsurf",
 ];
 
-pub const SUPPORTED_EVENTS: &[&str] = &[
-    "before_finish",
-    "after_save",
-    "pre_tool_execution",
-    "post_tool_execution",
-];
 pub const HOOK_SETTINGS_RELPATH: &str = ".agents/hook.json";
+
+pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
+    spec_version: SPEC_VERSION,
+    adapter: ID,
+    events: &[
+        CompatibilityEntry {
+            event: HookEvent::BeforeFinish,
+            native_event: Some("before_finish"),
+            aliases: &[],
+            coverage: CoverageLevel::Full,
+            scope: &[],
+            caveat: None,
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::AfterSave,
+            native_event: Some("after_save"),
+            aliases: &[],
+            coverage: CoverageLevel::Full,
+            scope: &[],
+            caveat: None,
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::PreToolUse,
+            native_event: Some("pre_tool_execution"),
+            aliases: &["pre_tool_execution"],
+            coverage: CoverageLevel::Partial,
+            scope: &["local function tools", "Bash", "Edit", "Write", "MCP"],
+            caveat: Some("Codex hosted tools do not use the local function-tool hook path."),
+            source: Some("https://learn.chatgpt.com/docs/hooks.md"),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::PostToolUse,
+            native_event: Some("post_tool_execution"),
+            aliases: &["post_tool_execution"],
+            coverage: CoverageLevel::Partial,
+            scope: &["local function tools", "Bash", "Edit", "Write", "MCP"],
+            caveat: Some("Codex hosted tools do not use the local function-tool hook path."),
+            source: Some("https://learn.chatgpt.com/docs/hooks.md"),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::SessionStart,
+            native_event: None,
+            aliases: &[],
+            coverage: CoverageLevel::Unsupported,
+            scope: &[],
+            caveat: Some("Open Agents hook.json does not currently define a session-start event."),
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::SessionEnd,
+            native_event: None,
+            aliases: &[],
+            coverage: CoverageLevel::Unsupported,
+            scope: &[],
+            caveat: Some("Open Agents hook.json does not currently define a session-end event."),
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::Stop,
+            native_event: None,
+            aliases: &[],
+            coverage: CoverageLevel::Unsupported,
+            scope: &[],
+            caveat: Some("Open Agents hook.json does not currently define a stop event."),
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+    ],
+};
 
 pub fn detect(repo_root: &Path) -> bool {
     repo_root.join(".agents").join("skills").exists()

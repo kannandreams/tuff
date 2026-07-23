@@ -5,11 +5,15 @@ edition = "2024"
 description = "Capability lifecycle manager for coding agents."
 license = "MIT"
 
+[workspace]
+members = [".", "crates/coral-hooks-spec"]
+
 [[bin]]
 name = "coral"
 path = "src/main.rs"
 
 [dependencies]
+coral-hooks-spec = { path = "crates/coral-hooks-spec" }
 clap = { version = "4.5.53", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

@@ -145,6 +145,15 @@ For harness-native hooks, pass the hook fragment explicitly:
 coral add hook ./claude-session-start --agent claude --hook-file settings.json
 ```
 
+Coral-standard manifest hooks are validated against adapter compatibility and rendered to the
+target harness's native settings. To inspect hook support or check a tracked hook before switching
+adapters:
+
+```sh frame="terminal"
+coral hooks matrix
+coral hooks check-portability pre-commit-lint --target claude
+```
+
 #### Flags
 
 | Flag | Description |

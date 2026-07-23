@@ -1586,6 +1586,10 @@ fn remove_tool_cleans_mcp_entry() {
 }
 
 fn make_hook_primitive(root: &Path, hook_id: &str) -> std::path::PathBuf {
+    make_hook_primitive_with_event(root, hook_id, "before_finish")
+}
+
+fn make_hook_primitive_with_event(root: &Path, hook_id: &str, event: &str) -> std::path::PathBuf {
     let primitive = root.join("hook-primitive");
     fs::create_dir_all(&primitive).unwrap();
     fs::write(
@@ -1597,7 +1601,7 @@ type = "hook"
 description = "A test hook."
 
 [hook]
-event = "before_finish"
+event = "{event}"
 command = "cargo test"
 working_directory = "."
 "#
@@ -1666,6 +1670,33 @@ fn add_hook_installs_and_emits() {
             .join("run.sh")
             .exists()
     );
+}
+
+#[test]
+fn add_hook_renders_canonical_event_to_native_event() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive_with_event(temp.path(), "tool-policy", "pre_tool_use");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".agents/hook.json")).unwrap())
+            .unwrap();
+    assert!(
+        settings["hooks"]["pre_tool_execution"].is_array(),
+        "canonical pre_tool_use should render to open-agents pre_tool_execution"
+    );
+    assert!(settings["hooks"]["pre_tool_use"].is_null());
 }
 
 #[test]
@@ -1954,6 +1985,59 @@ fn add_hook_file_merges_claude_settings_and_copies_external_assets() {
 }
 
 #[test]
+fn native_hook_file_bypasses_canonical_event_validation() {
+    let temp = TempDir::new().unwrap();
+    let hook = temp.path().join("native-special-hook");
+    fs::create_dir_all(&hook).unwrap();
+    fs::write(
+        hook.join("settings.json"),
+        r#"{
+  "hooks": {
+    "on_mars_landing": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{hook_dir}}/run.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+"#,
+    )
+    .unwrap();
+    fs::write(hook.join("run.sh"), "#!/usr/bin/env bash\necho native\n").unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "hook",
+            hook.to_str().unwrap(),
+            "--agent",
+            "claude",
+            "--hook-file",
+            "settings.json",
+        ])
+        .assert()
+        .success();
+
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".claude/settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(settings["hooks"]["on_mars_landing"].is_array());
+}
+
+#[test]
 fn add_hook_file_adopts_assets_already_inside_harness() {
     let temp = TempDir::new().unwrap();
     let hook = temp.path().join(".claude/hooks/session-start");
@@ -2075,6 +2159,96 @@ command = "echo hello"
         .stderr(predicate::str::contains(
             "does not support hook event 'on_mars_landing'",
         ));
+}
+
+#[test]
+fn hooks_matrix_lists_registered_adapter_compatibility() {
+    let temp = TempDir::new().unwrap();
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args(["hooks", "matrix"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("open-agents"))
+        .stdout(predicate::str::contains("pre_tool_use"))
+        .stdout(predicate::str::contains("pre_tool_execution"))
+        .stdout(predicate::str::contains("unsupported"));
+}
+
+#[test]
+fn hooks_check_portability_requires_registered_target() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive(temp.path(), "pre-commit");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "hooks",
+            "check-portability",
+            "pre-commit",
+            "--target",
+            "claude",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "agent 'claude' is not registered in this project",
+        ));
+}
+
+#[test]
+fn hooks_check_portability_reports_target_coverage() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive(temp.path(), "pre-commit");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["agent", "add", "claude"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "hooks",
+            "check-portability",
+            "pre-commit",
+            "--target",
+            "claude",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("before_finish"))
+        .stdout(predicate::str::contains("claude"))
+        .stdout(predicate::str::contains("full"));
 }
 
 #[test]

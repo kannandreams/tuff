@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use coral_hooks_spec::CompatibilityMatrix;
+
 use crate::adapters::{claude, open_agents};
 use crate::error::{CoralError, Result};
 use crate::manifest::{CapabilityManifest, CapabilityType};
@@ -143,7 +145,7 @@ pub trait AgentAdapter {
     fn dir_prefix(&self) -> &'static str;
     fn mcp_config_relpath(&self) -> &'static str;
     fn supported_agents(&self) -> &[&'static str];
-    fn supported_events(&self) -> &[&'static str];
+    fn hook_compatibility(&self) -> &'static CompatibilityMatrix;
     fn hook_filename(&self) -> &'static str;
     fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>>;
     #[expect(
@@ -156,6 +158,30 @@ pub trait AgentAdapter {
 
     fn supports(&self, capability_type: CapabilityType) -> bool {
         self.kinds_supported().contains(&capability_type)
+    }
+
+    fn native_hook_event(&self, raw_event: &str) -> Result<&'static str> {
+        let matrix = self.hook_compatibility();
+        let Some(entry) = matrix.find_event(raw_event) else {
+            return Err(CoralError::new(format!(
+                "{} does not support hook event '{}'. Supported events: {}",
+                self.display_name(),
+                raw_event,
+                matrix.supported_native_events().join(", ")
+            )));
+        };
+        entry.native_event_name().ok_or_else(|| {
+            let suffix = entry
+                .caveat
+                .map(|caveat| format!(": {caveat}"))
+                .unwrap_or_default();
+            CoralError::new(format!(
+                "{} does not support hook event '{}'{}",
+                self.display_name(),
+                raw_event,
+                suffix
+            ))
+        })
     }
 
     fn ensure_project_dir(&self, repo_root: &Path) -> std::io::Result<()> {
@@ -270,6 +296,7 @@ pub trait AgentAdapter {
 
         match hook {
             HookDefinition::Command(hook_cfg) => {
+                let native_event = self.native_hook_event(&hook_cfg.event)?;
                 let target_path = repo_root
                     .join(self.dir_prefix())
                     .join("hooks")
@@ -283,7 +310,7 @@ pub trait AgentAdapter {
                 };
                 let fragment = serde_json::json!({
                     "hooks": {
-                        hook_cfg.event.clone(): [{
+                        (native_event): [{
                             "hooks": [{
                                 "type": "command",
                                 "command": format!("sh {}/hooks/{}/run.sh", self.dir_prefix(), capability.id)
@@ -543,10 +570,10 @@ impl AgentAdapter for AdapterKind {
         }
     }
 
-    fn supported_events(&self) -> &[&'static str] {
+    fn hook_compatibility(&self) -> &'static CompatibilityMatrix {
         match self {
-            Self::OpenAgents => open_agents::SUPPORTED_EVENTS,
-            Self::Claude => claude::SUPPORTED_EVENTS,
+            Self::OpenAgents => &open_agents::HOOK_COMPATIBILITY,
+            Self::Claude => &claude::HOOK_COMPATIBILITY,
         }
     }
 

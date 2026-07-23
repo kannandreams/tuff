@@ -76,18 +76,23 @@ Both adapters currently support:
 
 ## Supported hook events
 
-Manifest-style hook event support is adapter-specific.
+Manifest-style Coral-standard hook event support is adapter-specific. Native hook fragments
+supplied with `--hook-file` keep their harness event names and are merged as-is.
 
 | Event | `open-agents` | `claude` |
 |---|---|---|
 | `before_finish` | Yes | Yes |
 | `after_save` | Yes | No |
-| `pre_tool_execution` | Yes | No |
-| `post_tool_execution` | Yes | Yes |
+| `pre_tool_use` | Yes, rendered as `pre_tool_execution` | No |
+| `post_tool_use` | Yes, rendered as `post_tool_execution` | Yes, rendered as `post_tool_execution` |
+| `session_start` | No | Yes, rendered as `SessionStart` |
+| `session_end` | No | No |
+| `stop` | No | No |
 
 If you try to install a manifest-style hook with an unsupported event, Coral blocks the install
-and shows which events that adapter accepts. Native hook fragments carry their own harness event
-names and are merged by the harness adapter.
+and shows which events that adapter accepts. Run `coral hooks matrix` to inspect the registered
+adapter compatibility matrix, or `coral hooks check-portability <id> --target <adapter>` to check
+an installed hook before switching adapters.
 
 ## Commands
 
@@ -95,4 +100,5 @@ names and are merged by the harness adapter.
 coral agent list
 coral agent add open-agents
 coral agent add claude
+coral hooks matrix
 ```

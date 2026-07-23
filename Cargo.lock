@@ -184,6 +184,7 @@ version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "clap",
+ "coral-hooks-spec",
  "git2",
  "predicates",
  "serde",
@@ -193,6 +194,13 @@ dependencies = [
  "tempfile",
  "toml",
  "url",
+]
+
+[[package]]
+name = "coral-hooks-spec"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
