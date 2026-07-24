@@ -2,8 +2,8 @@ use std::path::Path;
 
 pub use coral_core::adapter::replace_hook_dir_placeholder;
 pub use coral_core::adapter::{
-    AgentAdapter, CapabilityKind, EmittedFile, HookDefinition, NativeHookConfig, PlannedFile,
-    ResolvedCapability, resolve_capability,
+    AgentAdapter, CapabilityKind, EmittedFile, HookDefinition, HookRenderContext, NativeHookConfig,
+    PlannedFile, ResolvedCapability, resolve_capability,
 };
 use coral_core::error::Result;
 use coral_core::manifest::{CapabilityType, HookConfig};

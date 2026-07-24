@@ -129,8 +129,13 @@ pub fn cmd_create(
                 fs::create_dir_all(parent)?;
             }
             fs::write(&settings_path, &merged)?;
-            managed_hooks =
-                lockfile::managed_hooks_from_fragment(repo_root, settings_relpath, &fragment)?;
+            let canonical_event = adapter.canonical_hook_event(event)?;
+            managed_hooks = lockfile::managed_hooks_from_fragment_with_canonical(
+                repo_root,
+                settings_relpath,
+                &fragment,
+                Some(canonical_event),
+            )?;
             println!(
                 "created and tracked hook '{}' ({}) -> {}",
                 id,

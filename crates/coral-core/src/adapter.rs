@@ -2,10 +2,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use coral_hooks_spec::CompatibilityMatrix;
+use coral_hooks_spec::{CompatibilityMatrix, CoverageLevel};
 
 use crate::error::{CoralError, Result};
-use crate::manifest::{CapabilityManifest, CapabilityType};
+use crate::manifest::{CapabilityManifest, CapabilityType, HookConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmittedFile {
@@ -44,6 +44,33 @@ impl PlannedFile {
 pub struct NativeHookConfig {
     pub fragment: serde_json::Value,
     pub source_files: Vec<(String, Vec<u8>)>,
+}
+
+#[derive(Debug, Clone)]
+pub enum HookRenderDiagnosticLevel {
+    Warning,
+}
+
+#[derive(Debug, Clone)]
+pub struct HookRenderDiagnostic {
+    pub level: HookRenderDiagnosticLevel,
+    pub message: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct HookRenderContext<'a> {
+    pub capability_id: &'a str,
+    pub hook: &'a HookConfig,
+    pub source_files: &'a [(String, Vec<u8>)],
+    pub repo_root: &'a Path,
+    pub track_managed_hooks: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct HookRenderPlan {
+    pub files: Vec<PlannedFile>,
+    pub managed_hooks: Vec<crate::lockfile::ManagedHook>,
+    pub diagnostics: Vec<HookRenderDiagnostic>,
 }
 
 #[derive(Debug, Clone)]
@@ -141,6 +168,111 @@ pub trait AgentAdapter {
     fn scaffold_hook_event(&self) -> &'static str;
     fn hook_filename(&self) -> &'static str;
     fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>>;
+    fn render_standard_hook(&self, context: HookRenderContext<'_>) -> Result<HookRenderPlan> {
+        let matrix = self.hook_compatibility();
+        let Some(entry) = matrix.find_event(&context.hook.event) else {
+            return Err(CoralError::new(format!(
+                "{} does not support hook event '{}'. Supported events: {}",
+                self.display_name(),
+                context.hook.event,
+                matrix.supported_native_events().join(", ")
+            )));
+        };
+        let Some(native_event) = entry.native_event_name() else {
+            let suffix = entry
+                .caveat
+                .map(|caveat| format!(": {caveat}"))
+                .unwrap_or_default();
+            return Err(CoralError::new(format!(
+                "{} does not support hook event '{}'{}",
+                self.display_name(),
+                context.hook.event,
+                suffix
+            )));
+        };
+
+        let command = format!(
+            "sh {}/hooks/{}/{}",
+            self.dir_prefix(),
+            context.capability_id,
+            self.hook_filename()
+        );
+        let target_path = context
+            .repo_root
+            .join(self.dir_prefix())
+            .join("hooks")
+            .join(context.capability_id)
+            .join(self.hook_filename());
+        let script = self.hook_file_content(context.hook)?;
+        let settings_relpath = self.hook_settings_relpath();
+        let fragment = self.command_hook_fragment(native_event, &command);
+        let settings_path = context.repo_root.join(settings_relpath);
+        let existing = if settings_path.is_file() {
+            Some(std::fs::read(&settings_path)?)
+        } else {
+            None
+        };
+        let merged = self.merge_hook_fragment(existing.as_deref(), &fragment)?;
+
+        let mut files = vec![PlannedFile::new(
+            relative_or_absolute_fs(&target_path, context.repo_root),
+            script,
+        )];
+        for (relative, content) in context.source_files {
+            let path = context
+                .repo_root
+                .join(self.dir_prefix())
+                .join("hooks")
+                .join(context.capability_id)
+                .join(relative);
+            files.push(PlannedFile::new(
+                relative_or_absolute_fs(&path, context.repo_root),
+                content.clone(),
+            ));
+        }
+        files.push(PlannedFile::mergeable(
+            relative_or_absolute_fs(&settings_path, context.repo_root),
+            merged,
+        ));
+
+        let mut diagnostics = Vec::new();
+        if entry.coverage == CoverageLevel::Partial {
+            let scope = if entry.scope.is_empty() {
+                "partial coverage".to_string()
+            } else {
+                format!("scope: {}", entry.scope.join(", "))
+            };
+            let caveat = entry
+                .caveat
+                .map(|caveat| format!("; {caveat}"))
+                .unwrap_or_default();
+            diagnostics.push(HookRenderDiagnostic {
+                level: HookRenderDiagnosticLevel::Warning,
+                message: format!(
+                    "{} renders '{}' with partial compatibility ({scope}{caveat})",
+                    self.display_name(),
+                    entry.event
+                ),
+            });
+        }
+
+        let managed_hooks = if context.track_managed_hooks {
+            crate::lockfile::managed_hooks_from_fragment_with_canonical(
+                context.repo_root,
+                settings_relpath,
+                &fragment,
+                Some(entry.event.as_str()),
+            )?
+        } else {
+            Vec::new()
+        };
+
+        Ok(HookRenderPlan {
+            files,
+            managed_hooks,
+            diagnostics,
+        })
+    }
     fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value;
     fn merge_hook_fragment(
         &self,
@@ -182,6 +314,33 @@ pub trait AgentAdapter {
                 suffix
             ))
         })
+    }
+
+    fn canonical_hook_event(&self, raw_event: &str) -> Result<&'static str> {
+        let matrix = self.hook_compatibility();
+        let Some(entry) = matrix.find_event(raw_event) else {
+            return Err(CoralError::new(format!(
+                "{} does not support hook event '{}'",
+                self.display_name(),
+                raw_event
+            )));
+        };
+        entry
+            .coverage
+            .is_supported()
+            .then_some(entry.event.as_str())
+            .ok_or_else(|| {
+                let suffix = entry
+                    .caveat
+                    .map(|caveat| format!(": {caveat}"))
+                    .unwrap_or_default();
+                CoralError::new(format!(
+                    "{} does not support hook event '{}'{}",
+                    self.display_name(),
+                    raw_event,
+                    suffix
+                ))
+            })
     }
 
     fn ensure_project_dir(&self, repo_root: &Path) -> std::io::Result<()> {
@@ -288,46 +447,14 @@ pub trait AgentAdapter {
 
         match hook {
             HookDefinition::Command(hook_cfg) => {
-                let native_event = self.native_hook_event(&hook_cfg.event)?;
-                let target_path = repo_root
-                    .join(self.dir_prefix())
-                    .join("hooks")
-                    .join(&capability.id)
-                    .join("run.sh");
-                let script = self.hook_file_content(hook_cfg)?;
-                let settings_relpath = self.hook_settings_relpath();
-                let fragment = self.command_hook_fragment(
-                    native_event,
-                    &format!("sh {}/hooks/{}/run.sh", self.dir_prefix(), capability.id),
-                );
-                let settings_path = repo_root.join(settings_relpath);
-                let existing = if settings_path.is_file() {
-                    Some(std::fs::read(&settings_path)?)
-                } else {
-                    None
-                };
-                let merged = self.merge_hook_fragment(existing.as_deref(), &fragment)?;
-
-                let mut files = vec![PlannedFile::new(
-                    relative_or_absolute_fs(&target_path, repo_root),
-                    script,
-                )];
-                for (relative, content) in &capability.source_files {
-                    let path = repo_root
-                        .join(self.dir_prefix())
-                        .join("hooks")
-                        .join(&capability.id)
-                        .join(relative);
-                    files.push(PlannedFile::new(
-                        relative_or_absolute_fs(&path, repo_root),
-                        content.clone(),
-                    ));
-                }
-                files.push(PlannedFile::mergeable(
-                    relative_or_absolute_fs(&settings_path, repo_root),
-                    merged,
-                ));
-                Ok(files)
+                let render = self.render_standard_hook(HookRenderContext {
+                    capability_id: &capability.id,
+                    hook: hook_cfg,
+                    source_files: &capability.source_files,
+                    repo_root,
+                    track_managed_hooks: false,
+                })?;
+                Ok(render.files)
             }
             HookDefinition::Native(native) => self.plan_native_hook(capability, native, repo_root),
         }

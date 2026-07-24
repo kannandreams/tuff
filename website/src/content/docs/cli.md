@@ -392,7 +392,7 @@ jobs:
           toolchain: stable
 
       - name: Build and install coral
-        run: cargo install --git https://github.com/kannandreams/coral
+        run: cargo install --git https://github.com/kannandreams/coral --package coral
 
       - name: Validate capabilities
         run: coral check --json
