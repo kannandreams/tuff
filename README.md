@@ -19,8 +19,8 @@ untracked copy.
 The core is content-agnostic. Capability content can live in the repository
 that owns it or in a separate pack repository. Coral handles manifests,
 installation, validation, drift detection, diffs, updates, and agent-specific
-emission. The current adapters include the shared `.agents/` layout and
-Claude-oriented output.
+emission. The workspace contains dedicated Claude, Codex, Cursor, and Open
+Agents adapter crates; each owns its native output and compatibility data.
 
 ## How the lifecycle works
 
@@ -83,14 +83,14 @@ for release notes and platform artifacts.
 From this repository:
 
 ```sh
-cargo run -- --help
-cargo run -- --version
+cargo run -p coral -- --help
+cargo run -p coral -- --version
 ```
 
 To install the CLI from this checkout while developing locally:
 
 ```sh
-cargo install --path .
+cargo install --path crates/coral-cli
 coral --version
 ```
 
@@ -103,7 +103,7 @@ This is the closest local workflow to how an engineer would try Coral after
 installing it:
 
 ```sh
-cargo install --path .
+cargo install --path crates/coral-cli
 mkdir -p /tmp/coral-smoke
 cd /tmp/coral-smoke
 coral --version

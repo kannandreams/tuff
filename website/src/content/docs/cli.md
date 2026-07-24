@@ -145,6 +145,15 @@ For harness-native hooks, pass the hook fragment explicitly:
 coral add hook ./claude-session-start --agent claude --hook-file settings.json
 ```
 
+Coral-standard manifest hooks are validated against adapter compatibility and rendered to the
+target harness's native settings. To inspect hook support or check a tracked hook before switching
+adapters:
+
+```sh frame="terminal"
+coral hooks matrix
+coral hooks check-portability pre-commit-lint --target claude
+```
+
 #### Flags
 
 | Flag | Description |
@@ -479,12 +488,14 @@ coral agent list --global
 ```sh frame="terminal"
 coral agent add open-agents
 coral agent add claude
+coral agent add codex
+coral agent add cursor
 ```
 
 Registering an agent also creates its project directory (`.agents/` or
 `.claude/`) if it does not already exist.
 
-Legacy aliases (`codex`, `claude-code`) are accepted and map to the current agent names.
+`claude-code` remains an alias for `claude`. `codex` and `cursor` are dedicated adapter IDs.
 
 The `REGISTERED` column shows which agents are available for Coral operations in
 the selected config. The `DEFAULT` column shows which registered agent is used

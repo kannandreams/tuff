@@ -17,10 +17,10 @@ lint:
 check: lint test docs-build
 
 run *args:
-    cargo run -- {{args}}
+    cargo run -p coral -- {{args}}
 
 smoke-install:
-    cargo install --path .
+    cargo install --path crates/coral-cli
     rm -rf /tmp/coral-smoke
     mkdir -p /tmp/coral-smoke
     cd /tmp/coral-smoke && coral --version
@@ -35,4 +35,4 @@ docs-build:
     cd website && npm run build
 
 docs-assets:
-    ./scripts/generate-doc-screenshot.sh coral-welcome.png -- cargo run --quiet --
+    ./scripts/generate-doc-screenshot.sh coral-welcome.png -- cargo run -p coral --quiet --

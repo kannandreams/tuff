@@ -6,6 +6,14 @@ description: Hooks define event-driven automation that runs at specific lifecycl
 A hook capability represents automation that runs at defined moments in an agent lifecycle.
 Hooks are useful for validation, formatting, enforcement, and project-specific checks.
 
+Coral supports two hook source shapes:
+
+- **Coral-standard hooks** use a `coral.toml` `[hook]` section with canonical event names.
+  Coral validates those events against the selected adapter and renders them into that
+  harness's native hook settings.
+- **Native harness hooks** pass a harness hook fragment with `--hook-file`. Coral copies or
+  adopts the runtime files and merges the native fragment as-is.
+
 Because hooks run automatically (triggered by the harness, never by Coral), Coral applies the
 same safety rules as tools: no execution during install, path traversal rejection, and clear
 reporting of what the hook does.
@@ -126,19 +134,55 @@ in `coral.lock`.
 
 ## Hook event reference
 
+Manifest-style Coral-standard hooks can use canonical event names. Coral maps aliases such as
+`pre_tool_execution` to the canonical `pre_tool_use` event where supported.
+
+| Canonical event | Description |
+|---|---|
+| `before_finish` | Before the agent completes a session or task |
+| `after_save` | After a file has been saved |
+| `pre_tool_use` | Before a tool call is executed |
+| `post_tool_use` | After a tool call completes |
+| `session_start` | When a session starts |
+| `session_end` | When a session ends |
+| `stop` | When a harness reaches a stop/continuation point |
+
 ### Open Agents (`open-agents`)
 
 | Event | Description |
 |---|---|
 | `before_finish` | Before the agent completes a session or task |
 | `after_save` | After a file has been saved |
-| `pre_tool_execution` | Before a tool call is executed |
-| `post_tool_execution` | After a tool call completes |
+| `pre_tool_execution` | Native rendering for canonical `pre_tool_use` |
+| `post_tool_execution` | Native rendering for canonical `post_tool_use` |
+
+### Codex (`codex`)
+
+Codex has a dedicated adapter and compatibility matrix even though it uses the `.agents/` output
+family. Its local function-tool coverage is reported separately from the generic Open Agents
+adapter.
+
+### Cursor (`cursor`)
+
+Cursor hooks are rendered into `.cursor/hooks.json` using native event names such as `sessionStart`,
+`preToolUse`, `postToolUse`, and `stop`. Cursor hook groups contain a direct `command` field rather
+than the nested `hooks` array used by Claude and Open Agents.
 
 ### Claude (`claude`)
 
 For native hook fragments, Coral reads the event names from the fragment and merges them into the
 adapter's settings file.
+
+Use the compatibility commands to inspect what Coral-standard hook events can render where:
+
+```sh frame="terminal"
+coral hooks matrix
+coral hooks check-portability pre-commit-lint --target claude
+```
+
+Portability checks are scoped to registered adapters. Native hook fragments are reported from the
+tracked native events Coral can see, but portability is not guaranteed unless the event maps to a
+Coral-standard event.
 
 ```sh frame="terminal"
 $ coral create hook review-hook --agent open-agents
@@ -151,6 +195,8 @@ created and tracked hook 'review-hook' (open-agents) -> .agents/hook.json
 |---|---|---|
 | `open-agents` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Native JSON (development format) |
 | `claude` | `.claude/hooks/<id>/...` plus `.claude/settings.json` | Native Claude JSON |
+| `codex` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Codex hook JSON |
+| `cursor` | `.cursor/hooks/<id>/run.sh` plus `.cursor/hooks.json` | Cursor Hooks JSON |
 
 ## Filtering
 

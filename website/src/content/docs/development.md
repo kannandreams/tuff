@@ -47,7 +47,7 @@ Use this flow to test Coral the way a user would: install the current checkout
 as a binary, move to a separate directory, and run `coral` directly.
 
 ```sh frame="terminal"
-cargo install --path .
+cargo install --path crates/coral-cli
 mkdir -p /tmp/coral-smoke
 cd /tmp/coral-smoke
 coral --version
@@ -90,8 +90,10 @@ instead of inline text.
 ## Project structure
 
 ```text
-src/main.rs        CLI and core implementation
-tests/             integration tests and test fixtures
+crates/coral-cli/  CLI commands and integration tests
+crates/coral-core/ lifecycle engine and adapter contract
+crates/coral-adapter-*/ native harness adapters
+tests/             shared test assets when present
 examples/          runnable capability examples
 docs/              documentation source files
 ```
