@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small stdlib-only text analyzer for Coral tool examples."""
+"""Small stdlib-only text analyzer for Tuff tool examples."""
 
 from __future__ import annotations
 

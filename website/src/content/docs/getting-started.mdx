@@ -1,157 +1,157 @@
 ---
 title: Getting Started
-description: Initialize Coral state and install your first capability.
+description: Initialize Tuff state and install your first capability.
 ---
 
-This guide walks through the first Coral workflow: initialize a project, create or install a
+This guide walks through the first Tuff workflow: initialize a project, create or install a
 capability, detect drift, and validate the result.
 
 For every command, the [CLI Reference](/cli) has the complete flags, scope behavior, and examples.
 
-Before you initialize anything, `coral` gives you a quick overview of the CLI:
+Before you initialize anything, `tuff` gives you a quick overview of the CLI:
 
-![Coral CLI welcome output](/img/generated/coral-welcome.png)
+![Tuff CLI welcome output](/img/generated/tuff-welcome.png)
 
-## 1. Initialize Coral
+## 1. Initialize Tuff
 
 ```sh frame="terminal"
-coral init
+tuff init
 ```
 
-Creates `coral.lock` and optional project preferences, configures `open-agents` as the default agent, and scaffolds `.agents/`
-directories, and auto-installs `coral-cli-guide`, a reference skill your coding agent can read to
-learn Coral commands.
+Creates `tuff.lock` and optional project preferences, configures `open-agents` as the default agent, and scaffolds `.agents/`
+directories, and auto-installs `tuff-cli-guide`, a reference skill your coding agent can read to
+learn Tuff commands.
 
-See [`coral init`](/cli#coral-init) for project and global initialization.
+See [`tuff init`](/cli#tuff-init) for project and global initialization.
 
 ## 2. Configure another agent (optional)
 
-`coral init` is enough for the default `.agents/` workflow. Register another harness when you want
+`tuff init` is enough for the default `.agents/` workflow. Register another harness when you want
 to emit capabilities into its native directory:
 
 ```sh frame="terminal"
-coral agent add claude
-coral agent add codex
-coral agent add cursor
+tuff agent add claude
+tuff agent add codex
+tuff agent add cursor
 ```
 
 To make that harness the default for later commands, run:
 
 ```sh frame="terminal"
-coral agent set-default claude
+tuff agent set-default claude
 ```
 
-See [`coral agent`](/cli#coral-agent) for registration, defaults, aliases, and global settings.
+See [`tuff agent`](/cli#tuff-agent) for registration, defaults, aliases, and global settings.
 
 ## 3. Create and track your first capability
 
 ```sh frame="terminal"
-coral create skill my-skill
+tuff create skill my-skill
 ```
 
-Coral creates a valid starter scaffold in `.agents/skills/my-skill/`, records the baseline, and
+Tuff creates a valid starter scaffold in `.agents/skills/my-skill/`, records the baseline, and
 starts tracking drift without requiring a separate import.
 
 To create it for another agent explicitly:
 
 ```sh frame="terminal"
-coral create skill my-skill --agent claude
+tuff create skill my-skill --agent claude
 ```
 
-See [`coral create`](/cli#coral-create) for skills, tools, hooks, workflows, and repeated agent
+See [`tuff create`](/cli#tuff-create) for skills, tools, hooks, workflows, and repeated agent
 selection.
 
 If your project already has a skill under `.agents/skills/`, add it in place:
 
 ```sh frame="terminal"
-coral add skill .agents/skills/existing-skill --agent open-agents
+tuff add skill .agents/skills/existing-skill --agent open-agents
 ```
 
-See [`coral add`](/cli#coral-add) for adopting existing files and installing from git.
+See [`tuff add`](/cli#tuff-add) for adopting existing files and installing from git.
 
 ## 4. Inspect what is installed
 
 ```sh frame="terminal"
-coral list
+tuff list
 ```
 
-`coral list` shows the capability type, agent, drift status, and emitted path. See
-[`coral list`](/cli#coral-list) for scope and type filters.
+`tuff list` shows the capability type, agent, drift status, and emitted path. See
+[`tuff list`](/cli#tuff-list) for scope and type filters.
 
 ## 5. Edit and detect drift
 
 After editing `.agents/skills/my-skill/SKILL.md`, inspect the change:
 
 ```sh frame="terminal"
-coral list
-coral diff my-skill
+tuff list
+tuff diff my-skill
 ```
 
-`coral list` shows the capability as modified and `coral diff` shows the tracked changes. See
-[`coral diff`](/cli#coral-diff) for baseline and upstream comparisons.
+`tuff list` shows the capability as modified and `tuff diff` shows the tracked changes. See
+[`tuff diff`](/cli#tuff-diff) for baseline and upstream comparisons.
 
 If the drift is intentional and should become the new baseline:
 
 ```sh frame="terminal"
-coral update my-skill
+tuff update my-skill
 ```
 
 Commands use the configured default agent when `-a/--agent` is omitted. Pass `-a <agent>` to
 operate on a different agent, or repeat the flag for multiple agents. See
-[`coral update`](/cli#coral-update) for source-aware updates and dry runs.
+[`tuff update`](/cli#tuff-update) for source-aware updates and dry runs.
 
 For existing files that were added in place, later edits follow this same drift and update flow.
 
 ## 6. Install from git
 
 ```sh frame="terminal"
-coral add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
+tuff add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
 ```
 
 The command installs the selected capability, tracks the upstream revision, and records
 everything in the lockfile. Replace `skill` with `tool`, `hook`, or `workflow` when installing
-another capability type. See [`coral add`](/cli#coral-add) for local and Git source patterns.
+another capability type. See [`tuff add`](/cli#tuff-add) for local and Git source patterns.
 
 ## 7. Check for updates
 
 ```sh frame="terminal"
-coral outdated
-coral update rust-implement
+tuff outdated
+tuff update rust-implement
 ```
 
-`coral outdated` compares tracked git-backed capabilities against their latest upstream revision,
-and `coral update` reconciles them when you are ready. See [`coral outdated`](/cli#coral-outdated)
-and [`coral update`](/cli#coral-update).
+`tuff outdated` compares tracked git-backed capabilities against their latest upstream revision,
+and `tuff update` reconciles them when you are ready. See [`tuff outdated`](/cli#tuff-outdated)
+and [`tuff update`](/cli#tuff-update).
 
 ## 8. Clean up a capability
 
-Delete files Coral generated for the default agent:
+Delete files Tuff generated for the default agent:
 
 ```sh frame="terminal"
-coral delete rust-implement
+tuff delete rust-implement
 ```
 
 If the capability was added from files you already owned, preserve those files and remove only
-Coral tracking:
+Tuff tracking:
 
 ```sh frame="terminal"
-coral untrack my-skill
+tuff untrack my-skill
 ```
 
-See [`coral delete`](/cli#coral-delete) and [`coral untrack`](/cli#coral-untrack) for explicit
+See [`tuff delete`](/cli#tuff-delete) and [`tuff untrack`](/cli#tuff-untrack) for explicit
 agent selection, global scope, and force behavior.
 
-`coral agent remove <agent>` only unregisters the agent. It does not remove capabilities.
+`tuff agent remove <agent>` only unregisters the agent. It does not remove capabilities.
 
 ## 9. CI validation
 
 ```sh frame="terminal"
-coral check
-# coral-cli-guide    skill    open-agents    ok
+tuff check
+# tuff-cli-guide    skill    open-agents    ok
 # my-skill           skill    open-agents    ok
 ```
 
-See [`coral check`](/cli#coral-check) for JSON output, failure handling, and the GitHub Actions
+See [`tuff check`](/cli#tuff-check) for JSON output, failure handling, and the GitHub Actions
 example.
 
 For deeper scenario walkthroughs, see the [development lifecycle guide](/concepts/development-lifecycle).

@@ -3,7 +3,7 @@ title: Scopes & Overrides
 description: How project and global capability state interact today.
 ---
 
-Coral currently has two scopes:
+Tuff currently has two scopes:
 
 - `project`
 - `global`
@@ -16,32 +16,32 @@ The important rule is simple: project scope wins.
 
 Project-scoped capabilities live in the repository and are tracked by:
 
-- `coral.lock`
-- `coral.config.json` (optional project preferences)
+- `tuff.lock`
+- `tuff.config.json` (optional project preferences)
 
-This is the default scope for `coral add`, `coral list`, `coral diff`, and
-`coral update`.
+This is the default scope for `tuff add`, `tuff list`, `tuff diff`, and
+`tuff update`.
 
 ### Global scope
 
 Global scope is for personal capabilities shared across projects. It uses the platform's
-XDG-style Coral config, state, and cache directories:
+XDG-style Tuff config, state, and cache directories:
 
-- `coral.lock` in Coral's user state directory
-- verified trees in Coral's user cache directory
+- `tuff.lock` in Tuff's user state directory
+- verified trees in Tuff's user cache directory
 - `~/.agents/` or other global emitted files
 
 Use it explicitly:
 
 ```sh frame="terminal"
-coral init --global
-coral add ./my-skill --global
-coral update my-skill --scope global
+tuff init --global
+tuff add ./my-skill --global
+tuff update my-skill --scope global
 ```
 
 ## Resolution order
 
-When Coral looks up an installed capability by id, it resolves in this order:
+When Tuff looks up an installed capability by id, it resolves in this order:
 
 1. project scope
 2. global scope
@@ -55,7 +55,7 @@ If both scopes contain the same capability id:
 - the project copy is the active one for that repo
 - the global copy remains installed, but is shadowed there
 
-Coral surfaces this in status output:
+Tuff surfaces this in status output:
 
 - project entries can show: `[overrides global: won't receive global updates]`
 - global entries can show: `[shadowed by project copy]`
@@ -64,20 +64,20 @@ Coral surfaces this in status output:
 
 ```sh frame="terminal"
 # Install globally
-coral add ./company-review --global
+tuff add ./company-review --global
 
 # In a repo, install a project-specific copy with the same id
-coral add ./company-review-custom
+tuff add ./company-review-custom
 
-coral status
+tuff status
 ```
 
-In that repository, Coral resolves the project copy first.
+In that repository, Tuff resolves the project copy first.
 
 ## Collision warnings
 
 If a capability id already exists globally and you install a project copy from a different source,
-Coral warns that the project copy will take precedence.
+Tuff warns that the project copy will take precedence.
 
 This is especially useful when:
 
@@ -89,25 +89,25 @@ This is especially useful when:
 ### Commands that default to project scope
 
 ```sh frame="terminal"
-coral add ./my-skill
-coral list
-coral diff my-skill
-coral update my-skill
+tuff add ./my-skill
+tuff list
+tuff diff my-skill
+tuff update my-skill
 ```
 
 ### Commands that can target global scope
 
 ```sh frame="terminal"
-coral add ./my-skill --global
-coral list --scope global
-coral delete my-skill --scope global
-coral untrack my-skill --scope global
-coral update my-skill --scope global
+tuff add ./my-skill --global
+tuff list --scope global
+tuff delete my-skill --scope global
+tuff untrack my-skill --scope global
+tuff update my-skill --scope global
 ```
 
 ## Current Limits
 
-Coral does not currently support a deeper layered model such as:
+Tuff does not currently support a deeper layered model such as:
 
 - company
 - team

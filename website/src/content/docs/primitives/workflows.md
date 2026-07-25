@@ -18,7 +18,7 @@ and activates the listed capabilities together.
 ## Manifest
 
 ```toml
-# coral.toml
+# tuff.toml
 id = "release-prep"
 version = "1.0.0"
 type = "workflow"
@@ -55,7 +55,7 @@ Each `[[workflow.requires]]` entry must have:
 ## Installing a workflow
 
 ```sh frame="terminal"
-$ coral add workflow ./release-prep --agent open-agents
+$ tuff add workflow ./release-prep --agent open-agents
 note: workflow 'release-prep' requires 3 capabilities:
   - python-uv-default (skill)
   - security-review (tool)
@@ -64,12 +64,12 @@ installed release-prep (open-agents) -> .agents/workflows/release-prep/workflow.
 ```
 
 Workflows install themselves but do **not** auto-install dependencies. Install the required
-capabilities separately, or use `coral add <capability-type> <path> --agent <agent>` if they already exist in your
+capabilities separately, or use `tuff add <capability-type> <path> --agent <agent>` if they already exist in your
 project.
 
 ## Validation
 
-At install time, Coral validates:
+At install time, Tuff validates:
 
 - `requires` has at least one entry
 - No duplicate requirement ids
@@ -83,7 +83,7 @@ At install time, Coral validates:
 | `open-agents` | `.agents/workflows/<id>/workflow.toml` |
 | `claude` | `.claude/workflows/<id>/workflow.toml` |
 
-## `coral status` for workflows
+## `tuff status` for workflows
 
 Shows the workflow and each required capability with its drift status:
 
@@ -99,15 +99,15 @@ their actual drift status (`clean`, `modified`).
 
 ## Lifecycle
 
-Workflows participate in the full Coral lifecycle: `coral list`, `coral diff`,
-`coral check`, `coral delete`, `coral untrack`, and `coral outdated` all work.
+Workflows participate in the full Tuff lifecycle: `tuff list`, `tuff diff`,
+`tuff check`, `tuff delete`, `tuff untrack`, and `tuff outdated` all work.
 
 ## Example: feature-build workflow
 
 ```sh frame="terminal"
 # 1. Create the workflow
 mkdir feature-build
-cat > feature-build/coral.toml << 'EOF'
+cat > feature-build/tuff.toml << 'EOF'
 id = "feature-build"
 version = "1.0.0"
 type = "workflow"
@@ -131,14 +131,14 @@ type = "tool"
 EOF
 
 # 2. Install the workflow
-coral add workflow ./feature-build --agent open-agents
+tuff add workflow ./feature-build --agent open-agents
 
 # 3. Install the required capabilities
-coral add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
-coral add skill https://github.com/pproenca/dot-skills rust-write-tests --agent open-agents
-coral add hook examples/hooks/pre-commit-lint --agent open-agents
-coral add tool examples/tools/security-review --agent open-agents
+tuff add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
+tuff add skill https://github.com/pproenca/dot-skills rust-write-tests --agent open-agents
+tuff add hook examples/hooks/pre-commit-lint --agent open-agents
+tuff add tool examples/tools/security-review --agent open-agents
 
 # 4. Check status
-coral status
+tuff status
 ```

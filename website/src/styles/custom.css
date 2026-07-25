@@ -627,11 +627,11 @@ dialog[aria-label='Search'] {
   font-weight: 500;
 }
 
-.coral-banner-frame {
+.tuff-banner-frame {
   padding: 0.75rem;
 }
 
-.coral-banner-image {
+.tuff-banner-image {
   border-radius: 10px;
   display: block;
   width: 100%;
@@ -641,7 +641,7 @@ dialog[aria-label='Search'] {
 }
 
 @media (max-width: 50rem) {
-  .coral-banner-frame {
+  .tuff-banner-frame {
     padding: 0.55rem;
   }
 }

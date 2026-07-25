@@ -1,6 +1,6 @@
 ---
 title: Harness Config
-description: A practical command, flag, target-folder, and operations reference for Claude Code, Codex CLI, Cursor CLI, OpenCode, and Coral.
+description: A practical command, flag, target-folder, and operations reference for Claude Code, Codex CLI, Cursor CLI, OpenCode, and Tuff.
 ---
 
 This is the quick reference for teams that use more than one coding-agent
@@ -8,7 +8,7 @@ harness. It separates two concerns:
 
 1. The harness CLI controls a session: prompt, working directory, model,
    permissions, output, and resume behavior.
-2. Coral manages reusable project capabilities: skills, tools, hooks, and
+2. Tuff manages reusable project capabilities: skills, tools, hooks, and
    workflows, then emits them into the selected harness layout.
 
 The upstream CLIs change quickly. Treat this page as a workflow map and run
@@ -69,18 +69,18 @@ local settings and user state should stay out of version control.
 | Project config | `opencode.json` or `opencode.jsonc` |
 | User config | `~/.config/opencode/` |
 
-Coral is the cross-harness layer: use `coral.toml` and `coral.lock` as the
+Tuff is the cross-harness layer: use `tuff.toml` and `tuff.lock` as the
 source of truth, then emit adapter-specific files into `.agents/`, `.claude/`,
 or another supported target.
 
-### What Coral emits
+### What Tuff emits
 
-Coral keeps the capability source and lock metadata independent from the
+Tuff keeps the capability source and lock metadata independent from the
 harness output:
 
 ```text
-coral.toml                 # capability manifest / source declaration
-coral.lock                 # tracked identity, scope, agent, and baseline
+tuff.toml                 # capability manifest / source declaration
+tuff.lock                 # tracked identity, scope, agent, and baseline
 .agents/                   # open-agents / Codex-compatible output
   skills/<id>/SKILL.md
 .claude/                   # Claude-oriented output
@@ -89,7 +89,7 @@ coral.lock                 # tracked identity, scope, agent, and baseline
 ```
 
 The exact emitted paths depend on the capability type and adapter. Inspect
-them with `coral list`, `coral status`, or `coral generate report` instead of
+them with `tuff list`, `tuff status`, or `tuff generate report` instead of
 assuming that every harness has the same layout.
 
 ## Flag translation
@@ -140,48 +140,48 @@ opencode run "Inspect the release workflow and propose changes"
 Expected target: the current repository, its instruction file, and the
 harness-specific capability folders discovered from that repository.
 
-### 2. Add a capability with Coral
+### 2. Add a capability with Tuff
 
 ```sh frame="terminal"
-coral init
-coral agent add open-agents
-coral agent add claude
+tuff init
+tuff agent add open-agents
+tuff agent add claude
 
 # Create a new capability for both harnesses
-coral create skill release-check -a open-agents -a claude
+tuff create skill release-check -a open-agents -a claude
 
 # Adopt an existing project capability without rewriting its content
-coral add --agent open-agents .agents/skills/release-check
+tuff add --agent open-agents .agents/skills/release-check
 
 # Inspect what is tracked and where it was emitted
-coral list
-coral status
-coral generate report --output docs/coral-report.md
+tuff list
+tuff status
+tuff generate report --output docs/tuff-report.md
 ```
 
-Use `coral add skill <source> --agent <id>` when the source type is known, or
-the untyped `coral add <source>` form when Coral should infer it. For a
+Use `tuff add skill <source> --agent <id>` when the source type is known, or
+the untyped `tuff add <source>` form when Tuff should infer it. For a
 harness-native hook fragment:
 
 ```sh frame="terminal"
-coral add hook ./claude-session-start --agent claude --hook-file settings.json
+tuff add hook ./claude-session-start --agent claude --hook-file settings.json
 ```
 
 ### 3. Detect and reconcile drift
 
 ```sh frame="terminal"
-coral list
-coral diff <capability-id>
-coral diff <capability-id> --upstream
-coral update <capability-id> --check
-coral update <capability-id>
-coral check --json
+tuff list
+tuff diff <capability-id>
+tuff diff <capability-id> --upstream
+tuff update <capability-id> --check
+tuff update <capability-id>
+tuff check --json
 ```
 
 Interpretation:
 
 - `list` is the fast inventory and drift view.
-- `diff` shows local changes against Coral’s pristine baseline.
+- `diff` shows local changes against Tuff’s pristine baseline.
 - `diff --upstream` compares a Git-sourced capability with its latest source.
 - `update --check` previews reconciliation without writing.
 - `update` accepts intentional local edits or merges upstream changes,
@@ -192,19 +192,19 @@ Interpretation:
 
 ```sh frame="terminal"
 # Remove generated files, refusing modified files by default
-coral delete <id> -a claude
+tuff delete <id> -a claude
 
 # Remove generated files even when they changed
-coral delete <id> -a claude --force
+tuff delete <id> -a claude --force
 
 # Stop managing files but leave them in place
-coral untrack <id> -a claude
+tuff untrack <id> -a claude
 
 # Remove an adapter registration only; capabilities remain untouched
-coral agent remove claude
+tuff agent remove claude
 ```
 
-Use `delete` when Coral owns the generated files. Use `untrack` when the files
+Use `delete` when Tuff owns the generated files. Use `untrack` when the files
 should remain available to the harness. `agent remove` is configuration-only;
 it is not a cleanup command.
 
@@ -218,28 +218,28 @@ it is not a cleanup command.
   the repository.
 - Use plan / approval-on-request / workspace-write modes for exploratory work.
 - Use JSON output in automation and preserve the process exit code.
-- Run `coral check --json` before release or deployment automation.
-- Review generated paths with `coral status` after adding or changing an
+- Run `tuff check --json` before release or deployment automation.
+- Review generated paths with `tuff status` after adding or changing an
   adapter.
 
 ### Project versus global scope
 
 Project scope is for reproducible team behavior. Global scope is for personal
-defaults or organization-wide local setup. Coral follows the same distinction:
+defaults or organization-wide local setup. Tuff follows the same distinction:
 
 ```sh frame="terminal"
-coral init                 # project state
-coral init --global        # user/global state
-coral add skill ./pack     # project capability
-coral add skill ./pack --global
-coral agent set-default claude
-coral agent set-default claude --global
+tuff init                 # project state
+tuff init --global        # user/global state
+tuff add skill ./pack     # project capability
+tuff add skill ./pack --global
+tuff agent set-default claude
+tuff agent set-default claude --global
 ```
 
 When project and global capabilities share an id, the project copy wins. Use
-`coral status` to find shadowing and override warnings.
+`tuff status` to find shadowing and override warnings.
 
-For the Coral command and flag reference, see [CLI Reference](/cli). For concepts and
+For the Tuff command and flag reference, see [CLI Reference](/cli). For concepts and
 side effects, see [Lifecycle & Drift Detection](/concepts/lifecycle),
 [Diffing & Updates](/concepts/diff-update), and [Scopes & Overrides](/concepts/scopes).
 

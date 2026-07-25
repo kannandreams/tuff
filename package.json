@@ -1,5 +1,5 @@
 {
-  "name": "coral-root",
+  "name": "tuff-root",
   "private": true,
   "scripts": {
     "docs:start": "npm --prefix website run dev",

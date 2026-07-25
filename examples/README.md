@@ -1,6 +1,6 @@
-# Coral examples
+# Tuff examples
 
-These directories contain runnable capability examples for Coral command
+These directories contain runnable capability examples for Tuff command
 documentation and contributor smoke tests. Organize examples by capability
 type so the install path matches the capability being demonstrated:
 

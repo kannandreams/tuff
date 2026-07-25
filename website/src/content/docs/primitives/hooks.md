@@ -6,15 +6,15 @@ description: Hooks define event-driven automation that runs at specific lifecycl
 A hook capability represents automation that runs at defined moments in an agent lifecycle.
 Hooks are useful for validation, formatting, enforcement, and project-specific checks.
 
-Coral supports two hook source shapes:
+Tuff supports two hook source shapes:
 
-- **Coral-standard hooks** use a `coral.toml` `[hook]` section with canonical event names.
-  Coral validates those events against the selected adapter and renders them into that
+- **Tuff-standard hooks** use a `tuff.toml` `[hook]` section with canonical event names.
+  Tuff validates those events against the selected adapter and renders them into that
   harness's native hook settings.
-- **Native harness hooks** pass a harness hook fragment with `--hook-file`. Coral copies or
+- **Native harness hooks** pass a harness hook fragment with `--hook-file`. Tuff copies or
   adopts the runtime files and merges the native fragment as-is.
 
-Because hooks run automatically (triggered by the harness, never by Coral), Coral applies the
+Because hooks run automatically (triggered by the harness, never by Tuff), Tuff applies the
 same safety rules as tools: no execution during install, path traversal rejection, and clear
 reporting of what the hook does.
 
@@ -49,15 +49,15 @@ harness settings file. For Claude, that means a `hooks`-only JSON fragment:
 }
 ```
 
-Coral replaces `{{hook_dir}}` with the managed hook directory for that harness.
+Tuff replaces `{{hook_dir}}` with the managed hook directory for that harness.
 
 ## Installing a hook
 
-To create a new tracked hook scaffold, use `coral create hook`. For Claude, Coral creates the
+To create a new tracked hook scaffold, use `tuff create hook`. For Claude, Tuff creates the
 runtime command file and registers it in the shared settings file:
 
 ```sh frame="terminal"
-coral create hook session-start --agent claude
+tuff create hook session-start --agent claude
 ```
 
 This produces:
@@ -70,11 +70,11 @@ This produces:
       run.sh
 ```
 
-Edit `run.sh` and the generated `SessionStart` registration in `.claude/settings.json`. Coral
+Edit `run.sh` and the generated `SessionStart` registration in `.claude/settings.json`. Tuff
 tracks both files in the lockfile. Open Agents follows the same shape:
 
 ```sh frame="terminal"
-coral create hook review-hook --agent open-agents
+tuff create hook review-hook --agent open-agents
 ```
 
 This creates `.agents/hooks/review-hook/run.sh` and registers the `before_finish` event in
@@ -93,12 +93,12 @@ examples/hooks/claude-session-start/
 Install that example with:
 
 ```sh frame="terminal"
-coral add hook ./examples/hooks/claude-session-start \
+tuff add hook ./examples/hooks/claude-session-start \
   --agent claude \
   --hook-file settings.json
 ```
 
-If the source lives outside the harness folder, Coral copies runtime files into the selected
+If the source lives outside the harness folder, Tuff copies runtime files into the selected
 harness and merges the hook fragment into the native settings file:
 
 ```text
@@ -109,11 +109,11 @@ harness and merges the hook fragment into the native settings file:
       session-start.sh
 ```
 
-If the source already lives under the selected harness folder, Coral adopts it in place instead
+If the source already lives under the selected harness folder, Tuff adopts it in place instead
 of copying it:
 
 ```sh frame="terminal"
-coral add hook .claude/hooks/session-start --agent claude --hook-file settings.json
+tuff add hook .claude/hooks/session-start --agent claude --hook-file settings.json
 ```
 
 The in-place form is useful while developing a hook directly inside `.claude/`, `.cursor/`, or
@@ -123,18 +123,18 @@ The same source can also come from Git. The capability name is the directory ins
 repository:
 
 ```sh frame="terminal"
-coral add hook https://github.com/acme/coral-hooks claude-session-start \
+tuff add hook https://github.com/acme/tuff-hooks claude-session-start \
   --agent claude \
   --hook-file settings.json
 ```
 
-For Git sources, Coral resolves `settings.json` relative to the named hook directory, copies
+For Git sources, Tuff resolves `settings.json` relative to the named hook directory, copies
 the runtime files into `.claude/hooks/<id>/`, merges the fragment, and records the Git revision
-in `coral.lock`.
+in `tuff.lock`.
 
 ## Hook event reference
 
-Manifest-style Coral-standard hooks can use canonical event names. Coral maps aliases such as
+Manifest-style Tuff-standard hooks can use canonical event names. Tuff maps aliases such as
 `pre_tool_execution` to the canonical `pre_tool_use` event where supported.
 
 | Canonical event | Description |
@@ -170,23 +170,23 @@ than the nested `hooks` array used by Claude and Open Agents.
 
 ### Claude (`claude`)
 
-For native hook fragments, Coral reads the event names from the fragment and merges them into the
+For native hook fragments, Tuff reads the event names from the fragment and merges them into the
 adapter's settings file.
 
-Use the compatibility commands to inspect what Coral-standard hook events can render where:
+Use the compatibility commands to inspect what Tuff-standard hook events can render where:
 
 ```sh frame="terminal"
-coral hooks matrix
-coral hooks check-portability pre-commit-lint --target claude
+tuff hooks matrix
+tuff hooks check-portability pre-commit-lint --target claude
 ```
 
-Portability checks are scoped to registered adapters. Coral-standard hooks retain both their
+Portability checks are scoped to registered adapters. Tuff-standard hooks retain both their
 canonical event and emitted native event in the lockfile, so the target adapter is checked using the
 canonical event. Native hook fragments fall back to native-event matching and are not guaranteed to
 be portable.
 
 ```sh frame="terminal"
-$ coral create hook review-hook --agent open-agents
+$ tuff create hook review-hook --agent open-agents
 created and tracked hook 'review-hook' (open-agents) -> .agents/hook.json
 ```
 
@@ -202,16 +202,16 @@ created and tracked hook 'review-hook' (open-agents) -> .agents/hook.json
 ## Filtering
 
 ```sh frame="terminal"
-coral list --type hook
+tuff list --type hook
 ```
 
 ## Lifecycle
 
-Hooks participate in the full Coral lifecycle: baseline capture, drift detection, diff,
+Hooks participate in the full Tuff lifecycle: baseline capture, drift detection, diff,
 and merge-aware updates just like skills and tools.
 
 ```sh frame="terminal"
-$ coral diff pre-commit-lint
+$ tuff diff pre-commit-lint
 --- baseline/open-agents/pre-commit-lint/
 +++ .agents/hooks/pre-commit-lint/run.sh
 -echo "replace with hook logic"
@@ -222,6 +222,6 @@ $ coral diff pre-commit-lint
 
 :::caution
 Hooks run automatically when triggered by the harness. They are never executed by
-Coral during install or update. Review the command in the hook settings file carefully. A hook that
+Tuff during install or update. Review the command in the hook settings file carefully. A hook that
 modifies files or runs destructive commands affects every agent session.
 :::

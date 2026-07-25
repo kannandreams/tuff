@@ -1,17 +1,17 @@
 ---
 title: Harness Adapters
-description: How Coral maps one capability model into agent-specific files and config.
+description: How Tuff maps one capability model into agent-specific files and config.
 ---
 
-A harness is the coding environment Coral emits into, such as `.agents/` or `.claude/`.
-A harness adapter is Coral's agent-specific implementation layer for that environment.
+A harness is the coding environment Tuff emits into, such as `.agents/` or `.claude/`.
+A harness adapter is Tuff's agent-specific implementation layer for that environment.
 
 The adapter decides where files are emitted, how native settings are updated, and where tool
 registration lives.
 
 ## Supported Adapters
 
-Coral currently ships four adapters:
+Tuff currently ships four adapters:
 
 | Adapter | Target id | Main output root |
 |---|---|---|
@@ -46,7 +46,7 @@ The same capability can be emitted differently depending on the agent.
 | `codex` | `.agents/tools/<id>/...` | `.agents/mcp.json` |
 | `cursor` | `.cursor/tools/<id>/...` | `.cursor/mcp.json` |
 
-Coral writes the tool files and also registers the tool in the agent's MCP config so the harness
+Tuff writes the tool files and also registers the tool in the agent's MCP config so the harness
 can discover it.
 
 ## Hooks
@@ -60,7 +60,7 @@ Hooks are where the adapter differences are most visible:
 | `codex` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Codex hook JSON |
 | `cursor` | `.cursor/hooks/<id>/run.sh` plus `.cursor/hooks.json` | Cursor Hooks JSON |
 
-For Claude, `coral add hook ... --hook-file settings.json` reads a hooks-only native fragment,
+For Claude, `tuff add hook ... --hook-file settings.json` reads a hooks-only native fragment,
 copies runtime files when needed, and merges the fragment into `.claude/settings.json`.
 
 ## Workflows
@@ -83,7 +83,7 @@ All four adapters currently support:
 
 ## Supported hook events
 
-Manifest-style Coral-standard hook event support is adapter-specific. Native hook fragments
+Manifest-style Tuff-standard hook event support is adapter-specific. Native hook fragments
 supplied with `--hook-file` keep their harness event names and are merged as-is.
 
 | Event | `open-agents` | `claude` | `codex` | `cursor` |
@@ -100,18 +100,18 @@ Codex and Cursor have dedicated compatibility rows even when their output roots 
 generic Open Agents adapter. Cursor renders native names such as `sessionStart`, `preToolUse`,
 `postToolUse`, and `stop` into `.cursor/hooks.json`.
 
-If you try to install a manifest-style hook with an unsupported event, Coral blocks the install
-and shows which events that adapter accepts. Run `coral hooks matrix` to inspect the registered
-adapter compatibility matrix, or `coral hooks check-portability <id> --target <adapter>` to check
+If you try to install a manifest-style hook with an unsupported event, Tuff blocks the install
+and shows which events that adapter accepts. Run `tuff hooks matrix` to inspect the registered
+adapter compatibility matrix, or `tuff hooks check-portability <id> --target <adapter>` to check
 an installed hook before switching adapters.
 
 ## Commands
 
 ```sh frame="terminal"
-coral agent list
-coral agent add open-agents
-coral agent add claude
-coral agent add codex
-coral agent add cursor
-coral hooks matrix
+tuff agent list
+tuff agent add open-agents
+tuff agent add claude
+tuff agent add codex
+tuff agent add cursor
+tuff hooks matrix
 ```

@@ -1,9 +1,9 @@
 ---
 title: Credits
-description: Projects and libraries Coral builds on or draws from.
+description: Projects and libraries Tuff builds on or draws from.
 ---
 
-Coral is shaped by a mix of open-source libraries, documentation tooling, and prior work in the
+Tuff is shaped by a mix of open-source libraries, documentation tooling, and prior work in the
 agent capability space.
 
 ## Project inspiration

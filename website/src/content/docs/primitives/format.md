@@ -1,44 +1,44 @@
 ---
 title: Capability Format
-description: How Coral discovers and tracks capabilities.
+description: How Tuff discovers and tracks capabilities.
 ---
 
-Coral discovers capabilities from directory structure and, optionally, a source
-`coral.toml` manifest. The manifest is **not required** — Coral can infer
+Tuff discovers capabilities from directory structure and, optionally, a source
+`tuff.toml` manifest. The manifest is **not required** — Tuff can infer
 type, files, and metadata from the filesystem or from `--type` and `--name`
 flags passed at install time.
 
-Tracking metadata lives exclusively in `coral.lock` and
+Tracking metadata lives exclusively in `tuff.lock` and
 the user cache directory. No tracking files are emitted into agent directories
-(`.agents/`, `.claude/`). Coral regenerates derived artifacts like
-`CAPABILITIES.md` on demand with `coral generate index`.
+(`.agents/`, `.claude/`). Tuff regenerates derived artifacts like
+`CAPABILITIES.md` on demand with `tuff generate index`.
 
 ## Discovery and auto-detection
 
-Coral infers capability type at `coral add` time from:
+Tuff infers capability type at `tuff add` time from:
 
 1. The `--type` flag (explicit): `--type skill`, `--type tool`, etc.
 2. Parent directory name: `skills/` or `skill/` → skill, `tools/` or `tool/` → tool
 3. For git repositories: the cloned directory structure
 
 When installing from a git URL, `--name` identifies the capability folder
-inside the repository. Coral searches both plural and singular directory
+inside the repository. Tuff searches both plural and singular directory
 names (`skills/<name>`, `skill/<name>`, tools/<name>`, `tool/<name>`) plus
 the repo root.
 
 ## Installed output
 
-For a skill with `id = "python-uv-default"`, Coral installs:
+For a skill with `id = "python-uv-default"`, Tuff installs:
 
 ```text
 .agents/skills/python-uv-default/SKILL.md
 ```
 
-It records an install-time materialized-tree hash in `coral.lock`; the disposable
+It records an install-time materialized-tree hash in `tuff.lock`; the disposable
 verified tree cache is machine-global:
 
 ```text
-<user-cache>/coral/sha256/a1/b2c3...
+<user-cache>/tuff/sha256/a1/b2c3...
 ```
 
 Capabilities tracked from existing project files (e.g., `scripts/deploy.sh`)
@@ -57,7 +57,7 @@ installed_path = ".agents/tools/prod-deploy"
 
 ## Where capabilities should live
 
-Coral core stays content-agnostic. Capabilities live in:
+Tuff core stays content-agnostic. Capabilities live in:
 
 - the user project that owns the capability (any path in the repo)
 - an external pack repository maintained by a person, team, or company

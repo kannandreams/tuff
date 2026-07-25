@@ -1,9 +1,9 @@
 ---
 title: Lifecycle & Drift Detection
-description: How Coral records baselines, reports drift, and updates tracked capabilities.
+description: How Tuff records baselines, reports drift, and updates tracked capabilities.
 ---
 
-Coral is built around capability lifecycle management, not just file installation.
+Tuff is built around capability lifecycle management, not just file installation.
 
 The core loop is:
 
@@ -13,14 +13,14 @@ The core loop is:
 4. detect drift relative to the recorded baseline
 5. make that drift visible through listing, diffing, checking, and updates
 
-This is the main reason Coral exists. Teams need project-owned capabilities that can evolve without
+This is the main reason Tuff exists. Teams need project-owned capabilities that can evolve without
 losing provenance, source metadata, or update behavior.
 
-## Coral and Git
+## Tuff and Git
 
-Git is still the system of record for repository history. Coral adds a different layer of state.
+Git is still the system of record for repository history. Tuff adds a different layer of state.
 
-Git can tell you that a file changed. Coral also records:
+Git can tell you that a file changed. Tuff also records:
 
 - which capability produced that file
 - which agent emitted it
@@ -35,14 +35,14 @@ It also means teams can relate capability version changes to downstream effects 
 - agent behavior changes
 - review outcomes
 - prompt quality shifts
-- performance or evaluation metrics tracked outside Coral
+- performance or evaluation metrics tracked outside Tuff
 
-Coral does not replace Git. It versions the capability lifecycle metadata around the files Git is
+Tuff does not replace Git. It versions the capability lifecycle metadata around the files Git is
 already storing.
 
 ## Baseline, local, and upstream
 
-Coral models every tracked emitted file as up to three states:
+Tuff models every tracked emitted file as up to three states:
 
 | Version | Source |
 |---|---|
@@ -52,7 +52,7 @@ Coral models every tracked emitted file as up to three states:
 
 ## Drift states
 
-When Coral compares local files against the recorded baseline, the common states are:
+When Tuff compares local files against the recorded baseline, the common states are:
 
 | State | Meaning |
 |---|---|
@@ -65,9 +65,9 @@ When Coral compares local files against the recorded baseline, the common states
 For local capabilities, the typical flow is:
 
 ```sh frame="terminal"
-coral create skill my-skill
-coral list
-coral diff my-skill
+tuff create skill my-skill
+tuff list
+tuff diff my-skill
 ```
 
 Creation initializes tracking automatically. It uses the configured default
@@ -77,23 +77,23 @@ the scaffold under `.claude/` instead.
 If the drift is intentional and should become the new baseline:
 
 ```sh frame="terminal"
-coral update my-skill
+tuff update my-skill
 ```
 
 ## Cleanup
 
-Cleanup is explicit about file ownership. For a capability Coral installed by
+Cleanup is explicit about file ownership. For a capability Tuff installed by
 copying files into an agent, delete only the generated agent files:
 
 ```sh frame="terminal"
-coral delete my-skill
+tuff delete my-skill
 ```
 
 For a capability added from an existing `.agents/` or `.claude/` directory,
-remove Coral tracking without touching the files:
+remove Tuff tracking without touching the files:
 
 ```sh frame="terminal"
-coral untrack my-skill
+tuff untrack my-skill
 ```
 
 Both commands use the configured default agent unless `-a/--agent` is provided.
@@ -102,17 +102,17 @@ target lock entry and baseline while preserving the capability files and MCP
 configuration. The original source directory is never
 deleted by `delete`.
 
-See the [CLI Reference](/cli#coral-delete) for cleanup flags and explicit agent selection.
+See the [CLI Reference](/cli#tuff-delete) for cleanup flags and explicit agent selection.
 
 ## Git-sourced capability lifecycle
 
-For git-backed capabilities, Coral can compare baseline, local, and upstream together:
+For git-backed capabilities, Tuff can compare baseline, local, and upstream together:
 
 ```sh frame="terminal"
-coral outdated
-coral diff rust-implement --upstream
-coral update rust-implement --check
-coral update rust-implement
+tuff outdated
+tuff diff rust-implement --upstream
+tuff update rust-implement --check
+tuff update rust-implement
 ```
 
 ## Update behavior
@@ -130,25 +130,25 @@ The update path for git-sourced capabilities works like this:
 If you want to replace the local customized copy with upstream output, use:
 
 ```sh frame="terminal"
-coral update <id> --force
+tuff update <id> --force
 ```
 
 ## Commands in the lifecycle
 
 | Command | Purpose |
 |---|---|
-| `coral list` | Show drift status and agent paths |
-| `coral diff <id>` | Show local changes against baseline |
-| `coral diff <id> --upstream` | Show upstream changes against baseline |
-| `coral check` | Fail CI when tracked files drift |
-| `coral outdated` | Show whether git-sourced capabilities have newer revisions |
-| `coral update <id>` | Accept local edits or reconcile git-backed changes |
-| `coral delete <id>` | Delete Coral-generated files for the default agent |
-| `coral untrack <id>` | Remove tracking while preserving files for the default agent |
+| `tuff list` | Show drift status and agent paths |
+| `tuff diff <id>` | Show local changes against baseline |
+| `tuff diff <id> --upstream` | Show upstream changes against baseline |
+| `tuff check` | Fail CI when tracked files drift |
+| `tuff outdated` | Show whether git-sourced capabilities have newer revisions |
+| `tuff update <id>` | Accept local edits or reconcile git-backed changes |
+| `tuff delete <id>` | Delete Tuff-generated files for the default agent |
+| `tuff untrack <id>` | Remove tracking while preserving files for the default agent |
 
 ## Capability Metadata
 
-The important difference is not just that Coral detects drift. It keeps the capability metadata
+The important difference is not just that Tuff detects drift. It keeps the capability metadata
 attached to the emitted files for the whole lifecycle:
 
 - source

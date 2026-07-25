@@ -1,0 +1,4 @@
+# Tuff lockfile. Each entry records one capability installation target.
+version = 1
+capabilities = []
+
