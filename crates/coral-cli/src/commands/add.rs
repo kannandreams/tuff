@@ -3,8 +3,8 @@ use std::fs;
 use std::path::Path;
 
 use crate::adapter::{
-    self, AdapterKind, AgentAdapter, CapabilityKind, HookDefinition, NativeHookConfig,
-    resolve_capability,
+    self, AdapterKind, AgentAdapter, CapabilityKind, HookDefinition, HookRenderContext,
+    NativeHookConfig, resolve_capability,
 };
 use crate::error::{CoralError, Result};
 use crate::git;
@@ -557,18 +557,33 @@ pub(crate) fn install_capability(
                 .join("hooks")
                 .join(&capability.id);
             let hook_root_rel = lockfile::relative_or_absolute_fs(&hook_root, install_root);
-            let fragment = match hook {
-                HookDefinition::Native(native) => {
-                    adapter::replace_hook_dir_placeholder(native.fragment.clone(), &hook_root_rel)
+            match hook {
+                HookDefinition::Command(hook_cfg) => {
+                    let render = adapter.render_standard_hook(HookRenderContext {
+                        capability_id: &capability.id,
+                        hook: hook_cfg,
+                        source_files: &capability.source_files,
+                        repo_root: install_root,
+                        track_managed_hooks: true,
+                    })?;
+                    for diagnostic in render.diagnostics {
+                        eprintln!("{}", diagnostic.message);
+                    }
+                    managed_hooks = render.managed_hooks;
                 }
-                HookDefinition::Command(hook_cfg) => adapter.command_hook_fragment(
-                    adapter.native_hook_event(&hook_cfg.event)?,
-                    &format!("sh {}/hooks/{}/run.sh", adapter.dir_prefix(), capability.id),
-                ),
-            };
-            let settings_path = adapter.hook_settings_relpath();
-            managed_hooks =
-                lockfile::managed_hooks_from_fragment(install_root, settings_path, &fragment)?;
+                HookDefinition::Native(native) => {
+                    let fragment = adapter::replace_hook_dir_placeholder(
+                        native.fragment.clone(),
+                        &hook_root_rel,
+                    );
+                    let settings_path = adapter.hook_settings_relpath();
+                    managed_hooks = lockfile::managed_hooks_from_fragment(
+                        install_root,
+                        settings_path,
+                        &fragment,
+                    )?;
+                }
+            }
         }
 
         for planned in planned_files {

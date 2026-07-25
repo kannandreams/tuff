@@ -74,6 +74,12 @@ pub struct ManagedHook {
     #[serde(rename = "settingsPath")]
     pub settings_path: String,
     pub event: String,
+    #[serde(
+        default,
+        rename = "canonicalEvent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub canonical_event: Option<String>,
     pub command: String,
     #[serde(rename = "baselineHash")]
     pub baseline_hash: String,
@@ -83,6 +89,15 @@ pub fn managed_hooks_from_fragment(
     repo_root: &Path,
     settings_path: &str,
     fragment: &serde_json::Value,
+) -> Result<Vec<ManagedHook>> {
+    managed_hooks_from_fragment_with_canonical(repo_root, settings_path, fragment, None)
+}
+
+pub fn managed_hooks_from_fragment_with_canonical(
+    repo_root: &Path,
+    settings_path: &str,
+    fragment: &serde_json::Value,
+    canonical_event: Option<&str>,
 ) -> Result<Vec<ManagedHook>> {
     let mut managed = Vec::new();
     let Some(events) = fragment.get("hooks").and_then(serde_json::Value::as_object) else {
@@ -106,6 +121,7 @@ pub fn managed_hooks_from_fragment(
                 managed.push(ManagedHook {
                     settings_path: settings_path.to_string(),
                     event: event.clone(),
+                    canonical_event: canonical_event.map(str::to_owned),
                     command: command.to_string(),
                     baseline_hash: write_baseline_object(repo_root, &baseline)?,
                 });

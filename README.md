@@ -94,6 +94,10 @@ cargo install --path crates/coral-cli
 coral --version
 ```
 
+The repository root is a virtual Cargo workspace, so `cargo install --path .`
+is not a valid install command. The CLI package lives at
+`crates/coral-cli`.
+
 The repository requires a recent Rust toolchain with Cargo. There is currently
 no dependency on a separately installed JavaScript runtime for the CLI itself.
 

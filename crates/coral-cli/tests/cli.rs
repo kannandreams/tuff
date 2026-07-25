@@ -1698,6 +1698,14 @@ fn add_hook_renders_canonical_event_to_native_event() {
         "canonical pre_tool_use should render to open-agents pre_tool_execution"
     );
     assert!(settings["hooks"]["pre_tool_use"].is_null());
+
+    let lock = coral_core::lockfile::read_lockfile_at(&temp.path().join("coral.lock")).unwrap();
+    assert_eq!(
+        lock.capabilities["tool-policy"].targets["open-agents"].managed_hooks[0]
+            .canonical_event
+            .as_deref(),
+        Some("pre_tool_use")
+    );
 }
 
 #[test]
@@ -2282,6 +2290,44 @@ fn hooks_check_portability_reports_target_coverage() {
         .success()
         .stdout(predicate::str::contains("before_finish"))
         .stdout(predicate::str::contains("claude"))
+        .stdout(predicate::str::contains("full"));
+}
+
+#[test]
+fn hooks_check_portability_uses_canonical_event_for_different_native_formats() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive_with_event(temp.path(), "tool-policy", "pre_tool_use");
+
+    coral()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["agent", "add", "cursor"])
+        .assert()
+        .success();
+    coral()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    coral()
+        .current_dir(temp.path())
+        .args([
+            "hooks",
+            "check-portability",
+            "tool-policy",
+            "--target",
+            "cursor",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pre_tool_use"))
+        .stdout(predicate::str::contains("preToolUse"))
+        .stdout(predicate::str::contains("cursor"))
         .stdout(predicate::str::contains("full"));
 }
 

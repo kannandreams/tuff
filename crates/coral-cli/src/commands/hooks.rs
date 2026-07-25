@@ -14,9 +14,13 @@ use super::render_table;
 pub fn cmd_hooks_matrix(repo_root: &Path) -> Result<()> {
     let adapters = registered_adapters(repo_root)?;
     let mut rows = Vec::new();
+    let mut notes = Vec::new();
 
     for adapter in adapters {
         for entry in adapter.hook_compatibility().events {
+            if let Some(caveat) = entry.caveat {
+                notes.push(format!("{} / {}: {}", adapter.id(), entry.event, caveat));
+            }
             rows.push(vec![
                 adapter.id().to_string(),
                 entry.event.to_string(),
@@ -24,7 +28,6 @@ pub fn cmd_hooks_matrix(repo_root: &Path) -> Result<()> {
                 coverage_label(entry.coverage).to_string(),
                 entry.scope.join(", "),
                 version_label(entry),
-                entry.caveat.unwrap_or("").to_string(),
             ]);
         }
     }
@@ -33,11 +36,17 @@ pub fn cmd_hooks_matrix(repo_root: &Path) -> Result<()> {
         "{}",
         render_table(
             &[
-                "ADAPTER", "EVENT", "NATIVE", "COVERAGE", "SCOPE", "VERSIONS", "CAVEAT"
+                "ADAPTER", "EVENT", "NATIVE", "COVERAGE", "SCOPE", "VERSIONS"
             ],
             &rows
         )
     );
+    if !notes.is_empty() {
+        println!("\nNotes:");
+        for note in notes {
+            println!("- {note}");
+        }
+    }
     Ok(())
 }
 
@@ -80,11 +89,22 @@ pub fn cmd_hooks_check_portability(repo_root: &Path, hook_id: &str, target: &str
     }
 
     let mut rows = Vec::new();
-    for event in events {
+    for tracked in events {
         let matrix = target.hook_compatibility();
-        let Some(compat) = matrix.find_event(&event) else {
+        let lookup_event = tracked
+            .canonical_event
+            .as_deref()
+            .unwrap_or(&tracked.native_event);
+        let display_event = tracked
+            .canonical_event
+            .as_deref()
+            .unwrap_or(&tracked.native_event)
+            .to_string();
+        let Some(compat) = matrix.find_event(lookup_event) else {
             rows.push(vec![
-                event,
+                display_event,
+                tracked.native_event,
+                String::new(),
                 target.id().to_string(),
                 "unsupported".to_string(),
                 String::new(),
@@ -92,18 +112,42 @@ pub fn cmd_hooks_check_portability(repo_root: &Path, hook_id: &str, target: &str
             ]);
             continue;
         };
+        let caveat = match tracked.canonical_event {
+            Some(_) => compat.caveat.unwrap_or("").to_string(),
+            None => {
+                let native_note =
+                    "legacy/native event; portability is inferred from its native name";
+                match compat.caveat {
+                    Some(caveat) => format!("{native_note}; {caveat}"),
+                    None => native_note.to_string(),
+                }
+            }
+        };
         rows.push(vec![
-            event,
+            display_event,
+            tracked.native_event,
+            compat.native_event.unwrap_or("").to_string(),
             target.id().to_string(),
             coverage_label(compat.coverage).to_string(),
             compat.scope.join(", "),
-            compat.caveat.unwrap_or("").to_string(),
+            caveat,
         ]);
     }
 
     println!(
         "{}",
-        render_table(&["EVENT", "TARGET", "STATUS", "SCOPE", "CAVEAT"], &rows)
+        render_table(
+            &[
+                "EVENT",
+                "SOURCE NATIVE",
+                "TARGET NATIVE",
+                "TARGET",
+                "STATUS",
+                "SCOPE",
+                "CAVEAT",
+            ],
+            &rows,
+        )
     );
     Ok(())
 }
@@ -137,11 +181,22 @@ fn ensure_registered(repo_root: &Path, adapter: AdapterKind) -> Result<()> {
     )))
 }
 
-fn tracked_hook_events(entry: &lockfile::CapabilityLockEntry) -> BTreeSet<String> {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct TrackedHookEvent {
+    native_event: String,
+    canonical_event: Option<String>,
+}
+
+fn tracked_hook_events(entry: &lockfile::CapabilityLockEntry) -> BTreeSet<TrackedHookEvent> {
     entry
         .targets
         .values()
-        .flat_map(|target| target.managed_hooks.iter().map(|hook| hook.event.clone()))
+        .flat_map(|target| {
+            target.managed_hooks.iter().map(|hook| TrackedHookEvent {
+                native_event: hook.event.clone(),
+                canonical_event: hook.canonical_event.clone(),
+            })
+        })
         .collect()
 }
 

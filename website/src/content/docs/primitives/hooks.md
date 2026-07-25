@@ -180,9 +180,10 @@ coral hooks matrix
 coral hooks check-portability pre-commit-lint --target claude
 ```
 
-Portability checks are scoped to registered adapters. Native hook fragments are reported from the
-tracked native events Coral can see, but portability is not guaranteed unless the event maps to a
-Coral-standard event.
+Portability checks are scoped to registered adapters. Coral-standard hooks retain both their
+canonical event and emitted native event in the lockfile, so the target adapter is checked using the
+canonical event. Native hook fragments fall back to native-event matching and are not guaranteed to
+be portable.
 
 ```sh frame="terminal"
 $ coral create hook review-hook --agent open-agents
