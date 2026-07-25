@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Security review tool — example tool primitive for Coral.
+// Security review tool — example tool primitive for Tuff.
 //
 // Usage: node index.js <target_dir> [severity]
-// Coral's MCP config auto-generates the launch command pointing at this script.
+// Tuff's MCP config auto-generates the launch command pointing at this script.
 //
 // This is an example stub. A real implementation would walk the directory,
 // check for known vulnerability patterns, and output a findings report.

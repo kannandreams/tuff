@@ -1,0 +1,11 @@
+[package]
+name = "tuff-adapter-open-agents"
+version = "0.1.0"
+edition = "2024"
+description = "Open Agents adapter for Tuff."
+license = "MIT"
+
+[dependencies]
+tuff-core = { path = "../tuff-core" }
+tuff-hooks-spec = { path = "../tuff-hooks-spec" }
+serde_json = "1.0.145"

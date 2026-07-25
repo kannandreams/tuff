@@ -2,7 +2,7 @@
 set -euo pipefail
 
 image="${1:-hello-world}"
-message="${2:-hello from a Coral-managed container tool}"
+message="${2:-hello from a Tuff-managed container tool}"
 mode="${3:-print}"
 
 case "$image" in

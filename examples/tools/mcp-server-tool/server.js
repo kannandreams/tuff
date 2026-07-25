@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Minimal stdio-framed JSON-RPC server used as a Coral MCP tool example.
+// Minimal stdio-framed JSON-RPC server used as a Tuff MCP tool example.
 
 const guidance = {
   tests: "Run focused tests first, then the broader suite before handing off.",
@@ -67,7 +67,7 @@ function handle(message) {
     respond(message.id, {
       protocolVersion: "2024-11-05",
       capabilities: { tools: {} },
-      serverInfo: { name: "coral-example-mcp-server", version: "0.1.0" },
+      serverInfo: { name: "tuff-example-mcp-server", version: "0.1.0" },
     });
   } else if (message.method === "tools/list") {
     respond(message.id, toolList());

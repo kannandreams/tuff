@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install Coral on your machine.
+description: Install Tuff on your machine.
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -11,8 +11,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   <TabItem label="Homebrew">
 
   ```sh
-  brew tap kannandreams/homebrew-coral
-  brew install coral
+  brew tap kannandreams/homebrew-tuff
+  brew install tuff
   ```
 
   Requires [Homebrew](https://brew.sh).
@@ -21,7 +21,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   <TabItem label="curl">
 
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/kannandreams/tuff/main/install.sh | sh
   ```
 
   Downloads the latest release binary for your OS and architecture.
@@ -30,7 +30,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   <TabItem label="cargo">
 
   ```sh
-  cargo install --git https://github.com/kannandreams/coral --package coral
+  cargo install --git https://github.com/kannandreams/tuff --package tuff
   ```
 
   Builds from source. Requires Rust and Cargo.
@@ -39,10 +39,10 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   <TabItem label="Build from source">
 
   ```sh
-  git clone https://github.com/kannandreams/coral
-  cd coral
-  cargo build -p coral --release
-  ./target/release/coral --version
+  git clone https://github.com/kannandreams/tuff
+  cd tuff
+  cargo build -p tuff --release
+  ./target/release/tuff --version
   ```
 
   Clone and build locally.
@@ -53,17 +53,17 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 ## Verify
 
 ```sh frame="terminal"
-coral --version
-coral
+tuff --version
+tuff
 ```
 
 ## Requirements
 
 - **Rust**: `cargo` and build methods use it directly. `curl` and `brew` methods install prebuilt binaries.
-- **Git**: required for `coral add` with git-backed capabilities.
+- **Git**: required for `tuff add` with git-backed capabilities.
 
 ## Installed Files
 
-- `/usr/local/bin/coral` (curl/brew methods)
+- `/usr/local/bin/tuff` (curl/brew methods)
 - user cache directory: disposable verified capability trees
-- project root: `coral.lock` and optional `coral.config.json`
+- project root: `tuff.lock` and optional `tuff.config.json`

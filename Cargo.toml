@@ -1,11 +1,11 @@
 [workspace]
 members = [
-    "crates/coral-cli",
-    "crates/coral-core",
-    "crates/coral-hooks-spec",
-    "crates/coral-adapter-open-agents",
-    "crates/coral-adapter-claude",
-    "crates/coral-adapter-codex",
-    "crates/coral-adapter-cursor",
+    "crates/tuff-cli",
+    "crates/tuff-core",
+    "crates/tuff-hooks-spec",
+    "crates/tuff-adapter-open-agents",
+    "crates/tuff-adapter-claude",
+    "crates/tuff-adapter-codex",
+    "crates/tuff-adapter-cursor",
 ]
 resolver = "2"

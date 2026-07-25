@@ -3,7 +3,7 @@ title: Development
 description: Contributor setup, checks, and local docs workflows.
 ---
 
-Coral is a Rust CLI project managed with Cargo.
+Tuff is a Rust CLI project managed with Cargo.
 
 The Starlight/Astro docs use Node 18 or newer and npm.
 
@@ -43,17 +43,17 @@ just check
 
 ## Smoke test an installed binary
 
-Use this flow to test Coral the way a user would: install the current checkout
-as a binary, move to a separate directory, and run `coral` directly.
+Use this flow to test Tuff the way a user would: install the current checkout
+as a binary, move to a separate directory, and run `tuff` directly.
 
 ```sh frame="terminal"
-cargo install --path crates/coral-cli
-mkdir -p /tmp/coral-smoke
-cd /tmp/coral-smoke
-coral --version
-coral init
-coral add /absolute/path/to/coral/examples/skills/python-uv-default
-coral list
+cargo install --path crates/tuff-cli
+mkdir -p /tmp/tuff-smoke
+cd /tmp/tuff-smoke
+tuff --version
+tuff init
+tuff add /absolute/path/to/tuff/examples/skills/python-uv-default
+tuff list
 ```
 
 From this repo, `just smoke-install` runs the same flow using the skill example
@@ -90,9 +90,9 @@ instead of inline text.
 ## Project structure
 
 ```text
-crates/coral-cli/  CLI commands and integration tests
-crates/coral-core/ lifecycle engine and adapter contract
-crates/coral-adapter-*/ native harness adapters
+crates/tuff-cli/  CLI commands and integration tests
+crates/tuff-core/ lifecycle engine and adapter contract
+crates/tuff-adapter-*/ native harness adapters
 tests/             shared test assets when present
 examples/          runnable capability examples
 docs/              documentation source files

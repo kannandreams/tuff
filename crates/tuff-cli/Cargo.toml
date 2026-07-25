@@ -1,0 +1,27 @@
+[package]
+name = "tuff"
+version = "0.1.0"
+edition = "2024"
+description = "Capability lifecycle manager for coding agents."
+license = "MIT"
+
+[[bin]]
+name = "tuff"
+path = "src/main.rs"
+
+[dependencies]
+tuff-core = { path = "../tuff-core" }
+tuff-hooks-spec = { path = "../tuff-hooks-spec" }
+tuff-adapter-open-agents = { path = "../tuff-adapter-open-agents" }
+tuff-adapter-claude = { path = "../tuff-adapter-claude" }
+tuff-adapter-codex = { path = "../tuff-adapter-codex" }
+tuff-adapter-cursor = { path = "../tuff-adapter-cursor" }
+clap = { version = "4.5.53", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tabled = "0.18"
+tempfile = "3.23.0"
+
+[dev-dependencies]
+assert_cmd = "2.1.1"
+predicates = "3.1.3"

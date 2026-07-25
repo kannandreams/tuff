@@ -20,22 +20,22 @@ references, assets):
 ## Manifest
 
 Skills installed from a local directory or git repository do not require a
-manifest file. Coral discovers the skill's structure automatically. For
-source-based development, a `coral.toml` in the source directory is optional
+manifest file. Tuff discovers the skill's structure automatically. For
+source-based development, a `tuff.toml` in the source directory is optional
 but not emitted into agent directories.
 
 ## Installing a skill
 
 ```sh frame="terminal"
 # Local directory
-coral add --agent open-agents ./my-skill
+tuff add --agent open-agents ./my-skill
 
 # Git repository
-coral add skill https://github.com/owner/repo <name> --agent open-agents
+tuff add skill https://github.com/owner/repo <name> --agent open-agents
 
 # Global scope
-coral add --agent open-agents --global ./my-skill
+tuff add --agent open-agents --global ./my-skill
 ```
 
-Coral tracks where each skill came from, records a baseline, and reports local drift after
+Tuff tracks where each skill came from, records a baseline, and reports local drift after
 installation. See the [CLI reference](/cli) for available lifecycle commands.

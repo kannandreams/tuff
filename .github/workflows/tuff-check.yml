@@ -1,0 +1,27 @@
+name: Tuff Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build tuff
+        run: cargo build -p tuff --release
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Validate capabilities
+        run: cargo run -p tuff -- check --json

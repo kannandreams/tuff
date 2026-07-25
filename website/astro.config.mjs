@@ -2,21 +2,21 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://coral.dev',
+  site: 'https://tuff.dev',
   integrations: [
     starlight({
-      title: 'Coral',
+      title: 'Tuff',
       description: 'Capability lifecycle management for coding agents.',
       customCss: ['./src/styles/custom.css'],
       social: [
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/kannandreams/coral',
+          href: 'https://github.com/kannandreams/tuff',
         },
       ],
       editLink: {
-        baseUrl: 'https://github.com/kannandreams/coral/blob/main/website/',
+        baseUrl: 'https://github.com/kannandreams/tuff/blob/main/website/',
       },
       lastUpdated: true,
       expressiveCode: {
@@ -41,7 +41,7 @@ export default defineConfig({
           label: 'Capabilities',
           items: [
             { label: 'Overview', slug: 'primitives/overview' },
-            { label: 'coral.toml', slug: 'primitives/format' },
+            { label: 'tuff.toml', slug: 'primitives/format' },
             { label: 'Skills', slug: 'primitives/skills' },
             { label: 'Tools', slug: 'primitives/tools' },
             { label: 'Hooks', slug: 'primitives/hooks' },
@@ -52,7 +52,7 @@ export default defineConfig({
         {
           label: 'Workflows & Operations',
           items: [
-            { label: 'When to Use Coral', slug: 'usage-scenarios' },
+            { label: 'When to Use Tuff', slug: 'usage-scenarios' },
             { label: 'Use Cases Overview', slug: 'concepts/development-lifecycle' },
             { label: 'Lifecycle & Drift Detection', slug: 'concepts/lifecycle' },
             { label: 'Diffing & Updates', slug: 'concepts/diff-update' },

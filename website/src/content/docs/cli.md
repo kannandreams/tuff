@@ -1,77 +1,77 @@
 ---
 title: CLI Reference
-description: Command reference for the Coral CLI.
+description: Command reference for the Tuff CLI.
 ---
 
 Run commands from the repository root unless `--global` is specified.
 
-New to Coral? Start with the [Getting Started guide](/getting-started), then return here for the
+New to Tuff? Start with the [Getting Started guide](/getting-started), then return here for the
 complete command and flag reference.
 
 ## Command Groups
 
 | Group | Commands |
 |---|---|
-| Start | [`coral init`](#coral-init) |
-| Create or add capabilities | [`coral create`](#coral-create), [`coral add`](#coral-add) |
-| Inspect and generate | [`coral list`](#coral-list), [`coral status`](#coral-status), [`coral generate`](#coral-generate), [`coral outdated`](#coral-outdated) |
-| Diff and update | [`coral diff`](#coral-diff), [`coral update`](#coral-update) |
-| Validate in CI | [`coral check`](#coral-check) |
-| Clean up | [`coral delete`](#coral-delete), [`coral untrack`](#coral-untrack), [`coral cache clear`](#coral-cache-clear) |
-| Configure agents and scope | [`coral agent`](#coral-agent), [scope behavior](/concepts/scopes) |
+| Start | [`tuff init`](#tuff-init) |
+| Create or add capabilities | [`tuff create`](#tuff-create), [`tuff add`](#tuff-add) |
+| Inspect and generate | [`tuff list`](#tuff-list), [`tuff status`](#tuff-status), [`tuff generate`](#tuff-generate), [`tuff outdated`](#tuff-outdated) |
+| Diff and update | [`tuff diff`](#tuff-diff), [`tuff update`](#tuff-update) |
+| Validate in CI | [`tuff check`](#tuff-check) |
+| Clean up | [`tuff delete`](#tuff-delete), [`tuff untrack`](#tuff-untrack), [`tuff cache clear`](#tuff-cache-clear) |
+| Configure agents and scope | [`tuff agent`](#tuff-agent), [scope behavior](/concepts/scopes) |
 
 ## Start
 
-### `coral`
+### `tuff`
 
 Show the ASCII banner and quick-start menu:
 
 ```sh frame="terminal"
-coral
+tuff
 ```
 
-### `coral init`
+### `tuff init`
 
-Initialize Coral state in the current directory:
+Initialize Tuff state in the current directory:
 
 ```sh frame="terminal"
-coral init
+tuff init
 ```
 
 Initialize global scope (for primitives shared across all projects):
 
 ```sh frame="terminal"
-coral init --global
+tuff init --global
 ```
 
-Creates `coral.lock` (and a user-state lockfile for global scope),
+Creates `tuff.lock` (and a user-state lockfile for global scope),
 scaffolds `.agents/`, and configures `open-agents` as the default agent.
 
 ## Create or Add Capabilities
 
-### `coral create`
+### `tuff create`
 
 Create and track a new agent-local capability:
 
 ```sh frame="terminal"
-coral create skill my-skill
-coral create tool my-tool -a claude
-coral create hook review-hook -a open-agents -a claude
-coral create workflow release-flow -a claude
+tuff create skill my-skill
+tuff create tool my-tool -a claude
+tuff create hook review-hook -a open-agents -a claude
+tuff create workflow release-flow -a claude
 ```
 
 The capability type and id are positional. `-a, --agent` is optional and
-repeatable. When omitted, Coral uses the configured default agent. Creation
-initializes Coral state, registers the selected agents, writes adapter-valid
+repeatable. When omitted, Tuff uses the configured default agent. Creation
+initializes Tuff state, registers the selected agents, writes adapter-valid
 files, and records the baseline. Use `-a <agent>` when creating for a
 different agent.
 
-### `coral add`
+### `tuff add`
 
 Install a capability from a local capability directory or Git URL. The command supports
 two forms:
 
-1. Let Coral infer the capability type from a local path.
+1. Let Tuff infer the capability type from a local path.
 2. Use an explicit capability-type subcommand when the type is known or when
    installing from a Git repository.
 
@@ -81,59 +81,59 @@ with one of those four types.”
 
 #### Local sources
 
-For a local capability directory, Coral can infer the type from its location or
+For a local capability directory, Tuff can infer the type from its location or
 from its manifest:
 
 ```sh frame="terminal"
 # Auto-detect the type
-coral add ./my-skill
+tuff add ./my-skill
 
 # Explicit type
-coral add <capability-type> ./path/to/capability
+tuff add <capability-type> ./path/to/capability
 
 # Explicit type with a selected agent
-coral add <capability-type> ./path/to/capability --agent claude
+tuff add <capability-type> ./path/to/capability --agent claude
 
 # Multiple agents
-coral add <capability-type> ./path/to/capability --agent claude --agent open-agents
+tuff add <capability-type> ./path/to/capability --agent claude --agent open-agents
 
 # Global scope
-coral add <capability-type> ./path/to/capability --global
+tuff add <capability-type> ./path/to/capability --global
 ```
 
 For typed capability commands, `--agent` and `--global` come after the source
 and remain scoped to the selected capability type. For example:
 
 ```sh frame="terminal"
-coral add tool ./my-tool --agent claude
+tuff add tool ./my-tool --agent claude
 ```
 
 For typed capability commands, options come after the capability source:
 
 ```sh frame="terminal"
 # Agent and scope options stay with the typed command
-coral add tool ./my-tool --agent claude --global
+tuff add tool ./my-tool --agent claude --global
 ```
 
 Add existing agent files in place without copying their content:
 
 ```sh frame="terminal"
-coral add --agent open-agents .agents/skills/my-skill
-coral add --agent claude .agents/skills/my-skill
+tuff add --agent open-agents .agents/skills/my-skill
+tuff add --agent claude .agents/skills/my-skill
 ```
 
 Install from a git repository:
 
 ```sh frame="terminal"
-coral add <capability-type> https://github.com/owner/repo <name> --agent open-agents
-coral add <capability-type> https://github.com/owner/repo <name> --agent claude
+tuff add <capability-type> https://github.com/owner/repo <name> --agent open-agents
+tuff add <capability-type> https://github.com/owner/repo <name> --agent claude
 ```
 
 For Git sources, `<name>` is the capability directory name inside the
 repository. For example:
 
 ```sh frame="terminal"
-coral add skill https://github.com/owner/repo rust-implement --agent open-agents
+tuff add skill https://github.com/owner/repo rust-implement --agent open-agents
 ```
 
 Use the same structure for a tool, hook, or workflow by replacing `skill` with
@@ -142,16 +142,16 @@ the corresponding capability type.
 For harness-native hooks, pass the hook fragment explicitly:
 
 ```sh frame="terminal"
-coral add hook ./claude-session-start --agent claude --hook-file settings.json
+tuff add hook ./claude-session-start --agent claude --hook-file settings.json
 ```
 
-Coral-standard manifest hooks are validated against adapter compatibility and rendered to the
+Tuff-standard manifest hooks are validated against adapter compatibility and rendered to the
 target harness's native settings. To inspect hook support or check a tracked hook before switching
 adapters:
 
 ```sh frame="terminal"
-coral hooks matrix
-coral hooks check-portability pre-commit-lint --target claude
+tuff hooks matrix
+tuff hooks check-portability pre-commit-lint --target claude
 ```
 
 #### Flags
@@ -165,14 +165,14 @@ coral hooks check-portability pre-commit-lint --target claude
 The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
 `workflow`) rather than a `--type` flag. For a typed local source, the name is
 optional and is normally inferred from the source. For a Git source, the name
-is required so Coral knows which capability directory to discover.
+is required so Tuff knows which capability directory to discover.
 
 ### Adding Existing Agent Files
 
-Bring existing agent assets under Coral management without rewriting content:
+Bring existing agent assets under Tuff management without rewriting content:
 
 ```sh frame="terminal"
-coral add --agent open-agents .agents/skills/python-uv
+tuff add --agent open-agents .agents/skills/python-uv
 ```
 
 #### Before/after
@@ -182,49 +182,49 @@ Before add:
 .agents/skills/python-uv/
   └── SKILL.md                ← existing, unmanaged
 
-After coral add --agent open-agents .agents/skills/python-uv:
+After tuff add --agent open-agents .agents/skills/python-uv:
 .agents/skills/python-uv/
   └── SKILL.md                ← untouched
-coral.config.json
-  ├── coral.lock              ← entry added
+tuff.config.json
+  ├── tuff.lock              ← entry added
   └── objects/
     └── sha256/
       └── a1/
         └── b2c3...           ← immutable baseline object
 ```
 
-After add, the directory participates in the full lifecycle. `coral list`,
-`coral diff`, `coral check`, and `coral update` all work without modifying
-your existing agent files. Use `coral update <id>` to accept intentional local
+After add, the directory participates in the full lifecycle. `tuff list`,
+`tuff diff`, `tuff check`, and `tuff update` all work without modifying
+your existing agent files. Use `tuff update <id>` to accept intentional local
 edits as the new baseline.
 
 :::tip[After add]
-When Coral adopts existing agent files, it records their hashes as baselines in the lockfile. No additional files are created in the agent directory. The lockfile is the single source of truth for all tracking metadata.
+When Tuff adopts existing agent files, it records their hashes as baselines in the lockfile. No additional files are created in the agent directory. The lockfile is the single source of truth for all tracking metadata.
 :::
 
 ## Inspect and Generate
 
-### `coral list`
+### `tuff list`
 
 Show installed capabilities with scope, drift status, and path:
 
 ```sh frame="terminal"
-coral list
+tuff list
 ```
 
 #### Filters
 
 ```sh frame="terminal"
 # By scope
-coral list --scope project
-coral list --scope global
+tuff list --scope project
+tuff list --scope global
 
 # By capability type
-coral list --type skill
-coral list --type tool
+tuff list --type skill
+tuff list --type tool
 
 # Combine filters
-coral list --scope global --type tool
+tuff list --scope global --type tool
 ```
 
 #### Status values
@@ -235,14 +235,14 @@ coral list --scope global --type tool
 | `modified` | Installed content has local changes |
 | `missing` | Installed file no longer exists |
 
-`coral list` uses terminal colors when supported: clean is green, modified is amber, and missing is red.
+`tuff list` uses terminal colors when supported: clean is green, modified is amber, and missing is red.
 
-### `coral status`
+### `tuff status`
 
 Show per-primitive detail including scope, drift, and override warnings:
 
 ```sh frame="terminal"
-coral status
+tuff status
 ```
 
 Example output:
@@ -253,24 +253,24 @@ commit-hygiene     global   clean
 scan-tool          project  clean
 ```
 
-### `coral generate`
+### `tuff generate`
 
-Generate derived Coral artifacts from tracked project state:
+Generate derived Tuff artifacts from tracked project state:
 
 ```sh frame="terminal"
 # Agent-facing capability index
-coral generate index -a open-agents
-coral generate index -a claude
+tuff generate index -a open-agents
+tuff generate index -a claude
 
 # Custom index path
-coral generate index -a open-agents --output docs/CAPABILITIES.md
+tuff generate index -a open-agents --output docs/CAPABILITIES.md
 
 # Human-readable project report
-coral generate report
-coral generate report --output docs/coral-report.md
+tuff generate report
+tuff generate report --output docs/tuff-report.md
 ```
 
-`coral generate index` writes the default index for the selected agent:
+`tuff generate index` writes the default index for the selected agent:
 
 | Agent | Default output |
 |---|---|
@@ -282,20 +282,20 @@ The generated index is intended for agent context. Point `AGENTS.md`,
 `CAPABILITIES.md` file when you want the agent to see a compact inventory of
 tracked capabilities.
 
-`coral generate report` writes `coral-report.md` by default.
+`tuff generate report` writes `tuff-report.md` by default.
 The report includes installed capabilities, agents, source type, emitted paths,
 and clean/modified/missing status summaries.
 
 Generated files are derived output. The source of truth is
-`coral.lock` tracking state.
+`tuff.lock` tracking state.
 
-### `coral outdated`
+### `tuff outdated`
 
 Show all installed capabilities and whether upstream updates are available.
 Read-only; never modifies files.
 
 ```sh frame="terminal"
-coral outdated
+tuff outdated
 ```
 
 Example output:
@@ -311,25 +311,25 @@ For local primitives, `LATEST` shows `none` and status is always `up to date` or
 
 ## Diff and Update
 
-### `coral diff`
+### `tuff diff`
 
 Show unified diff between baseline and installed files, or compare against latest upstream:
 
 ```sh frame="terminal"
 # Local changes against baseline
-coral diff <id>
+tuff diff <id>
 
 # Upstream changes since last install (git-sourced only)
-coral diff <id> --upstream
+tuff diff <id> --upstream
 
 # Diff a specific agent
-coral diff <id> -a claude
+tuff diff <id> -a claude
 ```
 
 When color is enabled, diff headers are cyan, additions are green, and deletions are red,
 matching the usual Git diff convention. Set `NO_COLOR=1` for plain output.
 
-### `coral update`
+### `tuff update`
 
 Update a capability according to its recorded source. In-place local capabilities accept
 current edits as the new baseline; external local sources reload from `sourcePath`;
@@ -338,31 +338,31 @@ See the [lifecycle docs](/concepts/lifecycle) for the merge behavior table.
 
 ```sh frame="terminal"
 # Update the configured default agent
-coral update <id>
+tuff update <id>
 
 # Dry run: show what would happen without applying
-coral update <id> --check
+tuff update <id> --check
 
 # Update a specific agent instead
-coral update <id> -a <agent>
+tuff update <id> -a <agent>
 
 # Force overwrite local changes with recorded source output
-coral update <id> --force
+tuff update <id> --force
 
 # Explicit scope
-coral update <id> --scope global
+tuff update <id> --scope global
 ```
 
 ## Validate in CI
 
-### `coral check`
+### `tuff check`
 
 Validate installed capabilities for CI. Exits 1 on any failure.
 
 ```sh frame="terminal"
-coral check                    # check all capabilities
-coral check --json             # machine-readable JSON output
-coral check --ignore-failures  # report failures but exit 0
+tuff check                    # check all capabilities
+tuff check --json             # machine-readable JSON output
+tuff check --ignore-failures  # report failures but exit 0
 ```
 
 Example output:
@@ -374,10 +374,10 @@ Example output:
 
 ### CI with GitHub Actions
 
-Add this to your project's `.github/workflows/coral-check.yml`:
+Add this to your project's `.github/workflows/tuff-check.yml`:
 
 ```yaml
-name: Coral Check
+name: Tuff Check
 on: [push, pull_request]
 
 jobs:
@@ -391,83 +391,83 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Build and install coral
-        run: cargo install --git https://github.com/kannandreams/coral --package coral
+      - name: Build and install tuff
+        run: cargo install --git https://github.com/kannandreams/tuff --package tuff
 
       - name: Validate capabilities
-        run: coral check --json
+        run: tuff check --json
 ```
 
-Commit `coral.lock` to your repo so
-`coral check` runs against the committed state. See the [lockfile reference](/concepts/lockfile)
+Commit `tuff.lock` to your repo so
+`tuff check` runs against the committed state. See the [lockfile reference](/concepts/lockfile)
 for what to commit.
 
 ## Clean Up
 
-### `coral delete`
+### `tuff delete`
 
-Delete Coral-generated capability files for explicitly selected agents:
+Delete Tuff-generated capability files for explicitly selected agents:
 
 ```sh frame="terminal"
 # Delete generated files for one agent
-coral delete <id> -a open-agents
+tuff delete <id> -a open-agents
 
 # Delete generated files for multiple agents
-coral delete <id> -a open-agents -a claude
+tuff delete <id> -a open-agents -a claude
 
 # Delete from global scope
-coral delete <id> -a open-agents --scope global
+tuff delete <id> -a open-agents --scope global
 
 # Delete files with local modifications
-coral delete <id> -a open-agents --force
+tuff delete <id> -a open-agents --force
 ```
 
 When `-a/--agent` is omitted, `delete` uses the configured agent. It removes emitted files, their baselines,
 and generated tool MCP entries. It never deletes the original capability source
 directory. Modified generated files require `--force`. In-place added capabilities
-cannot be deleted; use `coral untrack` instead.
+cannot be deleted; use `tuff untrack` instead.
 
-### `coral untrack`
+### `tuff untrack`
 
 Stop tracking a capability for explicitly selected agents while preserving its
 agent files and manifest:
 
 ```sh frame="terminal"
 # Stop tracking an in-place added skill for the default agent
-coral untrack my-skill
+tuff untrack my-skill
 
 # Stop tracking several agents
-coral untrack my-skill -a open-agents -a claude
+tuff untrack my-skill -a open-agents -a claude
 
 # Stop tracking a global capability
-coral untrack my-skill -a open-agents --scope global
+tuff untrack my-skill -a open-agents --scope global
 ```
 
 `untrack` removes the selected lockfile entry and baseline. It preserves the
 capability files, source directories, and MCP configuration.
 The lockfile itself remains in place, even when it contains no capabilities.
 
-### `coral cache clear`
+### `tuff cache clear`
 
-Delete Coral's disposable machine-local cache of materialized trees and source
+Delete Tuff's disposable machine-local cache of materialized trees and source
 clones. This does not remove project capability files or lockfile entries:
 
 ```sh frame="terminal"
-coral cache clear
+tuff cache clear
 ```
 
 ## Configure Agents and Scope
 
-### `coral agent`
+### `tuff agent`
 
 #### Configure the default agent
 
 ```sh frame="terminal"
 # Project default
-coral agent set-default open-agents
+tuff agent set-default open-agents
 
 # Global default
-coral agent set-default claude --global
+tuff agent set-default claude --global
 ```
 
 Commands that accept `-a/--agent` use this value when the flag is omitted.
@@ -477,19 +477,19 @@ apply an operation to multiple agents.
 #### List available and registered agents
 
 ```sh frame="terminal"
-coral agent list
+tuff agent list
 
 # Show the global default
-coral agent list --global
+tuff agent list --global
 ```
 
 #### Register an agent
 
 ```sh frame="terminal"
-coral agent add open-agents
-coral agent add claude
-coral agent add codex
-coral agent add cursor
+tuff agent add open-agents
+tuff agent add claude
+tuff agent add codex
+tuff agent add cursor
 ```
 
 Registering an agent also creates its project directory (`.agents/` or
@@ -497,29 +497,29 @@ Registering an agent also creates its project directory (`.agents/` or
 
 `claude-code` remains an alias for `claude`. `codex` and `cursor` are dedicated adapter IDs.
 
-The `REGISTERED` column shows which agents are available for Coral operations in
+The `REGISTERED` column shows which agents are available for Tuff operations in
 the selected config. The `DEFAULT` column shows which registered agent is used
 when `-a/--agent` is omitted.
 
 #### Remove an agent
 
 ```sh frame="terminal"
-coral agent remove open-agents
+tuff agent remove open-agents
 ```
 
 Unregisters the agent from the project configuration. It does not delete
 capabilities, emitted files, baselines, MCP registrations, or lockfile entries.
-Use `coral delete <id>` or `coral untrack <id>` for the configured default
+Use `tuff delete <id>` or `tuff untrack <id>` for the configured default
 agent. Pass `-a <agent>` when selecting a different agent.
 
 ### Scope
 
-Coral supports two scopes:
+Tuff supports two scopes:
 
 | Scope | Location | Use |
 |---|---|---|
-| `project` | `coral.lock` in repo root | Shared with team via version control |
-| `global` | Coral user state directory | Available across all projects |
+| `project` | `tuff.lock` in repo root | Shared with team via version control |
+| `global` | Tuff user state directory | Available across all projects |
 
 Resolution order: **project always wins**. If the same primitive exists at both scopes,
-the project copy shadows the global one. `coral status` flags shadowed primitives.
+the project copy shadows the global one. `tuff status` flags shadowed primitives.

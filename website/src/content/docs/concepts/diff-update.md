@@ -1,13 +1,13 @@
 ---
 title: Diffing & Updates
-description: How Coral shows local drift, accepts local baselines, and updates git-sourced capabilities.
+description: How Tuff shows local drift, accepts local baselines, and updates git-sourced capabilities.
 ---
 
-Coral uses verified materialized trees from its user cache directory as the reference point for both
+Tuff uses verified materialized trees from its user cache directory as the reference point for both
 local diffing and upstream-aware updates. Diffing uses temporary Git trees through libgit2;
 the consuming project does not need to be a Git repository.
 
-This page explains the behavior behind the commands. See the [CLI Reference](/cli#coral-diff) for
+This page explains the behavior behind the commands. See the [CLI Reference](/cli#tuff-diff) for
 the complete command and flag syntax.
 
 There are three distinct flows:
@@ -21,19 +21,19 @@ There are three distinct flows:
 Use this when a tracked file in `.agents/` or `.claude/` was edited in the repo.
 
 ```sh frame="terminal"
-coral list
-coral diff my-skill
+tuff list
+tuff diff my-skill
 ```
 
 Command behavior:
 
-- `coral list` shows whether the installed files are `clean`, `modified`, or `missing`
-- `coral diff <id>` shows the unified diff between the current file and the recorded baseline
+- `tuff list` shows whether the installed files are `clean`, `modified`, or `missing`
+- `tuff diff <id>` shows the unified diff between the current file and the recorded baseline
 
 ### Example
 
 ```sh frame="terminal"
-coral diff python-project
+tuff diff python-project
 --- baseline/open-agents/python-project/
 +++ .agents/skills/python-project/SKILL.md
 @@ -1,2 +1,3 @@
@@ -45,7 +45,7 @@ coral diff python-project
 If that local change is now the new source of truth, accept it as the new baseline:
 
 ```sh frame="terminal"
-coral update python-project
+tuff update python-project
 ```
 
 ## 2. Diff upstream changes
@@ -54,16 +54,16 @@ Use this when the capability was installed from a git source and you want to ins
 upstream since the last recorded baseline.
 
 ```sh frame="terminal"
-coral outdated
-coral diff rust-implement --upstream
+tuff outdated
+tuff diff rust-implement --upstream
 ```
 
 ### Example
 
 ```sh frame="terminal"
-coral outdated
+tuff outdated
 
-coral diff rust-implement --upstream
+tuff diff rust-implement --upstream
 --- baseline/SKILL.md
 +++ upstream/open-agents/SKILL.md
 @@ -1,4 +1,5 @@
@@ -72,7 +72,7 @@ coral diff rust-implement --upstream
 +Run clippy before opening a PR.
 ```
 
-If nothing changed upstream, Coral prints:
+If nothing changed upstream, Tuff prints:
 
 ```sh frame="terminal"
 no upstream changes
@@ -84,7 +84,7 @@ Use `--check` before updating. For in-place local capabilities it previews basel
 for external local and git-sourced capabilities it previews source reconciliation:
 
 ```sh frame="terminal"
-coral update rust-implement --check
+tuff update rust-implement --check
 ```
 
 You will see one of these outcomes:
@@ -96,37 +96,37 @@ You will see one of these outcomes:
 ## 4. Apply an update
 
 ```sh frame="terminal"
-coral update rust-implement
+tuff update rust-implement
 ```
 
 Current update behavior:
 
-- for local capabilities, Coral records the current files as the new baseline
-- for local capabilities added from an external source folder, Coral reloads from `sourcePath`
-- if local matches baseline and upstream changed, Coral applies upstream
-- if upstream matches baseline, Coral leaves local changes alone
-- if both local and upstream changed, Coral attempts a three-way merge
-- if merge conflicts remain, Coral reports them and keeps local files in place
+- for local capabilities, Tuff records the current files as the new baseline
+- for local capabilities added from an external source folder, Tuff reloads from `sourcePath`
+- if local matches baseline and upstream changed, Tuff applies upstream
+- if upstream matches baseline, Tuff leaves local changes alone
+- if both local and upstream changed, Tuff attempts a three-way merge
+- if merge conflicts remain, Tuff reports them and keeps local files in place
 
 If you want to discard local changes and take upstream as-is:
 
 ```sh frame="terminal"
-coral update rust-implement --force
+tuff update rust-implement --force
 ```
 
 ## Command reference
 
 | Command | Purpose |
 |---|---|
-| `coral diff <id>` | Local file changes against baseline |
-| `coral diff <id> --upstream` | Upstream changes against baseline |
-| `coral outdated` | Show whether git-sourced capabilities have newer upstream commits |
-| `coral update <id> --check` | Preview update behavior |
-| `coral update <id>` | Update the configured default agent |
-| `coral update <id> -a <agent>` | Update one explicitly selected agent |
-| `coral update <id> --force` | Replace local files with recorded source output |
+| `tuff diff <id>` | Local file changes against baseline |
+| `tuff diff <id> --upstream` | Upstream changes against baseline |
+| `tuff outdated` | Show whether git-sourced capabilities have newer upstream commits |
+| `tuff update <id> --check` | Preview update behavior |
+| `tuff update <id>` | Update the configured default agent |
+| `tuff update <id> -a <agent>` | Update one explicitly selected agent |
+| `tuff update <id> --force` | Replace local files with recorded source output |
 
 ## Important distinction
 
-Use `coral update` for local baseline promotion, external local source refreshes, and git-backed
+Use `tuff update` for local baseline promotion, external local source refreshes, and git-backed
 upstream reconciliation.

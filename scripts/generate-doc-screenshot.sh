@@ -7,8 +7,8 @@ Usage:
   scripts/generate-doc-screenshot.sh <output-file> [--cwd <dir>] -- <command...>
 
 Examples:
-  scripts/generate-doc-screenshot.sh coral-welcome.png -- coral
-  scripts/generate-doc-screenshot.sh coral-list.png --cwd /tmp/demo -- coral list
+  scripts/generate-doc-screenshot.sh tuff-welcome.png -- tuff
+  scripts/generate-doc-screenshot.sh tuff-list.png --cwd /tmp/demo -- tuff list
 
 Output files are written under website/public/img/generated/.
 Requires: freeze

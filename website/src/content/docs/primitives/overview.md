@@ -1,11 +1,11 @@
 ---
 title: Overview
-description: What Coral primitives are and how they fit together.
+description: What Tuff primitives are and how they fit together.
 ---
 
-Coral uses the term `capability` for any managed agent-facing building block. A capability defines some part of an agent's operating surface: what it knows, what it can do, what rules it must obey, and what multi-step flows it should follow.
+Tuff uses the term `capability` for any managed agent-facing building block. A capability defines some part of an agent's operating surface: what it knows, what it can do, what rules it must obey, and what multi-step flows it should follow.
 
-Coral manages these capability types:
+Tuff manages these capability types:
 
 | Capability | Status | Description |
 |---|---|---|

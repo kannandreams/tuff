@@ -21,7 +21,7 @@ A tool is something the agent can invoke, such as:
 ## Manifest
 
 ```toml
-# coral.toml
+# tuff.toml
 id = "security-review"
 version = "1.0.0"
 type = "tool"
@@ -62,7 +62,7 @@ runtime_deps = ["chalk", "@octokit/rest"]    # shown at install time, never auto
 
 ## Install-time validation
 
-Every tool goes through these checks at `coral add` time:
+Every tool goes through these checks at `tuff add` time:
 
 1. **Schema validation:** `parameters` must be a valid JSON Schema with `type: object` and at least one property
 2. **Entrypoint validation:** `entrypoint` must resolve to an existing file, with no path traversal (`../` or absolute paths rejected)
@@ -74,16 +74,16 @@ Every tool goes through these checks at `coral add` time:
 
 ```sh frame="terminal"
 # Local directory (type auto-detected from parent directory)
-coral add --agent claude ./my-tool
+tuff add --agent claude ./my-tool
 
 # Local file with explicit type (subcommand)
-coral add tool ./scripts/deploy.sh --agent open-agents
+tuff add tool ./scripts/deploy.sh --agent open-agents
 
 # Git repository
-coral add tool https://github.com/owner/repo security-review --agent claude
+tuff add tool https://github.com/owner/repo security-review --agent claude
 
 # Multiple agents
-coral add --agent claude --agent open-agents ./my-tool
+tuff add --agent claude --agent open-agents ./my-tool
 ```
 
 ## Example tools
@@ -103,11 +103,11 @@ common executable shapes:
 Install one into the configured default agent:
 
 ```sh frame="terminal"
-coral add examples/tools/python-script-tool
-coral list --type tool
+tuff add examples/tools/python-script-tool
+tuff list --type tool
 ```
 
-Coral records the source, emitted files, and baseline for every tool. MCP
+Tuff records the source, emitted files, and baseline for every tool. MCP
 registration is generated only for tools that set `mcp = true`.
 
 ## Where files go
@@ -117,7 +117,7 @@ registration is generated only for tools that set `mcp = true`.
 | `open-agents` | `.agents/tools/<id>/` | `.agents/mcp.json` |
 | `claude` | `.claude/tools/<id>/` | `.mcp.json` |
 
-For MCP-native tools, set `implementation.mcp = true`. Coral then writes a
+For MCP-native tools, set `implementation.mcp = true`. Tuff then writes a
 launch command pointing at the copied entrypoint and read-merges it into the
 harness's native MCP config:
 
@@ -133,22 +133,22 @@ harness's native MCP config:
 ```
 
 Command-style tools are copied and tracked but are not registered as MCP
-servers. Multiple MCP-native tools share a single `mcpServers` object. `coral
-delete` cleans up both Coral-generated tool directories and their MCP entries.
-`coral untrack` preserves the tool directory and MCP entry while removing Coral
+servers. Multiple MCP-native tools share a single `mcpServers` object. `tuff
+delete` cleans up both Tuff-generated tool directories and their MCP entries.
+`tuff untrack` preserves the tool directory and MCP entry while removing Tuff
 tracking.
 
 ## Filtering
 
 ```sh frame="terminal"
 # Show only tools
-coral list --type tool
+tuff list --type tool
 
 # Show only skills
-coral list --type skill
+tuff list --type skill
 
 # Combine with scope filter
-coral list --type tool --scope global
+tuff list --type tool --scope global
 ```
 
 ## Safety

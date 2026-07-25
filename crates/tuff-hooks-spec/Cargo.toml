@@ -1,0 +1,10 @@
+[package]
+name = "tuff-hooks-spec"
+version = "0.1.0"
+edition = "2024"
+description = "Canonical hook event and compatibility types for Tuff-managed hooks."
+license = "MIT"
+readme = "README.md"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }

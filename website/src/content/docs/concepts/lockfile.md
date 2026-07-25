@@ -1,21 +1,21 @@
 ---
 title: Lockfile Reference
-description: What Coral records in project state.
+description: What Tuff records in project state.
 ---
 
-Coral records committed capability identity in `coral.lock` at the root of your project.
-Disposable materialized baselines live in Coral's user cache directory and can be deleted at any time.
+Tuff records committed capability identity in `tuff.lock` at the root of your project.
+Disposable materialized baselines live in Tuff's user cache directory and can be deleted at any time.
 
 ## Directory structure
 
 | File | Purpose | Commit to git? |
 |---|---|---|
-| `coral.lock` | Installed capability identity, source, target, and materialized hash | Yes |
-| `coral.config.json` | Optional project adapter preferences | Usually yes |
+| `tuff.lock` | Installed capability identity, source, target, and materialized hash | Yes |
+| `tuff.config.json` | Optional project adapter preferences | Usually yes |
 | User config/state directories | Global preferences and lockfile | No |
 | User cache directory | Verified materialized baseline trees | No |
 
-Commit `coral.lock` so your team can verify installations. A cold or deleted cache is
+Commit `tuff.lock` so your team can verify installations. A cold or deleted cache is
 refilled by refetching and verifying the recorded source.
 
 ## Lockfile schema
@@ -56,7 +56,7 @@ Entries are deterministically ordered by name, type, target, and installed path.
 
 | Field | Description |
 |---|---|
-| `ownership` | `generated` when Coral emitted the files, or `imported` when Coral tracks existing files |
+| `ownership` | `generated` when Tuff emitted the files, or `imported` when Tuff tracks existing files |
 
 ## Config schema
 
@@ -67,14 +67,14 @@ Entries are deterministically ordered by name, type, target, and installed path.
 }
 ```
 
-Initialized by `coral init`, updated by `coral agent add <id>` or `coral create`,
-and read by `coral agent list`. Set the default with `coral agent set-default
+Initialized by `tuff init`, updated by `tuff agent add <id>` or `tuff create`,
+and read by `tuff agent list`. Set the default with `tuff agent set-default
 <id>`; use `--global` for the global configuration. Commands with no explicit
 `-a/--agent` use this value.
 
-Agent registration is separate from capability tracking. `coral agent remove`
+Agent registration is separate from capability tracking. `tuff agent remove`
 only unregisters an agent; it does not change the lockfile or delete files.
 
-Use `coral delete <id>` to delete Coral-generated files for the default agent.
-Use `coral untrack <id>` to remove tracking while preserving files. Pass
+Use `tuff delete <id>` to delete Tuff-generated files for the default agent.
+Use `tuff untrack <id>` to remove tracking while preserving files. Pass
 `-a/--agent` to select another agent.

@@ -6,15 +6,15 @@ description: Capability lifecycle management for coding agents.
 import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <p align="center">
-  <img src="/img/coral-readme-banner.png?v=3" alt="Coral banner" class="coral-banner-image" />
+  <img src="/img/tuff-readme-banner.png?v=3" alt="Tuff banner" class="tuff-banner-image" />
 </p>
 
-**Coral** is a Rust-powered CLI for managing agent capabilities such as skills, tools, hooks,
+**Tuff** is a Rust-powered CLI for managing agent capabilities such as skills, tools, hooks,
 and workflows. It provides lifecycle tracking, drift detection, baseline diffs, and merge-aware
 updates. It works with Codex, Claude Code, Cursor, GitHub Copilot, and any agent harness that
 follows the open Agents standard.
 
-## Why Coral exists
+## Why Tuff exists
 
 Agent coding tools increasingly depend on capabilities: skills that teach an agent how
 to work in a project, tools it can call, hooks that run at key events, and workflows that
@@ -23,19 +23,19 @@ compose them together. Together, they define how an agent works.
 Today these capabilities are either siloed on one engineer's machine, invisible to the
 rest of the team, or copied by hand across projects and left to drift silently.
 
-- Coral treats each capability as something that can be installed, tracked, updated, and
+- Tuff treats each capability as something that can be installed, tracked, updated, and
   checked for drift over time.
-- Coral manages the lifecycle and structure around a capability, while the capability
+- Tuff manages the lifecycle and structure around a capability, while the capability
   content itself can stay with the team or project that owns it.
 
 These are common situations teams encounter as capabilities are shared across repositories, coding harnesses, and developer machines.
 
-| Problem context | What changes with Coral |
+| Problem context | What changes with Tuff |
 |---|---|
-| <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A skill gets copied between projects and slowly diverges. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Coral records a baseline, so edits show up as drift instead of becoming invisible forks. |
+| <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A skill gets copied between projects and slowly diverges. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Tuff records a baseline, so edits show up as drift instead of becoming invisible forks. |
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A capability file shows up in the project with no record of its origin, author, or version. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> The lockfile records source and version metadata, so provenance is explicit. |
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> Agent behavior differs across machines and nobody knows why. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Project capabilities are versioned in the repo for a shared baseline; personal overrides stay in global scope. |
-| <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A skill built for Claude Code is useless in Cursor or Codex. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Coral maps the same managed capability into each supported harness through adapters. |
+| <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A skill built for Claude Code is useless in Cursor or Codex. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Tuff maps the same managed capability into each supported harness through adapters. |
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> An upstream fix arrives after the local copy has been edited. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Updates use baseline, local, and upstream state together, so local customization is preserved where possible. |
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A new project starts by copying whatever someone remembers. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Setup becomes a repeatable CLI step instead of tribal knowledge. |
 
@@ -67,16 +67,16 @@ These are common situations teams encounter as capabilities are shared across re
 </div>
 
 All four types share the same lifecycle: install, baseline, drift detection, diff,
-and merge-aware update through `coral create`, `coral add`, `coral update`, and
-`coral diff`.
+and merge-aware update through `tuff create`, `tuff add`, `tuff update`, and
+`tuff diff`.
 
 ## Features
 
 ### Lifecycle management
 
-- **Install from anywhere**: local directories, git repositories, or existing agent files already in `.agents/` or `.claude/` with `coral add`.
-- **Drift detection**: every install records a pristine baseline. Any edit to an agent file becomes visible as `modified` in `coral list`.
-- **Three-way merge updates**: for git-sourced capabilities, `coral update` merges upstream changes with your local edits using `diffy`. Conflicts are reported with exact file paths and are never silently overwritten.
+- **Install from anywhere**: local directories, git repositories, or existing agent files already in `.agents/` or `.claude/` with `tuff add`.
+- **Drift detection**: every install records a pristine baseline. Any edit to an agent file becomes visible as `modified` in `tuff list`.
+- **Three-way merge updates**: for git-sourced capabilities, `tuff update` merges upstream changes with your local edits using `diffy`. Conflicts are reported with exact file paths and are never silently overwritten.
 
 ### Multi-harness output
 
@@ -85,23 +85,23 @@ and merge-aware update through `coral create`, `coral add`, `coral update`, and
 
 ### Scope and team workflows
 
-- **Project scope**: `coral.lock` is committed to the repo; project preferences use `coral.config.json`.
-- **Global scope**: Coral's user config/state/cache directories hold personal capabilities and caches.
-- Project always wins when both exist. `coral status` flags shadowed globals.
+- **Project scope**: `tuff.lock` is committed to the repo; project preferences use `tuff.config.json`.
+- **Global scope**: Tuff's user config/state/cache directories hold personal capabilities and caches.
+- Project always wins when both exist. `tuff status` flags shadowed globals.
 
 ### CI-ready validation
 
-- `coral check` exits 1 on any failure: drift, missing files, invalid state.
-- `coral check --json` for machine-readable CI output.
-- Copy-paste [GitHub Actions workflow](/cli#coral-check) in the CLI reference.
+- `tuff check` exits 1 on any failure: drift, missing files, invalid state.
+- `tuff check --json` for machine-readable CI output.
+- Copy-paste [GitHub Actions workflow](/cli#tuff-check) in the CLI reference.
 
 ## Inspiration
 
 <Aside type="note" title="Inspiration">
-  Coral is inspired by [skills.sh](https://skills.sh/) and the idea that reusable skills
+  Tuff is inspired by [skills.sh](https://skills.sh/) and the idea that reusable skills
   should be easy to share, install, and use across coding agents.
 
-  That solves an important first step: making skills portable. Coral focuses on what
+  That solves an important first step: making skills portable. Tuff focuses on what
   happens after a team starts depending on those skills in real projects: knowing where a
   skill came from, how it changed, whether local edits are intentional, and how to load
   it consistently into different coding harnesses.

@@ -1,23 +1,23 @@
 <p align="center">
-  <img src="assets/coral-readme-banner.png" alt="Coral banner" width="1100" />
+  <img src="assets/tuff-readme-banner.png" alt="Tuff banner" width="1100" />
 </p>
 
-# Coral
+# Tuff
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Coverage](https://img.shields.io/badge/coverage-79%25-brightgreen)](https://github.com/kannandreams/coral)
+[![Coverage](https://img.shields.io/badge/coverage-79%25-brightgreen)](https://github.com/kannandreams/tuff)
 
-Coral is a CLI for managing project-owned agent capabilities: skills, tools,
+Tuff is a CLI for managing project-owned agent capabilities: skills, tools,
 hooks, and workflows that teams load into coding harnesses such as Codex,
 Claude, Cursor, and others.
 
-Coral keeps capability files in the project while tracking the metadata around
+Tuff keeps capability files in the project while tracking the metadata around
 them: source, version, agent harness, scope, and a pristine install baseline.
 That makes local customization visible instead of turning it into an
 untracked copy.
 
 The core is content-agnostic. Capability content can live in the repository
-that owns it or in a separate pack repository. Coral handles manifests,
+that owns it or in a separate pack repository. Tuff handles manifests,
 installation, validation, drift detection, diffs, updates, and agent-specific
 emission. The workspace contains dedicated Claude, Codex, Cursor, and Open
 Agents adapter crates; each owns its native output and compatibility data.
@@ -26,15 +26,15 @@ Agents adapter crates; each owns its native output and compatibility data.
 
 1. Create a new capability or add an existing one.
 2. Track it for one or more agent harnesses.
-3. Coral records install identity in `coral.lock` and keeps verified materialized
+3. Tuff records install identity in `tuff.lock` and keeps verified materialized
    baselines in the disposable machine-local cache.
-4. Edit the project-owned files normally; `coral list`, `coral status`, and
-   `coral diff` report drift.
-5. Use `coral update` to accept intentional local changes or refresh from the
+4. Edit the project-owned files normally; `tuff list`, `tuff status`, and
+   `tuff diff` report drift.
+5. Use `tuff update` to accept intentional local changes or refresh from the
    recorded source.
 
 Project and global scopes are supported. Project capabilities take precedence
-when the same id exists in both scopes, and Coral reports that relationship in
+when the same id exists in both scopes, and Tuff reports that relationship in
 status output.
 
 ## Documentation
@@ -57,7 +57,7 @@ npm run build
 Start with:
 
 - [Intro](website/src/content/docs/index.mdx)
-- [When to Use Coral](website/src/content/docs/usage-scenarios.md)
+- [When to Use Tuff](website/src/content/docs/usage-scenarios.md)
 - [Skills.sh and Vercel Skills Comparison](website/src/content/docs/comparison/vercel-skills.md)
 
 ## Install
@@ -65,17 +65,17 @@ Start with:
 For the latest released version on macOS or Linux, use the install script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kannandreams/coral/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/kannandreams/tuff/main/install.sh | sh
 ```
 
 On macOS with Homebrew:
 
 ```sh
-brew tap kannandreams/coral
-brew install coral
+brew tap kannandreams/tuff
+brew install tuff
 ```
 
-See the [latest GitHub release](https://github.com/kannandreams/coral/releases/latest)
+See the [latest GitHub release](https://github.com/kannandreams/tuff/releases/latest)
 for release notes and platform artifacts.
 
 ### Build from source
@@ -83,38 +83,38 @@ for release notes and platform artifacts.
 From this repository:
 
 ```sh
-cargo run -p coral -- --help
-cargo run -p coral -- --version
+cargo run -p tuff -- --help
+cargo run -p tuff -- --version
 ```
 
 To install the CLI from this checkout while developing locally:
 
 ```sh
-cargo install --path crates/coral-cli
-coral --version
+cargo install --path crates/tuff-cli
+tuff --version
 ```
 
 The repository root is a virtual Cargo workspace, so `cargo install --path .`
 is not a valid install command. The CLI package lives at
-`crates/coral-cli`.
+`crates/tuff-cli`.
 
 The repository requires a recent Rust toolchain with Cargo. There is currently
 no dependency on a separately installed JavaScript runtime for the CLI itself.
 
 ## Test from another directory
 
-This is the closest local workflow to how an engineer would try Coral after
+This is the closest local workflow to how an engineer would try Tuff after
 installing it:
 
 ```sh
-cargo install --path crates/coral-cli
-mkdir -p /tmp/coral-smoke
-cd /tmp/coral-smoke
-coral --version
-coral init
-coral agent add open-agents
-coral add /absolute/path/to/coral/examples/skills/python-uv-default
-coral list
+cargo install --path crates/tuff-cli
+mkdir -p /tmp/tuff-smoke
+cd /tmp/tuff-smoke
+tuff --version
+tuff init
+tuff agent add open-agents
+tuff add /absolute/path/to/tuff/examples/skills/python-uv-default
+tuff list
 ```
 
 From this repo, the same smoke test is wrapped as:
@@ -126,29 +126,29 @@ just smoke-install
 ## CLI usage
 
 ```sh
-coral
-coral --version
-coral init
-coral agent add open-agents
-coral add examples/skills/python-uv-default
-coral list
-coral diff python-uv-default
-coral delete python-uv-default
+tuff
+tuff --version
+tuff init
+tuff agent add open-agents
+tuff add examples/skills/python-uv-default
+tuff list
+tuff diff python-uv-default
+tuff delete python-uv-default
 ```
 
-Running `coral` with no arguments shows the terminal banner and starter menu.
+Running `tuff` with no arguments shows the terminal banner and starter menu.
 
-`coral init` creates `coral.lock`, configures `open-agents` as the default, registers it, and scaffolds the standard `.agents/`
-directories, and installs the small `coral-cli-guide` reference skill. It does
+`tuff init` creates `tuff.lock`, configures `open-agents` as the default, registers it, and scaffolds the standard `.agents/`
+directories, and installs the small `tuff-cli-guide` reference skill. It does
 not install third-party capabilities or create a user skill for you.
 
-Capability cleanup is explicit. Use `coral delete <id>` for the configured
-default agent, or `coral delete <id> -a <agent>` for a specific agent. Use
-`coral untrack <id>` when the files should remain in place but no longer be
-managed by Coral. `coral agent remove <agent>`
+Capability cleanup is explicit. Use `tuff delete <id>` for the configured
+default agent, or `tuff delete <id> -a <agent>` for a specific agent. Use
+`tuff untrack <id>` when the files should remain in place but no longer be
+managed by Tuff. `tuff agent remove <agent>`
 only unregisters an agent and does not remove capabilities.
 
-Set the default project agent with `coral agent set-default <agent>`. Use
+Set the default project agent with `tuff agent set-default <agent>`. Use
 `--global` to configure the default used by global operations. Explicit
 `-a/--agent` values always override the default.
 
@@ -170,8 +170,8 @@ just check
 just run -- --help
 ```
 
-End users should run `coral ...` directly.
+End users should run `tuff ...` directly.
 
 ## License
 
-Coral is released under the MIT License. See [LICENSE](LICENSE).
+Tuff is released under the MIT License. See [LICENSE](LICENSE).

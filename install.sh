@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-REPO="kannandreams/coral"
-BIN="coral"
+REPO="kannandreams/tuff"
+BIN="tuff"
 INSTALL_DIR="/usr/local/bin"
 
 # Detect OS and architecture
@@ -32,22 +32,22 @@ if [ -z "$LATEST_TAG" ]; then
     exit 1
 fi
 
-echo "Installing coral ${LATEST_TAG}..."
+echo "Installing tuff ${LATEST_TAG}..."
 
 # Download and extract
-TARBALL="coral-${TARGET}.tar.gz"
+TARBALL="tuff-${TARGET}.tar.gz"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}/${TARBALL}"
 
 curl -fsSL "$DOWNLOAD_URL" -o "/tmp/${TARBALL}"
-tar xzf "/tmp/${TARBALL}" -C /tmp coral
+tar xzf "/tmp/${TARBALL}" -C /tmp tuff
 rm -f "/tmp/${TARBALL}"
 
 # Install
 if [ -w "$INSTALL_DIR" ]; then
-    mv /tmp/coral "$INSTALL_DIR/$BIN"
+    mv /tmp/tuff "$INSTALL_DIR/$BIN"
 else
-    sudo mv /tmp/coral "$INSTALL_DIR/$BIN"
+    sudo mv /tmp/tuff "$INSTALL_DIR/$BIN"
 fi
 
-echo "coral ${LATEST_TAG} installed to ${INSTALL_DIR}/${BIN}"
-echo "Run 'coral' to get started."
+echo "tuff ${LATEST_TAG} installed to ${INSTALL_DIR}/${BIN}"
+echo "Run 'tuff' to get started."
