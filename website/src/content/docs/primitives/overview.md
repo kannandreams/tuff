@@ -7,10 +7,14 @@ Tuff uses the term `capability` for any managed agent-facing building block. A c
 
 Tuff manages these capability types:
 
-| Capability | Status | Description |
+<div class="capability-types-table">
+
+| Capability | Description | Feature status |
 |---|---|---|
-| [skill](/primitives/skills) | **Implemented** | Prose instruction injected into agent context |
-| [tool](/primitives/tools) | **Implemented** | Executable capability with typed parameter contract |
-| [hook](/primitives/hooks) | **Implemented** | Event-driven automation at lifecycle moments |
-| [workflow](/primitives/workflows) | Roadmap | Composable patterns bundling skills, tools, and hooks |
-| policy | Roadmap | Constraints and guardrails on agent behavior |
+| [skill](/primitives/skills) | Prose instruction injected into agent context | **Implemented** |
+| [tool](/primitives/tools) | Executable capability with typed parameter contract | **Implemented** |
+| [hook](/primitives/hooks) | Event-driven automation at lifecycle moments | **Implemented** |
+| [workflow](/primitives/workflows) | Composable patterns bundling skills, tools, and hooks | Roadmap |
+| policy | Constraints and guardrails on agent behavior | Roadmap |
+
+</div>

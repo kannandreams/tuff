@@ -1,136 +1,80 @@
-const TUFF_WORDMARK_ASCII: &str = include_str!("../../../assets/tuff-alien-block.txt");
-
-const WORDMARK_GRADIENT: [(f64, (u8, u8, u8)); 5] = [
-    (0.00, (255, 128, 0)),
-    (0.25, (255, 105, 180)),
-    (0.50, (138, 43, 226)),
-    (0.75, (30, 144, 255)),
-    (1.00, (0, 206, 209)),
-];
-
 struct Palette<'a> {
     tuff: &'a str,
-    pink: &'a str,
-    violet: &'a str,
-    cyan: &'a str,
-    mint: &'a str,
     white: &'a str,
+    command: &'a str,
+    description: &'a str,
     gray: &'a str,
+    ribbon: &'a str,
     reset: &'a str,
 }
 
 fn palette(use_color: bool) -> Palette<'static> {
     if use_color {
         Palette {
-            tuff: "\x1b[38;2;255;122;89m",
-            pink: "\x1b[38;2;255;92;191m",
-            violet: "\x1b[38;2;178;108;255m",
-            cyan: "\x1b[38;2;57;208;255m",
-            mint: "\x1b[38;2;63;255;196m",
+            tuff: "\x1b[1;38;2;232;93;42m",
             white: "\x1b[38;2;241;246;248m",
+            command: "\x1b[38;2;90;220;210m",
+            description: "\x1b[38;2;190;201;207m",
             gray: "\x1b[38;2;143;153;166m",
+            ribbon: "\x1b[48;2;54;56;62m",
             reset: "\x1b[0m",
         }
     } else {
         Palette {
             tuff: "",
-            pink: "",
-            violet: "",
-            cyan: "",
-            mint: "",
             white: "",
+            command: "",
+            description: "",
             gray: "",
+            ribbon: "",
             reset: "",
         }
     }
 }
 
-fn lerp_u8(a: u8, b: u8, t: f64) -> u8 {
-    (a as f64 + (b as f64 - a as f64) * t).round() as u8
-}
-
-fn wordmark_color_at(t: f64) -> (u8, u8, u8) {
-    let t = t.clamp(0.0, 1.0);
-    for window in WORDMARK_GRADIENT.windows(2) {
-        let (t0, c0) = window[0];
-        let (t1, c1) = window[1];
-        if t <= t1 {
-            let frac = if t1 != t0 { (t - t0) / (t1 - t0) } else { 0.0 };
-            return (
-                lerp_u8(c0.0, c1.0, frac),
-                lerp_u8(c0.1, c1.1, frac),
-                lerp_u8(c0.2, c1.2, frac),
-            );
-        }
-    }
-    WORDMARK_GRADIENT[WORDMARK_GRADIENT.len() - 1].1
-}
-
-fn render_wordmark(use_color: bool) -> String {
-    let logo_lines = TUFF_WORDMARK_ASCII
-        .lines()
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
-    let logo_width = logo_lines
-        .iter()
-        .map(|line| line.chars().count())
-        .max()
-        .unwrap_or(0);
-
-    let mut hero = String::new();
-    for line in &logo_lines {
-        for (char_index, ch) in line.chars().enumerate() {
-            if ch == ' ' {
-                hero.push(' ');
-                continue;
-            }
-
-            let tx = if logo_width <= 1 {
-                0.0
-            } else {
-                char_index as f64 / (logo_width - 1) as f64
-            };
-            if use_color {
-                let (r, g, b) = wordmark_color_at(tx);
-                hero.push_str(&format!("\x1b[38;2;{r};{g};{b}m"));
-            }
-            hero.push(ch);
-        }
-        if use_color {
-            hero.push_str("\x1b[0m");
-        }
-        hero.push('\n');
-    }
-
-    hero
-}
-
-fn render_divider(colors: &Palette<'_>) -> String {
-    format!(
-        "{c0}{}{c1}{}{c2}{}{c3}{}{c4}{}{reset}",
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-        "\u{2500}".repeat(18),
-        c0 = colors.tuff,
-        c1 = colors.pink,
-        c2 = colors.violet,
-        c3 = colors.cyan,
-        c4 = colors.mint,
-        reset = colors.reset,
-    )
-}
-
-fn render_quick_start(colors: &Palette<'_>) -> String {
-    let rows = [
+fn quick_start_rows() -> [(&'static str, &'static str); 6] {
+    [
         ("tuff init", "Initialize Tuff state"),
         ("tuff add skill <path> [name]", "Install a capability"),
         ("tuff list", "Show installed capabilities"),
         ("tuff diff <id>", "Compare local changes to baseline"),
         ("tuff agent list", "Show configured agent harnesses"),
         ("tuff --help", "Show command reference"),
-    ];
+    ]
+}
+
+fn quick_start_width() -> usize {
+    let rows = quick_start_rows();
+    let left_width = rows
+        .iter()
+        .map(|(left, _)| left.chars().count())
+        .max()
+        .unwrap_or(0);
+    let right_width = rows
+        .iter()
+        .map(|(_, right)| right.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    left_width + right_width + 7
+}
+
+fn render_ribbon(colors: &Palette<'_>, width: usize) -> String {
+    let text = "Tuff is a capability lifecycle manager for coding agents.";
+    let padding = width.saturating_sub(text.chars().count());
+
+    format!(
+        "{ribbon}{tuff}Tuff{white} is a capability lifecycle manager for coding agents.{padding}{reset}",
+        ribbon = colors.ribbon,
+        tuff = colors.tuff,
+        white = colors.white,
+        padding = " ".repeat(padding),
+        reset = colors.reset,
+    )
+}
+
+fn render_quick_start(colors: &Palette<'_>) -> String {
+    let rows = quick_start_rows();
 
     let left_width = rows
         .iter()
@@ -149,30 +93,30 @@ fn render_quick_start(colors: &Palette<'_>) -> String {
 
     let mut out = String::new();
     out.push_str(&format!(
-        "{cyan}+{border}+{reset}\n",
-        cyan = colors.cyan,
+        "{gray}+{border}+{reset}\n",
+        gray = colors.gray,
         reset = colors.reset
     ));
     out.push_str(&format!(
-        "{cyan}|{reset} {mint}{title:<title_width$}{reset} {cyan}|{reset}\n",
-        cyan = colors.cyan,
-        mint = colors.mint,
+        "{gray}|{reset} {white}{title:<title_width$}{reset} {gray}|{reset}\n",
+        gray = colors.gray,
+        white = colors.white,
         reset = colors.reset,
         title = title,
         title_width = title_width
     ));
     out.push_str(&format!(
-        "{cyan}+{border}+{reset}\n",
-        cyan = colors.cyan,
+        "{gray}+{border}+{reset}\n",
+        gray = colors.gray,
         reset = colors.reset
     ));
 
     for (index, (left, right)) in rows.iter().enumerate() {
         out.push_str(&format!(
-            "{cyan}|{reset} {tuff}{left:<left_width$}{reset} {cyan}|{reset} {gray}{right:<right_width$}{reset} {cyan}|{reset}",
-            cyan = colors.cyan,
-            tuff = colors.tuff,
+            "{gray}|{reset} {command}{left:<left_width$}{reset} {gray}|{reset} {description}{right:<right_width$}{reset} {gray}|{reset}",
             gray = colors.gray,
+            command = colors.command,
+            description = colors.description,
             reset = colors.reset,
             left = left,
             right = right,
@@ -186,60 +130,40 @@ fn render_quick_start(colors: &Palette<'_>) -> String {
 
     out.push('\n');
     out.push_str(&format!(
-        "{cyan}+{border}+{reset}",
-        cyan = colors.cyan,
+        "{gray}+{border}+{reset}",
+        gray = colors.gray,
         reset = colors.reset
     ));
     out
 }
 
-fn render_tagline(colors: &Palette<'_>) -> String {
-    format!(
-        "{tuff}Tuff{reset} {white}is a capability lifecycle manager for coding agents.{reset}",
-        tuff = colors.tuff,
-        white = colors.white,
-        reset = colors.reset
-    )
-}
-
 fn render_welcome(use_color: bool) -> String {
     let colors = palette(use_color);
-    let hero = render_wordmark(use_color);
-    let divider = render_divider(&colors);
     let quick_start = render_quick_start(&colors);
-    let tagline = render_tagline(&colors);
+    let ribbon = render_ribbon(&colors, quick_start_width());
 
     format!(
-        "{hero}\n{divider}\n{tagline}\n\n{quick_start}\n",
-        hero = hero,
-        divider = divider,
-        tagline = tagline,
+        "{ribbon}\n\n{quick_start}\n",
+        ribbon = ribbon,
         quick_start = quick_start
     )
 }
 
 fn render_init_banner(use_color: bool) -> String {
     let colors = palette(use_color);
-    let hero = render_wordmark(use_color);
-    let divider = render_divider(&colors);
-    let tagline = render_tagline(&colors);
+    let ribbon = render_ribbon(&colors, quick_start_width());
 
-    format!(
-        "{hero}\n{divider}\n{tagline}\n",
-        hero = hero,
-        divider = divider,
-        tagline = tagline
-    )
+    format!("{ribbon}\n", ribbon = ribbon)
 }
 
 pub fn print_welcome() {
     let use_color = std::env::var_os("NO_COLOR").is_none();
-    print!("{}", render_welcome(use_color));
+    print!("\n{}", render_welcome(use_color));
 }
 
 pub fn print_init_banner() {
     let use_color = std::env::var_os("NO_COLOR").is_none();
-    print!("{}", render_init_banner(use_color));
+    print!("\n{}", render_init_banner(use_color));
 }
 
 #[cfg(test)]
@@ -275,9 +199,22 @@ mod tests {
     }
 
     #[test]
-    fn wordmark_uses_alien_block_asset() {
-        let wordmark = render_wordmark(false);
-        assert!(wordmark.contains("▄▄"));
-        assert!(!wordmark.contains("██████   ██████  ██████"));
+    fn tagline_is_first_banner_content() {
+        let welcome = render_welcome(false);
+        assert!(welcome.contains("Tuff is a capability lifecycle manager for coding agents."));
+        assert!(!welcome.contains("▄▄"));
+        assert!(!welcome.contains("████"));
+    }
+
+    #[test]
+    fn ribbon_matches_quick_start_box_width_without_color() {
+        let ribbon = render_ribbon(&palette(false), quick_start_width());
+        let quick_start = render_quick_start(&palette(false));
+        let box_line = quick_start
+            .lines()
+            .next()
+            .expect("quick-start box has a top border");
+
+        assert_eq!(ribbon.chars().count(), box_line.chars().count());
     }
 }

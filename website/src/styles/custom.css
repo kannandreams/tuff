@@ -1,28 +1,28 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Alien+Block&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
 
 :root {
-  --sl-font: 'Inter', system-ui, -apple-system, sans-serif;
-  --sl-font-system: 'Inter', system-ui, -apple-system, sans-serif;
-  --sl-font-system-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  --sl-color-accent-low: #172554;
-  --sl-color-accent: #38bdf8;
-  --sl-color-accent-high: #bae6fd;
-  --sl-color-white: hsl(0, 0%, 100%);
-  --sl-color-gray-1: hsl(224, 20%, 94%);
-  --sl-color-gray-2: hsl(224, 6%, 77%);
-  --sl-color-gray-3: hsl(224, 6%, 56%);
-  --sl-color-gray-4: hsl(224, 7%, 36%);
-  --sl-color-gray-5: hsl(224, 10%, 23%);
-  --sl-color-gray-6: hsl(224, 14%, 16%);
-  --sl-color-black: hsl(224, 10%, 10%);
+  --sl-font: 'Geist', system-ui, -apple-system, sans-serif;
+  --sl-font-system: 'Geist', system-ui, -apple-system, sans-serif;
+  --sl-font-system-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --sl-color-accent-low: #2B1A14;
+  --sl-color-accent: #E85D2A;
+  --sl-color-accent-high: #C94A1E;
+  --sl-color-white: #F2F1EE;
+  --sl-color-gray-1: #CBCDD0;
+  --sl-color-gray-2: #A5A9AE;
+  --sl-color-gray-3: #6B7075;
+  --sl-color-gray-4: #43474B;
+  --sl-color-gray-5: #2B3036;
+  --sl-color-gray-6: #1A1D20;
+  --sl-color-black: #111315;
   --sl-color-bg: var(--sl-color-black);
   --sl-color-bg-sidebar: var(--sl-color-gray-6);
   --sl-color-bg-nav: color-mix(in srgb, var(--sl-color-gray-6) 92%, transparent);
-  --sl-color-hairline: rgba(148, 163, 184, 0.2);
-  --sl-color-hairline-light: rgba(148, 163, 184, 0.12);
-  --sl-color-hairline-shade: rgba(148, 163, 184, 0.16);
-  --sl-color-text: var(--sl-color-gray-2);
-  --sl-color-text-accent: #7dd3fc;
+  --sl-color-hairline: rgba(43, 48, 54, 0.8);
+  --sl-color-hairline-light: rgba(43, 48, 54, 0.5);
+  --sl-color-hairline-shade: rgba(43, 48, 54, 0.64);
+  --sl-color-text: var(--sl-color-white);
+  --sl-color-text-accent: #E85D2A;
   --sl-color-text-invert: var(--sl-color-black);
   --sl-color-text-secondary: var(--sl-color-gray-2);
   --sl-color-text-dimmed: var(--sl-color-gray-3);
@@ -37,26 +37,26 @@
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #eff6ff;
-  --sl-color-accent: #0ea5e9;
-  --sl-color-accent-high: #075985;
-  --sl-color-white: hsl(224, 10%, 10%);
-  --sl-color-gray-1: hsl(224, 14%, 16%);
-  --sl-color-gray-2: hsl(224, 10%, 23%);
-  --sl-color-gray-3: hsl(224, 7%, 36%);
-  --sl-color-gray-4: hsl(224, 6%, 56%);
-  --sl-color-gray-5: hsl(224, 6%, 77%);
-  --sl-color-gray-6: hsl(224, 20%, 94%);
-  --sl-color-gray-7: hsl(224, 19%, 97%);
-  --sl-color-black: hsl(0, 0%, 100%);
+  --sl-color-accent-low: #fdf0e9;
+  --sl-color-accent: #E85D2A;
+  --sl-color-accent-high: #C94A1E;
+  --sl-color-white: #111315;
+  --sl-color-gray-1: #3D4044;
+  --sl-color-gray-2: #6B7075;
+  --sl-color-gray-3: #A5A9AE;
+  --sl-color-gray-4: #D9D9D0;
+  --sl-color-gray-5: #EBEBE6;
+  --sl-color-gray-6: #F5F5F0;
+  --sl-color-gray-7: #FBFBF9;
+  --sl-color-black: #FBFBF9;
   --sl-color-bg: var(--sl-color-black);
   --sl-color-bg-sidebar: var(--sl-color-bg);
   --sl-color-bg-nav: var(--sl-color-gray-7);
-  --sl-color-hairline: var(--sl-color-gray-6);
-  --sl-color-hairline-light: var(--sl-color-gray-6);
-  --sl-color-hairline-shade: var(--sl-color-gray-6);
-  --sl-color-text: var(--sl-color-gray-2);
-  --sl-color-text-accent: #0ea5e9;
+  --sl-color-hairline: var(--sl-color-gray-5);
+  --sl-color-hairline-light: var(--sl-color-gray-5);
+  --sl-color-hairline-shade: var(--sl-color-gray-5);
+  --sl-color-text: var(--sl-color-gray-1);
+  --sl-color-text-accent: #E85D2A;
   --sl-color-text-invert: var(--sl-color-black);
   --sl-color-text-secondary: var(--sl-color-gray-2);
   --sl-color-text-dimmed: var(--sl-color-gray-3);
@@ -68,8 +68,8 @@ html, body {
 
 body {
   background-image:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 26rem),
-    linear-gradient(180deg, #0f172a 0%, #0b1220 24%, #0b1220 100%);
+    radial-gradient(circle at top, rgba(232, 93, 42, 0.04), transparent 26rem),
+    linear-gradient(180deg, #111315 0%, #0f1113 24%, #0f1113 100%);
 }
 
 :root[data-theme='light'] body {
@@ -90,14 +90,11 @@ body > .page > header {
 }
 
 body > .page > header a.site-title {
-  background: linear-gradient(90deg, #ff8000 0%, #ff69b4 28%, #8a2be2 52%, #1e90ff 76%, #00ced1 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-family: 'Alien Block', sans-serif;
-  font-weight: 400;
+  color: #E85D2A;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-weight: 700;
   text-transform: lowercase;
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   letter-spacing: 1px;
 }
 
@@ -148,7 +145,7 @@ nav.sidebar .sidebar-pane,
 }
 
 :root[data-theme='light'] .right-sidebar-panel a {
-  color: #64748b;
+  color: var(--sl-color-gray-2);
 }
 
 :root[data-theme='light'] .right-sidebar-panel a:hover {
@@ -172,7 +169,7 @@ nav.sidebar span.large,
 .sl-markdown-content td,
 .sl-markdown-content th {
   color: var(--sl-color-text-secondary);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 400;
   font-size: 16px;
@@ -204,7 +201,7 @@ nav.sidebar a[aria-current=true] {
 .sl-markdown-content h5,
 .sl-markdown-content h6 {
   color: var(--sl-color-text);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
   font-weight: 600;
 }
 
@@ -228,7 +225,7 @@ nav.sidebar a[aria-current=true] {
 
 nav.sidebar ul.top-level > li > details > summary .group-label > span {
   color: var(--sl-color-text);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
   font-style: normal;
   font-weight: 700;
   font-size: 14px;
@@ -374,28 +371,28 @@ nav.sidebar span.large,
 }
 
 .lifecycle-node--neutral {
-  border-color: #ff8000;
+  border-color: var(--sl-color-accent);
 }
 
 .lifecycle-node--drift {
-  border-color: #8a2be2;
+  border-color: var(--sl-color-gray-3);
 }
 
 .lifecycle-node--upstream {
-  border-color: #ff69b4;
+  border-color: var(--sl-color-accent-high);
 }
 
 .lifecycle-node--resolve {
-  border-color: #00ced1;
+  border-color: #5F8D4E;
   width: min(100%, 38rem);
 }
 
 .lifecycle-track--drift {
-  border-color: #8a2be2;
+  border-color: var(--sl-color-gray-3);
 }
 
 .lifecycle-track--upstream {
-  border-color: #ff69b4;
+  border-color: var(--sl-color-accent-high);
 }
 
 @media (max-width: 52rem) {
@@ -441,25 +438,60 @@ dialog[aria-label='Search'] {
   width: 100%;
   max-width: 100%;
   table-layout: fixed;
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 0.65rem;
+  border: 0;
   border-spacing: 0;
-  background: color-mix(in srgb, var(--sl-color-bg) 82%, white 3%);
+  background: transparent;
   scrollbar-width: thin;
   scrollbar-color: var(--sl-color-gray-4) transparent;
 }
 
 .sl-markdown-content table thead {
-  background: color-mix(in srgb, var(--sl-color-accent-low) 72%, var(--sl-color-bg));
+  background: transparent;
 }
 
 .sl-markdown-content table th,
 .sl-markdown-content table td {
-  padding: 0.7rem 0.9rem;
-  border-bottom: 1px solid var(--sl-color-hairline-light);
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--sl-color-gray-5);
   vertical-align: top;
   text-align: start;
   overflow-wrap: anywhere;
+}
+
+.sl-markdown-content table thead th {
+  padding-block: 0.6rem;
+  border-color: #43474B;
+  background: #2B3036 !important;
+  color: #F2F1EE !important;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  text-transform: none !important;
+}
+
+.sl-markdown-content table thead th:first-child {
+  border-radius: 0.45rem 0 0 0.45rem;
+}
+
+.sl-markdown-content table thead th + th,
+.sl-markdown-content table tbody td + td {
+  border-left: 0;
+}
+
+.sl-markdown-content table thead th:last-child {
+  border-radius: 0 0.45rem 0.45rem 0;
+}
+
+.sl-markdown-content table tbody td {
+  background: color-mix(in srgb, var(--sl-color-gray-6) 76%, transparent);
+}
+
+.sl-markdown-content table tbody td:first-child {
+  border-radius: 0.45rem 0 0 0.45rem;
+}
+
+.sl-markdown-content table tbody td:last-child {
+  border-radius: 0 0.45rem 0.45rem 0;
 }
 
 .sl-markdown-content table th:first-child,
@@ -467,39 +499,24 @@ dialog[aria-label='Search'] {
   width: 22%;
 }
 
-.sl-markdown-content table tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--sl-color-gray-6) 42%, transparent);
-}
-
-.sl-markdown-content table tbody tr:hover {
-  background: color-mix(in srgb, var(--sl-color-accent-low) 34%, transparent);
+.sl-markdown-content table tbody tr:hover td {
+  background: color-mix(in srgb, var(--sl-color-gray-5) 52%, transparent);
 }
 
 .sl-markdown-content table tr:last-child td {
-  border-bottom: 0;
+  border-bottom-color: var(--sl-color-gray-5);
 }
 
 .sl-markdown-content table code {
   white-space: nowrap;
 }
 
-.sl-markdown-content table th {
-  color: var(--sl-color-text);
-  font-size: 0.82rem;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
 :root[data-theme='light'] .sl-markdown-content table {
-  background: #ffffff;
+  background: transparent;
 }
 
 :root[data-theme='light'] .sl-markdown-content table thead {
-  background: #eff6ff;
-}
-
-:root[data-theme='light'] .sl-markdown-content table tbody tr:nth-child(even) {
-  background: #f8fafc;
+  background: transparent;
 }
 
 @media (max-width: 50rem) {
@@ -523,7 +540,7 @@ dialog[aria-label='Search'] {
 
 .sl-markdown-content pre {
   border-radius: 8px;
-  background: #0f172a;
+  background: #1A1D20;
 }
 
 :root[data-theme='light'] .sl-markdown-content pre {
@@ -575,13 +592,22 @@ dialog[aria-label='Search'] {
 .expressive-code .frame.is-terminal pre {
   border-radius: 0;
   border: 0;
-  background: #111827;
+  background: #1A1D20;
+}
+
+/* Keep shell examples on-brand without making the syntax colors compete with the prose. */
+.expressive-code .frame.is-terminal .ec-line span[style*="--0:#B392F0"] {
+  color: #F08A5D !important;
+}
+
+:root[data-theme='light'] .expressive-code .frame.is-terminal .ec-line span[style*="--0:#B392F0"] {
+  color: #C94A1E !important;
 }
 
 .expressive-code .frame.is-terminal .header {
   min-height: 2rem;
   padding-inline: 0.75rem;
-  background: #1f2937;
+  background: #2B3036;
 }
 
 .expressive-code .frame.is-terminal .header::before,
@@ -612,7 +638,7 @@ dialog[aria-label='Search'] {
 
 .pagination-links a,
 .pagination-links span {
-  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-weight: 400;
   font-size: 14px;
   line-height: 24px;
@@ -691,9 +717,213 @@ dialog[aria-label='Search'] {
   display: block;
 }
 
+.cell-icon--bad circle {
+  fill: #B86B6B !important;
+}
+
+.cell-icon--good circle {
+  fill: #6EAA7D !important;
+}
+
+:root[data-theme='light'] .cell-icon--bad circle {
+  fill: #B45353 !important;
+}
+
+:root[data-theme='light'] .cell-icon--good circle {
+  fill: #4F8A5D !important;
+}
+
+.problem-solution-table {
+  margin-block: 1.4rem 2rem;
+}
+
+.problem-solution-table table {
+  border: 0;
+  border-spacing: 0;
+  background: transparent;
+  table-layout: fixed;
+}
+
+.problem-solution-table table th:first-child,
+.problem-solution-table table td:first-child {
+  width: 42%;
+}
+
+.problem-solution-table table th:last-child,
+.problem-solution-table table td:last-child {
+  width: 58%;
+}
+
+.problem-solution-table thead th {
+  padding: 0.6rem 1rem;
+  border: 1px solid #43474B;
+  background: #2B3036;
+  color: #F2F1EE !important;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  text-transform: none !important;
+}
+
+.problem-solution-table thead th:first-child {
+  border-radius: 0.45rem 0 0 0.45rem;
+}
+
+.problem-solution-table thead th:last-child {
+  border-left: 0;
+  border-radius: 0 0.45rem 0.45rem 0;
+}
+
+.problem-solution-table tbody td {
+  border: 1px solid var(--sl-color-gray-5);
+  padding: 0.8rem 1rem;
+  vertical-align: middle;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.problem-solution-table tbody td:first-child {
+  border-radius: 0.45rem 0 0 0.45rem;
+  background: color-mix(in srgb, var(--sl-color-gray-6) 76%, transparent);
+}
+
+.problem-solution-table tbody td:last-child {
+  border-left: 1px solid var(--sl-color-gray-4);
+  border-radius: 0 0.45rem 0.45rem 0;
+  background: color-mix(in srgb, var(--sl-color-gray-6) 76%, transparent);
+}
+
+.problem-solution-table tbody tr:hover td:first-child,
+.problem-solution-table tbody tr:hover td:last-child {
+  background: color-mix(in srgb, var(--sl-color-gray-5) 52%, transparent);
+}
+
+.problem-solution-table .cell-icon {
+  margin-right: 0.65rem;
+}
+
+.capability-types-table table th:first-child,
+.capability-types-table table td:first-child {
+  width: 20%;
+}
+
+.capability-types-table table th:nth-child(2),
+.capability-types-table table td:nth-child(2) {
+  width: 58%;
+}
+
+.capability-types-table table th:last-child,
+.capability-types-table table td:last-child {
+  width: 22%;
+  white-space: nowrap;
+}
+
+.tool-fields-table table {
+  border: 1px solid var(--sl-color-gray-5);
+  border-spacing: 0;
+  border-radius: 0.45rem;
+  overflow: hidden;
+}
+
+.tool-fields-table table th:first-child,
+.tool-fields-table table td:first-child {
+  width: 22%;
+}
+
+.tool-fields-table table th:nth-child(2),
+.tool-fields-table table td:nth-child(2) {
+  width: 60%;
+}
+
+.tool-fields-table table th:last-child,
+.tool-fields-table table td:last-child {
+  width: 18%;
+  white-space: nowrap;
+}
+
+.tool-fields-table table thead th:first-child,
+.tool-fields-table table thead th:last-child,
+.tool-fields-table table tbody td:first-child,
+.tool-fields-table table tbody td:last-child {
+  border-radius: 0;
+}
+
+.tool-fields-table table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tool-fields-table table tbody td:first-child code {
+  display: inline-block;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--sl-color-gray-5) 42%, transparent);
+  color: var(--sl-color-text);
+  font-size: 0.9em;
+}
+
+.sl-markdown-content table,
+.sl-markdown-content table th,
+.sl-markdown-content table td {
+  border-radius: 0 !important;
+}
+
+:root[data-theme='light'] .sl-markdown-content table tbody td {
+  background: #FFFFFF;
+}
+
+:root[data-theme='light'] .sl-markdown-content table tbody tr:hover td {
+  background: #F6F8FA;
+}
+
+@media (max-width: 50rem) {
+  .problem-solution-table table,
+  .problem-solution-table thead,
+  .problem-solution-table tbody,
+  .problem-solution-table tr,
+  .problem-solution-table th,
+  .problem-solution-table td {
+    display: block;
+  }
+
+  .problem-solution-table thead {
+    display: none;
+  }
+
+  .problem-solution-table tbody td {
+    border-radius: 0.45rem;
+  }
+
+  .problem-solution-table tbody td:last-child {
+    border-left: 1px solid var(--sl-color-gray-5);
+    margin-top: -0.3rem;
+  }
+}
+
 .capability-cards a {
   text-decoration: none;
   color: inherit;
+}
+
+.intro-brand {
+  color: var(--sl-color-accent);
+  font-size: 1.18em;
+  font-weight: 700;
+}
+
+.capability-grid .sl-link-card {
+  border-color: var(--sl-color-gray-4);
+  background: color-mix(in srgb, var(--sl-color-gray-6) 42%, transparent);
+  box-shadow: none;
+}
+
+.capability-grid .sl-link-card .description {
+  color: var(--sl-color-gray-2);
+}
+
+.capability-grid .sl-link-card:hover {
+  border-color: var(--sl-color-accent);
+  background: color-mix(in srgb, var(--sl-color-accent-low) 34%, var(--sl-color-bg));
 }
 
 .capability-grid .sl-link-card .title {
@@ -701,5 +931,17 @@ dialog[aria-label='Search'] {
 }
 
 .capability-grid .sl-link-card:hover .title {
-  color: var(--sl-color-white);
+  color: var(--sl-color-accent-high);
+}
+
+:root[data-theme='dark'] nav.sidebar a[aria-current='page'],
+:root[data-theme='dark'] nav.sidebar a[aria-current='true'] {
+  color: var(--sl-color-white) !important;
+  font-weight: 600;
+}
+
+:root[data-theme='light'] nav.sidebar a[aria-current='page'],
+:root[data-theme='light'] nav.sidebar a[aria-current='true'] {
+  color: #111315 !important;
+  font-weight: 600;
 }

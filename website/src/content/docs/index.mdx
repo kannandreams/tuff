@@ -5,11 +5,7 @@ description: Capability lifecycle management for coding agents.
 
 import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-<p align="center">
-  <img src="/img/tuff-readme-banner.png?v=3" alt="Tuff banner" class="tuff-banner-image" />
-</p>
-
-**Tuff** is a Rust-powered CLI for managing agent capabilities such as skills, tools, hooks,
+<strong class="intro-brand">Tuff</strong> is a Rust-powered CLI for managing agent capabilities such as skills, tools, hooks,
 and workflows. It provides lifecycle tracking, drift detection, baseline diffs, and merge-aware
 updates. It works with Codex, Claude Code, Cursor, GitHub Copilot, and any agent harness that
 follows the open Agents standard.
@@ -30,6 +26,8 @@ rest of the team, or copied by hand across projects and left to drift silently.
 
 These are common situations teams encounter as capabilities are shared across repositories, coding harnesses, and developer machines.
 
+<div class="problem-solution-table">
+
 | Problem context | What changes with Tuff |
 |---|---|
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A skill gets copied between projects and slowly diverges. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Tuff records a baseline, so edits show up as drift instead of becoming invisible forks. |
@@ -38,6 +36,8 @@ These are common situations teams encounter as capabilities are shared across re
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A skill built for Claude Code is useless in Cursor or Codex. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Tuff maps the same managed capability into each supported harness through adapters. |
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> An upstream fix arrives after the local copy has been edited. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Updates use baseline, local, and upstream state together, so local customization is preserved where possible. |
 | <span class="cell-icon cell-icon--bad"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#ef4444"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span> A new project starts by copying whatever someone remembers. | <span class="cell-icon cell-icon--good"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="10" fill="#22c55e"/><path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span> Setup becomes a repeatable CLI step instead of tribal knowledge. |
+
+</div>
 
 ## Capabilities
 
