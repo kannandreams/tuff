@@ -43,22 +43,26 @@ mcp = true                                    # only true for MCP-native tools
 runtime_deps = ["chalk", "@octokit/rest"]    # shown at install time, never auto-installed
 ```
 
-| Field | Required | Description |
+<div class="tool-fields-table">
+
+| Field | Description | Required |
 |---|---|---|
-| `id` | Yes | Stable identifier for the tool |
-| `version` | Yes | Semantic version |
-| `type` | Yes | Must be `"tool"` |
-| `description` | Yes | Shown to the agent: what the tool does and when to call it |
-| `files` | No | Source files to copy (entrypoint auto-added if present) |
-| `parameters` | Yes | JSON Schema object defining input contract |
-| `parameters.type` | Yes | Must be `"object"` |
-| `parameters.properties` | Yes | At least one parameter definition required |
-| `parameters.required` | No | Array of required parameter names |
-| `implementation` | Yes | Execution configuration |
-| `implementation.language` | Yes | Runtime language (`node`, `python`, `bash`, etc.) |
-| `implementation.entrypoint` | Yes | Relative path to the executable script |
-| `implementation.mcp` | No | Set to `true` only when the entrypoint is an MCP stdio server |
-| `implementation.runtime_deps` | No | Dependencies displayed at install time |
+| `id` | Stable identifier for the tool | Yes |
+| `version` | Semantic version | Yes |
+| `type` | Must be `"tool"` | Yes |
+| `description` | Shown to the agent: what the tool does and when to call it | Yes |
+| `files` | Source files to copy (entrypoint auto-added if present) | No |
+| `parameters` | JSON Schema object defining input contract | Yes |
+| `parameters.type` | Must be `"object"` | Yes |
+| `parameters.properties` | At least one parameter definition required | Yes |
+| `parameters.required` | Array of required parameter names | No |
+| `implementation` | Execution configuration | Yes |
+| `implementation.language` | Runtime language (`node`, `python`, `bash`, etc.) | Yes |
+| `implementation.entrypoint` | Relative path to the executable script | Yes |
+| `implementation.mcp` | Set to `true` only when the entrypoint is an MCP stdio server | No |
+| `implementation.runtime_deps` | Dependencies displayed at install time | No |
+
+</div>
 
 ## Install-time validation
 
