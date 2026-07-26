@@ -1,0 +1,130 @@
+---
+import '../styles/custom.css';
+
+const docs = '/getting-started';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content="Manage project-owned skills, tools, hooks, and workflows for coding agents." />
+    <title>Tuff — manage coding-agent capabilities in your repo</title>
+  </head>
+  <body class="tuff-standalone">
+    <nav class="tuff-nav">
+      <div class="tuff-nav-links">
+        <a href={docs}>Docs</a>
+        <a href="/primitives/overview">Capabilities</a>
+        <a href="/concepts/adapters">Adapters</a>
+        <a href="https://github.com/kannandreams/tuff/issues">Roadmap</a>
+      </div>
+      <a class="tuff-github-button" href="https://github.com/kannandreams/tuff" aria-label="View Tuff on GitHub">
+        View on GitHub
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.04c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.6-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"/></svg>
+      </a>
+    </nav>
+
+    <main class="tuff-landing tuff-landing--standalone">
+      <section class="tuff-hero">
+        <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
+        <p class="tuff-tagline">Capability lifecycle manager for coding agents.</p>
+        <p class="tuff-hero-copy">
+          A CLI for teams that keep agent capabilities version-controlled in the repo: install a capability, record where it came from,
+          catch local edits before they cause a bad run, and emit the exact capability version each harness needs to behave as expected.
+        </p>
+        <div class="tuff-install" data-install-tabs>
+          <div class="tuff-install-tabs" role="tablist" aria-label="Install Tuff">
+            <button class="is-active" type="button" role="tab" aria-selected="true" data-install-tab="homebrew">homebrew</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="pip">pip</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="npx">npx</button>
+          </div>
+          <div class="tuff-install-command"><span>$</span><code data-install-command>brew tap kannandreams/tuff &amp;&amp; brew install tuff</code><button type="button" aria-label="Copy install command" data-copy-command>copy</button></div>
+        </div>
+      </section>
+
+      <section class="tuff-section">
+        <div class="tuff-section-head"><div class="tuff-section-label">//how it works</div><h2>The lifecycle Tuff manages</h2><p>Agent capabilities are useful only if a team can tell what is installed, where it came from, and whether it changed.</p></div>
+        <div class="tuff-steps-grid tuff-steps-grid--4">
+          <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5l11 6v10l-11 6-11-6V11z"/><path d="M5 11l11 6 11-6"/><path d="M16 17v10"/></svg><strong class="tuff-step-title tuff-step-title--install">Create or add</strong><p>Start a new skill, tool, hook, or workflow, or bring existing agent files under management without rewriting their content.</p></div>
+          <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h5l3-9 5 16 3-11 2 4h6"/></svg><strong class="tuff-step-title tuff-step-title--track">Track</strong><p>Record source, version, scope, harness, emitted path, and the clean install baseline in project state.</p></div>
+          <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v8a4 4 0 004 4h8"/><path d="M16 14l4 4-4 4"/></svg><strong class="tuff-step-title tuff-step-title--diff">Diff</strong><p>Compare the current files against the baseline so intentional edits are visible and accidental drift is not silent.</p></div>
+          <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4l10 4v8c0 7-4.5 10.5-10 12-5.5-1.5-10-5-10-12V8z"/><path d="M16 12v8"/><path d="M12 16h8"/></svg><strong class="tuff-step-title tuff-step-title--govern">Update or check</strong><p>Accept deliberate local changes, merge upstream updates where possible, and fail CI when tracked capabilities are not in the expected state.</p></div>
+        </div>
+        <div class="tuff-terminal" aria-label="Example Tuff CLI session">
+            <div class="tuff-term-bar"><i></i><i></i><i></i><span>~/tuff</span></div>
+            <div class="tuff-term-body">
+              <div><b>$</b> tuff init</div>
+              <div class="tuff-output">created tuff.lock</div>
+              <div class="tuff-output">registered <mark>open-agents</mark> as the default harness</div>
+              <div class="tuff-output tuff-output--ok">installed tuff-cli-guide</div>
+              <div class="tuff-spacer"></div>
+              <div><b>$</b> tuff create skill project-review</div>
+              <div class="tuff-output">tracked .agents/skills/project-review/SKILL.md</div>
+              <div><b>$</b> tuff diff project-review</div>
+              <div class="tuff-output">modified since baseline</div>
+              <div><b>$</b> tuff check</div>
+              <div class="tuff-output tuff-output--ok">project-review  skill  open-agents  ok</div>
+            </div>
+        </div>
+      </section>
+
+      <section class="tuff-section">
+        <div class="tuff-section-head"><div class="tuff-section-label">//capabilities</div><h2>The things agents load should be first-class project assets</h2><p>Tuff treats these as managed files, not magic settings hidden inside one developer's local harness.</p></div>
+        <div class="tuff-cap-grid">
+          <a class="tuff-cap-card" href="/primitives/skills"><strong>Skill</strong><span>Instructions and references an agent can load for a project or task.</span></a>
+          <a class="tuff-cap-card" href="/primitives/tools"><strong>Tool</strong><span>Callable scripts, functions, or MCP servers with a clear contract.</span></a>
+          <a class="tuff-cap-card" href="/primitives/hooks"><strong>Hook</strong><span>Automation attached to supported lifecycle events in a harness.</span></a>
+          <a class="tuff-cap-card" href="/primitives/workflows"><strong>Workflow</strong><span>A repeatable sequence that composes capabilities for a larger job.</span></a>
+          <a class="tuff-cap-card tuff-cap-card--wide" href="/primitives/policies"><strong>Policy Control</strong><span>Governs all four. Set which capabilities can be installed, from which sources, and for which harnesses, enforced consistently across every agent your team runs.</span></a>
+        </div>
+      </section>
+
+      <section class="tuff-section">
+        <div class="tuff-section-head"><div class="tuff-section-label">//harnesses</div><h2>Write once, emit per harness</h2><p>Tuff compiles a canonical manifest into whatever file shape each agent harness expects natively.</p></div>
+        <div class="tuff-adapter-diagram">
+          <div class="tuff-manifest"><div><span>type:</span> hook</div><div><span>event:</span> PreToolUse</div><div><span>runner:</span> ./lint.sh</div><div><span>blocking:</span> true</div></div>
+          <div class="tuff-compile"><i></i><span>compile</span></div>
+          <div class="tuff-harness-list"><div>claude-code <small>.claude/hooks.json</small></div><div>cursor <small>.cursor/hooks.yaml</small></div><div>codex <small>.codex/hooks.json</small></div></div>
+        </div>
+      </section>
+
+      <section class="tuff-section tuff-section--last">
+        <div class="tuff-section-head"><div class="tuff-section-label">//day two</div><h2>Operational Features</h2><p>The parts that matter after day one.</p></div>
+        <div class="tuff-why-grid">
+          <div><b>01</b><strong>CI Integration</strong><p>Run the check in CI and fail the build on drift, not after it's already shipped.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/cli/#ci-with-github-action">GitHub Actions</a></div>
+          <div><b>02</b><strong>Tuff Skills</strong><p>Tuff ships as a skill itself. The agent learns the CLI and hook spec on install, so it writes manifests and runs commands for you instead of you doing it by hand.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/getting-started">tuff init</a></div>
+          <div><b>03</b><strong>Audit Reports</strong><p>Generate a full report of every installed capability, its source, and its policy status, right from the CLI, no hosted service required.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/cli">tuff generate report</a></div>
+        </div>
+      </section>
+    </main>
+    <footer class="tuff-standalone-footer"><span>tuff — MIT licensed</span><span><a href={docs}>docs</a><a href="https://github.com/kannandreams/tuff">github</a></span></footer>
+  </body>
+</html>
+
+<script>
+  const commands = {
+    homebrew: 'brew tap kannandreams/tuff && brew install tuff',
+    pip: 'pip install tuff',
+    npx: 'npx tuff',
+  };
+
+  document.querySelectorAll('[data-install-tabs]').forEach((group) => {
+    const command = group.querySelector('[data-install-command]');
+    const copy = group.querySelector('[data-copy-command]');
+    group.querySelectorAll('[data-install-tab]').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        group.querySelectorAll('[data-install-tab]').forEach((item) => {
+          item.classList.toggle('is-active', item === tab);
+          item.setAttribute('aria-selected', String(item === tab));
+        });
+        command.textContent = commands[tab.dataset.installTab];
+      });
+    });
+    copy.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(command.textContent);
+      copy.textContent = 'copied';
+      setTimeout(() => { copy.textContent = 'copy'; }, 1200);
+    });
+  });
+</script>
