@@ -35,12 +35,12 @@ const docs = '/getting-started';
         </p>
         <div class="tuff-install" data-install-tabs>
           <div class="tuff-install-tabs" role="tablist" aria-label="Install Tuff">
-            <button class="is-active" type="button" role="tab" aria-selected="true" data-install-tab="homebrew">homebrew</button>
-            <button type="button" role="tab" aria-selected="false" data-install-tab="cargo">cargo</button>
+            <button class="is-active" type="button" role="tab" aria-selected="true" data-install-tab="uv">uv</button>
             <button type="button" role="tab" aria-selected="false" data-install-tab="pip">pip</button>
-            <button type="button" role="tab" aria-selected="false" data-install-tab="uv">uv</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="install">install</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="cargo">cargo</button>
           </div>
-          <div class="tuff-install-command"><span>$</span><code data-install-command>brew tap kannandreams/tuff &amp;&amp; brew install tuff</code><button type="button" aria-label="Copy install command" data-copy-command>copy</button></div>
+          <div class="tuff-install-command"><span>$</span><code data-install-command>uv tool install tuffcli</code><button type="button" aria-label="Copy install command" data-copy-command>copy</button></div>
         </div>
       </section>
 
@@ -105,10 +105,10 @@ const docs = '/getting-started';
 
 <script>
   const commands = {
-    homebrew: 'brew tap kannandreams/tuff && brew install tuff',
-    cargo: 'cargo install tuffcli',
-    pip: 'pip install tuffcli',
     uv: 'uv tool install tuffcli',
+    pip: 'pip install tuffcli',
+    install: 'curl -fsSL https://tuff.dev/install.sh | sh',
+    cargo: 'cargo install tuffcli',
   };
 
   document.querySelectorAll('[data-install-tabs]').forEach((group) => {
