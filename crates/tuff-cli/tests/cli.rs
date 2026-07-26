@@ -3253,10 +3253,8 @@ fn update_local_can_select_one_agent() {
         .current_dir(temp.path())
         .args(["diff", "multi-skill", "-a", "claude"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "recorded baseline verification failed",
-        ));
+        .success()
+        .stdout(predicate::str::contains("Claude edit"));
 }
 
 #[test]
