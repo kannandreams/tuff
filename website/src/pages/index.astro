@@ -36,6 +36,7 @@ const docs = '/getting-started';
         <div class="tuff-install" data-install-tabs>
           <div class="tuff-install-tabs" role="tablist" aria-label="Install Tuff">
             <button class="is-active" type="button" role="tab" aria-selected="true" data-install-tab="homebrew">homebrew</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="cargo">cargo</button>
             <button type="button" role="tab" aria-selected="false" data-install-tab="pip">pip</button>
             <button type="button" role="tab" aria-selected="false" data-install-tab="npx">npx</button>
           </div>
@@ -105,6 +106,7 @@ const docs = '/getting-started';
 <script>
   const commands = {
     homebrew: 'brew tap kannandreams/tuff && brew install tuff',
+    cargo: 'cargo install tuffcli',
     pip: 'pip install tuff',
     npx: 'npx tuff',
   };
