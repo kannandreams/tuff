@@ -67,6 +67,15 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
 
+      - name: Generate checksums
+        run: |
+          {
+            sha256sum aarch64-apple-darwin/tuff-aarch64-apple-darwin.tar.gz | awk '{print $1 "  tuff-aarch64-apple-darwin.tar.gz"}'
+            sha256sum x86_64-apple-darwin/tuff-x86_64-apple-darwin.tar.gz | awk '{print $1 "  tuff-x86_64-apple-darwin.tar.gz"}'
+            sha256sum x86_64-unknown-linux-gnu/tuff-x86_64-unknown-linux-gnu.tar.gz | awk '{print $1 "  tuff-x86_64-unknown-linux-gnu.tar.gz"}'
+          } > checksums.txt
+          cat checksums.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -74,12 +83,13 @@ jobs:
             x86_64-apple-darwin/tuff-x86_64-apple-darwin.tar.gz
             aarch64-apple-darwin/tuff-aarch64-apple-darwin.tar.gz
             x86_64-unknown-linux-gnu/tuff-x86_64-unknown-linux-gnu.tar.gz
+            checksums.txt
 
       - name: Generate Homebrew formula
         run: |
-          SHA_ARM=$(shasum -a 256 aarch64-apple-darwin/tuff-aarch64-apple-darwin.tar.gz | awk '{print $1}')
-          SHA_INTEL=$(shasum -a 256 x86_64-apple-darwin/tuff-x86_64-apple-darwin.tar.gz | awk '{print $1}')
-          SHA_LINUX=$(shasum -a 256 x86_64-unknown-linux-gnu/tuff-x86_64-unknown-linux-gnu.tar.gz | awk '{print $1}')
+          SHA_ARM=$(awk '$2 == "tuff-aarch64-apple-darwin.tar.gz" {print $1}' checksums.txt)
+          SHA_INTEL=$(awk '$2 == "tuff-x86_64-apple-darwin.tar.gz" {print $1}' checksums.txt)
+          SHA_LINUX=$(awk '$2 == "tuff-x86_64-unknown-linux-gnu.tar.gz" {print $1}' checksums.txt)
           TAG="${GITHUB_REF#refs/tags/}"
 
           cat << EOF > formula.rb

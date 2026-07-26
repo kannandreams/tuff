@@ -37,7 +37,7 @@ const docs = '/getting-started';
           <div class="tuff-install-tabs" role="tablist" aria-label="Install Tuff">
             <button class="is-active" type="button" role="tab" aria-selected="true" data-install-tab="uv">uv</button>
             <button type="button" role="tab" aria-selected="false" data-install-tab="pip">pip</button>
-            <button type="button" role="tab" aria-selected="false" data-install-tab="homebrew">homebrew</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="install">install</button>
             <button type="button" role="tab" aria-selected="false" data-install-tab="cargo">cargo</button>
           </div>
           <div class="tuff-install-command"><span>$</span><code data-install-command>uv tool install tuffcli</code><button type="button" aria-label="Copy install command" data-copy-command>copy</button></div>
@@ -107,7 +107,7 @@ const docs = '/getting-started';
   const commands = {
     uv: 'uv tool install tuffcli',
     pip: 'pip install tuffcli',
-    homebrew: 'brew tap kannandreams/tuff && brew install tuff',
+    install: 'curl -fsSL https://tuff.dev/install.sh | sh',
     cargo: 'cargo install tuffcli',
   };
 
