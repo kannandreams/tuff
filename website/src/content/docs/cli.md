@@ -392,7 +392,7 @@ jobs:
           toolchain: stable
 
       - name: Build and install tuff
-        run: cargo install --git https://github.com/kannandreams/tuff --package tuff
+        run: cargo install tuffcli
 
       - name: Validate capabilities
         run: tuff check --json

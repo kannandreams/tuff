@@ -18,10 +18,10 @@ jobs:
           toolchain: stable
 
       - name: Build tuff
-        run: cargo build -p tuff --release
+        run: cargo build -p tuffcli --release
 
       - name: Run tests
         run: cargo test
 
       - name: Validate capabilities
-        run: cargo run -p tuff -- check --json
+        run: cargo run -p tuffcli -- check --json

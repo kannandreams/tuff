@@ -30,7 +30,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   <TabItem label="cargo">
 
   ```sh
-  cargo install --git https://github.com/kannandreams/tuff --package tuff
+  cargo install tuffcli
   ```
 
   Builds from source. Requires Rust and Cargo.
@@ -41,7 +41,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   ```sh
   git clone https://github.com/kannandreams/tuff
   cd tuff
-  cargo build -p tuff --release
+  cargo build -p tuffcli --release
   ./target/release/tuff --version
   ```
 

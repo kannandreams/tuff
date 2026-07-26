@@ -2,7 +2,10 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://tuff.dev',
+  site: 'https://tuffcli.dev',
+  devToolbar: {
+    enabled: false,
+  },
   integrations: [
     starlight({
       title: 'Tuff',

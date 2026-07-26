@@ -925,25 +925,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
-name = "tuff"
-version = "0.1.0"
-dependencies = [
- "assert_cmd",
- "clap",
- "predicates",
- "serde",
- "serde_json",
- "tabled",
- "tempfile",
- "tuff-adapter-claude",
- "tuff-adapter-codex",
- "tuff-adapter-cursor",
- "tuff-adapter-open-agents",
- "tuff-core",
- "tuff-hooks-spec",
-]
-
-[[package]]
 name = "tuff-adapter-claude"
 version = "0.1.0"
 dependencies = [
@@ -998,6 +979,25 @@ name = "tuff-hooks-spec"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "tuffcli"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "clap",
+ "predicates",
+ "serde",
+ "serde_json",
+ "tabled",
+ "tempfile",
+ "tuff-adapter-claude",
+ "tuff-adapter-codex",
+ "tuff-adapter-cursor",
+ "tuff-adapter-open-agents",
+ "tuff-core",
+ "tuff-hooks-spec",
 ]
 
 [[package]]

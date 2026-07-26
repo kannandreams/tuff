@@ -75,6 +75,12 @@ brew tap kannandreams/tuff
 brew install tuff
 ```
 
+From crates.io:
+
+```sh
+cargo install tuffcli
+```
+
 See the [latest GitHub release](https://github.com/kannandreams/tuff/releases/latest)
 for release notes and platform artifacts.
 
@@ -83,8 +89,8 @@ for release notes and platform artifacts.
 From this repository:
 
 ```sh
-cargo run -p tuff -- --help
-cargo run -p tuff -- --version
+cargo run -p tuffcli -- --help
+cargo run -p tuffcli -- --version
 ```
 
 To install the CLI from this checkout while developing locally:

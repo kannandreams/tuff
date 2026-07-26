@@ -6,6 +6,11 @@ description: Projects and libraries Tuff builds on or draws from.
 Tuff is shaped by a mix of open-source libraries, documentation tooling, and prior work in the
 agent capability space.
 
+## Project authorship
+
+- **Author:** Kannan Kalidasan
+- **Maintainer:** [@kannandreams](https://github.com/kannandreams)
+
 ## Project inspiration
 
 - [skills.sh](https://skills.sh/) for the broader idea of reusable, shareable agent skills
