@@ -448,6 +448,7 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 .tuff-why-grid b { margin-bottom: .65rem; color: var(--tuff-accent); font-size: .7rem; font-weight: 500; }
 .tuff-why-grid strong { margin-bottom: .45rem; font-size: 1.1rem; font-weight: 600; }
 .tuff-why-grid p { color: var(--tuff-dim); font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 1.65; }
+.tuff-why-grid > div:nth-child(2) p, .tuff-why-grid > div:nth-child(3) p { margin-bottom: 1.15rem; }
 .tuff-feature-button { align-self: flex-start; margin-top: auto; color: #fff; background: #1b1e1b; }
 .tuff-feature-button:hover { color: #fff; background: #343934; }
 .tuff-why-grid code { color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: .78rem; }
