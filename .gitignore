@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 site/
 build/
+dist/
 .docusaurus/
 node_modules/
 .pnpm-store/

@@ -14,7 +14,7 @@ tuff-hooks-spec = { path = "../tuff-hooks-spec", version = "0.1.0" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
-git2 = { version = "0.20", features = ["vendored-libgit2"] }
+git2 = { version = "0.20", features = ["vendored-libgit2", "vendored-openssl"] }
 tempfile = "3.23.0"
 toml = "0.9.8"
 url = "2.5.6"

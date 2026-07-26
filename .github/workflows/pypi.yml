@@ -1,0 +1,64 @@
+name: Publish Python wheels
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  wheels:
+    name: Build wheel (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --manifest-path crates/tuff-cli/Cargo.toml --bindings bin --out dist
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: tuffcli-wheel-${{ matrix.target }}
+          path: dist/*.whl
+
+  publish:
+    name: Publish wheels to PyPI
+    needs: wheels
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/tuffcli
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tuffcli-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Check distributions
+        run: pipx run twine check dist/*
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
