@@ -10,7 +10,7 @@ use crate::manifest::CapabilityType;
 
 use super::home_dir;
 
-const TUFF_GUIDE_CONTENT: &str = include_str!("../../../../assets/tuff-cli-guide.md");
+const TUFF_GUIDE_CONTENT: &str = include_str!("../../assets/tuff-cli-guide.md");
 
 pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {
