@@ -17,7 +17,7 @@ lint:
 check: lint test docs-build
 
 run *args:
-    cargo run -p tuff -- {{args}}
+    cargo run -p tuffcli -- {{args}}
 
 smoke-install:
     cargo install --path crates/tuff-cli
@@ -35,4 +35,4 @@ docs-build:
     cd website && npm run build
 
 docs-assets:
-    ./scripts/generate-doc-screenshot.sh tuff-welcome.png -- cargo run -p tuff --quiet --
+    ./scripts/generate-doc-screenshot.sh tuff-welcome.png -- cargo run -p tuffcli --quiet --

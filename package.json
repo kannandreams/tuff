@@ -1,6 +1,19 @@
 {
   "name": "tuff-root",
   "private": true,
+  "author": {
+    "name": "Kannan Kalidasan",
+    "url": "https://github.com/kannandreams"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kannandreams/tuff.git"
+  },
+  "homepage": "https://tuffcli.dev",
+  "bugs": {
+    "url": "https://github.com/kannandreams/tuff/issues"
+  },
   "scripts": {
     "docs:start": "npm --prefix website run dev",
     "docs:build": "npm --prefix website run build",

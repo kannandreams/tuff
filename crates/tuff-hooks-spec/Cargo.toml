@@ -5,6 +5,10 @@ edition = "2024"
 description = "Canonical hook event and compatibility types for Tuff-managed hooks."
 license = "MIT"
 readme = "README.md"
+authors = ["Kannan Kalidasan"]
+homepage = "https://tuffcli.dev"
+documentation = "https://tuffcli.dev"
+repository = "https://github.com/kannandreams/tuff"
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }

@@ -44,7 +44,7 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build -p tuff --release --target ${{ matrix.target }}
+        run: cargo build -p tuffcli --release --target ${{ matrix.target }}
 
       - name: Package
         run: |
