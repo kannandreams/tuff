@@ -36,6 +36,17 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
   Builds from source. Requires Rust and Cargo.
 
   </TabItem>
+  <TabItem label="pip / uv">
+
+  ```sh
+  pip install tuffcli
+  uv tool install tuffcli
+  ```
+
+  Installs a prebuilt wheel for supported macOS and Linux platforms. The
+  distribution is named `tuffcli`; the installed command remains `tuff`.
+
+  </TabItem>
   <TabItem label="Build from source">
 
   ```sh

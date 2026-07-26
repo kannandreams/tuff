@@ -81,6 +81,18 @@ From crates.io:
 cargo install tuffcli
 ```
 
+From PyPI:
+
+```sh
+pip install tuffcli
+```
+
+Or install the isolated CLI with uv:
+
+```sh
+uv tool install tuffcli
+```
+
 See the [latest GitHub release](https://github.com/kannandreams/tuff/releases/latest)
 for release notes and platform artifacts.
 

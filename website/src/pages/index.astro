@@ -38,7 +38,7 @@ const docs = '/getting-started';
             <button class="is-active" type="button" role="tab" aria-selected="true" data-install-tab="homebrew">homebrew</button>
             <button type="button" role="tab" aria-selected="false" data-install-tab="cargo">cargo</button>
             <button type="button" role="tab" aria-selected="false" data-install-tab="pip">pip</button>
-            <button type="button" role="tab" aria-selected="false" data-install-tab="npx">npx</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="uv">uv</button>
           </div>
           <div class="tuff-install-command"><span>$</span><code data-install-command>brew tap kannandreams/tuff &amp;&amp; brew install tuff</code><button type="button" aria-label="Copy install command" data-copy-command>copy</button></div>
         </div>
@@ -107,8 +107,8 @@ const docs = '/getting-started';
   const commands = {
     homebrew: 'brew tap kannandreams/tuff && brew install tuff',
     cargo: 'cargo install tuffcli',
-    pip: 'pip install tuff',
-    npx: 'npx tuff',
+    pip: 'pip install tuffcli',
+    uv: 'uv tool install tuffcli',
   };
 
   document.querySelectorAll('[data-install-tabs]').forEach((group) => {

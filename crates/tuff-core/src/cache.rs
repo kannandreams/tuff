@@ -89,6 +89,16 @@ pub fn populate(home: &Path, hash: &str, source: &Path) -> Result<PathBuf> {
         if error.kind() == std::io::ErrorKind::PermissionDenied {
             return Ok(source.to_path_buf());
         }
+
+        // Another process may have populated the same content-addressed
+        // directory between our existence check and the rename. Reuse its
+        // verified result instead of treating that harmless race as a cache
+        // failure.
+        if destination.is_dir() && hash_tree(&destination).ok().as_deref() == Some(hash) {
+            let _ = std::fs::remove_dir_all(&temporary_path);
+            return Ok(destination);
+        }
+
         return Err(error.into());
     }
     Ok(destination)
@@ -174,5 +184,30 @@ mod tests {
         let hash = hash_tree(source.path()).unwrap();
         let path = populate(home.path(), &hash, source.path()).unwrap();
         assert_eq!(read_verified(home.path(), &hash).unwrap(), Some(path));
+    }
+
+    #[test]
+    fn concurrent_populate_reuses_existing_content_addressed_directory() {
+        let home = TempDir::new().unwrap();
+        let source = TempDir::new().unwrap();
+        std::fs::write(source.path().join("file"), "content").unwrap();
+        let hash = hash_tree(source.path()).unwrap();
+        let home_path = home.path().to_path_buf();
+        let source_path = source.path().to_path_buf();
+
+        let workers = (0..8)
+            .map(|_| {
+                let home_path = home_path.clone();
+                let source_path = source_path.clone();
+                let hash = hash.clone();
+                std::thread::spawn(move || populate(&home_path, &hash, &source_path))
+            })
+            .collect::<Vec<_>>();
+
+        for worker in workers {
+            worker.join().unwrap().unwrap();
+        }
+
+        assert!(read_verified(home.path(), &hash).unwrap().is_some());
     }
 }

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "tuffcli"
+dynamic = ["version"]
+description = "Capability lifecycle manager for coding agents."
+readme = "README-pypi.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "Kannan Kalidasan" },
+]
+maintainers = [
+  { name = "kannandreams" },
+]
+
+[project.urls]
+Homepage = "https://tuffcli.dev"
+Repository = "https://github.com/kannandreams/tuff"
+Documentation = "https://tuffcli.dev"
+Issues = "https://github.com/kannandreams/tuff/issues"
+
+[tool.maturin]
+bindings = "bin"
