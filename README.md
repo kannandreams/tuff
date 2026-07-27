@@ -37,42 +37,12 @@ Project and global scopes are supported. Project capabilities take precedence
 when the same id exists in both scopes, and Tuff reports that relationship in
 status output.
 
-## Documentation
-
-The documentation site is built with Starlight on Astro in `website/`:
-
-```sh
-cd website
-npm install
-npm run dev
-```
-
-Build the static docs site:
-
-```sh
-cd website
-npm run build
-```
-
-Start with:
-
-- [Intro](website/src/content/docs/index.mdx)
-- [When to Use Tuff](website/src/content/docs/usage-scenarios.md)
-- [Skills.sh and Vercel Skills Comparison](website/src/content/docs/comparison/vercel-skills.md)
-
 ## Install
 
 For the latest released version on macOS or Linux, use the install script:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/kannandreams/tuff/main/install.sh | sh
-```
-
-On macOS with Homebrew:
-
-```sh
-brew tap kannandreams/tuff
-brew install tuff
 ```
 
 From crates.io:
@@ -91,6 +61,13 @@ Or install the isolated CLI with uv:
 
 ```sh
 uv tool install tuffcli
+```
+
+On macOS with Homebrew:
+
+```sh
+brew tap kannandreams/tuff
+brew install tuff
 ```
 
 See the [latest GitHub release](https://github.com/kannandreams/tuff/releases/latest)
@@ -189,6 +166,39 @@ just run -- --help
 ```
 
 End users should run `tuff ...` directly.
+
+## Documentation
+
+The documentation site is built with Starlight on Astro in `website/`:
+
+```sh
+cd website
+npm install
+npm run dev
+```
+
+Build the static docs site:
+
+```sh
+cd website
+npm run build
+```
+
+Start with:
+
+- [Intro](website/src/content/docs/intro.mdx)
+- [When to Use Tuff](website/src/content/docs/usage-scenarios.md)
+- [Skills.sh and Vercel Skills Comparison](website/src/content/docs/comparison/vercel-skills.md)
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for local
+setup, checks, and contribution guidelines.
+
+## Code of Conduct
+
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). Please keep
+issues, discussions, and pull requests respectful and constructive.
 
 ## License
 
