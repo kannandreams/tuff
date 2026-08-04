@@ -9,5 +9,6 @@ dist/
 node_modules/
 .pnpm-store/
 target/
+tarpaulin-report.*
 website/dist/
 website/.astro/
