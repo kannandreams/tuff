@@ -70,6 +70,30 @@ cd ..
 The repository also provides optional `just` wrappers. Run `just` to see the
 available commands.
 
+## Branch names
+
+Tuff validates work-branch names with the local pre-commit configuration.
+Install the `pre-commit` tool, then enable the repository hook:
+
+```sh
+pre-commit install
+```
+
+Branches must use one of the supported types followed by `/` and a lowercase
+branch slug:
+
+```text
+feat/add-adapter
+feat/sdk-add-adapter
+docs/contributing-guide
+chore/update-deps
+```
+
+Supported types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
+`build`, `ci`, `chore`, and `revert`. Scopes are intentionally open, so names
+such as `sdk`, `cli`, `website`, or `deps` do not need to be registered first.
+The shared branches `main`, `master`, and `develop` are also allowed.
+
 ## Checks
 
 Before opening a pull request, run the checks relevant to your change. For a
