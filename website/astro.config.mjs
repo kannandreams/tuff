@@ -10,6 +10,7 @@ export default defineConfig({
     starlight({
       title: 'Tuff',
       description: 'Capability lifecycle management for coding agents.',
+      favicon: '/favicon.svg',
       customCss: ['./src/styles/custom.css'],
       social: [
         {
