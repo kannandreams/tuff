@@ -5,6 +5,8 @@
 # Tuff
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![crates.io](https://img.shields.io/crates/v/tuffcli.svg)](https://crates.io/crates/tuffcli)
+[![PyPI](https://img.shields.io/pypi/v/tuffcli.svg)](https://pypi.org/project/tuffcli/)
 [![Coverage](https://img.shields.io/badge/coverage-79%25-brightgreen)](https://github.com/kannandreams/tuff)
 
 Tuff is a CLI for managing project-owned agent capabilities: skills, tools,
