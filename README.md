@@ -1,207 +1,132 @@
+<p align="center"><img src="assets/tuff-readme-banner.png" alt="Tuff banner" width="1100" /></p>
+
+<h1 align="center">Tuff</h1>
+
+<p align="center"><strong>Make your coding-agent playbook reproducible.</strong></p>
+
+<p align="center">Install, version, diff, and update the skills, tools, hooks, and workflows that make your agents useful.</p>
+
 <p align="center">
-  <img src="assets/tuff-readme-banner.png" alt="Tuff banner" width="1100" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://crates.io/crates/tuffcli"><img src="https://img.shields.io/crates/v/tuffcli.svg" alt="crates.io" /></a>
+  <a href="https://pypi.org/project/tuffcli/"><img src="https://img.shields.io/pypi/v/tuffcli.svg" alt="PyPI" /></a>
 </p>
 
-# Tuff
+Agent capabilities quickly become part of your engineering infrastructure. But once skills and automation are copied across `.agents/`, `.claude/`, and `.cursor/`, teams lose track of where they came from, what changed, and whether every developer is running the same version.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![crates.io](https://img.shields.io/crates/v/tuffcli.svg)](https://crates.io/crates/tuffcli)
-[![PyPI](https://img.shields.io/pypi/v/tuffcli.svg)](https://pypi.org/project/tuffcli/)
-[![Coverage](https://img.shields.io/badge/coverage-79%25-brightgreen)](https://github.com/kannandreams/tuff)
+**Tuff turns that copy-paste into a managed lifecycle.** Capabilities stay as ordinary, project-owned files while Tuff records their source and baseline, emits harness-native output, exposes local drift, and makes upstream updates reviewable.
 
-Tuff is a CLI for managing project-owned agent capabilities: skills, tools,
-hooks, and workflows that teams load into coding harnesses such as Codex,
-Claude, Cursor, and others.
+## See it work in 60 seconds
 
-Tuff keeps capability files in the project while tracking the metadata around
-them: source, version, agent harness, scope, and a pristine install baseline.
-That makes local customization visible instead of turning it into an
-untracked copy.
-
-The core is content-agnostic. Capability content can live in the repository
-that owns it or in a separate pack repository. Tuff handles manifests,
-installation, validation, drift detection, diffs, updates, and agent-specific
-emission. The workspace contains dedicated Claude, Codex, Cursor, and Open
-Agents adapter crates; each owns its native output and compatibility data.
-
-## How the lifecycle works
-
-1. Create a new capability or add an existing one.
-2. Track it for one or more agent harnesses.
-3. Tuff records install identity in `tuff.lock` and keeps verified materialized
-   baselines in the disposable machine-local cache.
-4. Edit the project-owned files normally; `tuff list`, `tuff status`, and
-   `tuff diff` report drift.
-5. Use `tuff update` to accept intentional local changes or refresh from the
-   recorded source.
-
-Project and global scopes are supported. Project capabilities take precedence
-when the same id exists in both scopes, and Tuff reports that relationship in
-status output.
-
-## Install
-
-For the latest released version on macOS or Linux, use the install script:
+Install Tuff on macOS or Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/kannandreams/tuff/main/install.sh | sh
 ```
 
-From crates.io:
+Then run this inside a project:
 
 ```sh
-cargo install tuffcli
+# Initialize project state and create a tracked skill for two harnesses.
+tuff init
+tuff create skill release-checklist \
+  --agent open-agents \
+  --agent claude
+
+# Edit .agents/skills/release-checklist/SKILL.md, then review the change.
+tuff list
+tuff diff release-checklist
+tuff update release-checklist
+tuff check
 ```
 
-From PyPI:
+That creates native skill files in `.agents/` and `.claude/`, records each target in `tuff.lock`, and stores a pristine baseline for drift checks. Commit the capability files and lockfile so the whole team gets the same setup.
 
-```sh
-pip install tuffcli
+The `open-agents` target works with Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, Roo, Cline, and Windsurf. Tuff also ships dedicated adapters for Claude Code, Codex, and Cursor.
+
+## What changes with Tuff
+
+| Without Tuff | With Tuff |
+|---|---|
+| Agent files are copied between repos and machines. | Capabilities are created, adopted, or installed with a repeatable command. |
+| Local edits become invisible forks. | `tuff list` and `tuff diff` show drift from the recorded baseline. |
+| Every harness needs hand-maintained configuration. | Adapters emit the capability into each harness's native layout. |
+| Pulling an upstream update risks losing local changes. | `tuff diff --upstream` previews the change, and updates refuse to overwrite local drift unless you explicitly force them. |
+| CI cannot tell whether agent setup has changed. | `tuff check` validates tracked capabilities and fails on drift or missing files. |
+
+## One lifecycle for every capability
+
+| Capability | What it gives an agent |
+|---|---|
+| **Skill** | Reusable instructions, conventions, and domain context. |
+| **Tool** | Executable behavior with a clear contract. |
+| **Hook** | Automation triggered at meaningful agent events. |
+| **Workflow** | A composable sequence of capabilities. |
+
+All four use the same lifecycle:
+
+```text
+local files / git repository / existing agent assets
+                         │
+                    tuff create
+                      or tuff add
+                         │
+             ┌───────────┼───────────┐
+             ▼           ▼           ▼
+         .agents/    .claude/    .cursor/
+             └───────────┬───────────┘
+                         ▼
+             tracking metadata + baseline
+                         │
+              list → diff → update → check
 ```
 
-Or install the isolated CLI with uv:
+Tuff manages the lifecycle around these files; Git remains the source of truth for your repository, and your existing agent runtime continues to execute the capabilities.
+
+## Common workflows
 
 ```sh
-uv tool install tuffcli
+# Adopt an existing project skill without moving it.
+tuff add skill .agents/skills/security-review --agent open-agents
+
+# Install a capability from Git into multiple harnesses.
+tuff add skill https://github.com/owner/agent-capabilities security-review \
+  --agent open-agents \
+  --agent claude
+
+# Review and reconcile an upstream change.
+tuff outdated
+tuff diff security-review --upstream
+tuff update security-review --check
+tuff update security-review
 ```
 
-On macOS with Homebrew:
+Tuff supports project and global scopes. Project capabilities are designed to be committed with the repository; global capabilities are useful for personal capabilities shared across projects.
+
+## Other installation options
 
 ```sh
-brew tap kannandreams/tuff
+cargo install tuffcli       # crates.io
+uv tool install tuffcli     # PyPI, isolated environment
+pip install tuffcli         # PyPI
+
+brew tap kannandreams/tuff  # Homebrew
 brew install tuff
 ```
 
-See the [latest GitHub release](https://github.com/kannandreams/tuff/releases/latest)
-for release notes and platform artifacts.
-
-### Build from source
-
-From this repository:
-
-```sh
-cargo run -p tuffcli -- --help
-cargo run -p tuffcli -- --version
-```
-
-To install the CLI from this checkout while developing locally:
-
-```sh
-cargo install --path crates/tuff-cli
-tuff --version
-```
-
-The repository root is a virtual Cargo workspace, so `cargo install --path .`
-is not a valid install command. The CLI package lives at
-`crates/tuff-cli`.
-
-The repository requires a recent Rust toolchain with Cargo. There is currently
-no dependency on a separately installed JavaScript runtime for the CLI itself.
-
-## Test from another directory
-
-This is the closest local workflow to how an engineer would try Tuff after
-installing it:
-
-```sh
-cargo install --path crates/tuff-cli
-mkdir -p /tmp/tuff-smoke
-cd /tmp/tuff-smoke
-tuff --version
-tuff init
-tuff agent add open-agents
-tuff add /absolute/path/to/tuff/examples/skills/python-uv-default
-tuff list
-```
-
-From this repo, the same smoke test is wrapped as:
-
-```sh
-just smoke-install
-```
-
-## CLI usage
-
-```sh
-tuff
-tuff --version
-tuff init
-tuff agent add open-agents
-tuff add examples/skills/python-uv-default
-tuff list
-tuff diff python-uv-default
-tuff delete python-uv-default
-```
-
-Running `tuff` with no arguments shows the terminal banner and starter menu.
-
-`tuff init` creates `tuff.lock`, configures `open-agents` as the default, registers it, and scaffolds the standard `.agents/`
-directories, and installs the small `tuff-cli-guide` reference skill. It does
-not install third-party capabilities or create a user skill for you.
-
-Capability cleanup is explicit. Use `tuff delete <id>` for the configured
-default agent, or `tuff delete <id> -a <agent>` for a specific agent. Use
-`tuff untrack <id>` when the files should remain in place but no longer be
-managed by Tuff. `tuff agent remove <agent>`
-only unregisters an agent and does not remove capabilities.
-
-Set the default project agent with `tuff agent set-default <agent>`. Use
-`--global` to configure the default used by global operations. Explicit
-`-a/--agent` values always override the default.
-
-The CLI is built from the Rust crate in this repository, and `Cargo.lock` is
-committed for reproducible builds.
-
-The `examples/skills/python-uv-default` capability is a local demonstration,
-not a bundled standard pack. Production capabilities should live in separate
-pack repositories or in the repositories that use them.
-
-## Developer commands
-
-`just` is only a contributor convenience wrapper for this repo, not the user
-interface:
-
-```sh
-just setup
-just check
-just run -- --help
-```
-
-End users should run `tuff ...` directly.
+The package is named `tuffcli`; every installation method provides the `tuff` command.
 
 ## Documentation
 
-The documentation site is built with Starlight on Astro in `website/`:
-
-```sh
-cd website
-npm install
-npm run dev
-```
-
-Build the static docs site:
-
-```sh
-cd website
-npm run build
-```
-
-Start with:
-
-- [Intro](website/src/content/docs/intro.mdx)
-- [When to Use Tuff](website/src/content/docs/usage-scenarios.md)
-- [Skills.sh and Vercel Skills Comparison](website/src/content/docs/comparison/vercel-skills.md)
+- [Getting started](https://tuffcli.dev/getting-started/)
+- [When to use Tuff](https://tuffcli.dev/usage-scenarios/)
+- [CLI reference](https://tuffcli.dev/cli/)
+- [Lifecycle and drift detection](https://tuffcli.dev/concepts/lifecycle/)
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for local
-setup, checks, and contribution guidelines.
-
-## Code of Conduct
-
-This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). Please keep
-issues, discussions, and pull requests respectful and constructive.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for project guidelines and [AGENTS.md](AGENTS.md) for repository layout, development commands, and verification guidance. Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-Tuff is released under the MIT License. See [LICENSE](LICENSE).
+Tuff is released under the [MIT License](LICENSE).
