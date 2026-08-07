@@ -27,8 +27,14 @@ curl -fsSL https://raw.githubusercontent.com/kannandreams/tuff/main/install.sh |
 Then run this inside a project:
 
 ```sh
-# Initialize project state and create a tracked skill for two harnesses.
+# Initialize project state.
 tuff init
+
+# Install a real Rust skill directly from a public Git repository.
+tuff add skill https://github.com/pproenca/dot-skills rust-implement \
+  --agent open-agents
+
+# Create your own tracked skill for two harnesses.
 tuff create skill release-checklist \
   --agent open-agents \
   --agent claude
@@ -40,7 +46,7 @@ tuff update release-checklist
 tuff check
 ```
 
-That creates native skill files in `.agents/` and `.claude/`, records each target in `tuff.lock`, and stores a pristine baseline for drift checks. Commit the capability files and lockfile so the whole team gets the same setup.
+Tuff installs [`rust-implement`](https://github.com/pproenca/dot-skills/tree/master/skills/.curated/rust-implement) into `.agents/skills/`, records its Git revision, and creates your project skill in `.agents/` and `.claude/`. Each target is tracked in `tuff.lock` with a pristine baseline for drift checks. Commit the capability files and lockfile so the whole team gets the same setup.
 
 The `open-agents` target works with Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, Roo, Cline, and Windsurf. Tuff also ships dedicated adapters for Claude Code, Codex, and Cursor.
 
