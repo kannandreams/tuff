@@ -53,30 +53,31 @@ configuration files.
 
 ## Local setup
 
-Install a recent Rust toolchain and fetch dependencies:
+Install [mise](https://mise.jdx.dev/getting-started.html), then prepare the complete development environment from the repository root:
 
 ```sh
-cargo fetch
+mise run setup
+mise run cli -- --help
 ```
 
-The documentation site lives in `website/` and uses Node.js and npm:
+Mise installs the pinned Rust, Node.js, Python, Perl, `pre-commit`, and terminal-screenshot tooling declared in `mise.toml`. It also fetches Cargo dependencies, installs the website dependencies with npm, and enables the repository Git hook.
+
+The host still needs Git, a C compiler, and `make`; these are required before mise can clone the repository or compile Tuff's vendored native dependencies.
+
+If you do not use mise, install the versions declared in `mise.toml` and run the underlying setup commands directly:
 
 ```sh
-cd website
-npm install
-cd ..
+cargo fetch --locked
+npm --prefix website ci
+pre-commit install
 ```
-
-The repository also provides optional `just` wrappers. Run `just` to see the
-available commands.
 
 ## Branch names
 
-Tuff validates work-branch names with the local pre-commit configuration.
-Install the `pre-commit` tool, then enable the repository hook:
+Tuff validates work-branch names with the local pre-commit configuration. `mise run setup` installs the hook; it can also be installed again explicitly with:
 
 ```sh
-pre-commit install
+mise run hooks
 ```
 
 Branches must use one of the supported types followed by `/` and a lowercase
@@ -96,20 +97,21 @@ The shared branches `main`, `master`, and `develop` are also allowed.
 
 ## Checks
 
-Before opening a pull request, run the checks relevant to your change. For a
-full validation:
+Before opening a pull request, run the checks relevant to your change. The canonical full validation is:
+
+```sh
+mise run check
+```
+
+Use direct commands when a narrower check is sufficient:
 
 ```sh
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace
+npm --prefix website audit --audit-level=low
+npm --prefix website run check
 npm --prefix website run build
-```
-
-The equivalent repository convenience command is:
-
-```sh
-just check
 ```
 
 Build the docs site whenever documentation, Astro configuration, styles, or
@@ -135,7 +137,7 @@ should:
 For changes that affect installation, run the local smoke test as well:
 
 ```sh
-just smoke-install
+mise run smoke-install
 ```
 
 ## Pull requests

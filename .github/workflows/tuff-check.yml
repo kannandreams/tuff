@@ -9,19 +9,16 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      MISE_LOCKED: "1"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - name: Install development toolchain
+        uses: jdx/mise-action@v4.2.3
         with:
-          toolchain: stable
+          version: 2026.8.2
+          cache: true
 
-      - name: Build tuff
-        run: cargo build -p tuffcli --release
-
-      - name: Run tests
-        run: cargo test
-
-      - name: Validate capabilities
-        run: cargo run -p tuffcli -- check --json
+      - name: Run repository checks
+        run: mise run check

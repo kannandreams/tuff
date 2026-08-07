@@ -110,22 +110,27 @@ const docs = '/getting-started';
     pip: 'pip install tuffcli',
     install: 'curl -fsSL https://tuff.dev/install.sh | sh',
     cargo: 'cargo install tuffcli',
-  };
+  } as const;
 
-  document.querySelectorAll('[data-install-tabs]').forEach((group) => {
-    const command = group.querySelector('[data-install-command]');
-    const copy = group.querySelector('[data-copy-command]');
-    group.querySelectorAll('[data-install-tab]').forEach((tab) => {
+  type InstallMethod = keyof typeof commands;
+
+  document.querySelectorAll<HTMLElement>('[data-install-tabs]').forEach((group) => {
+    const command = group.querySelector<HTMLElement>('[data-install-command]');
+    const copy = group.querySelector<HTMLButtonElement>('[data-copy-command]');
+    if (!command || !copy) return;
+
+    group.querySelectorAll<HTMLElement>('[data-install-tab]').forEach((tab) => {
       tab.addEventListener('click', () => {
         group.querySelectorAll('[data-install-tab]').forEach((item) => {
           item.classList.toggle('is-active', item === tab);
           item.setAttribute('aria-selected', String(item === tab));
         });
-        command.textContent = commands[tab.dataset.installTab];
+        const method = tab.dataset.installTab as InstallMethod | undefined;
+        if (method && method in commands) command.textContent = commands[method];
       });
     });
     copy.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(command.textContent);
+      await navigator.clipboard.writeText(command.textContent ?? '');
       copy.textContent = 'copied';
       setTimeout(() => { copy.textContent = 'copy'; }, 1200);
     });

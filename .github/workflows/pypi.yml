@@ -24,11 +24,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build wheel
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@v1.51.0
         with:
           command: build
           target: ${{ matrix.target }}
-          args: --release --manifest-path crates/tuff-cli/Cargo.toml --bindings bin --out dist
+          rust-toolchain: 1.97.1
+          args: --locked --release --manifest-path crates/tuff-cli/Cargo.toml --bindings bin --out dist
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
