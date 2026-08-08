@@ -1,0 +1,107 @@
+min_version = "2025.12.12"
+
+[settings]
+lockfile = true
+
+[tools]
+rust = "1.97.1"
+node = "24.19.0"
+python = "3.14.2"
+perl = "5.44.0.0"
+pre-commit = "4.6.1"
+"github:charmbracelet/freeze" = "0.2.2"
+
+[tasks.deps]
+description = "Install project dependencies"
+run = [
+  "cargo fetch --locked",
+  "npm --prefix website ci",
+]
+
+[tasks.hooks]
+description = "Install repository Git hooks"
+run = "pre-commit install"
+
+[tasks.setup]
+description = "Prepare the development environment"
+run = [
+  { task = "deps" },
+  { task = "hooks" },
+]
+
+[tasks.cli]
+description = "Run the Tuff CLI from source"
+run = "cargo run -p tuffcli --"
+
+[tasks.test]
+description = "Run the Rust test suite"
+run = "cargo test"
+
+[tasks.lint]
+description = "Run Rust formatting and lint checks"
+run = [
+  "cargo fmt --check",
+  "cargo clippy --all-targets --all-features -- -D warnings",
+]
+
+[tasks.build-release]
+description = "Build the release CLI binary"
+run = "cargo build -p tuffcli --release"
+
+[tasks.capabilities-check]
+description = "Validate tracked Tuff capabilities"
+run = "cargo run -p tuffcli -- check --json"
+
+[tasks.security-audit]
+description = "Reject known npm dependency vulnerabilities"
+run = "npm --prefix website audit --audit-level=low"
+
+[tasks.docs-check]
+description = "Type-check the documentation site"
+run = "npm --prefix website run check"
+
+[tasks.docs-build]
+description = "Build the documentation site"
+run = "npm --prefix website run build"
+
+[tasks.docs-serve]
+description = "Serve the documentation site locally"
+depends = ["deps"]
+raw = true
+run = "npm --prefix website run dev"
+
+[tasks.docs-assets]
+description = "Regenerate terminal screenshots"
+run = "./scripts/generate-doc-screenshot.sh tuff-welcome.png -- cargo run -p tuffcli --quiet --"
+
+[tasks.smoke-install]
+description = "Exercise an installed CLI from a clean directory"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+cargo install --locked --path crates/tuff-cli
+
+smoke_dir="${TMPDIR:-/tmp}/tuff-smoke"
+rm -rf "$smoke_dir"
+mkdir -p "$smoke_dir"
+
+cd "$smoke_dir"
+tuff --version
+tuff init
+tuff add "$MISE_PROJECT_ROOT/examples/skills/python-uv-default"
+tuff list
+'''
+
+[tasks.check]
+description = "Run the full repository check"
+run = [
+  { task = "deps" },
+  { task = "lint" },
+  { task = "test" },
+  { task = "build-release" },
+  { task = "security-audit" },
+  { task = "docs-check" },
+  { task = "docs-build" },
+  { task = "capabilities-check" },
+]

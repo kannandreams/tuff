@@ -3,97 +3,56 @@ title: Development
 description: Contributor setup, checks, and local docs workflows.
 ---
 
-Tuff is a Rust CLI project managed with Cargo.
-
-The Starlight/Astro docs use Node 18 or newer and npm.
+Tuff uses mise to provision the development toolchain and run project tasks. Install [mise](https://mise.jdx.dev/getting-started.html) before working in the repository.
 
 ## Setup
 
+From the repository root:
+
 ```sh frame="terminal"
-cargo fetch
-npm ci
+mise run setup
+mise run cli -- --help
 ```
 
-## Run tests
+Mise installs the pinned Rust, Node.js, Python, Perl, `pre-commit`, and terminal-screenshot tools declared in `mise.toml`. The setup task also fetches Cargo dependencies, installs website dependencies with `npm ci`, and enables the repository Git hook.
+
+The host still needs Git, a C compiler, and `make`; these are required before mise can clone the repository or compile Tuff's vendored native dependencies.
+
+## Common tasks
+
+| Command | Purpose |
+|---|---|
+| `mise run cli -- --help` | Run the CLI from source and forward arguments to `tuff` |
+| `mise run test` | Run the Rust test suite |
+| `mise run lint` | Check Rust formatting and Clippy warnings |
+| `mise run security-audit` | Reject known npm dependency vulnerabilities |
+| `mise run check` | Run the complete local and CI verification path |
+| `mise run smoke-install` | Install the current checkout and exercise it from a clean directory |
+| `mise run docs-check` | Type-check the Astro documentation site |
+| `mise run docs-build` | Build the documentation site |
+| `mise run docs-serve` | Serve the documentation site locally |
+| `mise run docs-assets` | Regenerate terminal screenshots with `freeze` |
+
+## Direct commands
+
+Mise is the canonical entry point, but the underlying commands remain available for focused work:
 
 ```sh frame="terminal"
-cargo test
-```
-
-## Run lint
-
-```sh frame="terminal"
+cargo test -p tuffcli
+cargo test -p tuff-core
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
+npm --prefix website run check
+npm --prefix website run build
 ```
-
-## Run all checks
-
-```sh frame="terminal"
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
-```
-
-If `just` is installed:
-
-```sh frame="terminal"
-just check
-```
-
-## Smoke test an installed binary
-
-Use this flow to test Tuff the way a user would: install the current checkout
-as a binary, move to a separate directory, and run `tuff` directly.
-
-```sh frame="terminal"
-cargo install --path crates/tuff-cli
-mkdir -p /tmp/tuff-smoke
-cd /tmp/tuff-smoke
-tuff --version
-tuff init
-tuff add /absolute/path/to/tuff/examples/skills/python-uv-default
-tuff list
-```
-
-From this repo, `just smoke-install` runs the same flow using the skill example
-from the current checkout.
-
-## Build docs
-
-```sh frame="terminal"
-npm run build
-```
-
-## Serve docs locally
-
-```sh frame="terminal"
-npm run dev
-```
-
-If `just` is installed:
-
-```sh frame="terminal"
-just docs-serve
-```
-
-CLI screenshots used in the docs can be generated with:
-
-```sh frame="terminal"
-just docs-assets
-```
-
-This uses `freeze` to capture real command output into `website/public/img/generated/`,
-so the same approach can be reused anywhere the docs benefit from a terminal screenshot
-instead of inline text.
 
 ## Project structure
 
 ```text
-crates/tuff-cli/  CLI commands and integration tests
-crates/tuff-core/ lifecycle engine and adapter contract
+crates/tuff-cli/       CLI commands, packaging, and integration tests
+crates/tuff-core/      lifecycle engine and adapter contract
+crates/tuff-hooks-spec/ canonical hook events and compatibility types
 crates/tuff-adapter-*/ native harness adapters
-tests/             shared test assets when present
-examples/          runnable capability examples
-docs/              documentation source files
+examples/              runnable capability examples
+website/               Astro/Starlight documentation site
 ```

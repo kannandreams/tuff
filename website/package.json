@@ -9,13 +9,22 @@
     "check": "astro check"
   },
   "dependencies": {
-    "astro": "^5.7.13",
-    "@astrojs/starlight": "^0.34.3"
+    "@astrojs/starlight": "^0.41.7",
+    "astro": "^7.2.0"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=18.17"
+    "node": ">=24.19 <25",
+    "npm": ">=11.16"
+  },
+  "packageManager": "npm@11.17.0",
+  "allowScripts": {
+    "dom-serializer": false,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "style-to-js": false
   }
 }

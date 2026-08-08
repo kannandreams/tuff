@@ -15,50 +15,56 @@ The repository root is a virtual Cargo workspace. The CLI package is `tuffcli`, 
 
 ## Setup and local use
 
-Use a recent stable Rust toolchain. Documentation development requires Node.js 18.17 or newer and npm. `just` is optional but provides the standard wrappers:
+Install [mise](https://mise.jdx.dev/getting-started.html), then let the repository provision its pinned Rust, Node.js, Python, Perl, `pre-commit`, and `freeze` toolchain:
 
 ```sh
-just setup
-just run -- --help
+mise run setup
+mise run cli -- --help
 ```
 
-Without `just`:
+Mise installs configured tools automatically before running a task. To install only the toolchain without project dependencies or Git hooks, run `mise install`.
+
+The host still needs Git, a C compiler, and `make`; these are required before mise can clone the repository or compile Tuff's vendored native dependencies.
+
+Without mise, install the tool versions declared in `mise.toml` and run the underlying commands directly:
 
 ```sh
-cargo fetch
-npm --prefix website install
+cargo fetch --locked
+npm --prefix website ci
+pre-commit install
 cargo run -p tuffcli -- --help
 ```
 
-To install the current checkout, use `cargo install --path crates/tuff-cli`. `cargo install --path .` does not work because the root has no package.
+To install the current checkout, use `cargo install --locked --path crates/tuff-cli`. `cargo install --path .` does not work because the root has no package.
 
 ## Verification
 
 Run the narrowest checks that cover the change. The full repository check is:
 
 ```sh
-just check
+mise run check
 ```
 
 Equivalent commands and useful targeted checks:
 
 ```sh
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
-cargo test -p tuffcli
-cargo test -p tuff-core
-npm --prefix website run check
-npm --prefix website run build
+mise run lint
+mise run test
+mise run security-audit
+mise run docs-check
+mise run docs-build
+mise run capabilities-check
 ```
+
+Direct Cargo and npm commands remain valid when a narrower check is more appropriate, including `cargo test -p tuffcli`, `cargo test -p tuff-core`, and `npm --prefix website run build`.
 
 For installation or end-to-end CLI changes, also run:
 
 ```sh
-just smoke-install
+mise run smoke-install
 ```
 
-Serve the documentation with `just docs-serve`. Regenerate terminal screenshots with `just docs-assets` when their underlying CLI output changes.
+Serve the documentation with `mise run docs-serve`. Regenerate terminal screenshots with `mise run docs-assets` when their underlying CLI output changes.
 
 ## Change guidelines
 

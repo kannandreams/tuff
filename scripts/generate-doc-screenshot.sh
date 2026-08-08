@@ -22,7 +22,7 @@ fi
 
 if ! command -v freeze >/dev/null 2>&1; then
   echo "error: freeze is not installed." >&2
-  echo "install it with: brew install charmbracelet/tap/freeze" >&2
+  echo "run this command through mise: mise run docs-assets" >&2
   exit 1
 fi
 
