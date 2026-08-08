@@ -673,7 +673,9 @@ dialog[aria-label='Search'] {
 }
 
 .sl-markdown-content table code {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 :root[data-theme='light'] .sl-markdown-content table {
@@ -862,6 +864,13 @@ dialog[aria-label='Search'] {
 :root[data-theme='light'] .sl-markdown-content td,
 :root[data-theme='light'] .sl-markdown-content th {
   color: var(--sl-color-text);
+}
+
+:root[data-theme='light'] .sl-markdown-content table thead,
+:root[data-theme='light'] .sl-markdown-content table thead th {
+  background: #F2F1EE !important;
+  border-color: #D9D9D0 !important;
+  color: #111315 !important;
 }
 
 :root[data-theme='light'] nav.sidebar a,
