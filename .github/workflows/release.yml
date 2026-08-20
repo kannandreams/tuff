@@ -81,10 +81,12 @@ jobs:
             sha256sum x86_64-unknown-linux-gnu/tuff-x86_64-unknown-linux-gnu.tar.gz | awk '{print $1 "  tuff-x86_64-unknown-linux-gnu.tar.gz"}'
           } > checksums.txt
           cat checksums.txt
+          test "$(wc -l < checksums.txt)" -eq 3
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: true
           files: |
             x86_64-apple-darwin/tuff-x86_64-apple-darwin.tar.gz
             aarch64-apple-darwin/tuff-aarch64-apple-darwin.tar.gz
