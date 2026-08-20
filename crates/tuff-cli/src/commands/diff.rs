@@ -1,4 +1,3 @@
-use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
@@ -286,8 +285,7 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
 }
 
 fn style_diff(diff: &str) -> String {
-    let color = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
-    if !color {
+    if !super::use_color() {
         return diff.to_string();
     }
     diff.split_inclusive('\n')

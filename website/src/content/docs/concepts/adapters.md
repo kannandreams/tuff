@@ -88,13 +88,15 @@ supplied with `--hook-file` keep their harness event names and are merged as-is.
 
 | Event | `open-agents` | `claude` | `codex` | `cursor` |
 |---|---|---|---|---|
-| `before_finish` | Yes | Yes | Yes | Partial, rendered as `stop` |
+| `before_finish` | Yes | Partial, rendered as `Stop` | Yes | Partial, rendered as `stop` |
 | `after_save` | Yes | No | Yes | No |
-| `pre_tool_use` | Yes, rendered as `pre_tool_execution` | No | Partial, rendered as `pre_tool_execution` | Yes, rendered as `preToolUse` |
-| `post_tool_use` | Yes, rendered as `post_tool_execution` | Yes, rendered as `post_tool_execution` | Partial, rendered as `post_tool_execution` | Yes, rendered as `postToolUse` |
+| `pre_tool_use` | Yes, rendered as `pre_tool_execution` | Yes, rendered as `PreToolUse` | Partial, rendered as `pre_tool_execution` | Yes, rendered as `preToolUse` |
+| `post_tool_use` | Yes, rendered as `post_tool_execution` | Yes, rendered as `PostToolUse` | Partial, rendered as `post_tool_execution` | Yes, rendered as `postToolUse` |
 | `session_start` | No | Yes, rendered as `SessionStart` | No | Yes, rendered as `sessionStart` |
-| `session_end` | No | No | No | Yes, rendered as `sessionEnd` |
-| `stop` | No | No | No | Yes, rendered as `stop` |
+| `session_end` | No | Yes, rendered as `SessionEnd` | No | Yes, rendered as `sessionEnd` |
+| `stop` | No | Yes, rendered as `Stop` | No | Yes, rendered as `stop` |
+
+Claude's `before_finish` mapping is partial because Claude's native `Stop` event runs after the main agent finishes responding and can request continuation; it is not a general pre-finish boundary. Claude's native `FileChanged` event requires watched filenames or paths, which the standard `after_save` hook cannot currently express, so `after_save` remains unsupported for that adapter.
 
 Codex and Cursor have dedicated compatibility rows even when their output roots overlap with the
 generic Open Agents adapter. Cursor renders native names such as `sessionStart`, `preToolUse`,

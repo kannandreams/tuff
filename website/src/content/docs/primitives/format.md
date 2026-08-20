@@ -21,10 +21,7 @@ Tuff infers capability type at `tuff add` time from:
 2. Parent directory name: `skills/` or `skill/` → skill, `tools/` or `tool/` → tool
 3. For git repositories: the cloned directory structure
 
-When installing from a git URL, `--name` identifies the capability folder
-inside the repository. Tuff searches both plural and singular directory
-names (`skills/<name>`, `skill/<name>`, tools/<name>`, `tool/<name>`) plus
-the repo root.
+When installing from a git URL, `--name` identifies the capability folder inside the repository. Tuff searches both plural and singular directory names (`skills/<name>`, `skill/<name>`, tools/<name>`, `tool/<name>`) plus the repo root. For a local auto-detected source, `--name` instead overrides the installed capability ID used in target paths and `tuff.lock`.
 
 ## Installed output
 

@@ -170,8 +170,19 @@ than the nested `hooks` array used by Claude and Open Agents.
 
 ### Claude (`claude`)
 
-For native hook fragments, Tuff reads the event names from the fragment and merges them into the
-adapter's settings file.
+Tuff-standard Claude hooks use Claude Code's case-sensitive native event names:
+
+| Canonical event | Claude event | Coverage |
+|---|---|---|
+| `session_start` | `SessionStart` | Full |
+| `session_end` | `SessionEnd` | Full |
+| `pre_tool_use` | `PreToolUse` | Full |
+| `post_tool_use` | `PostToolUse` | Full |
+| `before_finish` | `Stop` | Partial |
+| `stop` | `Stop` | Full |
+| `after_save` | — | Unsupported |
+
+The `before_finish` mapping is partial because Claude's `Stop` event runs after the main agent finishes responding and can request continuation. Claude's `FileChanged` hook requires watched filenames or paths, which Tuff's standard `after_save` model cannot currently express. For native hook fragments, Tuff reads the event names from the fragment and merges them into the adapter's settings file.
 
 Use the compatibility commands to inspect what Tuff-standard hook events can render where:
 

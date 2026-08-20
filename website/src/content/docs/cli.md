@@ -122,6 +122,12 @@ tuff add --agent open-agents .agents/skills/my-skill
 tuff add --agent claude .agents/skills/my-skill
 ```
 
+Override the installed ID for a local source with `--name`; the overridden ID is used for emitted paths and the lockfile entry:
+
+```sh frame="terminal"
+tuff add ./path/to/capability --name team-capability --agent open-agents
+```
+
 Install from a git repository:
 
 ```sh frame="terminal"
@@ -160,6 +166,7 @@ tuff hooks check-portability pre-commit-lint --target claude
 |---|---|
 | `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
 | `-g, --global` | Install to global user scope |
+| `-n, --name <id>` | Override the installed capability ID for an auto-detected local source |
 | `--hook-file <path>` | Hook-only native settings fragment, relative to the hook source directory |
 
 The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
@@ -326,8 +333,7 @@ tuff diff <id> --upstream
 tuff diff <id> -a claude
 ```
 
-When color is enabled, diff headers are cyan, additions are green, and deletions are red,
-matching the usual Git diff convention. Set `NO_COLOR=1` for plain output.
+When standard output is a terminal, diff headers are cyan, additions are green, and deletions are red, matching the usual Git diff convention. Piped or captured output is plain automatically; set `NO_COLOR=1` to disable color explicitly.
 
 ### `tuff update`
 
@@ -361,6 +367,7 @@ Validate installed capabilities for CI. Exits 1 on any failure.
 
 ```sh frame="terminal"
 tuff check                    # check all capabilities
+tuff check --global           # check global capabilities only
 tuff check --json             # machine-readable JSON output
 tuff check --ignore-failures  # report failures but exit 0
 ```

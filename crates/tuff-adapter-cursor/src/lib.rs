@@ -5,7 +5,7 @@ use tuff_hooks_spec::{
 };
 
 use tuff_core::adapter::AgentAdapter;
-use tuff_core::manifest::{CapabilityType, HookConfig};
+use tuff_core::manifest::CapabilityType;
 use tuff_core::{
     error::{Result, TuffError},
     lockfile,
@@ -88,7 +88,7 @@ pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
         CompatibilityEntry {
             event: HookEvent::BeforeFinish,
             native_event: Some("stop"),
-            aliases: &["stop"],
+            aliases: &[],
             coverage: CoverageLevel::Partial,
             scope: &["agent completion"],
             caveat: Some("Cursor stop can request continuation rather than block a prior action."),
@@ -136,7 +136,7 @@ pub fn merge_hook_fragment(
         .entry("hooks")
         .or_insert_with(|| serde_json::json!({}))
         .as_object_mut()
-        .ok_or_else(|| TuffError::new(".agents/hook.json field 'hooks' must be an object"))?;
+        .ok_or_else(|| TuffError::new(".cursor/hooks.json field 'hooks' must be an object"))?;
     for (event, additions) in fragment_hooks {
         let additions = additions
             .as_array()
@@ -260,14 +260,6 @@ impl AgentAdapter for Cursor {
 
     fn hook_filename(&self) -> &'static str {
         "run.sh"
-    }
-
-    fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>> {
-        Ok(format!(
-            "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
-            hook_cfg.working_directory, hook_cfg.command
-        )
-        .into_bytes())
     }
 
     fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value {
