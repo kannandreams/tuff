@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::Path;
 
-use tabled::Tabled;
-
 use crate::error::Result;
 use crate::lockfile::{self};
 use crate::manifest::{CapabilityType, load_manifest};
@@ -11,21 +9,13 @@ use crate::manifest::{CapabilityType, load_manifest};
 use super::{home_dir_opt, render_table, short_sha};
 use super::{style_capability_type, style_drift_status};
 
-#[derive(Tabled)]
 struct ListRow {
-    #[tabled(rename = "ID")]
     id: String,
-    #[tabled(rename = "TYPE")]
     capability_type: CapabilityType,
-    #[tabled(rename = "VERSION")]
     version: String,
-    #[tabled(rename = "SCOPE")]
     scope: String,
-    #[tabled(rename = "AGENT")]
     target: String,
-    #[tabled(rename = "STATUS")]
     status: String,
-    #[tabled(rename = "PATH")]
     path: String,
 }
 

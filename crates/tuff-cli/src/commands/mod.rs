@@ -38,7 +38,7 @@ use crate::manifest::CapabilityType;
 // ── Display utilities (used by multiple submodules) ─────────────────────────
 
 pub(crate) fn use_color() -> bool {
-    std::env::var_os("NO_COLOR").is_none()
+    crate::display::use_color()
 }
 
 pub(crate) fn paint(text: &str, code: &str) -> String {

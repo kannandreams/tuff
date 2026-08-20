@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use tabled::Tabled;
-
 use crate::error::Result;
 use crate::git;
 use crate::lockfile;
@@ -9,19 +7,12 @@ use crate::manifest::CapabilityType;
 
 use super::{home_dir_opt, render_table, short_sha, style_outdated_status};
 
-#[derive(Tabled)]
 struct OutdatedRow {
-    #[tabled(rename = "ID")]
     id: String,
-    #[tabled(rename = "TYPE")]
     capability_type: CapabilityType,
-    #[tabled(rename = "AGENT")]
     target: String,
-    #[tabled(rename = "CURRENT")]
     current: String,
-    #[tabled(rename = "LATEST")]
     latest: String,
-    #[tabled(rename = "STATUS")]
     status: String,
 }
 

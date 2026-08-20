@@ -115,6 +115,16 @@ pub struct ResolvedCapability {
     pub kind: CapabilityKind,
 }
 
+#[derive(Serialize)]
+struct WorkflowDocument<'a> {
+    id: &'a str,
+    version: &'a str,
+    #[serde(rename = "type")]
+    capability_type: CapabilityType,
+    description: &'a str,
+    workflow: &'a crate::manifest::WorkflowConfig,
+}
+
 pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapability> {
     let source_files = manifest.read_source_contents_with_names()?;
     let kind =
@@ -167,7 +177,9 @@ pub trait AgentAdapter {
     fn hook_settings_relpath(&self) -> &'static str;
     fn scaffold_hook_event(&self) -> &'static str;
     fn hook_filename(&self) -> &'static str;
-    fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>>;
+    fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>> {
+        render_hook_script(hook_cfg)
+    }
     fn render_standard_hook(&self, context: HookRenderContext<'_>) -> Result<HookRenderPlan> {
         let matrix = self.hook_compatibility();
         let Some(entry) = matrix.find_event(&context.hook.event) else {
@@ -526,20 +538,11 @@ pub trait AgentAdapter {
             .join(&capability.id)
             .join("workflow.toml");
 
-        let mut content = format!(
-            "id = \"{}\"\nversion = \"{}\"\ntype = \"workflow\"\ndescription = \"{}\"\n",
-            capability.id, capability.version, capability.description
-        );
-        for req in &wf.requires {
-            content.push_str(&format!(
-                "[[workflow.requires]]\nid = \"{}\"\ntype = \"{}\"\n",
-                req.id, req.capability_type
-            ));
-        }
+        let content = serialize_workflow(capability, wf)?;
 
         Ok(vec![PlannedFile::new(
             relative_or_absolute_fs(&target_path, repo_root),
-            content.into_bytes(),
+            content,
         )])
     }
 
@@ -582,6 +585,42 @@ pub trait AgentAdapter {
     }
 }
 
+fn render_hook_script(hook_cfg: &HookConfig) -> Result<Vec<u8>> {
+    let working_directory = shell_single_quote(&hook_cfg.working_directory)?;
+    let command = shell_single_quote(&hook_cfg.command)?;
+    Ok(format!(
+        "#!/usr/bin/env bash\nset -euo pipefail\ncd -- {working_directory}\nexec bash -euo pipefail -c {command}\n"
+    )
+    .into_bytes())
+}
+
+fn shell_single_quote(value: &str) -> Result<String> {
+    if value.contains('\0') {
+        return Err(TuffError::new(
+            "hook working directory and command cannot contain NUL bytes",
+        ));
+    }
+    Ok(format!("'{}'", value.replace('\'', "'\"'\"'")))
+}
+
+fn serialize_workflow(
+    capability: &ResolvedCapability,
+    workflow: &crate::manifest::WorkflowConfig,
+) -> Result<Vec<u8>> {
+    let document = WorkflowDocument {
+        id: &capability.id,
+        version: &capability.version,
+        capability_type: capability.capability_type,
+        description: &capability.description,
+        workflow,
+    };
+    let mut content = toml::to_string_pretty(&document)?;
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    Ok(content.into_bytes())
+}
+
 fn path_is_under(path: &Path, root: &Path) -> bool {
     let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -613,4 +652,93 @@ pub fn replace_hook_dir_placeholder(
 
 fn relative_or_absolute_fs(path: &Path, repo_root: &Path) -> String {
     crate::lockfile::relative_or_absolute_fs(path, repo_root)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manifest::{Requirement, WorkflowConfig};
+
+    #[cfg(unix)]
+    #[test]
+    fn hook_script_preserves_shell_sensitive_values() {
+        use std::process::Command;
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let working_directory = temp.path().join("directory with ' quote");
+        std::fs::create_dir(&working_directory).expect("create working directory");
+        let hook = HookConfig {
+            event: "stop".to_string(),
+            command: "printf '%s\\n' 'safe; $HOME `literal`' > result.txt".to_string(),
+            working_directory: working_directory.to_string_lossy().into_owned(),
+        };
+        let script_path = temp.path().join("run.sh");
+        std::fs::write(
+            &script_path,
+            render_hook_script(&hook).expect("render script"),
+        )
+        .expect("write script");
+
+        let syntax = Command::new("bash")
+            .arg("-n")
+            .arg(&script_path)
+            .status()
+            .expect("check script syntax");
+        assert!(syntax.success());
+        let executed = Command::new("bash")
+            .arg(&script_path)
+            .status()
+            .expect("execute script");
+        assert!(executed.success());
+        assert_eq!(
+            std::fs::read_to_string(working_directory.join("result.txt"))
+                .expect("read command output"),
+            "safe; $HOME `literal`\n"
+        );
+    }
+
+    #[test]
+    fn hook_script_rejects_nul_bytes() {
+        let hook = HookConfig {
+            event: "stop".to_string(),
+            command: "printf '\0'".to_string(),
+            working_directory: ".".to_string(),
+        };
+
+        assert!(render_hook_script(&hook).is_err());
+    }
+
+    #[test]
+    fn workflow_serialization_escapes_manifest_values() {
+        let workflow = WorkflowConfig {
+            requires: vec![Requirement {
+                id: "dependency\"\\name".to_string(),
+                capability_type: CapabilityType::Skill,
+            }],
+        };
+        let capability = ResolvedCapability {
+            id: "workflow\"id".to_string(),
+            capability_type: CapabilityType::Workflow,
+            version: "1.0.0".to_string(),
+            description: "first line\nsecond \"line\" \\ value".to_string(),
+            source_files: Vec::new(),
+            source_dir: PathBuf::new(),
+            kind: CapabilityKind::Workflow {
+                workflow: workflow.clone(),
+            },
+        };
+
+        let bytes = serialize_workflow(&capability, &workflow).expect("serialize workflow");
+        let parsed: toml::Value = toml::from_slice(&bytes).expect("parse emitted workflow");
+
+        assert_eq!(parsed["id"].as_str(), Some("workflow\"id"));
+        assert_eq!(
+            parsed["description"].as_str(),
+            Some("first line\nsecond \"line\" \\ value")
+        );
+        assert_eq!(
+            parsed["workflow"]["requires"][0]["id"].as_str(),
+            Some("dependency\"\\name")
+        );
+    }
 }

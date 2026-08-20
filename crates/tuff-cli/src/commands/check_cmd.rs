@@ -4,8 +4,13 @@ use crate::error::Result;
 
 use super::paint;
 
-pub fn cmd_check(repo_root: &Path, json: bool, ignore_failures: bool, _global: bool) -> Result<()> {
-    let outcome = crate::check::run_checks(repo_root)?;
+pub fn cmd_check(repo_root: &Path, json: bool, ignore_failures: bool, global: bool) -> Result<()> {
+    let scope = if global {
+        crate::check::CheckScope::Global
+    } else {
+        crate::check::CheckScope::ProjectAndGlobal
+    };
+    let outcome = crate::check::run_checks(repo_root, scope)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&outcome)?);

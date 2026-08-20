@@ -96,12 +96,12 @@ pub struct HookConfig {
     pub working_directory: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowConfig {
     pub requires: Vec<Requirement>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Requirement {
     pub id: String,
     #[serde(rename = "type")]

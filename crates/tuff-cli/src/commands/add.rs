@@ -141,16 +141,20 @@ fn cmd_add_local(
     target_ids: &[String],
     project_root: &Path,
     capability_type: Option<&str>,
-    _name: Option<&str>,
+    name: Option<&str>,
     hook_file: Option<&Path>,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability_path);
     let parsed_type = capability_type.and_then(CapabilityType::parse);
     let inferred = infer_from_path(&capability_dir);
     let resolved_type = parsed_type.or(Some(inferred.0));
-    let manifest = load_or_synthetic_manifest(&capability_dir, resolved_type)?;
+    let mut manifest = load_or_synthetic_manifest(&capability_dir, resolved_type)?;
+    if let Some(name) = name {
+        validate_capability_name(name)?;
+        manifest.id = name.to_string();
+    }
     let resolved = if resolved_type == Some(CapabilityType::Hook) && hook_file.is_some() {
-        resolve_native_hook_capability(&capability_dir, _name, "0.1.0", hook_file)?
+        resolve_native_hook_capability(&capability_dir, name, "0.1.0", hook_file)?
     } else {
         resolve_capability(&manifest)?
     };
@@ -174,6 +178,15 @@ fn cmd_add_local(
     }
 
     install_capability(install_root, scope, &resolved, &manifest, target_ids, None)
+}
+
+fn validate_capability_name(name: &str) -> Result<()> {
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
+        return Err(TuffError::new(
+            "capability name must be a non-empty single path component",
+        ));
+    }
+    Ok(())
 }
 
 fn load_or_synthetic_manifest(
@@ -542,6 +555,13 @@ pub(crate) fn install_capability(
                     )));
                 }
             }
+        }
+    }
+
+    if matches!(capability.kind, CapabilityKind::Tool { .. }) {
+        for adapter in &adapters {
+            let mcp_path = install_root.join(adapter.mcp_config_relpath());
+            tuff_core::mcp::validate_config(&mcp_path)?;
         }
     }
 

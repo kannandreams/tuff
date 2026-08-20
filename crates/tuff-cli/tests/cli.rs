@@ -1046,6 +1046,70 @@ fn add_global_creates_lockfile_and_emits_to_home() {
 }
 
 #[test]
+fn check_global_excludes_modified_project_capabilities() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let primitive = make_primitive(project.path(), "project-skill");
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["init", "--global"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--name",
+            "global-skill",
+            "--agent",
+            "open-agents",
+            "--global",
+        ])
+        .assert()
+        .success();
+
+    fs::write(
+        project.path().join(".agents/skills/project-skill/SKILL.md"),
+        "# Modified\n",
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["check", "--global"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("global-skill"))
+        .stdout(predicate::str::contains("project-skill").not());
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("check")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("project-skill"))
+        .stdout(predicate::str::contains("modified"));
+}
+
+#[test]
 fn list_shows_scope_column() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
@@ -1238,6 +1302,41 @@ fn add_tool_installs_and_emits() {
 }
 
 #[test]
+fn local_add_name_overrides_manifest_id() {
+    let temp = TempDir::new().unwrap();
+    let primitive = make_primitive(temp.path(), "manifest-name");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--name",
+            "installed-name",
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("installed installed-name"));
+
+    assert!(
+        temp.path()
+            .join(".agents/skills/installed-name/SKILL.md")
+            .is_file()
+    );
+    assert!(!temp.path().join(".agents/skills/manifest-name").exists());
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.capabilities.contains_key("installed-name"));
+    assert!(!lock.capabilities.contains_key("manifest-name"));
+}
+
+#[test]
 fn add_tool_rejects_invalid_schema() {
     let temp = TempDir::new().unwrap();
     let primitive = temp.path().join("bad-tool");
@@ -1376,6 +1475,45 @@ fn add_mcp_tool_registers_mcp_entry() {
 }
 
 #[test]
+fn add_mcp_tool_rejects_malformed_config_before_writing_capability() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+    let manifest_path = tool.join("tuff.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    let mcp_path = temp.path().join(".agents/mcp.json");
+    fs::create_dir_all(mcp_path.parent().unwrap()).unwrap();
+    let original = "{ malformed MCP config\n";
+    fs::write(&mcp_path, original).unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid MCP config"))
+        .stderr(predicate::str::contains(".agents/mcp.json"));
+
+    assert_eq!(fs::read_to_string(&mcp_path).unwrap(), original);
+    assert!(!temp.path().join(".agents/tools/scan-tool").exists());
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    assert!(!lock.capabilities.contains_key("scan-tool"));
+}
+
+#[test]
 fn list_filter_by_primitive_kind() {
     let temp = TempDir::new().unwrap();
     let skill = make_primitive(temp.path(), "my-skill");
@@ -1404,7 +1542,7 @@ fn list_filter_by_primitive_kind() {
         .assert()
         .success()
         .stdout(predicate::str::contains("my-tool"))
-        .stdout(predicate::str::contains("\u{1b}[35mtool\u{1b}[0m"))
+        .stdout(predicate::str::contains("\u{1b}[").not())
         .stdout(predicate::str::contains("my-skill").not());
 
     tuff()
@@ -1706,6 +1844,81 @@ fn add_hook_renders_canonical_event_to_native_event() {
             .as_deref(),
         Some("pre_tool_use")
     );
+}
+
+#[test]
+fn claude_hook_matrix_renders_exact_native_event_names() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let cases = [
+        ("session-start", "session_start"),
+        ("session-end", "session_end"),
+        ("pre-tool", "pre_tool_use"),
+        ("post-tool", "post_tool_use"),
+        ("before-finish", "before_finish"),
+        ("stop", "stop"),
+    ];
+    for (id, canonical_event) in cases {
+        let source_root = temp.path().join(format!("source-{id}"));
+        let hook = make_hook_primitive_with_event(&source_root, id, canonical_event);
+        tuff()
+            .current_dir(temp.path())
+            .args(["add", hook.to_str().unwrap(), "--agent", "claude"])
+            .assert()
+            .success();
+    }
+
+    let settings: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(temp.path().join(".claude/settings.json")).unwrap(),
+    )
+    .unwrap();
+    let hooks = settings["hooks"].as_object().expect("Claude hooks object");
+    for native_event in [
+        "SessionStart",
+        "SessionEnd",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+    ] {
+        assert!(
+            hooks
+                .get(native_event)
+                .is_some_and(|value| value.is_array()),
+            "missing Claude native event {native_event}"
+        );
+    }
+    assert_eq!(hooks.len(), 5, "unexpected Claude hook event: {hooks:?}");
+    for obsolete_event in ["before_finish", "post_tool_execution", "pre_tool_execution"] {
+        assert!(!hooks.contains_key(obsolete_event));
+    }
+}
+
+#[test]
+fn cursor_stop_uses_canonical_row_instead_of_before_finish_alias() {
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive_with_event(temp.path(), "stop-policy", "stop");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--agent", "cursor"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("partial compatibility").not());
+
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let managed = &lock.capabilities["stop-policy"].targets["cursor"].managed_hooks[0];
+    assert_eq!(managed.canonical_event.as_deref(), Some("stop"));
+    assert_eq!(managed.event, "stop");
 }
 
 #[test]
@@ -2290,7 +2503,7 @@ fn hooks_check_portability_reports_target_coverage() {
         .success()
         .stdout(predicate::str::contains("before_finish"))
         .stdout(predicate::str::contains("claude"))
-        .stdout(predicate::str::contains("full"));
+        .stdout(predicate::str::contains("partial"));
 }
 
 #[test]

@@ -5,7 +5,7 @@ use tuff_hooks_spec::{
 };
 
 use tuff_core::adapter::AgentAdapter;
-use tuff_core::manifest::{CapabilityType, HookConfig};
+use tuff_core::manifest::CapabilityType;
 use tuff_core::{
     error::{Result, TuffError},
     lockfile,
@@ -277,14 +277,6 @@ impl AgentAdapter for OpenAgents {
 
     fn hook_filename(&self) -> &'static str {
         "run.sh"
-    }
-
-    fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>> {
-        Ok(format!(
-            "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
-            hook_cfg.working_directory, hook_cfg.command
-        )
-        .into_bytes())
     }
 
     fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value {

@@ -1,3 +1,5 @@
+use std::io::{self, IsTerminal};
+
 struct Palette<'a> {
     tuff: &'a str,
     white: &'a str,
@@ -157,13 +159,24 @@ fn render_init_banner(use_color: bool) -> String {
 }
 
 pub fn print_welcome() {
-    let use_color = std::env::var_os("NO_COLOR").is_none();
+    let use_color = use_color();
     print!("\n{}", render_welcome(use_color));
 }
 
 pub fn print_init_banner() {
-    let use_color = std::env::var_os("NO_COLOR").is_none();
+    let use_color = use_color();
     print!("\n{}", render_init_banner(use_color));
+}
+
+pub(crate) fn use_color() -> bool {
+    color_enabled(
+        io::stdout().is_terminal(),
+        std::env::var_os("NO_COLOR").is_some(),
+    )
+}
+
+fn color_enabled(is_terminal: bool, no_color_is_set: bool) -> bool {
+    is_terminal && !no_color_is_set
 }
 
 #[cfg(test)]
@@ -216,5 +229,13 @@ mod tests {
             .expect("quick-start box has a top border");
 
         assert_eq!(ribbon.chars().count(), box_line.chars().count());
+    }
+
+    #[test]
+    fn color_requires_a_terminal_and_respects_no_color() {
+        assert!(color_enabled(true, false));
+        assert!(!color_enabled(false, false));
+        assert!(!color_enabled(true, true));
+        assert!(!color_enabled(false, true));
     }
 }

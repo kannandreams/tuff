@@ -196,7 +196,12 @@ impl CompatibilityMatrix {
     pub fn find_event(&self, raw_event: &str) -> Option<&CompatibilityEntry> {
         self.events
             .iter()
-            .find(|entry| entry.matches_name(raw_event))
+            .find(|entry| entry.event.as_str() == raw_event)
+            .or_else(|| {
+                self.events
+                    .iter()
+                    .find(|entry| entry.aliases.contains(&raw_event))
+            })
     }
 
     /// Returns supported native event names for user-facing error messages.
@@ -327,5 +332,67 @@ mod tests {
         };
 
         assert_eq!(entry.native_event_name(), None);
+    }
+
+    #[test]
+    fn canonical_name_takes_precedence_over_an_earlier_alias() {
+        const EVENTS: &[CompatibilityEntry] = &[
+            CompatibilityEntry {
+                event: HookEvent::BeforeFinish,
+                native_event: Some("stop"),
+                aliases: &["stop"],
+                coverage: CoverageLevel::Partial,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+            CompatibilityEntry {
+                event: HookEvent::Stop,
+                native_event: Some("stop"),
+                aliases: &[],
+                coverage: CoverageLevel::Full,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+        ];
+        let matrix = CompatibilityMatrix {
+            spec_version: SPEC_VERSION,
+            adapter: "test",
+            events: EVENTS,
+        };
+
+        let matched = matrix.find_event("stop").expect("stop event");
+        assert_eq!(matched.event, HookEvent::Stop);
+        assert_eq!(matched.coverage, CoverageLevel::Full);
+    }
+
+    #[test]
+    fn aliases_remain_available_when_no_canonical_name_matches() {
+        const EVENTS: &[CompatibilityEntry] = &[CompatibilityEntry {
+            event: HookEvent::PreToolUse,
+            native_event: Some("PreToolUse"),
+            aliases: &["BeforeTool"],
+            coverage: CoverageLevel::Full,
+            scope: &[],
+            caveat: None,
+            source: None,
+            since_harness_version: None,
+            until_harness_version: None,
+        }];
+        let matrix = CompatibilityMatrix {
+            spec_version: SPEC_VERSION,
+            adapter: "test",
+            events: EVENTS,
+        };
+
+        assert_eq!(
+            matrix.find_event("BeforeTool").map(|entry| entry.event),
+            Some(HookEvent::PreToolUse)
+        );
     }
 }

@@ -5,7 +5,7 @@ use tuff_hooks_spec::{
 };
 
 use tuff_core::adapter::AgentAdapter;
-use tuff_core::manifest::{CapabilityType, HookConfig};
+use tuff_core::manifest::CapabilityType;
 use tuff_core::{
     error::{Result, TuffError},
     lockfile,
@@ -23,6 +23,7 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
 ];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
+const CLAUDE_HOOKS_DOCS: &str = "https://code.claude.com/docs/en/hooks";
 
 pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
     spec_version: SPEC_VERSION,
@@ -33,83 +34,79 @@ pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
             native_event: Some("SessionStart"),
             aliases: &["SessionStart"],
             coverage: CoverageLevel::Full,
-            scope: &["startup", "resume"],
+            scope: &["startup", "resume", "clear", "compact", "fork"],
             caveat: None,
-            source: None,
+            source: Some(CLAUDE_HOOKS_DOCS),
             since_harness_version: None,
             until_harness_version: None,
         },
         CompatibilityEntry {
-            event: HookEvent::BeforeFinish,
-            native_event: Some("before_finish"),
-            aliases: &[],
+            event: HookEvent::SessionEnd,
+            native_event: Some("SessionEnd"),
+            aliases: &["SessionEnd"],
             coverage: CoverageLevel::Full,
-            scope: &[],
+            scope: &["session lifecycle"],
             caveat: None,
-            source: None,
-            since_harness_version: None,
-            until_harness_version: None,
-        },
-        CompatibilityEntry {
-            event: HookEvent::PostToolUse,
-            native_event: Some("post_tool_execution"),
-            aliases: &["post_tool_execution"],
-            coverage: CoverageLevel::Full,
-            scope: &["tool calls"],
-            caveat: None,
-            source: None,
+            source: Some(CLAUDE_HOOKS_DOCS),
             since_harness_version: None,
             until_harness_version: None,
         },
         CompatibilityEntry {
             event: HookEvent::PreToolUse,
-            native_event: None,
-            aliases: &["pre_tool_execution"],
-            coverage: CoverageLevel::Unsupported,
-            scope: &[],
+            native_event: Some("PreToolUse"),
+            aliases: &["PreToolUse"],
+            coverage: CoverageLevel::Full,
+            scope: &["tool calls"],
+            caveat: None,
+            source: Some(CLAUDE_HOOKS_DOCS),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::PostToolUse,
+            native_event: Some("PostToolUse"),
+            aliases: &["PostToolUse"],
+            coverage: CoverageLevel::Full,
+            scope: &["successful tool calls"],
+            caveat: None,
+            source: Some(CLAUDE_HOOKS_DOCS),
+            since_harness_version: None,
+            until_harness_version: None,
+        },
+        CompatibilityEntry {
+            event: HookEvent::BeforeFinish,
+            native_event: Some("Stop"),
+            aliases: &[],
+            coverage: CoverageLevel::Partial,
+            scope: &["main-agent completion"],
             caveat: Some(
-                "Claude adapter support for PreToolUse rendering has not been implemented in Tuff yet.",
+                "Claude Stop runs after the main agent finishes responding and can request continuation; it does not represent every possible pre-finish boundary.",
             ),
-            source: None,
+            source: Some(CLAUDE_HOOKS_DOCS),
             since_harness_version: None,
             until_harness_version: None,
         },
         CompatibilityEntry {
             event: HookEvent::AfterSave,
             native_event: None,
-            aliases: &[],
+            aliases: &["FileChanged"],
             coverage: CoverageLevel::Unsupported,
             scope: &[],
             caveat: Some(
-                "Claude adapter support for after-save rendering has not been implemented in Tuff yet.",
+                "Claude FileChanged requires watched filenames or paths that Tuff's standard after_save hook cannot currently express.",
             ),
-            source: None,
-            since_harness_version: None,
-            until_harness_version: None,
-        },
-        CompatibilityEntry {
-            event: HookEvent::SessionEnd,
-            native_event: None,
-            aliases: &[],
-            coverage: CoverageLevel::Unsupported,
-            scope: &[],
-            caveat: Some(
-                "Claude adapter support for session-end rendering has not been implemented in Tuff yet.",
-            ),
-            source: None,
+            source: Some(CLAUDE_HOOKS_DOCS),
             since_harness_version: None,
             until_harness_version: None,
         },
         CompatibilityEntry {
             event: HookEvent::Stop,
-            native_event: None,
-            aliases: &[],
-            coverage: CoverageLevel::Unsupported,
-            scope: &[],
-            caveat: Some(
-                "Claude adapter support for stop rendering has not been implemented in Tuff yet.",
-            ),
-            source: None,
+            native_event: Some("Stop"),
+            aliases: &["Stop"],
+            coverage: CoverageLevel::Full,
+            scope: &["main-agent completion"],
+            caveat: None,
+            source: Some(CLAUDE_HOOKS_DOCS),
             since_harness_version: None,
             until_harness_version: None,
         },
@@ -295,14 +292,6 @@ impl AgentAdapter for Claude {
         "run.sh"
     }
 
-    fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>> {
-        Ok(format!(
-            "#!/usr/bin/env bash\nset -euo pipefail\ncd \"{}\"\n{}\n",
-            hook_cfg.working_directory, hook_cfg.command
-        )
-        .into_bytes())
-    }
-
     fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value {
         serde_json::json!({
             "hooks": {
@@ -348,5 +337,69 @@ mod tests {
     #[test]
     fn supported_types_covers_all_capability_types() {
         assert_eq!(SUPPORTED_TYPES.len(), 4);
+    }
+
+    #[test]
+    fn hook_matrix_matches_claude_native_event_contract() {
+        let actual: Vec<_> = HOOK_COMPATIBILITY
+            .events
+            .iter()
+            .map(|entry| {
+                (
+                    entry.event,
+                    entry.native_event,
+                    entry.aliases,
+                    entry.coverage,
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            actual,
+            vec![
+                (
+                    HookEvent::SessionStart,
+                    Some("SessionStart"),
+                    &["SessionStart"][..],
+                    CoverageLevel::Full
+                ),
+                (
+                    HookEvent::SessionEnd,
+                    Some("SessionEnd"),
+                    &["SessionEnd"][..],
+                    CoverageLevel::Full
+                ),
+                (
+                    HookEvent::PreToolUse,
+                    Some("PreToolUse"),
+                    &["PreToolUse"][..],
+                    CoverageLevel::Full
+                ),
+                (
+                    HookEvent::PostToolUse,
+                    Some("PostToolUse"),
+                    &["PostToolUse"][..],
+                    CoverageLevel::Full
+                ),
+                (
+                    HookEvent::BeforeFinish,
+                    Some("Stop"),
+                    &[][..],
+                    CoverageLevel::Partial
+                ),
+                (
+                    HookEvent::AfterSave,
+                    None,
+                    &["FileChanged"][..],
+                    CoverageLevel::Unsupported
+                ),
+                (
+                    HookEvent::Stop,
+                    Some("Stop"),
+                    &["Stop"][..],
+                    CoverageLevel::Full
+                ),
+            ]
+        );
     }
 }

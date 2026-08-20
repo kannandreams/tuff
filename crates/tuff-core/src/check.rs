@@ -23,15 +23,21 @@ pub struct CheckOutcome {
     pub results: Vec<CheckResult>,
 }
 
-pub fn run_checks(repo_root: &Path) -> Result<CheckOutcome> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckScope {
+    ProjectAndGlobal,
+    Global,
+}
+
+pub fn run_checks(repo_root: &Path, scope: CheckScope) -> Result<CheckOutcome> {
     let mut results = Vec::new();
 
-    // Project scope
-    if let Ok(lf) = lockfile::require_lockfile(repo_root) {
+    if scope == CheckScope::ProjectAndGlobal
+        && let Ok(lf) = lockfile::require_lockfile(repo_root)
+    {
         check_lockfile(repo_root, &lf, &mut results);
     }
 
-    // Global scope
     if let Some(home) = home_dir() {
         let lock_path = crate::paths::global_lockfile(&home);
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
