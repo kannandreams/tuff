@@ -1,0 +1,21 @@
+name: Commit Message
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  conventional-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check every commit in the pull request
+        run: scripts/check-commit-message.sh --range "origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
+
+      - name: Check the pull request title (used as the squash-merge subject)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: scripts/check-commit-message.sh --subject "$PR_TITLE"

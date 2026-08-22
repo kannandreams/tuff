@@ -95,6 +95,25 @@ Supported types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
 such as `sdk`, `cli`, `website`, or `deps` do not need to be registered first.
 The shared branches `main`, `master`, and `develop` are also allowed.
 
+## Commit messages
+
+Commit subjects must follow [Conventional Commits](https://www.conventionalcommits.org/) using the same type list:
+
+```text
+<type>(<scope>)!: <subject>
+```
+
+The scope is optional and lowercase, `!` marks a breaking change, and the subject line is at most 72 characters:
+
+```text
+feat(cli): add tuff diff command
+fix: fail release when checksums are missing
+docs(readme): streamline quick start
+chore!: drop lockfile schema v1
+```
+
+The `commit-msg` hook (installed by `mise run hooks`) enforces this locally. The `Commit Message` workflow re-checks every commit in a pull request and the pull request title, since the title becomes the subject on squash merge.
+
 ## Checks
 
 Before opening a pull request, run the checks relevant to your change. The canonical full validation is:
