@@ -17,6 +17,7 @@ const docs = '/getting-started';
       <div class="tuff-nav-links">
         <a href={docs}>Docs</a>
         <a href="/primitives/overview">Capabilities</a>
+        <a href="#packs">Packs</a>
         <a href="/concepts/adapters">Adapters</a>
         <a href="https://github.com/kannandreams/tuff/issues">Roadmap</a>
       </div>
@@ -80,6 +81,45 @@ const docs = '/getting-started';
           <a class="tuff-cap-card" href="/primitives/workflows"><strong>Workflow</strong><span>A repeatable sequence that composes capabilities for a larger job.</span></a>
           <a class="tuff-cap-card tuff-cap-card--wide" href="/primitives/policies"><strong>Policy Control</strong><span>Governs all four. Set which capabilities can be installed, from which sources, and for which harnesses, enforced consistently across every agent your team runs.</span></a>
         </div>
+      </section>
+
+      <section class="tuff-section" id="packs">
+        <div class="tuff-section-head"><div class="tuff-section-label">//tuff packs</div><h2 id="packs-title">Bundle once. Ship as a verified release.</h2><p id="packs-description">Bundle the skills, tools, hooks, and workflows behind an integration into one deterministic artifact. Publish it through OCI, pin it by digest, and deploy the same reviewed bundle to every agent runtime.</p></div>
+        <figure class="tuff-pack-showcase" aria-labelledby="packs-title" aria-describedby="packs-description">
+          <div class="tuff-pack-stage tuff-pack-stage--capabilities">
+            <div class="tuff-pack-stage-label">CRM capabilities</div>
+            <ul class="tuff-pack-capabilities">
+              <li><strong>CRM operating</strong><span>skill</span></li>
+              <li><strong>CRM connector</strong><span>MCP tool</span></li>
+              <li><strong>PII guard</strong><span>hook</span></li>
+              <li><strong>Lead triage</strong><span>workflow</span></li>
+            </ul>
+          </div>
+          <div class="tuff-pack-flow" aria-hidden="true"><span>build</span><i></i></div>
+          <div class="tuff-pack-stage tuff-pack-stage--artifact">
+            <div class="tuff-pack-stage-label">Tuff pack</div>
+            <strong class="tuff-pack-reference">yourorg/crm-integration:1.2.0</strong>
+            <code>crm-integration.tuffpack</code>
+            <div class="tuff-pack-digest"><span>sha256</span>84a1c7e9…2f40</div>
+            <div class="tuff-pack-badges"><span>4 capabilities</span><span>2 targets</span><span class="tuff-pack-verified">verified ✓</span></div>
+          </div>
+          <div class="tuff-pack-flow" aria-hidden="true"><span>publish</span><i></i></div>
+          <div class="tuff-pack-stage tuff-pack-stage--registry">
+            <div class="tuff-pack-stage-label">OCI registry</div>
+            <div class="tuff-pack-registry-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+            <code>yourorg/crm-integration:1.2.0</code>
+            <strong>digest pinned</strong>
+            <div class="tuff-pack-trust"><span>signed</span><span>attested</span><span>policy approved</span></div>
+          </div>
+          <div class="tuff-pack-flow" aria-hidden="true"><span>deploy</span><i></i></div>
+          <div class="tuff-pack-stage tuff-pack-stage--runtime">
+            <div class="tuff-pack-stage-label">Agent runtime</div>
+            <strong>Runtime filesystem</strong>
+            <p>Harness-native files, extracted from the exact reviewed artifact.</p>
+            <ul class="tuff-pack-files"><li>.agents/skills/</li><li>.mcp.json</li><li>.agents/hooks/</li></ul>
+          </div>
+        </figure>
+        <a class="tuff-button tuff-button--quiet tuff-pack-cta" href="/concepts/packs">Explore Tuff Packs</a>
       </section>
 
       <section class="tuff-section">
