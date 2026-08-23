@@ -100,6 +100,11 @@ tuff add skill https://github.com/owner/agent-capabilities security-review \
   --agent open-agents \
   --agent claude
 
+# Build one reviewed capability pack and install it atomically.
+tuff pack build ./company-agent-pack --output ./company-agent-pack.tuffpack
+tuff pack verify ./company-agent-pack.tuffpack
+tuff add pack ./company-agent-pack.tuffpack --agent open-agents
+
 # Review and reconcile an upstream change.
 tuff outdated
 tuff diff security-review --upstream

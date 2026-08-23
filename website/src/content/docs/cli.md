@@ -14,6 +14,7 @@ complete command and flag reference.
 |---|---|
 | Start | [`tuff init`](#tuff-init) |
 | Create or add capabilities | [`tuff create`](#tuff-create), [`tuff add`](#tuff-add) |
+| Build and deliver packs | [`tuff pack`](#tuff-pack), [`tuff add pack`](#install-a-pack) |
 | Inspect and generate | [`tuff list`](#tuff-list), [`tuff status`](#tuff-status), [`tuff generate`](#tuff-generate), [`tuff outdated`](#tuff-outdated) |
 | Diff and update | [`tuff diff`](#tuff-diff), [`tuff update`](#tuff-update) |
 | Validate in CI | [`tuff check`](#tuff-check) |
@@ -145,6 +146,17 @@ tuff add skill https://github.com/owner/repo rust-implement --agent open-agents
 Use the same structure for a tool, hook, or workflow by replacing `skill` with
 the corresponding capability type.
 
+#### Install a pack
+
+Install every member of a verified local pack artifact into project scope:
+
+```sh frame="terminal"
+tuff init
+tuff add pack ./dist/engineering-1.2.0.tuffpack --agent open-agents
+```
+
+Pack installation verifies the complete artifact, preflights every member, stages shared hook and MCP configuration, and refuses the entire installation if any member is already tracked or would overwrite an untracked file. `--agent` is optional and repeatable; pack installation does not support `--global`.
+
 For harness-native hooks, pass the hook fragment explicitly:
 
 ```sh frame="terminal"
@@ -208,6 +220,41 @@ edits as the new baseline.
 :::tip[After add]
 When Tuff adopts existing agent files, it records their hashes as baselines in the lockfile. No additional files are created in the agent directory. The lockfile is the single source of truth for all tracking metadata.
 :::
+
+## Build and Deliver Packs
+
+### `tuff pack`
+
+Create a starter manifest in the current directory:
+
+```sh frame="terminal"
+tuff pack init com.acme/engineering
+```
+
+Validate or build a source pack. Both commands default to the current directory:
+
+```sh frame="terminal"
+tuff pack check [path]
+tuff pack build [path] --output <artifact.tuffpack>
+```
+
+When `--output` is omitted, Tuff writes `<pack-name>-<pack-version>.tuffpack` beneath the pack root. Build refuses to overwrite an existing artifact.
+
+Inspect or verify an artifact:
+
+```sh frame="terminal"
+tuff pack inspect <artifact.tuffpack>
+tuff pack inspect <artifact.tuffpack> --json
+tuff pack verify <artifact.tuffpack>
+```
+
+Extract one pre-rendered adapter target without creating project lockfile state:
+
+```sh frame="terminal"
+tuff pack extract <artifact.tuffpack> --agent <id> --output <directory>
+```
+
+The output directory must be missing or empty. See [Capability Packs](/concepts/packs/) for the source manifest, artifact guarantees, and installation behavior.
 
 ## Inspect and Generate
 

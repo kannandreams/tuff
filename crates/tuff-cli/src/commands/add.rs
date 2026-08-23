@@ -125,6 +125,7 @@ fn cmd_add_git(
             source_ref: commit_sha,
             skill: source_skill.to_string(),
         }),
+        true,
     );
     drop(source_guard);
     result
@@ -177,7 +178,15 @@ fn cmd_add_local(
         );
     }
 
-    install_capability(install_root, scope, &resolved, &manifest, target_ids, None)
+    install_capability(
+        install_root,
+        scope,
+        &resolved,
+        &manifest,
+        target_ids,
+        None,
+        true,
+    )
 }
 
 fn validate_capability_name(name: &str) -> Result<()> {
@@ -475,6 +484,7 @@ fn adopt_capability_in_place(
             targets,
             source: None,
             scope: scope.as_str().to_string(),
+            pack: None,
         },
     );
     lockfile::write_lockfile(install_root, &lockfile)?;
@@ -502,6 +512,7 @@ pub(crate) fn install_capability(
     manifest: &manifest::CapabilityManifest,
     target_ids: &[String],
     source_meta: Option<&SourceMetaInput>,
+    report: bool,
 ) -> Result<()> {
     let is_git = source_meta.is_some();
 
@@ -586,8 +597,10 @@ pub(crate) fn install_capability(
                         repo_root: install_root,
                         track_managed_hooks: true,
                     })?;
-                    for diagnostic in render.diagnostics {
-                        eprintln!("{}", diagnostic.message);
+                    if report {
+                        for diagnostic in render.diagnostics {
+                            eprintln!("{}", diagnostic.message);
+                        }
                     }
                     managed_hooks = render.managed_hooks;
                 }
@@ -625,7 +638,7 @@ pub(crate) fn install_capability(
                 });
             }
 
-            if should_print_installed_file(capability, planned) {
+            if report && should_print_installed_file(capability, planned) {
                 println!(
                     "installed {} ({}) -> {}",
                     capability.id,
@@ -678,22 +691,26 @@ pub(crate) fn install_capability(
                     &mcp_command,
                     &mcp_args,
                 )?;
-                println!(
-                    "registered MCP server {} ({}) -> {}",
-                    capability.id,
-                    adapter.id(),
-                    lockfile::relative_or_absolute_fs(&mcp_path, install_root)
-                );
+                if report {
+                    println!(
+                        "registered MCP server {} ({}) -> {}",
+                        capability.id,
+                        adapter.id(),
+                        lockfile::relative_or_absolute_fs(&mcp_path, install_root)
+                    );
+                }
             }
         } else {
             for adapter in &adapters {
                 let mcp_path = install_root.join(adapter.mcp_config_relpath());
                 crate::adapters::mcp_remove_tool(install_root, &mcp_path, &capability.id)?;
             }
-            eprintln!(
-                "note: tool '{}' is not MCP-native; copied and tracked without MCP registration",
-                capability.id
-            );
+            if report {
+                eprintln!(
+                    "note: tool '{}' is not MCP-native; copied and tracked without MCP registration",
+                    capability.id
+                );
+            }
         }
     }
 
@@ -730,6 +747,7 @@ pub(crate) fn install_capability(
                 skill: m.skill.clone(),
             }),
             scope: scope.as_str().to_string(),
+            pack: None,
         },
     );
 

@@ -108,6 +108,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                     targets,
                     source: None,
                     scope: "project".into(),
+                    pack: None,
                 },
             );
 

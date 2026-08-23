@@ -156,6 +156,7 @@ mod tests {
                     )]),
                     source: None,
                     scope: "project".into(),
+                    pack: None,
                 },
             );
         }

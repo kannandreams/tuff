@@ -20,16 +20,23 @@ company-agent-pack/
     release-prep/
 ```
 
-Product teams install the capabilities they need:
+The platform team validates and builds one immutable artifact:
+
+```sh frame="terminal"
+tuff pack check company-agent-pack
+tuff pack build company-agent-pack --output dist/company-agent-pack-1.0.0.tuffpack
+tuff pack verify dist/company-agent-pack-1.0.0.tuffpack
+```
+
+Product teams install the complete pack atomically, while runtime infrastructure can extract a verified target tree without project state:
 
 ```sh frame="terminal"
 tuff init
-tuff add skill https://github.com/company/company-agent-pack rust-test-workflow --agent open-agents
-tuff list
+tuff add pack dist/company-agent-pack-1.0.0.tuffpack --agent open-agents
+tuff pack extract dist/company-agent-pack-1.0.0.tuffpack --agent open-agents --output runtime/
 ```
 
-The project owns the installed output. If a team customizes it, Tuff should
-show that drift instead of hiding it.
+The project owns installed output. If a team customizes a member, Tuff shows that drift instead of hiding it. See [Capability Packs](/concepts/packs/) for the complete authoring and delivery contract.
 
 ## Project-specific capabilities
 

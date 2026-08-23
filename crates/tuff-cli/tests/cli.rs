@@ -130,6 +130,97 @@ runtime_deps = ["curl"]
     primitive
 }
 
+fn make_pack(root: &Path) -> std::path::PathBuf {
+    let pack = root.join("engineering-pack");
+    let skill = pack.join("capabilities").join("pack-skill");
+    let workflow = pack.join("capabilities").join("pack-workflow");
+    fs::create_dir_all(&skill).unwrap();
+    fs::create_dir_all(&workflow).unwrap();
+    fs::write(
+        pack.join("tuff-pack.toml"),
+        r#"schema = 1
+name = "com.acme/engineering"
+version = "1.2.0"
+description = "A deterministic test pack."
+
+[build]
+targets = ["open-agents"]
+
+[[capabilities]]
+path = "capabilities/pack-workflow"
+
+[[capabilities]]
+path = "capabilities/pack-skill"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        skill.join("tuff.toml"),
+        r#"id = "pack-skill"
+version = "2.0.0"
+type = "skill"
+description = "A skill shipped in a pack."
+files = ["SKILL.md"]
+"#,
+    )
+    .unwrap();
+    fs::write(
+        skill.join("SKILL.md"),
+        "# Pack skill\n\nPackaged guidance.\n",
+    )
+    .unwrap();
+    fs::write(
+        workflow.join("tuff.toml"),
+        r#"id = "pack-workflow"
+version = "3.0.0"
+type = "workflow"
+description = "A workflow shipped in a pack."
+
+[[workflow.requires]]
+id = "pack-skill"
+type = "skill"
+"#,
+    )
+    .unwrap();
+    pack
+}
+
+fn make_runtime_pack(root: &Path) -> std::path::PathBuf {
+    let pack = root.join("runtime-pack");
+    let capabilities = pack.join("capabilities");
+    fs::create_dir_all(&capabilities).unwrap();
+    let tool = make_tool_primitive(&capabilities, "pack-mcp");
+    let tool_manifest = fs::read_to_string(tool.join("tuff.toml")).unwrap();
+    fs::write(
+        tool.join("tuff.toml"),
+        tool_manifest.replace(
+            "entrypoint = \"run.sh\"",
+            "entrypoint = \"run.sh\"\nmcp = true",
+        ),
+    )
+    .unwrap();
+    make_hook_primitive(&capabilities, "pack-hook");
+    fs::write(
+        pack.join("tuff-pack.toml"),
+        r#"schema = 1
+name = "com.acme/runtime"
+version = "1.0.0"
+description = "A pack with shared runtime configuration."
+
+[build]
+targets = ["open-agents"]
+
+[[capabilities]]
+path = "capabilities/tool-primitive"
+
+[[capabilities]]
+path = "capabilities/hook-primitive"
+"#,
+    )
+    .unwrap();
+    pack
+}
+
 #[test]
 fn version_outputs_current_version() {
     tuff()
@@ -3896,4 +3987,291 @@ fn status_shows_workflow_dependency_tree() {
         .success()
         .stdout(predicate::str::contains("parent-wf"))
         .stdout(predicate::str::contains("dep-skill"));
+}
+
+#[test]
+fn pack_build_is_deterministic_and_extracts_a_verified_target() {
+    let temp = TempDir::new().unwrap();
+    let pack = make_pack(temp.path());
+    let left = temp.path().join("left.tuffpack");
+    let right = temp.path().join("right.tuffpack");
+    let extracted = temp.path().join("runtime");
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["pack", "check", pack.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 capabilities"));
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            left.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            right.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    assert_eq!(fs::read(&left).unwrap(), fs::read(&right).unwrap());
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["pack", "verify", left.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sha256:"));
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "pack",
+            "extract",
+            left.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--output",
+            extracted.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    assert!(
+        extracted
+            .join(".agents/skills/pack-skill/SKILL.md")
+            .is_file()
+    );
+}
+
+#[test]
+fn pack_verify_rejects_tampered_artifact() {
+    let temp = TempDir::new().unwrap();
+    let pack = make_pack(temp.path());
+    let artifact = temp.path().join("pack.tuffpack");
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let mut bytes = fs::read(&artifact).unwrap();
+    *bytes.last_mut().unwrap() ^= 1;
+    fs::write(&artifact, bytes).unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["pack", "verify", artifact.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("hash mismatch"));
+}
+
+#[test]
+fn pack_check_rejects_missing_workflow_dependency() {
+    let temp = TempDir::new().unwrap();
+    let pack = make_pack(temp.path());
+    fs::write(
+        pack.join("capabilities/pack-workflow/tuff.toml"),
+        r#"id = "pack-workflow"
+version = "3.0.0"
+type = "workflow"
+description = "A broken workflow."
+
+[[workflow.requires]]
+id = "missing-skill"
+type = "skill"
+"#,
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["pack", "check", pack.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("requires missing capability"));
+}
+
+#[test]
+fn add_pack_installs_all_members_and_records_provenance() {
+    let author = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let pack = make_pack(author.path());
+    let artifact = author.path().join("pack.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "pack",
+            artifact.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed pack com.acme/engineering 1.2.0",
+        ));
+
+    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("name = \"com.acme/engineering\""));
+    assert!(
+        project
+            .path()
+            .join(".agents/skills/pack-skill/SKILL.md")
+            .is_file()
+    );
+    assert!(
+        project
+            .path()
+            .join(".agents/workflows/pack-workflow/workflow.toml")
+            .is_file()
+    );
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pack-skill"))
+        .stdout(predicate::str::contains("pack-workflow"));
+}
+
+#[test]
+fn add_pack_collision_leaves_every_member_uninstalled() {
+    let author = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let pack = make_pack(author.path());
+    let artifact = author.path().join("pack.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    let collision = project.path().join(".agents/skills/pack-skill");
+    fs::create_dir_all(&collision).unwrap();
+    fs::write(collision.join("SKILL.md"), "user managed\n").unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "pack",
+            artifact.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("all-or-nothing"));
+
+    assert!(
+        !project
+            .path()
+            .join(".agents/workflows/pack-workflow")
+            .exists()
+    );
+}
+
+#[test]
+fn add_pack_merges_hook_and_mcp_configuration_without_executing_members() {
+    let author = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let pack = make_runtime_pack(author.path());
+    let artifact = author.path().join("runtime.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    fs::write(
+        project.path().join(".agents/mcp.json"),
+        r#"{"custom":{"preserved":true}}"#,
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "pack",
+            artifact.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+
+    let mcp: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path().join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    assert_eq!(mcp["custom"]["preserved"], true);
+    assert!(mcp["mcpServers"]["pack-mcp"].is_object());
+    let hooks = fs::read_to_string(project.path().join(".agents/hook.json")).unwrap();
+    assert!(hooks.contains("pack-hook"));
 }

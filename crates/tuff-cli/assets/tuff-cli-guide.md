@@ -22,6 +22,14 @@ or workflows, or when they mention "drift", "baseline", or "tuff".
 - `tuff add <git-url> tool <name> -a <agent>` — install tool from git
 - `tuff add <git-url> hook <name> -a <agent>` — install hook from git
 - `tuff create <type> <id> -a <agent>` — create and track a capability
+- `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
+
+### Packs
+- `tuff pack check [path]` — validate a local source pack
+- `tuff pack build [path] -o <artifact.tuffpack>` — build a deterministic artifact
+- `tuff pack inspect <artifact.tuffpack>` — inspect verified metadata
+- `tuff pack verify <artifact.tuffpack>` — verify metadata and every stored file
+- `tuff pack extract <artifact.tuffpack> -a <agent> -o <dir>` — extract a runtime-native target
 
 ### Inspect
 - `tuff list` — show all installed capabilities with drift status

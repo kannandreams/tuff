@@ -4,7 +4,7 @@ mod commands;
 mod display;
 
 pub use tuff_core::{
-    cache, check, config, error, git, lockfile, manifest, paths, resolver, tool, tree_diff,
+    cache, check, config, error, git, lockfile, manifest, pack, paths, resolver, tool, tree_diff,
 };
 
 use std::path::PathBuf;
@@ -12,10 +12,11 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default,
+    cmd_add, cmd_add_pack, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default,
     cmd_cache_clear, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_generate_index,
     cmd_generate_report, cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list,
-    cmd_outdated, cmd_status, cmd_untrack, cmd_update,
+    cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init,
+    cmd_pack_inspect, cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -61,6 +62,12 @@ enum Command {
 
         #[command(subcommand)]
         kind: Option<AddCommand>,
+    },
+
+    /// Build, inspect, verify, and extract capability packs.
+    Pack {
+        #[command(subcommand)]
+        action: PackCommand,
     },
 
     /// List installed capabilities.
@@ -300,6 +307,60 @@ enum AddCommand {
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
+    /// Install every capability in a verified pack artifact.
+    Pack {
+        source: PathBuf,
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum PackCommand {
+    /// Create a source pack manifest in the current directory.
+    Init {
+        /// Stable pack name, optionally namespaced with slashes.
+        name: String,
+    },
+    /// Validate a source pack without writing an artifact.
+    Check {
+        /// Pack directory or tuff-pack.toml path.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Build a deterministic local pack artifact.
+    Build {
+        /// Pack directory or tuff-pack.toml path.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Artifact output path.
+        #[arg(short = 'o', long = "output")]
+        output: Option<PathBuf>,
+    },
+    /// Print verified pack metadata.
+    Inspect {
+        /// Pack artifact path.
+        artifact: PathBuf,
+        /// Print canonical metadata as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
+    /// Verify the complete pack artifact and every stored file.
+    Verify {
+        /// Pack artifact path.
+        artifact: PathBuf,
+    },
+    /// Extract one pre-rendered target into a missing or empty directory.
+    Extract {
+        /// Pack artifact path.
+        artifact: PathBuf,
+        /// Target agent contained in the artifact.
+        #[arg(short = 'a', long = "agent")]
+        agent: String,
+        /// Missing or empty output directory.
+        #[arg(short = 'o', long = "output")]
+        output: PathBuf,
+    },
 }
 
 fn reject_parent_add_options(
@@ -480,6 +541,25 @@ fn run() -> Result<()> {
                     None,
                 )
             }
+            Some(AddCommand::Pack {
+                source: typed_source,
+                agent: typed_agent,
+            }) => {
+                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                cmd_add_pack(&repo_root, &typed_source, &typed_agent)
+            }
+        },
+        Some(Command::Pack { action }) => match action {
+            PackCommand::Init { name } => cmd_pack_init(&repo_root, &name),
+            PackCommand::Check { path } => cmd_pack_check(&path),
+            PackCommand::Build { path, output } => cmd_pack_build(&path, output.as_deref()),
+            PackCommand::Inspect { artifact, json } => cmd_pack_inspect(&artifact, json),
+            PackCommand::Verify { artifact } => cmd_pack_verify(&artifact),
+            PackCommand::Extract {
+                artifact,
+                agent,
+                output,
+            } => cmd_pack_extract(&artifact, &agent, &output),
         },
         Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),
         Some(Command::Status) => cmd_status(&repo_root),

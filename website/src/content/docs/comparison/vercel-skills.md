@@ -33,12 +33,12 @@ the full product thesis.
 | --- | --- | --- |
 | Primary scope | Open skill ecosystem for reusable agent context | Lifecycle manager for project-owned agent capabilities |
 | Current model | Skills, typically `SKILL.md` plus supporting files | Starts with skills, designed to expand to tools, hooks, and workflows |
-| Distribution | Public git repos, local folders, and ecosystem discovery | Local filesystem capabilities first; pack and registry behavior deferred |
+| Distribution | Public git repos, local folders, and ecosystem discovery | Local and Git capability sources plus deterministic multi-capability pack artifacts; registry transport deferred |
 | CLI shape | `npx skills add`, `find`, `list`, `remove`, `update`, `init`, and related commands | `tuff init`, `add`, `list`, and `diff` for the first lifecycle loop |
 | Agents | Broad multi-agent support across many coding assistants | Codex first; multiple-agent support is not the near-term wedge |
 | Install ownership | Project or global scope, with copy/symlink behavior | Project-local artifacts are repo-owned after install |
 | Drift handling | Update behavior exists, but local-edit merge semantics are not the core positioning | Baseline hashes and diffs are central; future update/merge behavior is the product bet |
-| Opinion layer | Broad ecosystem and discovery directory | Optional packs can sit above the content-agnostic engine |
+| Opinion layer | Broad ecosystem and discovery directory | Versioned packs sit above the content-agnostic per-capability lifecycle |
 | Best use case | Finding and installing reusable skills across many agents | Managing locally customized capabilities over time without losing upstream context |
 
 ## Strategic take

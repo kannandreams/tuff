@@ -51,6 +51,7 @@ export default defineConfig({
             { label: 'Hooks', slug: 'primitives/hooks' },
             { label: 'Policies', slug: 'primitives/policies' },
             { label: 'Workflows', slug: 'primitives/workflows' },
+            { label: 'Capability Packs', slug: 'concepts/packs' },
           ],
         },
         {
