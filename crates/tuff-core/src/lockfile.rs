@@ -35,6 +35,8 @@ pub struct CapabilityLockEntry {
     pub source: Option<SourceMetadata>,
     #[serde(default = "default_scope")]
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack: Option<PackProvenance>,
 }
 
 fn default_scope() -> String {
@@ -49,6 +51,14 @@ pub struct SourceMetadata {
     #[serde(rename = "ref")]
     pub source_ref: String,
     pub skill: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Immutable pack release that delivered a capability entry.
+pub struct PackProvenance {
+    pub name: String,
+    pub version: String,
+    pub digest: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,6 +266,7 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
                     skill: item.source_path,
                 }),
                 scope: "project".to_string(),
+                pack: item.pack,
             });
     }
     let lockfile = Lockfile {
@@ -311,6 +322,7 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
                 description: entry.description.clone(),
                 ownership: target_entry.ownership,
                 managed_hooks: target_entry.managed_hooks.clone(),
+                pack: entry.pack.clone(),
             });
         }
     }
@@ -362,6 +374,8 @@ struct WireCapability {
     ownership: TargetOwnership,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     managed_hooks: Vec<ManagedHook>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pack: Option<PackProvenance>,
 }
 
 pub fn hash_bytes(content: &[u8]) -> String {
@@ -480,6 +494,7 @@ mod tests {
                 )]),
                 source: None,
                 scope: "project".into(),
+                pack: None,
             },
         );
         write_lockfile_at(&path, &lf).unwrap();

@@ -192,7 +192,15 @@ fn update_local_from_source(
         )));
     }
 
-    install_capability(scope_root, scope, &capability, &manifest, target_ids, None)?;
+    install_capability(
+        scope_root,
+        scope,
+        &capability,
+        &manifest,
+        target_ids,
+        None,
+        true,
+    )?;
     Ok(())
 }
 
@@ -273,6 +281,7 @@ pub fn cmd_update(
                 source_ref: latest_sha,
                 skill: source.skill.clone(),
             }),
+            true,
         );
     }
 
@@ -324,5 +333,6 @@ pub fn cmd_update(
             source_ref: latest_sha,
             skill: source.skill.clone(),
         }),
+        true,
     )
 }

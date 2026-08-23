@@ -179,6 +179,7 @@ pub fn cmd_create(
             targets: target_entries,
             source: None,
             scope: "project".to_string(),
+            pack: None,
         },
     );
     config::write_config(repo_root, &config)?;
