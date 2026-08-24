@@ -58,6 +58,7 @@ export default defineConfig({
           label: 'Workflows & Operations',
           items: [
             { label: 'When to Use Tuff', slug: 'usage-scenarios' },
+            { label: 'OCI Registries & Container Images', slug: 'guides/oci-registries-and-container-images' },
             { label: 'Use Cases Overview', slug: 'concepts/development-lifecycle' },
             { label: 'Lifecycle & Drift Detection', slug: 'concepts/lifecycle' },
             { label: 'Diffing & Updates', slug: 'concepts/diff-update' },

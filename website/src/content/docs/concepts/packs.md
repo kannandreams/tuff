@@ -91,6 +91,8 @@ Tuff first uses credentials already configured by `docker login`, then credentia
 
 OCI transport proves that the bytes arrived unchanged; it does not prove who published them. Signatures, attestations, referrer discovery, and trust-policy enforcement remain a later milestone. Store future signatures and attestations as OCI referrers whose `subject` points at the pack manifest digest, without changing the pack object itself.
 
+The Tuff OCI layer and a Docker image filesystem layer are different objects. Docker cannot use a Tuff pack reference in `FROM`; pull and verify the pack with Tuff, extract one harness-native target, then copy that extracted tree into the image. See [OCI Registries and Container Images](/guides/oci-registries-and-container-images/) for a complete Amazon ECR, digest-pinned deployment, and Docker BuildKit walkthrough.
+
 ## Extract for runtime infrastructure
 
 Use `pack extract` to produce one harness-native filesystem tree without creating Tuff project state:
