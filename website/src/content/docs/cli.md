@@ -248,6 +248,16 @@ tuff pack inspect <artifact.tuffpack> --json
 tuff pack verify <artifact.tuffpack>
 ```
 
+Publish a verified artifact to an OCI registry, or pull it back by an explicit tag or digest:
+
+```sh frame="terminal"
+tuff pack push <artifact.tuffpack> ghcr.io/acme/engineering:1.2.0
+tuff pack pull ghcr.io/acme/engineering:1.2.0 --output engineering-1.2.0.tuffpack
+tuff pack pull ghcr.io/acme/engineering@sha256:<manifest-digest> --output pinned.tuffpack
+```
+
+`pack push` refuses to move a tag that already names different content unless `--force` is supplied; pushing identical content is idempotent. `pack pull` resolves a tag to an immutable manifest digest before downloading, verifies the OCI descriptors and the complete Tuff artifact, and refuses to overwrite an existing output file. Both commands accept `--json`, repeatable `--ca-file <pem>`, and `--plain-http` for disposable development registries. Tuff uses existing Docker credentials first, then Podman credentials, and otherwise attempts anonymous access.
+
 Extract one pre-rendered adapter target without creating project lockfile state:
 
 ```sh frame="terminal"

@@ -9,6 +9,7 @@ pub mod git;
 pub mod lockfile;
 pub mod manifest;
 pub mod mcp;
+pub mod oci;
 pub mod pack;
 pub mod paths;
 pub mod resolver;

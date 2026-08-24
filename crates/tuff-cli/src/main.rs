@@ -4,7 +4,8 @@ mod commands;
 mod display;
 
 pub use tuff_core::{
-    cache, check, config, error, git, lockfile, manifest, pack, paths, resolver, tool, tree_diff,
+    cache, check, config, error, git, lockfile, manifest, oci, pack, paths, resolver, tool,
+    tree_diff,
 };
 
 use std::path::PathBuf;
@@ -16,7 +17,8 @@ use commands::{
     cmd_cache_clear, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_generate_index,
     cmd_generate_report, cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list,
     cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init,
-    cmd_pack_inspect, cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
+    cmd_pack_inspect, cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status, cmd_untrack,
+    cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -350,6 +352,42 @@ enum PackCommand {
         /// Pack artifact path.
         artifact: PathBuf,
     },
+    /// Publish a verified pack artifact to an OCI registry tag.
+    Push {
+        /// Local pack artifact to publish.
+        artifact: PathBuf,
+        /// OCI registry reference with an explicit tag.
+        reference: String,
+        /// Replace an existing tag that points to different content.
+        #[arg(long)]
+        force: bool,
+        /// Use unencrypted HTTP for a development registry.
+        #[arg(long)]
+        plain_http: bool,
+        /// Additional PEM certificate authority to trust (repeatable).
+        #[arg(long = "ca-file")]
+        ca_file: Vec<PathBuf>,
+        /// Print deterministic JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Pull and verify a pack artifact from an OCI registry.
+    Pull {
+        /// OCI registry reference with an explicit tag or digest.
+        reference: String,
+        /// New local artifact path. Existing files are never overwritten.
+        #[arg(short = 'o', long = "output")]
+        output: PathBuf,
+        /// Use unencrypted HTTP for a development registry.
+        #[arg(long)]
+        plain_http: bool,
+        /// Additional PEM certificate authority to trust (repeatable).
+        #[arg(long = "ca-file")]
+        ca_file: Vec<PathBuf>,
+        /// Print deterministic JSON output.
+        #[arg(long)]
+        json: bool,
+    },
     /// Extract one pre-rendered target into a missing or empty directory.
     Extract {
         /// Pack artifact path.
@@ -555,6 +593,21 @@ fn run() -> Result<()> {
             PackCommand::Build { path, output } => cmd_pack_build(&path, output.as_deref()),
             PackCommand::Inspect { artifact, json } => cmd_pack_inspect(&artifact, json),
             PackCommand::Verify { artifact } => cmd_pack_verify(&artifact),
+            PackCommand::Push {
+                artifact,
+                reference,
+                force,
+                plain_http,
+                ca_file,
+                json,
+            } => cmd_pack_push(&artifact, &reference, force, plain_http, &ca_file, json),
+            PackCommand::Pull {
+                reference,
+                output,
+                plain_http,
+                ca_file,
+                json,
+            } => cmd_pack_pull(&reference, &output, plain_http, &ca_file, json),
             PackCommand::Extract {
                 artifact,
                 agent,

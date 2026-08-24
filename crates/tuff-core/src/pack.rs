@@ -331,6 +331,16 @@ pub fn read_artifact(path: &Path) -> Result<PackArtifact> {
             path.display()
         ))
     })?;
+    read_artifact_bytes(&artifact)
+}
+
+/// Parses and verifies a complete pack artifact already loaded in memory.
+///
+/// # Errors
+///
+/// Returns an error for unsupported versions, non-canonical metadata, unsafe paths, truncated or
+/// trailing data, invalid hashes, or inconsistent member and target metadata.
+pub fn read_artifact_bytes(artifact: &[u8]) -> Result<PackArtifact> {
     let header_len = ARTIFACT_MAGIC.len() + 8;
     if artifact.len() < header_len || &artifact[..ARTIFACT_MAGIC.len()] != ARTIFACT_MAGIC {
         return Err(TuffError::new("invalid pack artifact header"));
@@ -383,7 +393,7 @@ pub fn read_artifact(path: &Path) -> Result<PackArtifact> {
     Ok(PackArtifact {
         metadata,
         contents,
-        digest: sha256(&artifact),
+        digest: sha256(artifact),
     })
 }
 

@@ -10,6 +10,7 @@ use crate::adapter::{
 use crate::error::{Result, TuffError};
 use crate::lockfile::{self, PackProvenance};
 use crate::manifest;
+use crate::oci::{self, OciPushStatus, OciTransferOptions};
 use crate::pack::{
     self, LoadedPack, PackArtifact, PackArtifactCapability, PackArtifactContent,
     PackArtifactMetadata, PackArtifactTarget, PackArtifactTargetCapability,
@@ -114,6 +115,71 @@ pub fn cmd_pack_verify(path: &Path) -> Result<()> {
         artifact.metadata.name, artifact.metadata.version, artifact.digest
     );
     Ok(())
+}
+
+pub fn cmd_pack_push(
+    artifact: &Path,
+    reference: &str,
+    force: bool,
+    plain_http: bool,
+    ca_files: &[PathBuf],
+    json: bool,
+) -> Result<()> {
+    let options = OciTransferOptions {
+        plain_http,
+        ca_files: ca_files.to_vec(),
+    };
+    let result = block_on_oci(oci::push_pack(artifact, reference, force, &options))?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
+    let action = match result.status {
+        OciPushStatus::Pushed => "pushed",
+        OciPushStatus::Unchanged => "unchanged",
+    };
+    println!(
+        "{action} pack {} {} -> {}",
+        result.name, result.version, result.tag_reference
+    );
+    println!("artifact: {}", result.artifact_digest);
+    println!("manifest: {}", result.manifest_digest);
+    println!("reference: {}", result.reference);
+    Ok(())
+}
+
+pub fn cmd_pack_pull(
+    reference: &str,
+    output: &Path,
+    plain_http: bool,
+    ca_files: &[PathBuf],
+    json: bool,
+) -> Result<()> {
+    let options = OciTransferOptions {
+        plain_http,
+        ca_files: ca_files.to_vec(),
+    };
+    let result = block_on_oci(oci::pull_pack(reference, output, &options))?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
+    println!(
+        "pulled pack {} {} -> {}",
+        result.name, result.version, result.output
+    );
+    println!("artifact: {}", result.artifact_digest);
+    println!("manifest: {}", result.manifest_digest);
+    println!("reference: {}", result.reference);
+    println!("next: tuff pack verify {}", result.output);
+    Ok(())
+}
+
+fn block_on_oci<T>(future: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(future)
 }
 
 pub fn cmd_pack_extract(path: &Path, agent: &str, output: &Path) -> Result<()> {
