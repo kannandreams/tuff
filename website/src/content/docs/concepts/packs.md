@@ -57,6 +57,40 @@ Pack builds validate every capability, ensure workflow requirements are present 
 
 Building, verifying, extracting, and installing a pack never executes member tools or hooks. Runtime dependencies remain the responsibility of the destination environment.
 
+## Publish and pull with OCI
+
+Tuff can store the exact `.tuffpack` bytes in any compatible OCI registry, including GHCR and self-hosted registries. OCI is the distribution protocol used by container registries, but a Tuff pack is a generic OCI artifact rather than a runnable container image.
+
+```sh frame="terminal"
+tuff pack push dist/engineering-1.2.0.tuffpack ghcr.io/acme/engineering:1.2.0
+tuff pack pull ghcr.io/acme/engineering:1.2.0 --output dist/downloaded.tuffpack
+```
+
+An OCI reference has three important parts: the registry (`ghcr.io`), repository (`acme/engineering`), and either a human-readable tag (`:1.2.0`) or immutable manifest digest (`@sha256:...`). Tuff requires an explicit tag for push and an explicit tag or digest for pull; it never assumes `latest`.
+
+The published object uses an OCI image manifest as a portable envelope with artifact type `application/vnd.tuff.pack.v1`, one layer with media type `application/vnd.tuff.pack.layer.v1`, and the exact `.tuffpack` bytes as that layer. The manifest also carries the pack name, version, and description as standard OCI annotations. It deliberately omits timestamps so the same pack produces the same OCI manifest bytes.
+
+### Two digests, two jobs
+
+| Digest | Identifies | Why it matters |
+| --- | --- | --- |
+| Artifact digest | The exact `.tuffpack` bytes | Tuff verifies the pack format, canonical metadata, every file, and this digest. |
+| Manifest digest | The OCI manifest containing the layer descriptor and annotations | The registry uses this digest as the immutable, pullable OCI reference. |
+
+`pack push` prints both digests and the immutable digest reference. Save that returned reference when a deployment must consume exactly the reviewed release. `pack pull` resolves a tag to its manifest digest before downloading and returns the resolved digest reference in human and JSON output.
+
+### Tags and overwrite safety
+
+Tags are convenient names, but registries allow them to move. Tuff treats an existing tag as immutable by default: pushing the same manifest reports `unchanged`, while pushing different content fails until `--force` is supplied. This check is best-effort because the portable OCI Distribution API does not provide a compare-and-swap operation for tags; concurrent publishers can still race. Use a single publisher and digest-pinned deployment references for release automation.
+
+Pulling never overwrites an existing output file. Tuff downloads into a temporary file beside the destination, checks the OCI layer size and digest, verifies the complete Tuff artifact and its metadata annotations, and only then atomically persists the new file.
+
+### Authentication and TLS
+
+Tuff first uses credentials already configured by `docker login`, then credentials configured by `podman login`, and falls back to anonymous access when neither configuration contains credentials for the registry. Credential helper secrets are not printed in errors. HTTPS is the default; repeat `--ca-file <certificate.pem>` to add private certificate authorities. `--plain-http` disables transport encryption and should only be used with a disposable local development registry.
+
+OCI transport proves that the bytes arrived unchanged; it does not prove who published them. Signatures, attestations, referrer discovery, and trust-policy enforcement remain a later milestone. Store future signatures and attestations as OCI referrers whose `subject` points at the pack manifest digest, without changing the pack object itself.
+
 ## Extract for runtime infrastructure
 
 Use `pack extract` to produce one harness-native filesystem tree without creating Tuff project state:
@@ -90,4 +124,4 @@ Each member remains an ordinary lockfile capability with its normal baseline and
 - Pack installation is project-scoped; `--global` is not supported.
 - Tuff does not resolve pack-to-pack dependencies or semantic-version constraints.
 - Tuff does not install language or system dependencies.
-- Registry publishing, signatures, attestations, and policy enforcement are future distribution layers.
+- Signatures, attestations, referrer discovery, and policy enforcement are future trust layers.

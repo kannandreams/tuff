@@ -46,6 +46,18 @@ npm --prefix website run check
 npm --prefix website run build
 ```
 
+## OCI registry integration test
+
+The real push/pull integration test is ignored during ordinary `cargo test` runs because it needs a disposable, anonymous, plain-HTTP OCI registry. Set `TUFF_OCI_TEST_REGISTRY` to the registry host and port, without a URL scheme, and run the ignored test explicitly:
+
+```sh frame="terminal"
+docker run --rm -d --name tuff-oci-test -p 5000:5000 registry:2
+TUFF_OCI_TEST_REGISTRY=localhost:5000 cargo test -p tuffcli --test oci_registry -- --ignored
+docker stop tuff-oci-test
+```
+
+The test builds two packs, publishes and repeats an identical push, verifies conflict refusal and forced tag movement, pulls by tag and digest, and compares the downloaded bytes. CI provides `localhost:5000` through its `registry:2` service and sets the same environment variable. Do not point the test at a shared or production registry.
+
 ## Project structure
 
 ```text

@@ -9,6 +9,11 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
     env:
       MISE_LOCKED: "1"
     steps:
@@ -22,3 +27,8 @@ jobs:
 
       - name: Run repository checks
         run: mise run check
+
+      - name: Run OCI registry integration test
+        env:
+          TUFF_OCI_TEST_REGISTRY: localhost:5000
+        run: cargo test -p tuffcli --test oci_registry -- --ignored

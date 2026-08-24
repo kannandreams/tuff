@@ -29,6 +29,8 @@ or workflows, or when they mention "drift", "baseline", or "tuff".
 - `tuff pack build [path] -o <artifact.tuffpack>` — build a deterministic artifact
 - `tuff pack inspect <artifact.tuffpack>` — inspect verified metadata
 - `tuff pack verify <artifact.tuffpack>` — verify metadata and every stored file
+- `tuff pack push <artifact.tuffpack> <registry/repository:tag>` — publish exact pack bytes as an OCI artifact
+- `tuff pack pull <registry/repository:tag-or-digest> -o <artifact.tuffpack>` — download and verify an OCI-distributed pack without overwriting an existing file
 - `tuff pack extract <artifact.tuffpack> -a <agent> -o <dir>` — extract a runtime-native target
 
 ### Inspect

@@ -4084,6 +4084,57 @@ fn pack_verify_rejects_tampered_artifact() {
 }
 
 #[test]
+fn pack_push_requires_an_explicit_tag_before_network_access() {
+    tuff()
+        .args([
+            "pack",
+            "push",
+            "missing.tuffpack",
+            "ghcr.io/acme/engineering",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("explicit tag"));
+}
+
+#[test]
+fn pack_pull_rejects_implicit_latest_before_network_access() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .args([
+            "pack",
+            "pull",
+            "ghcr.io/acme/engineering",
+            "--output",
+            temp.path().join("pack.tuffpack").to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("implicit 'latest'"));
+}
+
+#[test]
+fn pack_pull_refuses_existing_output_before_network_access() {
+    let temp = TempDir::new().unwrap();
+    let output = temp.path().join("pack.tuffpack");
+    fs::write(&output, "keep me").unwrap();
+
+    tuff()
+        .args([
+            "pack",
+            "pull",
+            "localhost:1/acme/engineering:1.2.0",
+            "--output",
+            output.to_str().unwrap(),
+            "--plain-http",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("refusing to overwrite"));
+    assert_eq!(fs::read_to_string(output).unwrap(), "keep me");
+}
+
+#[test]
 fn pack_check_rejects_missing_workflow_dependency() {
     let temp = TempDir::new().unwrap();
     let pack = make_pack(temp.path());
