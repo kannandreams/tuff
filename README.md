@@ -100,12 +100,12 @@ tuff add skill https://github.com/owner/agent-capabilities security-review \
   --agent open-agents \
   --agent claude
 
-# Build one reviewed capability pack and install it atomically.
-tuff pack build ./crm-integration --output ./crm-integration.tuffpack
-tuff pack verify ./crm-integration.tuffpack
-tuff pack push ./crm-integration.tuffpack ghcr.io/yourorg/crm-integration:1.2.0
-tuff pack pull ghcr.io/yourorg/crm-integration:1.2.0 --output ./downloaded.tuffpack
-tuff add pack ./downloaded.tuffpack --agent open-agents
+# Build the project's reviewed capabilities and install the release atomically.
+tuff pack build --name crm-integration --version 1.2.0
+tuff pack verify ./tuff-dist/crm-integration-1.2.0.tuffpack
+tuff pack push ./tuff-dist/crm-integration-1.2.0.tuffpack ghcr.io/yourorg/crm-integration:1.2.0
+tuff pack pull ghcr.io/yourorg/crm-integration:1.2.0 --output ./tuff-dist/downloaded.tuffpack
+tuff add pack ./tuff-dist/downloaded.tuffpack --agent open-agents
 
 # Review and reconcile an upstream change.
 tuff outdated

@@ -3,13 +3,18 @@ title: When to Use Tuff
 description: Where Tuff helps teams manage coding-agent capabilities.
 ---
 
-Tuff is for teams that want agent capabilities to be managed like normal
-engineering assets: visible in a project, reviewable in pull requests, and
-reproducible across machines.
+Tuff is for teams that want agent capabilities to be managed like normal engineering assets: visible in a project, reviewable in pull requests, and reproducible across machines.
 
 ## Team capability pack
 
-A platform or developer-experience team maintains a pack repository:
+A platform or developer-experience team can test capabilities in an initialized agent project and package the tracked set directly:
+
+```sh frame="terminal"
+tuff pack build --name company-agent-pack --version 1.0.0
+tuff pack verify tuff-dist/company-agent-pack-1.0.0.tuffpack
+```
+
+When the team needs a reusable subset, `tuff pack init company-agent-pack --from-project` creates a small definition under `tuff-packs/` that refers to tracked capability IDs without copying their files. A dedicated release repository can instead use the advanced standalone layout:
 
 ```text
 company-agent-pack/
@@ -20,20 +25,20 @@ company-agent-pack/
     release-prep/
 ```
 
-The platform team validates and builds one immutable artifact:
+The platform team validates and builds the standalone source into the same artifact format:
 
 ```sh frame="terminal"
 tuff pack check company-agent-pack
-tuff pack build company-agent-pack --output dist/company-agent-pack-1.0.0.tuffpack
-tuff pack verify dist/company-agent-pack-1.0.0.tuffpack
+tuff pack build company-agent-pack --output tuff-dist/company-agent-pack-1.0.0.tuffpack
+tuff pack verify tuff-dist/company-agent-pack-1.0.0.tuffpack
 ```
 
 Product teams install the complete pack atomically, while runtime infrastructure can extract a verified target tree without project state:
 
 ```sh frame="terminal"
 tuff init
-tuff add pack dist/company-agent-pack-1.0.0.tuffpack --agent open-agents
-tuff pack extract dist/company-agent-pack-1.0.0.tuffpack --agent open-agents --output runtime/
+tuff add pack tuff-dist/company-agent-pack-1.0.0.tuffpack --agent open-agents
+tuff pack extract tuff-dist/company-agent-pack-1.0.0.tuffpack --agent open-agents --output runtime/
 ```
 
 The project owns installed output. If a team customizes a member, Tuff shows that drift instead of hiding it. See [Capability Packs](/concepts/packs/) for the complete authoring and delivery contract.
@@ -47,17 +52,13 @@ Some agent behavior belongs to a single project. For example:
 - how to review domain-specific code
 - how to prepare a release
 
-Those capabilities can live inside the project and still use Tuff for
-validation, install state, drift detection, and future merge behavior.
+Those capabilities can live inside the project and still use Tuff for validation, install state, drift detection, and pack releases.
 
 ## Personal or global setup
 
-An engineer may also keep personal capabilities in a global location and load
-them into a harness. Tuff should support that flexibility later, but the
-strongest team workflow is project-owned state that can be reviewed and shared.
+An engineer may also keep personal capabilities in a global location and load them into a harness. Project packs intentionally select project-scoped capabilities because the strongest team workflow is project-owned state that can be reviewed and shared.
 
-Global capabilities are useful for personal preferences. Project capabilities
-are better for team conventions.
+Global capabilities are useful for personal preferences. Project capabilities are better for team conventions.
 
 ## Adopting external skills
 

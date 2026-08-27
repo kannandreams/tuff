@@ -6,10 +6,22 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-27
+
+### Added
+
+- Added `tuff pack build --name <name>` for packaging accepted project-scoped capabilities directly from `tuff.lock`, with capability selectors, workflow dependency expansion, version and agent overrides, and a `tuff-dist/` default output.
+- Added `tuff pack init <name> --from-project` for reusable ID-based definitions under `tuff-packs/` without copying capability sources.
+
 ### Improved
 
 - Made the “Explore Tuff Packs” landing-page link a primary call to action.
 - Standardized public pack documentation around the `crm-integration` example and linked the beginner-focused [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples) from the CLI and capability-pack documentation.
+- Made project pack builds verify selected installed files and reconstructed sources against accepted lockfile baselines before writing an artifact, with actionable `tuff update` guidance.
+
+### Fixed
+
+- Deduplicated Git capability discovery paths so a directly selected nested capability is not reported as ambiguous.
 
 ## [0.1.3] - 2026-08-25
 
@@ -78,6 +90,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
 [Unreleased]: https://github.com/kannandreams/tuff/compare/v0.1.3...HEAD
+[0.1.4]: https://github.com/kannandreams/tuff/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/kannandreams/tuff/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/kannandreams/tuff/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/kannandreams/tuff/compare/v0.1.0...v0.1.1

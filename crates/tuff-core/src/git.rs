@@ -204,6 +204,8 @@ pub fn discover_capability(
         }
     }
 
+    matches.sort();
+    matches.dedup();
     match matches.len() {
         0 => {
             let nearby = list_nearby_capabilities(repo, capability_type)?;
