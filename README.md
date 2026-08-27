@@ -135,6 +135,7 @@ The package is named `tuffcli`; every installation method provides the `tuff` co
 - [When to use Tuff](https://tuffcli.dev/usage-scenarios/)
 - [CLI reference](https://tuffcli.dev/cli/)
 - [Lifecycle and drift detection](https://tuffcli.dev/concepts/lifecycle/)
+- [Changelog](CHANGELOG.md)
 
 ## Contributing
 
