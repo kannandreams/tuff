@@ -57,7 +57,7 @@ Entries are deterministically ordered by name, type, target, and installed path.
 A capability installed through `tuff add pack` also records the pack release that delivered it:
 
 ```toml
-pack = { name = "com.acme/engineering", version = "1.2.0", digest = "<sha256>" }
+pack = { name = "crm-integration", version = "1.2.0", digest = "<sha256>" }
 ```
 
 The pack version is separate from the capability's `version`. These optional fields do not change lockfile schema version 1 and are absent for capabilities installed directly from local or Git sources.

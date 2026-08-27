@@ -39,12 +39,12 @@ You need:
 - Docker with Buildx/BuildKit; and
 - `jq` if you want to capture Tuff's JSON result automatically in a shell or CI job.
 
-This guide uses account `111122223333`, Region `eu-west-2`, ECR repository `tuff/engineering`, and pack version `1.2.0`. Replace them with your values.
+This guide uses account `111122223333`, Region `eu-west-2`, ECR repository `tuff/crm-integration`, and pack version `1.2.0`. Replace them with your values.
 
 ```sh frame="terminal"
 export AWS_ACCOUNT_ID="111122223333"
 export AWS_REGION="eu-west-2"
-export PACK_REPOSITORY="tuff/engineering"
+export PACK_REPOSITORY="tuff/crm-integration"
 export PACK_TAG="1.2.0"
 export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 export PACK_TAG_REFERENCE="${ECR_REGISTRY}/${PACK_REPOSITORY}:${PACK_TAG}"
@@ -93,7 +93,7 @@ The following combined policy covers login, Tuff's safe-tag read, blob publicati
         "ecr:PutImage",
         "ecr:UploadLayerPart"
       ],
-      "Resource": "arn:aws:ecr:eu-west-2:111122223333:repository/tuff/engineering"
+      "Resource": "arn:aws:ecr:eu-west-2:111122223333:repository/tuff/crm-integration"
     }
   ]
 }
@@ -120,16 +120,16 @@ Build and locally verify the deterministic artifact:
 
 ```sh frame="terminal"
 mkdir -p dist
-tuff pack check ./company-agent-pack
-tuff pack build ./company-agent-pack --output dist/engineering-1.2.0.tuffpack
-tuff pack verify dist/engineering-1.2.0.tuffpack
+tuff pack check ./crm-integration
+tuff pack build ./crm-integration --output dist/crm-integration-1.2.0.tuffpack
+tuff pack verify dist/crm-integration-1.2.0.tuffpack
 ```
 
 Publish it under the explicit ECR tag:
 
 ```sh frame="terminal"
 tuff pack push \
-  dist/engineering-1.2.0.tuffpack \
+  dist/crm-integration-1.2.0.tuffpack \
   "$PACK_TAG_REFERENCE" \
   --json
 ```
@@ -139,12 +139,12 @@ The result contains both digests and an immutable reference:
 ```json
 {
   "status": "pushed",
-  "name": "com.acme/engineering",
+  "name": "crm-integration",
   "version": "1.2.0",
   "artifactDigest": "sha256:<tuffpack-digest>",
   "manifestDigest": "sha256:<oci-manifest-digest>",
-  "tagReference": "111122223333.dkr.ecr.eu-west-2.amazonaws.com/tuff/engineering:1.2.0",
-  "reference": "111122223333.dkr.ecr.eu-west-2.amazonaws.com/tuff/engineering@sha256:<oci-manifest-digest>"
+  "tagReference": "111122223333.dkr.ecr.eu-west-2.amazonaws.com/tuff/crm-integration:1.2.0",
+  "reference": "111122223333.dkr.ecr.eu-west-2.amazonaws.com/tuff/crm-integration@sha256:<oci-manifest-digest>"
 }
 ```
 
@@ -155,7 +155,7 @@ To capture it in CI:
 ```sh frame="terminal"
 mkdir -p build
 tuff pack push \
-  dist/engineering-1.2.0.tuffpack \
+  dist/crm-integration-1.2.0.tuffpack \
   "$PACK_TAG_REFERENCE" \
   --json > build/tuff-pack-push.json
 
@@ -178,10 +178,10 @@ aws ecr get-login-password --region "$AWS_REGION" \
 mkdir -p build
 tuff pack pull \
   "$PACK_DIGEST_REFERENCE" \
-  --output build/engineering-1.2.0.tuffpack
+  --output build/crm-integration-1.2.0.tuffpack
 
 tuff pack extract \
-  build/engineering-1.2.0.tuffpack \
+  build/crm-integration-1.2.0.tuffpack \
   --agent open-agents \
   --output build/tuff-runtime
 ```
@@ -242,10 +242,10 @@ After login, the Tuff build, push, pull, digest, extract, and Docker steps remai
 
 | Registry | Configure reusable credentials | Reference shape |
 | --- | --- | --- |
-| GitHub Container Registry | `printf '%s' "$GHCR_TOKEN" \| docker login ghcr.io --username "$GITHUB_USER" --password-stdin` | `ghcr.io/owner/engineering:1.2.0` |
-| Google Artifact Registry | `gcloud auth configure-docker europe-west2-docker.pkg.dev` | `europe-west2-docker.pkg.dev/project/repository/engineering:1.2.0` |
-| Azure Container Registry | `az acr login --name myregistry` | `myregistry.azurecr.io/team/engineering:1.2.0` |
-| Self-hosted OCI registry | `docker login registry.example.com` | `registry.example.com/team/engineering:1.2.0` |
+| GitHub Container Registry | `printf '%s' "$GHCR_TOKEN" \| docker login ghcr.io --username "$GITHUB_USER" --password-stdin` | `ghcr.io/yourorg/crm-integration:1.2.0` |
+| Google Artifact Registry | `gcloud auth configure-docker europe-west2-docker.pkg.dev` | `europe-west2-docker.pkg.dev/project/repository/crm-integration:1.2.0` |
+| Azure Container Registry | `az acr login --name myregistry` | `myregistry.azurecr.io/team/crm-integration:1.2.0` |
+| Self-hosted OCI registry | `docker login registry.example.com` | `registry.example.com/team/crm-integration:1.2.0` |
 
 Tuff checks Docker credentials first and Podman credentials second. For a self-hosted registry with a private certificate authority, the login client must trust that CA according to its own configuration, and each Tuff push or pull must receive `--ca-file company-ca.pem`; Tuff's flag does not change Docker or Podman trust settings. Use `--plain-http` only with an isolated disposable development registry.
 

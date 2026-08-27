@@ -152,7 +152,7 @@ Install every member of a verified local pack artifact into project scope:
 
 ```sh frame="terminal"
 tuff init
-tuff add pack ./dist/engineering-1.2.0.tuffpack --agent open-agents
+tuff add pack ./dist/crm-integration-1.2.0.tuffpack --agent open-agents
 ```
 
 Pack installation verifies the complete artifact, preflights every member, stages shared hook and MCP configuration, and refuses the entire installation if any member is already tracked or would overwrite an untracked file. `--agent` is optional and repeatable; pack installation does not support `--global`.
@@ -223,12 +223,14 @@ When Tuff adopts existing agent files, it records their hashes as baselines in t
 
 ## Build and Deliver Packs
 
+New to packs? Start with the [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples). It walks through a five-minute CSV demo and packages one existing skill before introducing tools, hooks, workflows, OCI publishing, and container delivery.
+
 ### `tuff pack`
 
 Create a starter manifest in the current directory:
 
 ```sh frame="terminal"
-tuff pack init com.acme/engineering
+tuff pack init crm-integration
 ```
 
 Validate or build a source pack. Both commands default to the current directory:
@@ -251,9 +253,9 @@ tuff pack verify <artifact.tuffpack>
 Publish a verified artifact to an OCI registry, or pull it back by an explicit tag or digest:
 
 ```sh frame="terminal"
-tuff pack push <artifact.tuffpack> ghcr.io/acme/engineering:1.2.0
-tuff pack pull ghcr.io/acme/engineering:1.2.0 --output engineering-1.2.0.tuffpack
-tuff pack pull ghcr.io/acme/engineering@sha256:<manifest-digest> --output pinned.tuffpack
+tuff pack push <artifact.tuffpack> ghcr.io/yourorg/crm-integration:1.2.0
+tuff pack pull ghcr.io/yourorg/crm-integration:1.2.0 --output crm-integration-1.2.0.tuffpack
+tuff pack pull ghcr.io/yourorg/crm-integration@sha256:<manifest-digest> --output pinned.tuffpack
 ```
 
 `pack push` refuses to move a tag that already names different content unless `--force` is supplied; pushing identical content is idempotent. `pack pull` resolves a tag to an immutable manifest digest before downloading, verifies the OCI descriptors and the complete Tuff artifact, and refuses to overwrite an existing output file. Both commands accept `--json`, repeatable `--ca-file <pem>`, and `--plain-http` for disposable development registries. Tuff uses existing Docker credentials first, then Podman credentials, and otherwise attempts anonymous access.

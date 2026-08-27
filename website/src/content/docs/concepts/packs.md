@@ -7,19 +7,25 @@ A Tuff pack is a versioned release unit containing one or more manifest-backed c
 
 Use packs when a platform team needs to deliver the same reviewed skills, tools, hooks, and workflows into multiple repositories or ephemeral agent runtimes. Continue using `tuff add <capability-type>` when you only need to manage one capability.
 
+:::tip[Learn with a working example]
+The [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples) starts with a five-minute CSV demo, then shows step by step how to turn an existing agent skill into a pack. Continue into its tools, hooks, workflows, registry, and container examples when you are ready for the complete delivery path.
+:::
+
 ## Source layout
 
 ```text
-company-agent-pack/
+crm-integration/
   tuff-pack.toml
   capabilities/
-    rust-guidance/
+    crm-operating/
       tuff.toml
       SKILL.md
-    security-review/
+    crm-connector/
+      tuff.toml
+    pii-guard/
       tuff.toml
       review.sh
-    release-prep/
+    lead-triage/
       tuff.toml
 ```
 
@@ -27,30 +33,33 @@ Every member must be a local directory beneath the pack root and must contain a 
 
 ```toml title="tuff-pack.toml"
 schema = 1
-name = "com.acme/engineering"
+name = "crm-integration"
 version = "1.2.0"
-description = "Acme's reviewed engineering-agent capabilities"
+description = "Reviewed capabilities for agents that work with CRM data"
 
 [build]
 targets = ["open-agents", "claude"]
 
 [[capabilities]]
-path = "capabilities/rust-guidance"
+path = "capabilities/crm-operating"
 
 [[capabilities]]
-path = "capabilities/security-review"
+path = "capabilities/crm-connector"
 
 [[capabilities]]
-path = "capabilities/release-prep"
+path = "capabilities/pii-guard"
+
+[[capabilities]]
+path = "capabilities/lead-triage"
 ```
 
 ## Validate and build
 
 ```sh frame="terminal"
 tuff pack check .
-tuff pack build . --output dist/engineering-1.2.0.tuffpack
-tuff pack verify dist/engineering-1.2.0.tuffpack
-tuff pack inspect dist/engineering-1.2.0.tuffpack
+tuff pack build . --output dist/crm-integration-1.2.0.tuffpack
+tuff pack verify dist/crm-integration-1.2.0.tuffpack
+tuff pack inspect dist/crm-integration-1.2.0.tuffpack
 ```
 
 Pack builds validate every capability, ensure workflow requirements are present with the correct types, reject workflow cycles, and confirm every configured adapter supports every member. The artifact contains the verified member sources and pre-rendered target trees. Files and metadata are canonically ordered, so identical input produces identical artifact bytes and SHA-256 digest.
@@ -62,11 +71,11 @@ Building, verifying, extracting, and installing a pack never executes member too
 Tuff can store the exact `.tuffpack` bytes in any compatible OCI registry, including GHCR and self-hosted registries. OCI is the distribution protocol used by container registries, but a Tuff pack is a generic OCI artifact rather than a runnable container image.
 
 ```sh frame="terminal"
-tuff pack push dist/engineering-1.2.0.tuffpack ghcr.io/acme/engineering:1.2.0
-tuff pack pull ghcr.io/acme/engineering:1.2.0 --output dist/downloaded.tuffpack
+tuff pack push dist/crm-integration-1.2.0.tuffpack ghcr.io/yourorg/crm-integration:1.2.0
+tuff pack pull ghcr.io/yourorg/crm-integration:1.2.0 --output dist/downloaded.tuffpack
 ```
 
-An OCI reference has three important parts: the registry (`ghcr.io`), repository (`acme/engineering`), and either a human-readable tag (`:1.2.0`) or immutable manifest digest (`@sha256:...`). Tuff requires an explicit tag for push and an explicit tag or digest for pull; it never assumes `latest`.
+An OCI reference has three important parts: the registry (`ghcr.io`), repository (`yourorg/crm-integration`), and either a human-readable tag (`:1.2.0`) or immutable manifest digest (`@sha256:...`). Tuff requires an explicit tag for push and an explicit tag or digest for pull; it never assumes `latest`.
 
 The published object uses an OCI image manifest as a portable envelope with artifact type `application/vnd.tuff.pack.v1`, one layer with media type `application/vnd.tuff.pack.layer.v1`, and the exact `.tuffpack` bytes as that layer. The manifest also carries the pack name, version, and description as standard OCI annotations. It deliberately omits timestamps so the same pack produces the same OCI manifest bytes.
 
@@ -98,7 +107,7 @@ The Tuff OCI layer and a Docker image filesystem layer are different objects. Do
 Use `pack extract` to produce one harness-native filesystem tree without creating Tuff project state:
 
 ```sh frame="terminal"
-tuff pack extract dist/engineering-1.2.0.tuffpack \
+tuff pack extract dist/crm-integration-1.2.0.tuffpack \
   --agent open-agents \
   --output runtime-bundle/
 ```
@@ -111,7 +120,7 @@ Initialize the destination repository and install every member atomically:
 
 ```sh frame="terminal"
 tuff init
-tuff add pack dist/engineering-1.2.0.tuffpack --agent open-agents
+tuff add pack dist/crm-integration-1.2.0.tuffpack --agent open-agents
 tuff list
 tuff check
 ```
