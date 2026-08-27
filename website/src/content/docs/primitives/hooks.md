@@ -123,7 +123,7 @@ The same source can also come from Git. The capability name is the directory ins
 repository:
 
 ```sh frame="terminal"
-tuff add hook https://github.com/acme/tuff-hooks claude-session-start \
+tuff add hook https://github.com/yourorg/tuff-hooks claude-session-start \
   --agent claude \
   --hook-file settings.json
 ```
