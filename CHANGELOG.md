@@ -22,6 +22,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 ### Fixed
 
 - Deduplicated Git capability discovery paths so a directly selected nested capability is not reported as ambiguous.
+- Kept project pack builds read-only for `tuff.config.json` when the default-agent configuration is absent.
 
 ## [0.1.3] - 2026-08-25
 
