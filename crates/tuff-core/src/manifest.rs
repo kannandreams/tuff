@@ -53,7 +53,7 @@ impl std::fmt::Display for CapabilityType {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityManifest {
     pub id: String,
     pub version: String,
@@ -78,7 +78,7 @@ pub struct CapabilityManifest {
     pub root: PathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImplementationConfig {
     pub language: String,
     pub entrypoint: String,
@@ -88,7 +88,7 @@ pub struct ImplementationConfig {
     pub runtime_deps: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookConfig {
     pub event: String,
     pub command: String,
@@ -293,6 +293,16 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     Ok(manifest)
 }
 
+/// Writes a capability manifest as deterministic TOML.
+///
+/// # Errors
+///
+/// Returns an error when serialization or filesystem writing fails.
+pub fn write_manifest(path: &Path, manifest: &CapabilityManifest) -> Result<()> {
+    std::fs::write(path, toml::to_string_pretty(manifest)?)?;
+    Ok(())
+}
+
 pub fn synthetic_manifest(
     skill_dir: &Path,
     name: &str,
@@ -328,14 +338,21 @@ fn walk_skill_dir(base: &Path, prefix: &str, files: &mut Vec<String>) -> Result<
     for entry in std::fs::read_dir(base)? {
         let entry = entry?;
         let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(TuffError::new(format!(
+                "symbolic links are not allowed in capability sources: {}",
+                path.display()
+            )));
+        }
         let rel = if prefix.is_empty() {
             entry.file_name().to_string_lossy().to_string()
         } else {
             format!("{}/{}", prefix, entry.file_name().to_string_lossy())
         };
-        if path.is_dir() {
+        if metadata.is_dir() {
             walk_skill_dir(&path, &rel, files)?;
-        } else if rel != "tuff.toml" {
+        } else if metadata.is_file() && rel != "tuff.toml" {
             files.push(rel);
         }
     }

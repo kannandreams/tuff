@@ -13,12 +13,12 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    cmd_add, cmd_add_pack, cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default,
-    cmd_cache_clear, cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_generate_index,
-    cmd_generate_report, cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list,
-    cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init,
-    cmd_pack_inspect, cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status, cmd_untrack,
-    cmd_update,
+    PackBuildOptions, PackInitOptions, cmd_add, cmd_add_pack, cmd_agent_add, cmd_agent_list,
+    cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check, cmd_create, cmd_delete,
+    cmd_diff, cmd_generate_index, cmd_generate_report, cmd_hooks_check_portability,
+    cmd_hooks_matrix, cmd_init, cmd_list, cmd_outdated, cmd_pack_build, cmd_pack_check,
+    cmd_pack_extract, cmd_pack_init, cmd_pack_inspect, cmd_pack_pull, cmd_pack_push,
+    cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -319,22 +319,50 @@ enum AddCommand {
 
 #[derive(Subcommand)]
 enum PackCommand {
-    /// Create a source pack manifest in the current directory.
+    /// Create a source pack manifest.
     Init {
         /// Stable pack name, optionally namespaced with slashes.
         name: String,
+        /// Select tracked capabilities from the current project.
+        #[arg(long = "from-project")]
+        from_project: bool,
+        /// Tracked capability to include (repeatable; workflows add their requirements).
+        #[arg(short = 'c', long = "capability")]
+        capability: Vec<String>,
+        /// Agent harness to render (repeatable; defaults to the project default).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+        /// Initial pack version.
+        #[arg(long)]
+        version: Option<String>,
+        /// Pack description.
+        #[arg(long)]
+        description: Option<String>,
     },
     /// Validate a source pack without writing an artifact.
     Check {
         /// Pack directory or tuff-pack.toml path.
-        #[arg(default_value = ".")]
-        path: PathBuf,
+        path: Option<PathBuf>,
     },
     /// Build a deterministic local pack artifact.
     Build {
         /// Pack directory or tuff-pack.toml path.
-        #[arg(default_value = ".")]
-        path: PathBuf,
+        path: Option<PathBuf>,
+        /// Build tracked capabilities directly from the current project.
+        #[arg(long)]
+        name: Option<String>,
+        /// Pack version (project mode defaults to 0.1.0).
+        #[arg(long)]
+        version: Option<String>,
+        /// Pack description for a one-shot project build.
+        #[arg(long)]
+        description: Option<String>,
+        /// Tracked capability to include (repeatable; workflows add their requirements).
+        #[arg(short = 'c', long = "capability")]
+        capability: Vec<String>,
+        /// Agent harness to render (repeatable; defaults to the project default).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
         /// Artifact output path.
         #[arg(short = 'o', long = "output")]
         output: Option<PathBuf>,
@@ -588,9 +616,45 @@ fn run() -> Result<()> {
             }
         },
         Some(Command::Pack { action }) => match action {
-            PackCommand::Init { name } => cmd_pack_init(&repo_root, &name),
-            PackCommand::Check { path } => cmd_pack_check(&path),
-            PackCommand::Build { path, output } => cmd_pack_build(&path, output.as_deref()),
+            PackCommand::Init {
+                name,
+                from_project,
+                capability,
+                agent,
+                version,
+                description,
+            } => cmd_pack_init(
+                &repo_root,
+                PackInitOptions {
+                    name,
+                    from_project,
+                    capabilities: capability,
+                    agents: agent,
+                    version,
+                    description,
+                },
+            ),
+            PackCommand::Check { path } => cmd_pack_check(&repo_root, path.as_deref()),
+            PackCommand::Build {
+                path,
+                name,
+                version,
+                description,
+                capability,
+                agent,
+                output,
+            } => cmd_pack_build(
+                &repo_root,
+                PackBuildOptions {
+                    path,
+                    name,
+                    version,
+                    description,
+                    capabilities: capability,
+                    agents: agent,
+                    output,
+                },
+            ),
             PackCommand::Inspect { artifact, json } => cmd_pack_inspect(&artifact, json),
             PackCommand::Verify { artifact } => cmd_pack_verify(&artifact),
             PackCommand::Push {

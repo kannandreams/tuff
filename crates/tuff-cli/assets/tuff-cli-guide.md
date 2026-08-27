@@ -5,9 +5,7 @@ description: Reference for using Tuff CLI to manage agent capabilities — creat
 
 # Tuff CLI Guide
 
-You have the Tuff capability lifecycle manager installed in this project.
-Use these commands when the user asks about managing skills, tools, hooks,
-or workflows, or when they mention "drift", "baseline", or "tuff".
+You have the Tuff capability lifecycle manager installed in this project. Use these commands when the user asks about managing skills, tools, hooks, or workflows, or when they mention "drift", "baseline", or "tuff".
 
 ## Available Commands
 
@@ -25,8 +23,11 @@ or workflows, or when they mention "drift", "baseline", or "tuff".
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
 
 ### Packs
+- `tuff pack build --name <name>` — package accepted project capabilities into `tuff-dist/<name>-0.1.0.tuffpack`
+- `tuff pack build --name <name> --capability <id> --version <version> -a <agent>` — build a selected project pack
+- `tuff pack init <name> --from-project --capability <id>` — save a reusable ID-based definition under `tuff-packs/`
 - `tuff pack check [path]` — validate a local source pack
-- `tuff pack build [path] -o <artifact.tuffpack>` — build a deterministic artifact
+- `tuff pack build [path] -o <artifact.tuffpack>` — build a reusable project definition or standalone source pack
 - `tuff pack inspect <artifact.tuffpack>` — inspect verified metadata
 - `tuff pack verify <artifact.tuffpack>` — verify metadata and every stored file
 - `tuff pack push <artifact.tuffpack> <registry/repository:tag>` — publish exact pack bytes as an OCI artifact

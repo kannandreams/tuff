@@ -6,6 +6,24 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-08-27
+
+### Added
+
+- Added `tuff pack build --name <name>` for packaging accepted project-scoped capabilities directly from `tuff.lock`, with capability selectors, workflow dependency expansion, version and agent overrides, and a `tuff-dist/` default output.
+- Added `tuff pack init <name> --from-project` for reusable ID-based definitions under `tuff-packs/` without copying capability sources.
+
+### Improved
+
+- Made project pack builds verify selected installed files and reconstructed sources against accepted lockfile baselines before writing an artifact, with actionable `tuff update` guidance.
+
+### Fixed
+
+- Deduplicated Git capability discovery paths so a directly selected nested capability is not reported as ambiguous.
+- Kept project pack builds read-only for `tuff.config.json` when the default-agent configuration is absent.
+
+## [0.1.4] - 2026-08-27
+
 ### Improved
 
 - Made the “Explore Tuff Packs” landing-page link a primary call to action.
@@ -77,7 +95,9 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/kannandreams/tuff/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/kannandreams/tuff/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/kannandreams/tuff/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/kannandreams/tuff/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/kannandreams/tuff/compare/v0.1.0...v0.1.1

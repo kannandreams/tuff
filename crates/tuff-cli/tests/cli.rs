@@ -227,7 +227,7 @@ fn version_outputs_current_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("tuff 0.1.3"));
+        .stdout(predicate::str::contains("tuff 0.1.5"));
 }
 
 #[test]
@@ -4053,6 +4053,312 @@ fn pack_build_is_deterministic_and_extracts_a_verified_target() {
             .join(".agents/skills/pack-skill/SKILL.md")
             .is_file()
     );
+}
+
+#[test]
+fn project_pack_build_packages_tracked_capabilities_with_simple_defaults() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let skill = make_primitive(project.path(), "code-review");
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", skill.to_str().unwrap()])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["pack", "build", "--name", "crm-integration"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "tuff-dist/crm-integration-0.1.0.tuffpack",
+        ));
+
+    let artifact = project
+        .path()
+        .join("tuff-dist/crm-integration-0.1.0.tuffpack");
+    let output = tuff()
+        .current_dir(project.path())
+        .args(["pack", "inspect", artifact.to_str().unwrap(), "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(metadata["capabilities"][0]["id"], "code-review");
+    assert_eq!(metadata["capabilities"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn project_pack_build_packages_skills_tools_hooks_and_workflows() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let skill = make_primitive(project.path(), "review-skill");
+    let tool = make_tool_primitive(project.path(), "review-tool");
+    let hook = make_hook_primitive(project.path(), "review-hook");
+    let workflow = make_workflow_primitive(
+        project.path(),
+        "review-flow",
+        &[("review-skill", "skill"), ("review-tool", "tool")],
+    );
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    for source in [&skill, &tool, &hook, &workflow] {
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .args(["add", source.to_str().unwrap()])
+            .assert()
+            .success();
+    }
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["pack", "build", "--name", "security-review"])
+        .assert()
+        .success();
+    let pack = tuff_core::pack::read_artifact(
+        &project
+            .path()
+            .join("tuff-dist/security-review-0.1.0.tuffpack"),
+    )
+    .unwrap();
+    let types = pack
+        .metadata
+        .capabilities
+        .iter()
+        .map(|capability| capability.capability_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(types, ["workflow", "hook", "skill", "tool"]);
+}
+
+#[test]
+fn project_pack_build_refuses_drift_without_writing_an_artifact() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let skill = make_primitive(project.path(), "code-review");
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", skill.to_str().unwrap()])
+        .assert()
+        .success();
+    fs::write(
+        project.path().join(".agents/skills/code-review/SKILL.md"),
+        "# Unaccepted change\n",
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["pack", "build", "--name", "crm-integration"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "selected capabilities have unaccepted changes",
+        ))
+        .stderr(predicate::str::contains("tuff update <capability>"));
+    assert!(!project.path().join("tuff-dist").exists());
+}
+
+#[test]
+fn project_pack_build_allows_explicit_guide_and_custom_version_and_agent() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "pack",
+            "build",
+            "--name",
+            "guide",
+            "--capability",
+            "tuff-cli-guide",
+            "--version",
+            "2.4.0",
+            "--agent",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    let artifact = project.path().join("tuff-dist/guide-2.4.0.tuffpack");
+    let pack = tuff_core::pack::read_artifact(&artifact).unwrap();
+    assert_eq!(pack.metadata.capabilities[0].id, "tuff-cli-guide");
+    assert_eq!(pack.metadata.targets[0].id, "claude");
+}
+
+#[test]
+fn project_pack_build_refuses_source_changes_not_accepted_by_update() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let skill = make_primitive(project.path(), "code-review");
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", skill.to_str().unwrap()])
+        .assert()
+        .success();
+    fs::write(skill.join("src/SKILL.md"), "# Changed source\n").unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["pack", "build", "--name", "crm-integration"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "no longer reproduces its accepted 'open-agents' baseline",
+        ))
+        .stderr(predicate::str::contains("tuff update code-review"));
+    assert!(!project.path().join("tuff-dist").exists());
+}
+
+#[test]
+fn project_pack_init_persists_expanded_workflow_selection_without_copying_sources() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let skill = make_primitive(project.path(), "dep-skill");
+    let workflow =
+        make_workflow_primitive(project.path(), "review-flow", &[("dep-skill", "skill")]);
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    for source in [&skill, &workflow] {
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .args(["add", source.to_str().unwrap()])
+            .assert()
+            .success();
+    }
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "pack",
+            "init",
+            "crm-integration",
+            "--from-project",
+            "--capability",
+            "review-flow",
+        ])
+        .assert()
+        .success();
+
+    let pack_root = project.path().join("tuff-packs/crm-integration");
+    let (_, manifest) = tuff_core::pack::load_manifest(&pack_root).unwrap();
+    assert_eq!(
+        manifest.project.unwrap().capabilities,
+        ["dep-skill", "review-flow"]
+    );
+    assert!(!pack_root.join("capabilities").exists());
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["pack", "build", pack_root.to_str().unwrap()])
+        .assert()
+        .success();
+    assert!(
+        project
+            .path()
+            .join("tuff-dist/crm-integration-0.1.0.tuffpack")
+            .is_file()
+    );
+}
+
+#[test]
+fn project_pack_build_explains_unreconstructable_pack_installed_non_skill() {
+    let author = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let source_pack = make_runtime_pack(author.path());
+    let artifact = author.path().join("runtime.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            source_pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", "pack", artifact.to_str().unwrap()])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "pack",
+            "build",
+            "--name",
+            "runtime",
+            "--capability",
+            "pack-mcp",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "cannot reconstruct portable source for tool capability 'pack-mcp'",
+        ))
+        .stderr(predicate::str::contains(
+            "reinstall it from a manifest-backed local source",
+        ));
+    assert!(!project.path().join("tuff-dist").exists());
 }
 
 #[test]

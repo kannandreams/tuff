@@ -31,6 +31,9 @@ pub struct PackManifest {
     pub version: String,
     pub description: String,
     pub build: PackBuild,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<ProjectPackSelection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<PackMember>,
 }
 
@@ -43,18 +46,27 @@ pub struct PackBuild {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// Capability IDs selected from the current project's `tuff.lock`.
+pub struct ProjectPackSelection {
+    pub capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 /// A local manifest-backed capability included in a pack.
 pub struct PackMember {
     pub path: String,
 }
 
 /// A validated pack member and its loaded capability manifest.
+#[derive(Clone)]
 pub struct LoadedPackMember {
     pub source_path: String,
     pub manifest: CapabilityManifest,
 }
 
 /// A validated source pack rooted at its canonical filesystem directory.
+#[derive(Clone)]
 pub struct LoadedPack {
     pub root: PathBuf,
     pub manifest: PackManifest,
@@ -136,6 +148,23 @@ pub struct PackArtifact {
 /// Returns an error for malformed manifests, unsafe or duplicate paths, invalid capability
 /// manifests, incomplete workflow dependencies, or workflow cycles.
 pub fn load_pack(path: &Path) -> Result<LoadedPack> {
+    let (root, manifest) = load_manifest(path)?;
+    if manifest.project.is_some() {
+        return Err(TuffError::new(
+            "project-backed pack manifests must be built from an initialized Tuff project",
+        ));
+    }
+    load_path_pack(root, manifest)
+}
+
+/// Loads and validates only the source-pack manifest and returns its canonical root.
+///
+/// Project-backed manifests require CLI project context before their members can be resolved.
+///
+/// # Errors
+///
+/// Returns an error for an invalid path, unreadable TOML, or invalid source-pack metadata.
+pub fn load_manifest(path: &Path) -> Result<(PathBuf, PackManifest)> {
     let root = if path.is_file() {
         if path.file_name().and_then(|name| name.to_str()) != Some(PACK_MANIFEST_FILE) {
             return Err(TuffError::new(format!(
@@ -165,6 +194,10 @@ pub fn load_pack(path: &Path) -> Result<LoadedPack> {
         .map_err(|error| TuffError::new(format!("invalid pack manifest TOML: {error}")))?;
 
     validate_pack_manifest(&manifest)?;
+    Ok((root, manifest))
+}
+
+fn load_path_pack(root: PathBuf, manifest: PackManifest) -> Result<LoadedPack> {
     let mut members = Vec::with_capacity(manifest.capabilities.len());
     let mut ids = BTreeSet::new();
     for member in &manifest.capabilities {
@@ -488,8 +521,14 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
     if manifest.name.chars().any(char::is_whitespace) {
         return Err(TuffError::new("pack name must not contain whitespace"));
     }
-    if manifest.capabilities.is_empty() {
-        return Err(TuffError::new("pack must contain at least one capability"));
+    match (&manifest.project, manifest.capabilities.is_empty()) {
+        (None, true) => return Err(TuffError::new("pack must contain at least one capability")),
+        (Some(_), false) => {
+            return Err(TuffError::new(
+                "pack must use either [project] capabilities or [[capabilities]] paths, not both",
+            ));
+        }
+        _ => {}
     }
     if manifest.build.targets.is_empty() {
         return Err(TuffError::new(
@@ -513,6 +552,22 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
                 "duplicate pack capability path: {}",
                 member.path
             )));
+        }
+    }
+    if let Some(project) = &manifest.project {
+        if project.capabilities.is_empty() {
+            return Err(TuffError::new(
+                "project pack must contain at least one capability id",
+            ));
+        }
+        let mut ids = BTreeSet::new();
+        for id in &project.capabilities {
+            validate_non_empty("project.capabilities", id)?;
+            if !ids.insert(id) {
+                return Err(TuffError::new(format!(
+                    "duplicate project capability id: {id}"
+                )));
+            }
         }
     }
     Ok(())

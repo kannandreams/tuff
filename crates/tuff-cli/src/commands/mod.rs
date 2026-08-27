@@ -10,6 +10,7 @@ mod init;
 mod list;
 mod outdated;
 mod pack;
+mod project_pack;
 mod report;
 mod status;
 mod update;

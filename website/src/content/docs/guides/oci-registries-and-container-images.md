@@ -16,18 +16,67 @@ The word “layer” refers to two different things in this workflow:
 
 A Tuff pack uses an OCI manifest so a registry can store and transport it, but it is not a container image. It has an empty OCI configuration and a Tuff-specific layer media type rather than an operating system, architecture, command, or root filesystem. Do not use `docker pull` or `FROM` with a Tuff pack reference.
 
-The supported deployment flow is:
+Container images and capability packs use the same registry transport, but they remain different artifacts. The two delivery lanes meet only after the verified capability target is copied into the image build context:
 
 ```text
-pack source
-  → tuff pack build
-  → tuff pack push to ECR
-  → immutable manifest-digest reference
-  → tuff pack pull
-  → tuff pack extract for one agent
-  → Docker BuildKit COPY
-  → runnable container image
+Agent application lane                 Agent capability lane
+──────────────────────                 ─────────────────────
+application source                     tracked skills, tools, hooks, workflows
+        │                                           │
+        ▼                                           ▼
+docker build                              tuff pack build --name ...
+        │                                           │
+        ▼                                           ▼
+container image                              .tuffpack artifact
+        │                                           │
+        ▼                                           ▼
+docker push / docker pull               tuff pack push / tuff pack pull
+                                                    │
+                                                    ▼
+                                           tuff pack extract
+                                                    │
+                           ┌────────────────────────┘
+                           ▼
+                 Dockerfile COPY
+                           │
+                           ▼
+          runnable image = application + capabilities
 ```
+
+## Quick example with GHCR
+
+This short example shows the matching commands before the detailed ECR walkthrough. Authenticate once with GitHub Container Registry:
+
+```sh frame="terminal"
+printf '%s' "$GHCR_TOKEN" \
+  | docker login ghcr.io --username "$GITHUB_USER" --password-stdin
+```
+
+Build and publish the application image in the normal Docker lane:
+
+```sh frame="terminal"
+docker build --tag ghcr.io/yourorg/crm-agent:1.2.0 .
+docker push ghcr.io/yourorg/crm-agent:1.2.0
+docker pull ghcr.io/yourorg/crm-agent:1.2.0
+```
+
+Build and publish the tracked agent capabilities in the Tuff lane:
+
+```sh frame="terminal"
+tuff pack build --name crm-integration --version 1.2.0
+tuff pack push \
+  tuff-dist/crm-integration-1.2.0.tuffpack \
+  ghcr.io/yourorg/crm-integration:1.2.0
+tuff pack pull \
+  ghcr.io/yourorg/crm-integration:1.2.0 \
+  --output build/crm-integration-1.2.0.tuffpack
+tuff pack extract \
+  build/crm-integration-1.2.0.tuffpack \
+  --agent open-agents \
+  --output build/tuff-runtime
+```
+
+The final Dockerfile and BuildKit commands later in this guide copy `build/tuff-runtime` into the application image. `docker pull` cannot pull the Tuff pack because its OCI layer has a Tuff media type; use `tuff pack pull` for that lane.
 
 ## Prerequisites
 
@@ -119,17 +168,15 @@ aws ecr get-login-password --region "$AWS_REGION" \
 Build and locally verify the deterministic artifact:
 
 ```sh frame="terminal"
-mkdir -p dist
-tuff pack check ./crm-integration
-tuff pack build ./crm-integration --output dist/crm-integration-1.2.0.tuffpack
-tuff pack verify dist/crm-integration-1.2.0.tuffpack
+tuff pack build --name crm-integration --version 1.2.0
+tuff pack verify tuff-dist/crm-integration-1.2.0.tuffpack
 ```
 
 Publish it under the explicit ECR tag:
 
 ```sh frame="terminal"
 tuff pack push \
-  dist/crm-integration-1.2.0.tuffpack \
+  tuff-dist/crm-integration-1.2.0.tuffpack \
   "$PACK_TAG_REFERENCE" \
   --json
 ```
@@ -155,7 +202,7 @@ To capture it in CI:
 ```sh frame="terminal"
 mkdir -p build
 tuff pack push \
-  dist/crm-integration-1.2.0.tuffpack \
+  tuff-dist/crm-integration-1.2.0.tuffpack \
   "$PACK_TAG_REFERENCE" \
   --json > build/tuff-pack-push.json
 

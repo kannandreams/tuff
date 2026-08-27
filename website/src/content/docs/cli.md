@@ -152,7 +152,7 @@ Install every member of a verified local pack artifact into project scope:
 
 ```sh frame="terminal"
 tuff init
-tuff add pack ./dist/crm-integration-1.2.0.tuffpack --agent open-agents
+tuff add pack ./tuff-dist/crm-integration-1.2.0.tuffpack --agent open-agents
 ```
 
 Pack installation verifies the complete artifact, preflights every member, stages shared hook and MCP configuration, and refuses the entire installation if any member is already tracked or would overwrite an untracked file. `--agent` is optional and repeatable; pack installation does not support `--global`.
@@ -223,24 +223,44 @@ When Tuff adopts existing agent files, it records their hashes as baselines in t
 
 ## Build and Deliver Packs
 
-New to packs? Start with the [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples). It walks through a five-minute CSV demo and packages one existing skill before introducing tools, hooks, workflows, OCI publishing, and container delivery.
+New to packs? Start with the [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples). It follows tracked capabilities through build, inspection, GHCR publication, pull, extraction, and a container image before introducing the lower-level details.
 
 ### `tuff pack`
 
-Create a starter manifest in the current directory:
+Package all project-scoped tracked capabilities except `tuff-cli-guide`, using version `0.1.0` and the configured default agent:
 
 ```sh frame="terminal"
-tuff pack init crm-integration
+tuff pack build --name crm-integration
 ```
 
-Validate or build a source pack. Both commands default to the current directory:
+The default output is `tuff-dist/crm-integration-0.1.0.tuffpack`. Select capabilities, targets, a version, or a different output when needed:
+
+```sh frame="terminal"
+tuff pack build --name crm-integration --version 1.2.0 \
+  --capability crm-operating --capability lead-triage \
+  --agent open-agents --agent claude \
+  --output releases/crm-integration-1.2.0.tuffpack
+```
+
+Create a reusable project-backed definition under `tuff-packs/<name>/tuff-pack.toml` without copying capability files:
+
+```sh frame="terminal"
+tuff pack init crm-integration --from-project \
+  --capability crm-operating --capability lead-triage
+tuff pack check tuff-packs/crm-integration
+tuff pack build tuff-packs/crm-integration
+```
+
+Selecting a workflow automatically includes its tracked transitive requirements. Project builds fail when selected capability files or sources differ from the accepted `tuff.lock` baseline; accept intentional changes with `tuff update <capability>` first.
+
+Standalone path-based source packs remain supported. Both commands default to the current directory:
 
 ```sh frame="terminal"
 tuff pack check [path]
 tuff pack build [path] --output <artifact.tuffpack>
 ```
 
-When `--output` is omitted, Tuff writes `<pack-name>-<pack-version>.tuffpack` beneath the pack root. Build refuses to overwrite an existing artifact.
+For a standalone pack, omitting `--output` writes `<pack-name>-<pack-version>.tuffpack` beneath the pack root. Build always refuses to overwrite an existing artifact.
 
 Inspect or verify an artifact:
 

@@ -18,12 +18,43 @@ use crate::pack::{
 use crate::resolver::Scope;
 
 use super::add::install_capability;
+use super::project_pack::{
+    PreparedProjectPack, default_project_capabilities, prepare_project_pack,
+};
 use super::resolve_agent_selection;
 
-pub fn cmd_pack_init(root: &Path, name: &str) -> Result<()> {
-    let name = name.trim();
-    if name.is_empty() {
-        return Err(TuffError::new("pack name must not be empty"));
+pub struct PackInitOptions {
+    pub name: String,
+    pub from_project: bool,
+    pub capabilities: Vec<String>,
+    pub agents: Vec<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+}
+
+pub struct PackBuildOptions {
+    pub path: Option<PathBuf>,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub capabilities: Vec<String>,
+    pub agents: Vec<String>,
+    pub output: Option<PathBuf>,
+}
+
+pub fn cmd_pack_init(root: &Path, options: PackInitOptions) -> Result<()> {
+    validate_pack_name(&options.name)?;
+    if options.from_project {
+        return init_project_pack(root, options);
+    }
+    if !options.capabilities.is_empty()
+        || !options.agents.is_empty()
+        || options.version.is_some()
+        || options.description.is_some()
+    {
+        return Err(TuffError::new(
+            "--capability, --agent, --version, and --description require --from-project",
+        ));
     }
     let manifest_path = root.join(pack::PACK_MANIFEST_FILE);
     if manifest_path.exists() {
@@ -34,12 +65,13 @@ pub fn cmd_pack_init(root: &Path, name: &str) -> Result<()> {
     }
     let manifest = pack::PackManifest {
         schema: pack::PACK_SCHEMA_VERSION,
-        name: name.to_string(),
+        name: options.name,
         version: "0.1.0".into(),
         description: "Describe the capabilities and runtime contract in this pack.".into(),
         build: pack::PackBuild {
             targets: vec!["open-agents".into()],
         },
+        project: None,
         capabilities: vec![pack::PackMember {
             path: "capabilities/replace-me".into(),
         }],
@@ -54,9 +86,23 @@ pub fn cmd_pack_init(root: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_pack_check(path: &Path) -> Result<()> {
-    let pack = pack::load_pack(path)?;
-    validate_pack_targets(&pack)?;
+pub fn cmd_pack_check(repo_root: &Path, path: Option<&Path>) -> Result<()> {
+    let path = path.unwrap_or_else(|| Path::new("."));
+    let (_, manifest) = pack::load_manifest(path)?;
+    if manifest.project.is_some() {
+        let prepared = prepare_project_pack(repo_root, manifest)?;
+        validate_pack_targets(&prepared.loaded)?;
+        validate_project_source_baselines(&prepared)?;
+        print_valid_pack(&prepared.loaded);
+        return Ok(());
+    }
+    let loaded = pack::load_pack(path)?;
+    validate_pack_targets(&loaded)?;
+    print_valid_pack(&loaded);
+    Ok(())
+}
+
+fn print_valid_pack(pack: &LoadedPack) {
     println!(
         "pack {} {} is valid ({} capabilities, {} targets)",
         pack.manifest.name,
@@ -64,16 +110,61 @@ pub fn cmd_pack_check(path: &Path) -> Result<()> {
         pack.members.len(),
         pack.manifest.build.targets.len()
     );
-    Ok(())
 }
 
-pub fn cmd_pack_build(path: &Path, output: Option<&Path>) -> Result<()> {
+pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()> {
+    if let Some(name) = options.name.as_deref() {
+        if options.path.is_some() {
+            return Err(TuffError::new(
+                "a source-pack path cannot be combined with --name",
+            ));
+        }
+        validate_pack_name(name)?;
+        let prepared = prepare_one_shot_project_pack(repo_root, &options)?;
+        validate_project_source_baselines(&prepared)?;
+        let output = options
+            .output
+            .unwrap_or_else(|| default_project_artifact_path(repo_root, &prepared.loaded.manifest));
+        return build_loaded_pack(&prepared.loaded, &output);
+    }
+    if options.version.is_some()
+        || options.description.is_some()
+        || !options.capabilities.is_empty()
+        || !options.agents.is_empty()
+    {
+        return Err(TuffError::new(
+            "--version, --description, --capability, and --agent require --name for a one-shot project build",
+        ));
+    }
+    let path = options.path.as_deref().unwrap_or_else(|| Path::new("."));
+    let (_, manifest) = pack::load_manifest(path)?;
+    if manifest.project.is_some() {
+        let prepared = prepare_project_pack(repo_root, manifest)?;
+        validate_project_source_baselines(&prepared)?;
+        let output = options
+            .output
+            .unwrap_or_else(|| default_project_artifact_path(repo_root, &prepared.loaded.manifest));
+        return build_loaded_pack(&prepared.loaded, &output);
+    }
     let loaded = pack::load_pack(path)?;
-    let output = output
-        .map(Path::to_path_buf)
+    let output = options
+        .output
         .unwrap_or_else(|| default_artifact_path(&loaded));
-    let (metadata, contents) = render_artifact(&loaded)?;
-    let digest = pack::write_artifact(&output, metadata, contents)?;
+    build_loaded_pack(&loaded, &output)
+}
+
+fn build_loaded_pack(loaded: &LoadedPack, output: &Path) -> Result<()> {
+    if output.exists() {
+        return Err(TuffError::new(format!(
+            "refusing to overwrite existing pack artifact: {}",
+            output.display()
+        )));
+    }
+    let (metadata, contents) = render_artifact(loaded)?;
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let digest = pack::write_artifact(output, metadata, contents)?;
     println!(
         "built {} {} -> {}",
         loaded.manifest.name,
@@ -83,6 +174,187 @@ pub fn cmd_pack_build(path: &Path, output: Option<&Path>) -> Result<()> {
     println!("sha256:{digest}");
     println!("next: tuff pack verify {}", output.display());
     Ok(())
+}
+
+fn init_project_pack(root: &Path, options: PackInitOptions) -> Result<()> {
+    let manifest_path = project_manifest_path(root, &options.name)?;
+    if manifest_path.exists() {
+        return Err(TuffError::new(format!(
+            "refusing to overwrite existing pack manifest: {}",
+            manifest_path.display()
+        )));
+    }
+    let lock = lockfile::require_lockfile(root)?;
+    let selected = if options.capabilities.is_empty() {
+        default_project_capabilities(&lock)
+    } else {
+        options.capabilities
+    };
+    if selected.is_empty() {
+        return Err(TuffError::new(
+            "this project has no packageable capabilities; add a capability first",
+        ));
+    }
+    let targets = resolve_project_agent_selection(root, &options.agents)?;
+    let version = options.version.unwrap_or_else(|| "0.1.0".to_string());
+    let description = options
+        .description
+        .unwrap_or_else(|| format!("Project capability pack {}.", options.name));
+    let manifest = project_pack_manifest(&options.name, &version, &description, targets, selected);
+    let prepared = prepare_project_pack(root, manifest)?;
+    validate_project_source_baselines(&prepared)?;
+    let expanded = prepared
+        .loaded
+        .members
+        .iter()
+        .map(|member| member.manifest.id.clone())
+        .collect();
+    let saved = project_pack_manifest(
+        &prepared.loaded.manifest.name,
+        &prepared.loaded.manifest.version,
+        &prepared.loaded.manifest.description,
+        prepared.loaded.manifest.build.targets.clone(),
+        expanded,
+    );
+    let parent = manifest_path
+        .parent()
+        .ok_or_else(|| TuffError::new("pack manifest path has no parent"))?;
+    fs::create_dir_all(parent)?;
+    pack::write_manifest(&manifest_path, &saved)?;
+    println!("created {}", manifest_path.display());
+    println!("next: tuff pack check {}", parent.display());
+    println!("then: tuff pack build {}", parent.display());
+    Ok(())
+}
+
+fn prepare_one_shot_project_pack(
+    repo_root: &Path,
+    options: &PackBuildOptions,
+) -> Result<PreparedProjectPack> {
+    let name = options
+        .name
+        .as_deref()
+        .ok_or_else(|| TuffError::new("project pack name is required"))?;
+    let lock = lockfile::require_lockfile(repo_root)?;
+    let selected = if options.capabilities.is_empty() {
+        default_project_capabilities(&lock)
+    } else {
+        options.capabilities.clone()
+    };
+    if selected.is_empty() {
+        return Err(TuffError::new(
+            "this project has no packageable capabilities; add a capability first",
+        ));
+    }
+    let targets = resolve_project_agent_selection(repo_root, &options.agents)?;
+    let version = options.version.as_deref().unwrap_or("0.1.0");
+    let description = options
+        .description
+        .clone()
+        .unwrap_or_else(|| format!("Project capability pack {name}."));
+    prepare_project_pack(
+        repo_root,
+        project_pack_manifest(name, version, &description, targets, selected),
+    )
+}
+
+fn project_pack_manifest(
+    name: &str,
+    version: &str,
+    description: &str,
+    targets: Vec<String>,
+    capabilities: Vec<String>,
+) -> pack::PackManifest {
+    pack::PackManifest {
+        schema: pack::PACK_SCHEMA_VERSION,
+        name: name.to_string(),
+        version: version.to_string(),
+        description: description.to_string(),
+        build: pack::PackBuild { targets },
+        project: Some(pack::ProjectPackSelection { capabilities }),
+        capabilities: Vec::new(),
+    }
+}
+
+fn validate_project_source_baselines(prepared: &PreparedProjectPack) -> Result<()> {
+    let mut targets = BTreeSet::new();
+    for member in &prepared.loaded.members {
+        let entry = prepared
+            .lock
+            .capabilities
+            .get(&member.manifest.id)
+            .ok_or_else(|| {
+                TuffError::new("prepared project pack member is missing from tuff.lock")
+            })?;
+        targets.extend(entry.targets.keys().cloned());
+    }
+    let mut verification_pack = prepared.loaded.clone();
+    verification_pack.manifest.build.targets = targets.into_iter().collect();
+    let (metadata, _) = render_artifact(&verification_pack)?;
+    for target in &metadata.targets {
+        for capability in &target.capabilities {
+            let expected = prepared
+                .lock
+                .capabilities
+                .get(&capability.id)
+                .and_then(|entry| entry.targets.get(&target.id));
+            let Some(expected) = expected else {
+                continue;
+            };
+            if capability.sha256 != expected.sha256 {
+                return Err(TuffError::new(format!(
+                    "source for '{}' no longer reproduces its accepted '{}' baseline; run 'tuff update {}' before building the pack",
+                    capability.id, target.id, capability.id
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_pack_name(name: &str) -> Result<()> {
+    let name = name.trim();
+    if name.is_empty()
+        || name != name.trim_matches('/')
+        || name.contains('\\')
+        || name.chars().any(char::is_whitespace)
+        || name
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(TuffError::new(
+            "pack name must contain safe, non-empty slash-separated components without whitespace",
+        ));
+    }
+    Ok(())
+}
+
+fn project_manifest_path(root: &Path, name: &str) -> Result<PathBuf> {
+    validate_pack_name(name)?;
+    Ok(root
+        .join("tuff-packs")
+        .join(name)
+        .join(pack::PACK_MANIFEST_FILE))
+}
+
+fn resolve_project_agent_selection(root: &Path, requested: &[String]) -> Result<Vec<String>> {
+    if !requested.is_empty() {
+        return resolve_agent_selection(root, requested, false);
+    }
+    let config_path = crate::paths::project_config(root);
+    let default_agent = if config_path.is_file() {
+        serde_json::from_str::<crate::config::TuffConfig>(&fs::read_to_string(config_path)?)?
+            .default_agent
+    } else {
+        crate::config::DEFAULT_AGENT.to_string()
+    };
+    resolve_agent_selection(root, &[default_agent], false)
+}
+
+fn default_project_artifact_path(root: &Path, manifest: &pack::PackManifest) -> PathBuf {
+    let leaf = manifest.name.rsplit('/').next().unwrap_or(&manifest.name);
+    root.join("tuff-dist")
+        .join(format!("{leaf}-{}.tuffpack", manifest.version))
 }
 
 pub fn cmd_pack_inspect(path: &Path, json: bool) -> Result<()> {
