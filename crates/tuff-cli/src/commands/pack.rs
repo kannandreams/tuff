@@ -195,7 +195,7 @@ fn init_project_pack(root: &Path, options: PackInitOptions) -> Result<()> {
             "this project has no packageable capabilities; add a capability first",
         ));
     }
-    let targets = resolve_agent_selection(root, &options.agents, false)?;
+    let targets = resolve_project_agent_selection(root, &options.agents)?;
     let version = options.version.unwrap_or_else(|| "0.1.0".to_string());
     let description = options
         .description
@@ -246,7 +246,7 @@ fn prepare_one_shot_project_pack(
             "this project has no packageable capabilities; add a capability first",
         ));
     }
-    let targets = resolve_agent_selection(repo_root, &options.agents, false)?;
+    let targets = resolve_project_agent_selection(repo_root, &options.agents)?;
     let version = options.version.as_deref().unwrap_or("0.1.0");
     let description = options
         .description
@@ -335,6 +335,20 @@ fn project_manifest_path(root: &Path, name: &str) -> Result<PathBuf> {
         .join("tuff-packs")
         .join(name)
         .join(pack::PACK_MANIFEST_FILE))
+}
+
+fn resolve_project_agent_selection(root: &Path, requested: &[String]) -> Result<Vec<String>> {
+    if !requested.is_empty() {
+        return resolve_agent_selection(root, requested, false);
+    }
+    let config_path = crate::paths::project_config(root);
+    let default_agent = if config_path.is_file() {
+        serde_json::from_str::<crate::config::TuffConfig>(&fs::read_to_string(config_path)?)?
+            .default_agent
+    } else {
+        crate::config::DEFAULT_AGENT.to_string()
+    };
+    resolve_agent_selection(root, &[default_agent], false)
 }
 
 fn default_project_artifact_path(root: &Path, manifest: &pack::PackManifest) -> PathBuf {
