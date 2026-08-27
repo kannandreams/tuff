@@ -114,6 +114,12 @@ chore!: drop lockfile schema v1
 
 The `commit-msg` hook (installed by `mise run hooks`) enforces this locally. The `Commit Message` workflow re-checks every commit in a pull request and the pull request title, since the title becomes the subject on squash merge.
 
+## Changelog and releases
+
+User-facing changes should update the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) under `Added`, `Improved`, or `Fixed`. Release preparation moves those entries into a dated version section and updates the comparison links without rewriting an existing release tag.
+
+GitHub release notes are generated automatically from merged pull requests. Apply the `enhancement` or `feature`, `documentation`, `dependencies`, `maintenance`, `ci`, `bug`, or `fix` label when one category clearly applies; unlabeled changes remain visible under “Other Changes.” The curated changelog remains the authoritative summary of user-visible behavior.
+
 ## Checks
 
 Before opening a pull request, run the checks relevant to your change. The canonical full validation is:
