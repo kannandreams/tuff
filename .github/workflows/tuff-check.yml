@@ -25,6 +25,14 @@ jobs:
           version: 2026.8.2
           cache: true
 
+      # mise-action's cache covers mise's own tool installs, not cargo. Without
+      # this the workspace recompiles every dependency from scratch on every
+      # run, in both the dev and release profiles, which is roughly 7 of the 8
+      # minutes this job takes. Must run after mise installs the toolchain: the
+      # cache key includes the rustc version.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2.9.2
+
       - name: Run repository checks
         run: mise run check
 
