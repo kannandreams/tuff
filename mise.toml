@@ -74,6 +74,41 @@ run = "npm --prefix website run dev"
 description = "Regenerate terminal screenshots"
 run = "./scripts/generate-doc-screenshot.sh tuff-welcome.png -- cargo run -p tuffcli --quiet --"
 
+[tasks.docs-deploy]
+description = "Deploy the documentation site to Cloudflare Pages"
+depends = ["docs-build"]
+raw = true
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The Pages project name is not committed: this repository has no Cloudflare
+# configuration, and hardcoding the wrong project would publish the docs over
+# someone else's site. List yours with:
+#   npx --yes wrangler@4 pages project list
+project="${CF_PAGES_PROJECT:-}"
+if [ -z "$project" ]; then
+  echo "Set CF_PAGES_PROJECT to the Cloudflare Pages project name." >&2
+  echo "List projects with: npx --yes wrangler@4 pages project list" >&2
+  exit 2
+fi
+
+# Cloudflare treats the production branch as the live site; any other value
+# publishes to a preview URL instead, which is the safe way to check a build.
+branch="${CF_PAGES_BRANCH:-main}"
+
+# website/.npmrc sets strict-allow-scripts, so wrangler's postinstall
+# packages need naming explicitly. Narrow approval beats
+# --dangerously-allow-all-scripts, which would switch the policy off.
+npx --yes \
+  --allow-scripts=esbuild \
+  --allow-scripts=fsevents \
+  --allow-scripts=workerd \
+  wrangler@4 pages deploy website/dist \
+  --project-name="$project" \
+  --branch="$branch"
+'''
+
 [tasks.smoke-install]
 description = "Exercise an installed CLI from a clean directory"
 run = '''
