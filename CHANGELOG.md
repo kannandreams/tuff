@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Fixed
+
+- Stopped `tuff add` from registering a hook twice when the same capability or pack is installed over an existing install. Every adapter appended hook groups to the harness settings file unconditionally, so each re-add left another identical entry behind and the harness ran the hook once per copy. Affects the Claude, Codex, Cursor, and Open Agents adapters.
+
 ## [0.1.5] - 2026-08-27
 
 ### Added

@@ -7,6 +7,20 @@ use tuff_hooks_spec::{CompatibilityMatrix, CoverageLevel};
 use crate::error::{Result, TuffError};
 use crate::manifest::{CapabilityManifest, CapabilityType, HookConfig};
 
+/// Append hook groups that this event does not already register.
+///
+/// `tuff add` is re-runnable and a pack may be installed over an existing
+/// install, so the same hook fragment is merged more than once. Appending
+/// unconditionally leaves a duplicate group behind on every re-add, and the
+/// harness then runs that hook once per copy.
+pub fn extend_hook_groups(existing: &mut Vec<serde_json::Value>, additions: &[serde_json::Value]) {
+    for addition in additions {
+        if !existing.iter().any(|group| group == addition) {
+            existing.push(addition.clone());
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmittedFile {
     pub path: String,

@@ -4,7 +4,7 @@ use tuff_hooks_spec::{
     CompatibilityEntry, CompatibilityMatrix, CoverageLevel, HookEvent, SPEC_VERSION,
 };
 
-use tuff_core::adapter::AgentAdapter;
+use tuff_core::adapter::{extend_hook_groups, AgentAdapter};
 use tuff_core::manifest::CapabilityType;
 use tuff_core::{
     error::{Result, TuffError},
@@ -147,14 +147,14 @@ pub fn merge_hook_fragment(
         let additions = additions
             .as_array()
             .ok_or_else(|| TuffError::new(format!("--hook-file hooks.{event} must be an array")))?;
-        settings_hooks
+        let groups = settings_hooks
             .entry(event.clone())
             .or_insert_with(|| serde_json::json!([]))
             .as_array_mut()
             .ok_or_else(|| {
                 TuffError::new(format!(".agents/hook.json hooks.{event} must be an array"))
-            })?
-            .extend(additions.iter().cloned());
+            })?;
+        extend_hook_groups(groups, additions);
     }
     Ok(serde_json::to_string_pretty(&settings)?.into_bytes())
 }
@@ -323,5 +323,24 @@ mod tests {
     #[test]
     fn supported_types_covers_all_capability_types() {
         assert_eq!(SUPPORTED_TYPES.len(), 4);
+    }
+
+    #[test]
+    fn merging_the_same_fragment_twice_does_not_duplicate_the_hook() {
+        let fragment = serde_json::json!({
+            "hooks": {
+                "before_finish": [{"hooks": [{"type": "command", "command": "sh .agents/hooks/require-log-summary/run.sh"}]}]
+            }
+        });
+
+        let once = merge_hook_fragment(None, &fragment).expect("first merge");
+        let twice = merge_hook_fragment(Some(&once), &fragment).expect("second merge");
+
+        let settings: serde_json::Value = serde_json::from_slice(&twice).expect("valid json");
+        let groups = settings["hooks"]["before_finish"]
+            .as_array()
+            .expect("event array");
+        assert_eq!(groups.len(), 1, "re-adding a hook must not register it twice");
+        assert_eq!(once, twice, "a redundant merge must leave the file unchanged");
     }
 }
