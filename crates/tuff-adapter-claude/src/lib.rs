@@ -4,7 +4,7 @@ use tuff_hooks_spec::{
     CompatibilityEntry, CompatibilityMatrix, CoverageLevel, HookEvent, SPEC_VERSION,
 };
 
-use tuff_core::adapter::{extend_hook_groups, AgentAdapter};
+use tuff_core::adapter::{AgentAdapter, extend_hook_groups};
 use tuff_core::manifest::CapabilityType;
 use tuff_core::{
     error::{Result, TuffError},
@@ -418,7 +418,14 @@ mod tests {
         let groups = settings["hooks"]["PreToolUse"]
             .as_array()
             .expect("event array");
-        assert_eq!(groups.len(), 1, "re-adding a hook must not register it twice");
-        assert_eq!(once, twice, "a redundant merge must leave the file unchanged");
+        assert_eq!(
+            groups.len(),
+            1,
+            "re-adding a hook must not register it twice"
+        );
+        assert_eq!(
+            once, twice,
+            "a redundant merge must leave the file unchanged"
+        );
     }
 }
