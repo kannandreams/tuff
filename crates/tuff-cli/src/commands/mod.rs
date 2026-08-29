@@ -58,6 +58,9 @@ pub(crate) fn style_drift_status(status: &str) -> String {
         "modified" => format!("{} {}", paint("●", "33"), paint("modified", "33")),
         "missing" => format!("{} {}", paint("✗", "31"), paint("missing", "31")),
         "error" => format!("{} {}", paint("✗", "31"), paint("error", "31")),
+        // Deliberately not green: this is an absence of information, not a
+        // clean bill of health.
+        "not checked" => format!("{} {}", paint("?", "2"), paint("not checked", "2")),
         other => other.to_string(),
     }
 }

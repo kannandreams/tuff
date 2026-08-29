@@ -2750,7 +2750,11 @@ fn outdated_reports_status() {
         .success()
         .stdout(predicate::str::contains("│ ID"))
         .stdout(predicate::str::contains("local-skill"))
-        .stdout(predicate::str::contains("up to date"))
+        // A locally-installed skill has no upstream to compare against, so the
+        // row must say so. This previously asserted "up to date", which stated
+        // a conclusion that was never reached.
+        .stdout(predicate::str::contains("not checked"))
+        .stdout(predicate::str::contains("up to date").not())
         .stdout(predicate::str::contains("HEAD is now at").not());
 }
 
