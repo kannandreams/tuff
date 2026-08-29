@@ -3,7 +3,9 @@ title: Capability Packs
 description: Build, verify, extract, and install immutable bundles of Tuff capabilities.
 ---
 
-A Tuff pack is a versioned release unit containing one or more agent capabilities. Each skill, tool, hook, or workflow keeps its own capability ID, type, and version; the pack adds a separate name and version for promoting the tested collection as one artifact.
+A capability pack is a versioned release unit containing one or more agent capabilities. Each skill, tool, hook, or workflow keeps its own capability ID, type, and version; the pack adds a separate name and version for promoting the tested collection as one artifact.
+
+Tuff packs are Tuff's implementation of that idea: the `.tuffpack` artifact and the `tuff pack` commands that build, verify, publish, and install it. The artifact carries a Tuff media type rather than a neutral interchange format, so this page uses "Tuff pack" wherever the distinction from a container image matters, and "capability pack" or plain "pack" everywhere else.
 
 Use packs when a platform team needs to deliver the same reviewed skills, tools, hooks, and workflows into multiple repositories or ephemeral agent runtimes. Continue using `tuff add <capability-type>` when you only need to manage one capability.
 

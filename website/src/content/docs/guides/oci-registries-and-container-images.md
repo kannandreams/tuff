@@ -16,7 +16,7 @@ The word “layer” refers to two different things in this workflow:
 
 A Tuff pack uses an OCI manifest so a registry can store and transport it, but it is not a container image. It has an empty OCI configuration and a Tuff-specific layer media type rather than an operating system, architecture, command, or root filesystem. Do not use `docker pull` or `FROM` with a Tuff pack reference.
 
-Container images and capability packs use the same registry transport, but they remain different artifacts. The two delivery lanes meet only after the verified capability target is copied into the image build context:
+Container images and Tuff packs use the same registry transport, but they remain different artifacts. The two delivery lanes meet only after the verified capability target is copied into the image build context:
 
 ```text
 Agent application lane                 Agent capability lane
