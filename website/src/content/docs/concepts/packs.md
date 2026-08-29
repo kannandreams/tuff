@@ -8,8 +8,20 @@ A Tuff pack is a versioned release unit containing one or more agent capabilitie
 Use packs when a platform team needs to deliver the same reviewed skills, tools, hooks, and workflows into multiple repositories or ephemeral agent runtimes. Continue using `tuff add <capability-type>` when you only need to manage one capability.
 
 :::tip[Learn with a working example]
-The [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples) starts with tracked capabilities and follows them through build, inspection, GHCR publication, pull, extraction, and a container image. It also contains realistic skills, tools, hooks, and workflows.
+The [log aggregation agent](https://github.com/kannandreams/tuff-pack-examples/tree/main/projects/log-aggregation-agent), in the [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples), packages a skill, a tool, a hook, and a workflow as one pack, publishes it to GHCR, and consumes it from a clean container. Run `./scripts/demo.sh` there to walk the lifecycle yourself; it asks before every step.
 :::
+
+The recording below follows that example end to end. The first half runs on the
+authoring host: `tuff add` for the four capabilities, `tuff list` and `tuff
+check`, then `tuff pack build`, `verify`, and `inspect`, and publication to
+GHCR. The second half runs inside a clean container that has none of the
+sources: `tuff init`, `tuff pack pull`, `tuff pack verify`, `tuff add pack`,
+and finally a Python agent calling the installed tool.
+
+<video controls muted playsinline preload="none" poster="/video/log-aggregation-pack-demo.png" width="1600" height="800" style="width:100%;height:auto;border-radius:0.5rem;">
+  <source src="/video/log-aggregation-pack-demo.mp4" type="video/mp4" />
+  <a href="/video/log-aggregation-pack-demo.mp4">Download the recording</a> — your browser cannot play it inline.
+</video>
 
 ## Build your project's capabilities
 
