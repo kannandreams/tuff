@@ -27,7 +27,6 @@ pub const SOURCE_URL: &str = "builtin";
 
 #[derive(Debug, Deserialize)]
 struct Catalog {
-    catalog_version: String,
     #[serde(default)]
     servers: Vec<CatalogServer>,
 }
@@ -35,6 +34,10 @@ struct Catalog {
 #[derive(Debug, Deserialize)]
 struct CatalogServer {
     id: String,
+    /// Independent per entry — bumping one server's version does not mark
+    /// every other installed catalog server "outdated" (an earlier, global
+    /// `catalog_version` did exactly that).
+    version: String,
     description: String,
     #[serde(default)]
     transport: McpTransport,
@@ -54,12 +57,6 @@ struct CatalogServer {
 
 fn catalog() -> Catalog {
     toml::from_str(CATALOG_TOML).expect("embedded MCP catalog must parse; covered by unit test")
-}
-
-/// The catalog's own version, compared against an installed server's
-/// recorded version by `update` and `outdated`.
-pub fn version() -> String {
-    catalog().catalog_version
 }
 
 /// Every catalog id, in file order.
@@ -96,7 +93,7 @@ pub fn lookup(id: &str) -> Result<Option<CapabilityManifest>> {
 
     Ok(Some(CapabilityManifest {
         id: server.id,
-        version: catalog.catalog_version,
+        version: server.version,
         capability_type: CapabilityType::McpServer,
         description: server.description,
         files: Vec::new(),
@@ -129,23 +126,44 @@ mod tests {
     #[test]
     fn embedded_catalog_parses_and_every_entry_validates() {
         let catalog = catalog();
-        assert!(!catalog.catalog_version.is_empty());
         assert!(!catalog.servers.is_empty());
         for id in ids() {
             let manifest = lookup(&id).unwrap().expect("listed id resolves");
             assert_eq!(manifest.id, id);
             assert_eq!(manifest.capability_type, CapabilityType::McpServer);
-            assert_eq!(manifest.version, catalog.catalog_version);
+            assert!(!manifest.version.is_empty());
             assert!(manifest.server.is_some());
         }
     }
 
     #[test]
-    fn github_entry_references_its_token_by_name_only() {
+    fn each_entry_versions_independently() {
+        // A global version meant bumping one entry marked every installed
+        // server "outdated" — confirm the schema really is per-entry.
+        let ids = ids();
+        assert!(ids.len() >= 2);
+        for id in &ids {
+            let manifest = lookup(id).unwrap().unwrap();
+            assert_eq!(manifest.version, "1.0.0");
+        }
+    }
+
+    #[test]
+    fn github_entry_uses_the_current_docker_based_launch() {
+        // The old npm package (@modelcontextprotocol/server-github) was
+        // archived upstream in 2025-04; GitHub's own server ships via
+        // Docker instead. Pin this so a future edit can't silently regress
+        // back to the broken launch command.
         let manifest = lookup("github").unwrap().unwrap();
         let server = manifest.server.unwrap();
         assert_eq!(server.transport, McpTransport::Stdio);
-        assert_eq!(server.command.as_deref(), Some("npx"));
+        assert_eq!(server.command.as_deref(), Some("docker"));
+        assert!(
+            server
+                .args
+                .iter()
+                .any(|arg| arg == "ghcr.io/github/github-mcp-server")
+        );
         assert_eq!(
             server.env["GITHUB_PERSONAL_ACCESS_TOKEN"].from_env,
             "GITHUB_PERSONAL_ACCESS_TOKEN"
@@ -154,6 +172,23 @@ mod tests {
             required_env(&server),
             vec!["GITHUB_PERSONAL_ACCESS_TOKEN".to_string()]
         );
+    }
+
+    #[test]
+    fn excluded_servers_are_not_in_the_catalog() {
+        // Regression guard for the exclusions documented in the catalog
+        // file's header — these package names are confirmed archived or
+        // otherwise don't meet the sourcing bar; they should not silently
+        // reappear.
+        let ids = ids();
+        for excluded in [
+            "postgres", "sqlite", "slack", "gitlab", "linear", "context7",
+        ] {
+            assert!(
+                !ids.contains(&excluded.to_string()),
+                "{excluded} should not be in the catalog"
+            );
+        }
     }
 
     #[test]

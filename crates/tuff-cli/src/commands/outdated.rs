@@ -91,13 +91,14 @@ fn classify(
     };
 
     if src.source_type == crate::catalog::SOURCE_TYPE {
-        let latest = crate::catalog::version();
-        let status = match crate::catalog::lookup(&src.skill) {
-            Ok(Some(_)) if latest == entry.installed_version => "up to date",
-            Ok(Some(_)) => "outdated",
+        let (latest, status) = match crate::catalog::lookup(&src.skill) {
+            Ok(Some(manifest)) if manifest.version == entry.installed_version => {
+                (manifest.version, "up to date")
+            }
+            Ok(Some(manifest)) => (manifest.version, "outdated"),
             // Removed from the catalog, or the catalog itself is broken:
             // either way there is nothing current to compare against.
-            _ => "error",
+            _ => ("unavailable".to_string(), "error"),
         };
         return (entry.installed_version.clone(), latest, status.to_string());
     }

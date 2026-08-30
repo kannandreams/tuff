@@ -21,7 +21,7 @@ You have the Tuff capability lifecycle manager installed in this project. Use th
 - `tuff add <git-url> hook <name> -a <agent>` — install hook from git
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
-- `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: github, filesystem, memory) into each harness config; secrets stay as `${VAR}` references
+- `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
 
 ### Packs
 - `tuff pack build --name <name>` — package accepted project capabilities into `tuff-dist/<name>-0.1.0.tuffpack`

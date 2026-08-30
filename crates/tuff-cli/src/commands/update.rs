@@ -206,8 +206,9 @@ fn update_local_from_source(
 }
 
 /// Re-resolve a catalog-installed MCP server against the catalog compiled
-/// into this binary. The catalog version is the "upstream ref": a newer Tuff
-/// can carry a newer catalog, and that is the only way an entry changes.
+/// into this binary. Each entry's own version is the "upstream ref": a
+/// newer Tuff can carry a newer version of that one entry, and that is the
+/// only way it changes.
 fn update_from_catalog(
     scope_root: &Path,
     scope: Scope,
@@ -221,7 +222,6 @@ fn update_from_catalog(
         .source
         .as_ref()
         .expect("catalog source checked by caller");
-    let latest = crate::catalog::version();
     let Some(manifest) = crate::catalog::lookup(&source.skill)? else {
         return Err(TuffError::new(format!(
             "'{}' is no longer in the built-in catalog (installed from catalog {}); \
@@ -229,6 +229,7 @@ fn update_from_catalog(
             source.skill, entry.installed_version
         )));
     };
+    let latest = manifest.version.clone();
 
     // A hand-edited `mcpServers.<id>` entry counts as local drift too:
     // reinstalling is also how the canonical entry is restored, so it must

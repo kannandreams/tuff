@@ -384,6 +384,11 @@ enum AddCommand {
         /// Install to global scope.
         #[arg(short = 'g', long = "global")]
         global: bool,
+        /// Skip the interactive prompt for a different env var name per
+        /// catalog entry and accept the catalog's defaults. Implied when
+        /// stdin isn't a terminal (scripts, CI).
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
 }
 
@@ -697,9 +702,10 @@ fn run() -> Result<()> {
                 sources,
                 agent: typed_agent,
                 global: typed_global,
+                yes,
             }) => {
                 reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
-                cmd_add_mcp(&repo_root, &sources, &typed_agent, typed_global)
+                cmd_add_mcp(&repo_root, &sources, &typed_agent, typed_global, yes)
             }
         },
         Some(Command::Pack { action }) => match action {

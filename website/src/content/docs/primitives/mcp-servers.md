@@ -71,18 +71,61 @@ From the built-in catalog, a local directory, or a git URL — several at once:
 ```sh frame="terminal"
 tuff add mcp github filesystem -a claude -a cursor -a open-agents
 tuff add mcp ./mcp-servers/internal-search
-tuff add mcp https://github.com/acme/capabilities//mcp-servers/linear
+tuff add mcp https://github.com/acme/capabilities//mcp-servers/internal-notion-mirror
 ```
 
-The catalog currently ships `github`, `filesystem`, and `memory`. Git sources
-must name the subdirectory holding `tuff.toml`.
+Git sources must name the subdirectory holding `tuff.toml`.
+
+### The catalog
+
+Every entry is verified against a primary source — the vendor's own README,
+or the `modelcontextprotocol/servers` repo — not a search snippet or memory.
+A wrong package name in something billed as "curated" wastes your time, so
+entries below medium confidence, or with an invocation inferred rather than
+documented, are left out rather than guessed at.
+
+| id | what it needs | notes |
+|---|---|---|
+| `filesystem` | — | read/write/search files in the project directory |
+| `memory` | — | knowledge-graph notes persisted across sessions |
+| `github` | `GITHUB_PERSONAL_ACCESS_TOKEN`, Docker | GitHub's own server; the old npm package was archived upstream in 2025 |
+| `fetch` | — | fetch a URL, convert to Markdown |
+| `git` | — | read/search/manipulate a local Git repo |
+| `time` | — | current time, timezone conversion |
+| `sequentialthinking` | — | structured step-by-step reasoning |
+| `everything` | — | protocol reference/demo server — a good first `tuff mcp doctor` target, no API key needed |
+| `brave-search` | `BRAVE_API_KEY` | web and local search |
+| `notion` | `NOTION_TOKEN` | read/write Notion pages and databases |
+| `playwright` | — | browser automation |
+| `sentry` | `SENTRY_ACCESS_TOKEN` | issue/event search; a few AI-search tools need an additional LLM key |
+
+**Not yet supported:** `linear` and `context7` both authenticate via a custom
+`Authorization` header on an HTTP endpoint, which this schema doesn't express
+yet (`http` transport here is a bare `url`, no `headers`) — a real extension,
+not built speculatively for zero other current consumers.
+
+### Choosing your own variable name
+
+At a real terminal, installing from the catalog asks — once per required
+variable — whether to use a different environment variable name than the
+catalog's default:
+
+```
+github: reads GITHUB_PERSONAL_ACCESS_TOKEN from your environment. Press enter to keep it, or type a different variable name: GH_TOKEN
+```
+
+It never asks for the secret's *value* — only which variable holds it, so a
+catalog default that doesn't match what you already have exported doesn't
+force a rename of your own environment. Press enter to keep the default.
+Skipped automatically in a non-interactive shell or CI, or explicitly with
+`--yes`.
 
 Every lifecycle verb works unchanged:
 
 ```sh frame="terminal"
 tuff list --type mcp-server
 tuff check
-tuff outdated          # catalog installs compare against the catalog version
+tuff outdated          # catalog installs compare against that entry's own version
 tuff update github
 tuff delete github     # removes the config entry and the tracked record
 ```

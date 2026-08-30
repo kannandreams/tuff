@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::IsTerminal;
 use std::path::Path;
 
 use crate::adapter::{
@@ -68,6 +69,7 @@ pub fn cmd_add_mcp(
     sources: &[String],
     target_ids: &[String],
     global: bool,
+    yes: bool,
 ) -> Result<()> {
     if sources.is_empty() {
         return Err(TuffError::new(
@@ -90,15 +92,72 @@ pub fn cmd_add_mcp(
             continue;
         }
 
-        let Some(manifest) = crate::catalog::lookup(source)? else {
+        let Some(mut manifest) = crate::catalog::lookup(source)? else {
             return Err(TuffError::new(format!(
                 "'{source}' is not a path, a git URL, or a catalog entry; catalog ids: {}",
                 crate::catalog::ids().join(", ")
             )));
         };
+        prompt_env_overrides(&mut manifest, yes);
         add_catalog_server(repo_root, &manifest, target_ids, global)?;
     }
     Ok(())
+}
+
+/// Ask, per `[server.env]` entry, whether to use a different variable name
+/// than the catalog's default — never the secret's value, only which
+/// variable holds it, matching the "secrets are references, never values"
+/// rule. Only meaningful for catalog installs (a local/git manifest is
+/// already fully under the user's own control). Skipped — silently keeping
+/// the catalog defaults — with `--yes` or when stdin isn't a real terminal,
+/// so this never hangs a script or CI run.
+fn prompt_env_overrides(manifest: &mut manifest::CapabilityManifest, yes: bool) {
+    if yes || !std::io::stdin().is_terminal() {
+        return;
+    }
+    let Some(server) = manifest.server.as_mut() else {
+        return;
+    };
+    let defaults: Vec<String> = server.env.keys().cloned().collect();
+    for default in defaults {
+        eprint!(
+            "{}: reads {default} from your environment. Press enter to keep it, or type a different variable name: ",
+            manifest.id
+        );
+        let _ = std::io::Write::flush(&mut std::io::stderr());
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).is_err() {
+            return;
+        }
+        if let Some(new_name) = resolve_prompt_answer(&default, &line) {
+            rename_env_var(server, &default, &new_name);
+        }
+    }
+}
+
+/// `None` means keep the default (blank input, or input matching the
+/// default verbatim); `Some(name)` means use this variable name instead.
+fn resolve_prompt_answer(default: &str, line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed == default {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// The map key and `from_env` value are always identical today (an entry
+/// only ever declares a variable by name, with no separate purpose label),
+/// so renaming replaces both.
+fn rename_env_var(server: &mut manifest::McpServerConfig, old_name: &str, new_name: &str) {
+    if server.env.remove(old_name).is_some() {
+        server.env.insert(
+            new_name.to_string(),
+            manifest::EnvRef {
+                from_env: new_name.to_string(),
+            },
+        );
+    }
 }
 
 fn add_catalog_server(
@@ -1013,7 +1072,60 @@ fn is_path_under(path: &Path, root: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_native_hook_path;
+    use super::{normalize_native_hook_path, rename_env_var, resolve_prompt_answer};
+    use crate::manifest::{EnvRef, McpServerConfig, McpTransport};
+
+    #[test]
+    fn resolve_prompt_answer_keeps_default_on_blank_or_matching_input() {
+        assert_eq!(resolve_prompt_answer("GITHUB_TOKEN", "\n"), None);
+        assert_eq!(resolve_prompt_answer("GITHUB_TOKEN", "   \n"), None);
+        assert_eq!(
+            resolve_prompt_answer("GITHUB_TOKEN", "GITHUB_TOKEN\n"),
+            None
+        );
+    }
+
+    #[test]
+    fn resolve_prompt_answer_returns_a_trimmed_different_name() {
+        assert_eq!(
+            resolve_prompt_answer("GITHUB_TOKEN", "  GH_TOKEN  \n"),
+            Some("GH_TOKEN".to_string())
+        );
+    }
+
+    #[test]
+    fn rename_env_var_replaces_both_the_key_and_the_reference() {
+        let mut server = McpServerConfig {
+            transport: McpTransport::Stdio,
+            command: Some("npx".to_string()),
+            args: Vec::new(),
+            url: None,
+            env: std::collections::BTreeMap::from([(
+                "GITHUB_TOKEN".to_string(),
+                EnvRef {
+                    from_env: "GITHUB_TOKEN".to_string(),
+                },
+            )]),
+            metadata: None,
+        };
+        rename_env_var(&mut server, "GITHUB_TOKEN", "GH_TOKEN");
+        assert!(!server.env.contains_key("GITHUB_TOKEN"));
+        assert_eq!(server.env["GH_TOKEN"].from_env, "GH_TOKEN");
+    }
+
+    #[test]
+    fn rename_env_var_is_a_no_op_for_an_unknown_name() {
+        let mut server = McpServerConfig {
+            transport: McpTransport::Stdio,
+            command: Some("npx".to_string()),
+            args: Vec::new(),
+            url: None,
+            env: std::collections::BTreeMap::new(),
+            metadata: None,
+        };
+        rename_env_var(&mut server, "NOT_PRESENT", "OTHER");
+        assert!(server.env.is_empty());
+    }
 
     #[test]
     fn native_hook_paths_strip_source_harness_roots() {

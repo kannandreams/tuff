@@ -2002,6 +2002,39 @@ fn add_mcp_from_local_path_emits_record_and_entry_and_delete_removes_both() {
 }
 
 #[test]
+fn add_mcp_from_catalog_never_prompts_or_hangs_non_interactively() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    // assert_cmd pipes a closed stdin by default -- not a real terminal --
+    // so this already exercises the non-interactive skip path without
+    // --yes. Completing at all (assert_cmd applies its own generous
+    // timeout) proves the prompt never blocked on a read; asserting no
+    // prompt text on stdout proves it went to stderr as designed, not
+    // wherever a script might capture and misinterpret it.
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", "github", "-a", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("reads GITHUB_PERSONAL_ACCESS_TOKEN").not());
+
+    // --yes accepted explicitly too, and installs the same defaults.
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", "notion", "-a", "open-agents", "--yes"])
+        .assert()
+        .success();
+    let record =
+        fs::read_to_string(temp.path().join(".agents/mcp-servers/notion/server.toml")).unwrap();
+    assert!(record.contains("from_env = \"NOTION_TOKEN\""));
+}
+
+#[test]
 fn add_mcp_from_catalog_wires_every_selected_harness_in_its_own_dialect() {
     let temp = TempDir::new().unwrap();
     tuff()
@@ -2282,7 +2315,7 @@ TOKEN = "ghp_literal_secret"
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "catalog ids: github, filesystem, memory",
+            "catalog ids: filesystem, memory, github,",
         ));
 
     tuff()
