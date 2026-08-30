@@ -109,6 +109,9 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                     source: None,
                     scope: "project".into(),
                     pack: None,
+                    implementation: None,
+                    parameters: None,
+                    workflow: None,
                 },
             );
 

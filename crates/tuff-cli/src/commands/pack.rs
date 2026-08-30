@@ -19,6 +19,7 @@ use crate::resolver::Scope;
 
 use super::add::install_capability;
 use super::block_on_oci;
+use super::capability_index;
 use super::project_pack::{
     PreparedProjectPack, default_project_capabilities, prepare_project_pack,
 };
@@ -809,6 +810,16 @@ fn preflight_pack_install(
 }
 
 fn copy_shared_configuration(source: &Path, destination: &Path, targets: &[String]) -> Result<()> {
+    // The capability-index regeneration triggered by `install_capability`
+    // reads `registered_adapters`, which reads this file's `agents` list.
+    // Without it staged in advance, `read_config_at` would fall back to
+    // writing a stray *default* config into the staging tree (debt #18)
+    // and the index would regenerate against zero configured agents.
+    let project_config = crate::paths::project_config(source);
+    if project_config.is_file() {
+        fs::copy(&project_config, crate::paths::project_config(destination))?;
+    }
+
     for target in targets {
         let adapter = AdapterKind::from_id(target)
             .ok_or_else(|| TuffError::new(format!("unknown agent '{target}'")))?;
@@ -898,6 +909,20 @@ fn collect_install_mutations(
                 paths.insert(PathBuf::from(&hook.settings_path), false);
             }
         }
+
+        // Installing this pack's capabilities regenerates the capability-
+        // index skill inside the staging tree (see `install_capability`).
+        // It isn't one of the pack's own declared capabilities, so the loop
+        // above never walks it — without this, the staged lockfile would
+        // reference index files that never made it to `repo_root`.
+        if let Some(index_entry) = staged_lock
+            .capabilities
+            .get(capability_index::CAPABILITY_INDEX_ID)
+            && let Some(target_entry) = index_entry.targets.get(adapter.id())
+        {
+            collect_mutation_tree(stage, &stage.join(&target_entry.installed_path), &mut paths)?;
+        }
+
         let mcp_path = PathBuf::from(adapter.mcp_config_relpath());
         if stage.join(&mcp_path).is_file() {
             paths.insert(mcp_path, false);

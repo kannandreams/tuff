@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use crate::adapter::EmittedFile;
 use crate::error::{Result, TuffError};
-use crate::manifest::CapabilityType;
+use crate::manifest::{CapabilityType, ImplementationConfig, WorkflowConfig};
 
 pub const LOCKFILE_VERSION: u8 = 1;
 
@@ -37,6 +37,20 @@ pub struct CapabilityLockEntry {
     pub scope: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack: Option<PackProvenance>,
+    /// Cached from the manifest at install/update time, the same way
+    /// `description` is: after install, only the `files` a manifest declares
+    /// get copied to disk — `tuff.toml` itself does not — so this is the
+    /// only durable record of how a tool is invoked. Consumed by the
+    /// generated capability-index skill (RFC-103 tier 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation: Option<ImplementationConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<serde_json::Value>,
+    /// Same rationale as `implementation`/`parameters`: a workflow's
+    /// `requires` list lives only in its manifest, which isn't copied to the
+    /// installed target directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<WorkflowConfig>,
 }
 
 fn default_scope() -> String {
@@ -276,6 +290,9 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
                 }),
                 scope: "project".to_string(),
                 pack: item.pack,
+                implementation: item.implementation,
+                parameters: item.parameters,
+                workflow: item.workflow,
             });
     }
     let lockfile = Lockfile {
@@ -332,6 +349,9 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
                 ownership: target_entry.ownership,
                 managed_hooks: target_entry.managed_hooks.clone(),
                 pack: entry.pack.clone(),
+                implementation: entry.implementation.clone(),
+                parameters: entry.parameters.clone(),
+                workflow: entry.workflow.clone(),
             });
         }
     }
@@ -385,6 +405,12 @@ struct WireCapability {
     managed_hooks: Vec<ManagedHook>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pack: Option<PackProvenance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    implementation: Option<ImplementationConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parameters: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    workflow: Option<WorkflowConfig>,
 }
 
 pub fn hash_bytes(content: &[u8]) -> String {
@@ -504,6 +530,9 @@ mod tests {
                 source: None,
                 scope: "project".into(),
                 pack: None,
+                implementation: None,
+                parameters: None,
+                workflow: None,
             },
         );
         write_lockfile_at(&path, &lf).unwrap();

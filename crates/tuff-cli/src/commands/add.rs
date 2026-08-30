@@ -12,7 +12,7 @@ use crate::lockfile::{self, TargetLockEntry};
 use crate::manifest::{self, CapabilityType, load_manifest};
 use crate::resolver::{self, Scope};
 
-use super::{home_dir, infer_from_path, resolve_agent_selection};
+use super::{capability_index, home_dir, infer_from_path, resolve_agent_selection};
 
 pub fn cmd_add(
     repo_root: &Path,
@@ -425,7 +425,7 @@ fn adopt_capability_in_place(
     install_root: &Path,
     scope: Scope,
     capability_dir: &Path,
-    _manifest: &manifest::CapabilityManifest,
+    manifest: &manifest::CapabilityManifest,
     capability: &adapter::ResolvedCapability,
     inferred_target: &str,
     target_ids: &[String],
@@ -485,9 +485,13 @@ fn adopt_capability_in_place(
             source: None,
             scope: scope.as_str().to_string(),
             pack: None,
+            implementation: manifest.implementation.clone(),
+            parameters: manifest.parameters.clone(),
+            workflow: manifest.workflow.clone(),
         },
     );
     lockfile::write_lockfile(install_root, &lockfile)?;
+    capability_index::regenerate_capability_index(install_root)?;
     println!(
         "added {} ({}, {}) -> {}",
         capability.id,
@@ -496,6 +500,28 @@ fn adopt_capability_in_place(
         relative_or_absolute_canonical(capability_dir, install_root)
     );
     Ok(())
+}
+
+/// Write one planned file to disk and record it as an `EmittedFile`.
+///
+/// Shared by `install_capability`'s write phase and the generated
+/// capability-index skill (`capability_index.rs`), which has no hooks or
+/// reporting to layer on top — just files to write and hash.
+pub(crate) fn write_planned_file(
+    install_root: &Path,
+    planned: &adapter::PlannedFile,
+) -> Result<adapter::EmittedFile> {
+    let target_path = install_root.join(&planned.path);
+    if let Some(parent) = target_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&target_path, &planned.content)?;
+
+    Ok(adapter::EmittedFile {
+        path: planned.path.clone(),
+        hash: lockfile::hash_bytes(&planned.content),
+        baseline_hash: lockfile::write_baseline_object(install_root, &planned.content)?,
+    })
 }
 
 pub(crate) struct SourceMetaInput {
@@ -621,21 +647,13 @@ pub(crate) fn install_capability(
 
         for planned in planned_files {
             let target_path = install_root.join(&planned.path);
-            if let Some(parent) = target_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(&target_path, &planned.content)?;
+            let emitted_file = write_planned_file(install_root, planned)?;
 
-            let hash = lockfile::hash_bytes(&planned.content);
             let shared_settings = managed_hooks
                 .iter()
                 .any(|hook| hook.settings_path == planned.path);
             if !shared_settings {
-                emitted.push(adapter::EmittedFile {
-                    path: planned.path.clone(),
-                    hash,
-                    baseline_hash: lockfile::write_baseline_object(install_root, &planned.content)?,
-                });
+                emitted.push(emitted_file);
             }
 
             if report && should_print_installed_file(capability, planned) {
@@ -748,11 +766,15 @@ pub(crate) fn install_capability(
             }),
             scope: scope.as_str().to_string(),
             pack: None,
+            implementation: manifest.implementation.clone(),
+            parameters: manifest.parameters.clone(),
+            workflow: manifest.workflow.clone(),
         },
     );
 
     lockfile::write_lockfile(install_root, &lockfile)?;
     lockfile::prune_unreferenced_baseline_objects(install_root, &lockfile)?;
+    capability_index::regenerate_capability_index(install_root)?;
     Ok(())
 }
 

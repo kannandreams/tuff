@@ -152,7 +152,7 @@ pub fn cmd_hooks_check_portability(repo_root: &Path, hook_id: &str, target: &str
     Ok(())
 }
 
-fn registered_adapters(repo_root: &Path) -> Result<Vec<AdapterKind>> {
+pub(crate) fn registered_adapters(repo_root: &Path) -> Result<Vec<AdapterKind>> {
     let config = config::read_config(repo_root)?;
     let mut adapters = Vec::new();
     for id in config.agents {

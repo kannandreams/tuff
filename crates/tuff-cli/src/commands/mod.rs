@@ -1,6 +1,7 @@
 mod add;
 mod agent;
 mod cache;
+mod capability_index;
 mod check_cmd;
 mod create;
 mod delete;

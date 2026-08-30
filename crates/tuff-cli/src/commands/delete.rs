@@ -5,7 +5,7 @@ use crate::error::{Result, TuffError};
 use crate::lockfile;
 use crate::resolver::{self, Scope};
 
-use super::{home_dir, resolve_agent_selection};
+use super::{capability_index, home_dir, resolve_agent_selection};
 
 fn resolve_cleanup_scope(repo_root: &Path, scope_str: &str) -> Result<(Scope, PathBuf)> {
     let scope = resolver::Scope::parse(scope_str)
@@ -109,6 +109,9 @@ pub fn cmd_delete(
     }
     lockfile::write_lockfile(&scope_root, &lf)?;
     lockfile::prune_unreferenced_baseline_objects(&scope_root, &lf)?;
+    if id != capability_index::CAPABILITY_INDEX_ID {
+        capability_index::regenerate_capability_index(&scope_root)?;
+    }
     println!("deleted '{}' from {} scope", id, scope.as_str());
     Ok(())
 }
@@ -146,6 +149,9 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
     }
     lockfile::write_lockfile(&scope_root, &lf)?;
     lockfile::prune_unreferenced_baseline_objects(&scope_root, &lf)?;
+    if id != capability_index::CAPABILITY_INDEX_ID {
+        capability_index::regenerate_capability_index(&scope_root)?;
+    }
     println!("untracked '{}' from {} scope", id, scope.as_str());
     Ok(())
 }

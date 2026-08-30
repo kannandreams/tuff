@@ -180,6 +180,9 @@ pub fn cmd_create(
             source: None,
             scope: "project".to_string(),
             pack: None,
+            implementation: None,
+            parameters: None,
+            workflow: None,
         },
     );
     config::write_config(repo_root, &config)?;
