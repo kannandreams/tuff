@@ -1,0 +1,180 @@
+name: Publish to crates.io
+
+# Publishes all seven workspace crates in dependency order, using crates.io
+# Trusted Publishing (OIDC) — no stored token, matching the PyPI setup in
+# pypi.yml.
+#
+# One-time setup per crate, done on crates.io (Settings -> Trusted
+# Publishing on each crate's page — the crate must already exist, i.e. have
+# been published manually at least once):
+#   Owner:       kannandreams
+#   Repository:  tuff
+#   Workflow:    crates.yml
+#   Environment: (one of the release-<crate> names below — must match the
+#                 job's `environment:` exactly, so crates.io can tell which
+#                 crate this workflow run is authorized to publish)
+#
+#     crate                       -> environment
+#     tuff-hooks-spec             -> release-tuff-hooks-spec
+#     tuff-core                   -> release-tuff-core
+#     tuff-adapter-open-agents    -> release-tuff-adapter-open-agents
+#     tuff-adapter-claude         -> release-tuff-adapter-claude
+#     tuff-adapter-codex          -> release-tuff-adapter-codex
+#     tuff-adapter-cursor         -> release-tuff-adapter-cursor
+#     tuffcli                     -> release-tuffcli
+#
+# GitHub Actions environments do not need to be created ahead of time — they
+# are created automatically the first time a workflow references them.
+#
+# All crates are versioned in lockstep via [workspace.package] in the root
+# Cargo.toml. To cut a release: bump that version, run `cargo update -w`,
+# commit, then tag `vX.Y.Z` — this workflow and release.yml both trigger.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  tuff-hooks-spec:
+    name: Publish tuff-hooks-spec
+    runs-on: ubuntu-latest
+    environment: release-tuff-hooks-spec
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-hooks-spec --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  tuff-core:
+    name: Publish tuff-core
+    needs: tuff-hooks-spec
+    runs-on: ubuntu-latest
+    environment: release-tuff-core
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-core --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  tuff-adapter-open-agents:
+    name: Publish tuff-adapter-open-agents
+    needs: tuff-core
+    runs-on: ubuntu-latest
+    environment: release-tuff-adapter-open-agents
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-adapter-open-agents --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  tuff-adapter-claude:
+    name: Publish tuff-adapter-claude
+    needs: tuff-core
+    runs-on: ubuntu-latest
+    environment: release-tuff-adapter-claude
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-adapter-claude --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  tuff-adapter-codex:
+    name: Publish tuff-adapter-codex
+    needs: tuff-core
+    runs-on: ubuntu-latest
+    environment: release-tuff-adapter-codex
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-adapter-codex --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  tuff-adapter-cursor:
+    name: Publish tuff-adapter-cursor
+    needs: tuff-core
+    runs-on: ubuntu-latest
+    environment: release-tuff-adapter-cursor
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-adapter-cursor --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  tuffcli:
+    name: Publish tuffcli
+    needs:
+      - tuff-adapter-open-agents
+      - tuff-adapter-claude
+      - tuff-adapter-codex
+      - tuff-adapter-cursor
+    runs-on: ubuntu-latest
+    environment: release-tuffcli
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuffcli --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
