@@ -9,8 +9,11 @@ name: Release
 #   git tag v0.1.0
 #   git push origin v0.1.0
 #
-# After the release succeeds, copy the printed formula to:
-#   github.com/kannandreams/homebrew-tuff → Formula/tuff.rb
+# The Homebrew formula is pushed to kannandreams/homebrew-tuff automatically
+# (see the "Publish Homebrew formula" step below). It needs a
+# HOMEBREW_TAP_TOKEN repo secret: a PAT (fine-grained, Contents: Read and
+# write on homebrew-tuff, or classic with `repo` scope) so this workflow can
+# push there — the default GITHUB_TOKEN only has access to this repo.
 
 on:
   push:
@@ -133,5 +136,25 @@ jobs:
           end
           EOF
 
-          echo "::notice::Homebrew formula — copy this to homebrew-tuff/Formula/tuff.rb"
           cat formula.rb
+
+      - name: Checkout homebrew-tuff
+        uses: actions/checkout@v4
+        with:
+          repository: kannandreams/homebrew-tuff
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tuff
+
+      - name: Publish Homebrew formula
+        run: |
+          cp formula.rb homebrew-tuff/Formula/tuff.rb
+          cd homebrew-tuff
+          if git diff --quiet; then
+            echo "Formula unchanged, nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/tuff.rb
+          git commit -m "tuff ${GITHUB_REF#refs/tags/}"
+          git push
