@@ -43,6 +43,7 @@ You have the Tuff capability lifecycle manager installed in this project. Use th
 - `tuff diff <id>` — show local changes against baseline
 - `tuff diff <id> --upstream` — show upstream changes (git sources only)
 - `tuff outdated` — check all capabilities for available updates
+- `tuff mcp doctor` — spawn each installed MCP server for real and verify the handshake + tool list, not just that the config entry exists
 
 ### Update & Merge
 - `tuff update <id> --check` — preview local baseline promotion or upstream changes

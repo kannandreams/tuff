@@ -15,7 +15,7 @@ complete command and flag reference.
 | Start | [`tuff init`](#tuff-init) |
 | Create or add capabilities | [`tuff create`](#tuff-create), [`tuff add`](#tuff-add) |
 | Build and deliver packs | [`tuff pack`](#tuff-pack), [`tuff add pack`](#install-a-pack) |
-| Wire MCP servers | [`tuff add mcp`](#install-an-mcp-server) |
+| Wire MCP servers | [`tuff add mcp`](#install-an-mcp-server), [`tuff mcp doctor`](#tuff-mcp-doctor) |
 | Inspect and generate | [`tuff list`](#tuff-list), [`tuff status`](#tuff-status), [`tuff generate`](#tuff-generate), [`tuff outdated`](#tuff-outdated) |
 | Diff and update | [`tuff diff`](#tuff-diff), [`tuff update`](#tuff-update) |
 | Validate in CI | [`tuff check`](#tuff-check) |
@@ -503,6 +503,28 @@ Example output:
 ✓ python-uv-default       skill      open-agents  ok
 ✗ dirty-skill             skill      open-agents  modified (.agents/skills/dirty-skill/SKILL.md)
 ```
+
+### `tuff mcp doctor`
+
+Spawn each installed `mcp-server` capability for real, complete the MCP
+`initialize` handshake, and call `tools/list` — the difference between "the
+config entry exists" and "the server actually starts." One row per server,
+not per harness, since the underlying process is the same regardless of
+which harness's dialect wired it in.
+
+```sh frame="terminal"
+tuff mcp doctor                    # check every installed mcp-server
+tuff mcp doctor -a claude          # only servers wired into claude
+tuff mcp doctor --json             # machine-readable output
+tuff mcp doctor --timeout 20       # wait longer before reporting a timeout
+tuff mcp doctor --ignore-failures  # report failures but exit 0
+```
+
+Statuses: `ok`, `missing env` (a required variable isn't exported — the
+server is never spawned), `spawn failed`, `timeout`, `protocol error`, and
+`unsupported transport` (`http` transport isn't probed yet). Exits non-zero
+if any server is unhealthy, so it composes with `tuff check` in CI. See
+[MCP Servers](/primitives/mcp-servers) for the full status table.
 
 ### CI with GitHub Actions
 

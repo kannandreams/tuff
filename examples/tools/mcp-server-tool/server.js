@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-// Minimal stdio-framed JSON-RPC server used as a Tuff MCP tool example.
+// Minimal stdio MCP server used as a Tuff MCP tool example.
+//
+// Framing is newline-delimited JSON-RPC: one JSON object per line on
+// stdin/stdout, exactly what the real MCP stdio transport spec requires
+// (and what `tuff mcp doctor` speaks) -- not Content-Length headers.
 
 const guidance = {
   tests: "Run focused tests first, then the broader suite before handing off.",
@@ -16,8 +20,7 @@ function error(id, code, message) {
 }
 
 function send(message) {
-  const body = JSON.stringify(message);
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+  process.stdout.write(JSON.stringify(message) + "\n");
 }
 
 function toolList() {
@@ -60,6 +63,7 @@ function handle(message) {
   }
 
   if (message.id === undefined) {
+    // A notification (e.g. notifications/initialized) -- nothing to reply to.
     return;
   }
 
@@ -78,39 +82,20 @@ function handle(message) {
   }
 }
 
-let buffer = Buffer.alloc(0);
+let buffer = "";
 
 process.stdin.on("data", (chunk) => {
-  buffer = Buffer.concat([buffer, chunk]);
+  buffer += chunk.toString("utf8");
 
-  while (true) {
-    const headerEnd = buffer.indexOf("\r\n\r\n");
-    if (headerEnd === -1) {
-      return;
+  let newlineIndex;
+  while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+    const line = buffer.slice(0, newlineIndex).trim();
+    buffer = buffer.slice(newlineIndex + 1);
+    if (line.length === 0) {
+      continue;
     }
-
-    const header = buffer.slice(0, headerEnd).toString("utf8");
-    const lengthLine = header
-      .split("\r\n")
-      .find((line) => line.toLowerCase().startsWith("content-length:"));
-    if (!lengthLine) {
-      error(null, -32600, "Missing Content-Length header");
-      buffer = Buffer.alloc(0);
-      return;
-    }
-
-    const length = Number.parseInt(lengthLine.split(":")[1].trim(), 10);
-    const bodyStart = headerEnd + 4;
-    const bodyEnd = bodyStart + length;
-    if (buffer.length < bodyEnd) {
-      return;
-    }
-
-    const body = buffer.slice(bodyStart, bodyEnd).toString("utf8");
-    buffer = buffer.slice(bodyEnd);
-
     try {
-      handle(JSON.parse(body));
+      handle(JSON.parse(line));
     } catch {
       error(null, -32700, "Invalid JSON");
     }
