@@ -2293,6 +2293,170 @@ TOKEN = "ghp_literal_secret"
         .stderr(predicate::str::contains("use `tuff add mcp"));
 }
 
+fn make_local_mcp_server(root: &Path, id: &str, extra_toml: &str) -> std::path::PathBuf {
+    let primitive = root.join("doctor-server-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    let script = test_fixture("mcp-doctor-server.js");
+    fs::write(
+        primitive.join("tuff.toml"),
+        format!(
+            r#"id = "{id}"
+version = "1.0.0"
+type = "mcp-server"
+description = "A local, network-free MCP server for doctor tests."
+
+[server]
+transport = "stdio"
+command = "node"
+args = ["{}"]
+{extra_toml}
+"#,
+            script.to_str().unwrap().replace('\\', "\\\\")
+        ),
+    )
+    .unwrap();
+    primitive
+}
+
+#[test]
+fn mcp_doctor_reports_ok_and_lists_tools_for_a_healthy_server() {
+    let temp = TempDir::new().unwrap();
+    let server = make_local_mcp_server(temp.path(), "doctor-ok", "");
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", server.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["mcp", "doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("doctor-ok"))
+        .stdout(predicate::str::contains("ok"))
+        .stdout(predicate::str::contains("2 tool(s)"));
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["mcp", "doctor", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"echo\""))
+        .stdout(predicate::str::contains("\"ping\""));
+}
+
+#[test]
+fn mcp_doctor_reports_missing_env_without_spawning() {
+    let temp = TempDir::new().unwrap();
+    let server = make_local_mcp_server(
+        temp.path(),
+        "doctor-env",
+        "\n[server.env]\nDOCTOR_TEST_TOKEN = { from_env = \"DOCTOR_TEST_TOKEN_UNSET\" }\n",
+    );
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .env_remove("DOCTOR_TEST_TOKEN_UNSET")
+        .args(["add", "mcp", server.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .env_remove("DOCTOR_TEST_TOKEN_UNSET")
+        .args(["mcp", "doctor"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("missing env"))
+        .stdout(predicate::str::contains("DOCTOR_TEST_TOKEN_UNSET"));
+}
+
+#[test]
+fn mcp_doctor_reports_spawn_failed_for_a_nonexistent_command() {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("bad-server-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("tuff.toml"),
+        r#"id = "doctor-bad-command"
+version = "1.0.0"
+type = "mcp-server"
+description = "Points at a command that does not exist."
+
+[server]
+transport = "stdio"
+command = "tuff-doctor-test-nonexistent-binary"
+"#,
+    )
+    .unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "mcp",
+            primitive.to_str().unwrap(),
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["mcp", "doctor"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("spawn failed"));
+}
+
+#[test]
+fn mcp_doctor_times_out_on_a_server_that_never_responds() {
+    let temp = TempDir::new().unwrap();
+    let server = make_local_mcp_server(temp.path(), "doctor-slow", "");
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", server.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .env("MCP_DOCTOR_TEST_DELAY_MS", "3000")
+        .args(["mcp", "doctor", "--timeout", "1"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("timeout"));
+
+    // --ignore-failures turns the same failure into a zero exit code.
+    tuff()
+        .current_dir(temp.path())
+        .env("MCP_DOCTOR_TEST_DELAY_MS", "3000")
+        .args(["mcp", "doctor", "--timeout", "1", "--ignore-failures"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("timeout"));
+}
+
 #[test]
 fn remove_tool_cleans_mcp_entry() {
     let temp = TempDir::new().unwrap();

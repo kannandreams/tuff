@@ -130,8 +130,51 @@ hooks get). A hand-edit to either shows as `modified` in `tuff list`, fails
 you maintain by hand are never inspected. To accept the canonical entry
 again, run `tuff update <id>`.
 
+## Diagnosing a server
+
+Everything above proves the *configuration* is right — a well-formed entry,
+in the right file, matching a tracked baseline. It doesn't prove the server
+actually starts. `tuff mcp doctor` closes that gap: it spawns each installed
+server for real, completes the MCP `initialize` handshake, and calls
+`tools/list`.
+
+```sh frame="terminal"
+tuff mcp doctor
+```
+
+```
+┌────────┬───────────┬─────────────┬────────┬─────────────┐
+│ ID     │ TRANSPORT │ HARNESSES   │ STATUS │ DETAIL      │
+├────────┼───────────┼─────────────┼────────┼─────────────┤
+│ github │ stdio     │ open-agents │ ✓ ok   │ 26 tool(s)  │
+└────────┴───────────┴─────────────┴────────┴─────────────┘
+```
+
+One row per server, not per harness — the underlying process is the same
+regardless of which harness's dialect wired it in, so doctor probes it once
+and lists every harness it's registered for in the `HARNESSES` column.
+
+| Status | Meaning |
+|---|---|
+| `ok` | Handshake and `tools/list` both succeeded |
+| `missing env` | A required `[server.env]` variable isn't set in your shell — the server was never spawned |
+| `spawn failed` | The `command` couldn't be launched (not on `PATH`, permission denied, …) |
+| `timeout` | No valid response within `--timeout` seconds (default 10) |
+| `protocol error` | The server responded, but not with a valid MCP handshake |
+| `unsupported transport` | `http`-transport servers aren't probed yet — see below |
+
+Flags: `--agent <id>` (repeatable, only check servers wired into a given
+harness), `--global`, `--json`, `--timeout <seconds>`, and
+`--ignore-failures` (report but exit `0`, useful outside CI).
+`tuff mcp doctor` exits non-zero if any server is unhealthy, so it's safe to
+wire into CI alongside `tuff check`.
+
 ## Current limits
 
 - Catalog-installed servers cannot be included in a project pack yet.
-- There is no `tuff mcp doctor` yet — Tuff writes the entry but does not
-  probe that the server starts.
+- `doctor` only probes `stdio`-transport servers. `http` transport exists in
+  the schema but isn't dialed yet — the real Streamable HTTP spec (SSE or
+  JSON responses, session ids) is meaningfully more work than stdio, and no
+  catalog or example entry currently uses it.
+- `doctor` covers `mcp-server` capabilities only, not MCP-native tools
+  (`type = "tool"` with `mcp = true`) — a natural follow-up, not yet done.

@@ -2,6 +2,7 @@ mod adapter;
 mod adapters;
 mod commands;
 mod display;
+mod mcp_client;
 
 pub use tuff_core::{
     cache, catalog, check, config, error, git, lockfile, manifest, oci, pack, paths, resolver,
@@ -16,9 +17,10 @@ use commands::{
     PackBuildOptions, PackInitOptions, cmd_add, cmd_add_mcp, cmd_add_pack, cmd_agent_add,
     cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check,
     cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
-    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_outdated,
-    cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
-    cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
+    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_mcp_doctor,
+    cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init,
+    cmd_pack_inspect, cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status, cmd_untrack,
+    cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -207,6 +209,35 @@ enum Command {
     Cache {
         #[command(subcommand)]
         action: CacheCommand,
+    },
+
+    /// Diagnose installed MCP server capabilities.
+    Mcp {
+        #[command(subcommand)]
+        action: McpCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpCommand {
+    /// Spawn each installed mcp-server capability, complete the MCP
+    /// initialize handshake, and list its tools.
+    Doctor {
+        /// Only check servers wired into this agent (repeatable).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+        /// Check global scope instead of project scope.
+        #[arg(short = 'g', long = "global")]
+        global: bool,
+        /// Output results as JSON.
+        #[arg(long = "json")]
+        json: bool,
+        /// Report failures but exit with code 0.
+        #[arg(long = "ignore-failures")]
+        ignore_failures: bool,
+        /// Seconds to wait for a server to respond before reporting a timeout.
+        #[arg(long = "timeout", default_value_t = 10)]
+        timeout_secs: u64,
     },
 }
 
@@ -796,5 +827,21 @@ fn run() -> Result<()> {
         Some(Command::Cache {
             action: CacheCommand::Clear,
         }) => cmd_cache_clear(),
+        Some(Command::Mcp { action }) => match action {
+            McpCommand::Doctor {
+                agent,
+                global,
+                json,
+                ignore_failures,
+                timeout_secs,
+            } => cmd_mcp_doctor(
+                &repo_root,
+                &agent,
+                global,
+                json,
+                ignore_failures,
+                timeout_secs,
+            ),
+        },
     }
 }
