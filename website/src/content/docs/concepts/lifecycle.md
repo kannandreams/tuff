@@ -141,7 +141,7 @@ tuff update <id> --force
 | `tuff diff <id>` | Show local changes against baseline |
 | `tuff diff <id> --upstream` | Show upstream changes against baseline |
 | `tuff check` | Fail CI when tracked files drift |
-| `tuff outdated` | Show whether git-sourced capabilities have newer revisions |
+| `tuff outdated` | Show whether git-sourced or registry-aware pack-sourced capabilities have newer versions |
 | `tuff update <id>` | Accept local edits or reconcile git-backed changes |
 | `tuff delete <id>` | Delete Tuff-generated files for the default agent |
 | `tuff untrack <id>` | Remove tracking while preserving files for the default agent |

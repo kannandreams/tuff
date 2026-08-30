@@ -59,6 +59,15 @@ pub struct PackProvenance {
     pub name: String,
     pub version: String,
     pub digest: String,
+    /// The OCI registry and repository this pack was pulled from
+    /// ("registry/repository", no tag), when known.
+    ///
+    /// `tuff add pack` only ever sees a local artifact file; it has no way to
+    /// know where that file came from unless the caller says so with
+    /// `--reference`. Absent, `tuff outdated` cannot check this capability
+    /// against anything and reports it as such rather than guessing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -18,6 +18,7 @@ use crate::pack::{
 use crate::resolver::Scope;
 
 use super::add::install_capability;
+use super::block_on_oci;
 use super::project_pack::{
     PreparedProjectPack, default_project_capabilities, prepare_project_pack,
 };
@@ -447,13 +448,6 @@ pub fn cmd_pack_pull(
     Ok(())
 }
 
-fn block_on_oci<T>(future: impl std::future::Future<Output = Result<T>>) -> Result<T> {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?
-        .block_on(future)
-}
-
 pub fn cmd_pack_extract(path: &Path, agent: &str, output: &Path) -> Result<()> {
     let artifact = pack::read_artifact(path)?;
     if !artifact
@@ -485,7 +479,15 @@ pub fn cmd_pack_extract(path: &Path, agent: &str, output: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_add_pack(repo_root: &Path, path: &Path, target_ids: &[String]) -> Result<()> {
+pub fn cmd_add_pack(
+    repo_root: &Path,
+    path: &Path,
+    target_ids: &[String],
+    reference: Option<&str>,
+) -> Result<()> {
+    // Normalized before any install work starts: a malformed --reference
+    // should fail closed, not install the pack and then fail on cleanup.
+    let registry = reference.map(oci::normalize_pack_repository).transpose()?;
     let artifact = pack::read_artifact(path)?;
     let target_ids = canonical_target_ids(&resolve_agent_selection(repo_root, target_ids, false)?)?;
     let current_lock = lockfile::require_lockfile(repo_root)?;
@@ -518,6 +520,7 @@ pub fn cmd_add_pack(repo_root: &Path, path: &Path, target_ids: &[String]) -> Res
         name: artifact.metadata.name.clone(),
         version: artifact.metadata.version.clone(),
         digest: artifact.digest.clone(),
+        registry: registry.clone(),
     };
     for capability in &artifact.metadata.capabilities {
         let entry = staged_lock

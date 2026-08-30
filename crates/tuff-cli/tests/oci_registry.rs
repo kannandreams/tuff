@@ -145,3 +145,79 @@ fn oci_push_pull_round_trip_preserves_bytes_and_safe_tags() {
         .assert()
         .success();
 }
+
+#[test]
+#[ignore = "requires TUFF_OCI_TEST_REGISTRY to name a disposable OCI registry"]
+fn outdated_resolves_a_newer_pack_version_from_the_registry() {
+    let registry = std::env::var("TUFF_OCI_TEST_REGISTRY")
+        .expect("TUFF_OCI_TEST_REGISTRY must name the test registry host and port");
+    let temp = TempDir::new().unwrap();
+    let older = temp.path().join("older.tuffpack");
+    let newer = temp.path().join("newer.tuffpack");
+    make_pack(temp.path(), "1.0.0", "# Older release\n", &older);
+    make_pack(temp.path(), "1.2.0", "# Newer release\n", &newer);
+    let repository = format!("{registry}/tuff-tests/outdated-{}", std::process::id());
+
+    push_json(&older, &format!("{repository}:1.0.0"), false);
+    push_json(&newer, &format!("{repository}:1.2.0"), false);
+
+    // Install the older release with --reference, so the lockfile records
+    // where it came from and outdated has something to check against.
+    let project = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .args([
+            "add",
+            "pack",
+            older.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--reference",
+            &format!("{repository}:1.0.0"),
+        ])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .args(["outdated", "--plain-http"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("registry-skill"))
+        .stdout(predicate::str::contains("1.0.0"))
+        .stdout(predicate::str::contains("1.2.0"))
+        .stdout(predicate::str::contains("outdated"));
+
+    // A pack installed without --reference must stay honest rather than
+    // guess: this is the regression #92 fixed. A separate project, since the
+    // same capability id cannot be tracked twice in one lockfile.
+    let unreferenced_project = TempDir::new().unwrap();
+    tuff()
+        .current_dir(unreferenced_project.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(unreferenced_project.path())
+        .args([
+            "add",
+            "pack",
+            newer.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(unreferenced_project.path())
+        .args(["outdated", "--plain-http"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("not checked"))
+        .stdout(predicate::str::contains("outdated").not());
+}

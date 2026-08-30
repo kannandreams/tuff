@@ -6,6 +6,21 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- Added `--reference` to `tuff add pack`, recording the OCI reference a pack was pulled from so `tuff outdated` can check the registry for a newer version. `tuff outdated` gained `--plain-http` and `--ca-file`, matching `tuff pack push`/`pull`, for checking a self-hosted registry.
+- Added a CI cache for Rust dependencies (`Swatinem/rust-cache`). `Tuff Check` dropped from about 8.5 minutes to under 2 on a warm cache; nothing else changed.
+- Added `gitleaks` as a pre-commit hook, scanning staged changes for generic secrets before a commit exists.
+
+### Fixed
+
+- Stopped `tuff outdated` from reporting `up to date` for a capability it had not checked — anything installed from a pack, or from a local path. It now reports `not checked`, styled to make clear it is not a clean bill of health.
+
+### Improved
+
+- Added credential file patterns to `.gitignore` (keys, certificates, dotenv files) as a preventative measure; no leak was found.
+- Defined "capability pack" and "Tuff pack" once, on the page that owns the concept, and used each consistently: the vendor name where the artifact is being distinguished from a container image, the category name everywhere else.
+
 ## [0.1.6] - 2026-08-29
 
 ### Fixed
