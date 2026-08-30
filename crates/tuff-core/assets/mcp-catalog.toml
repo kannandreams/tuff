@@ -1,27 +1,44 @@
 # Built-in MCP server catalog (RFC-102).
 #
-# Every entry here is a server whose launch command is public and stable
-# enough to ship in the binary. Secrets are never listed as values: `env`
-# names the variables the developer must export, and the generated manifest
-# references them with `{ from_env = "NAME" }`.
+# Every entry here was verified against a primary source (the vendor's own
+# README or the modelcontextprotocol/servers repo), not memory or a search
+# snippet -- a wrong package name in something billed as "curated" wastes a
+# user's time. New entries must clear the same bar: primary source, medium
+# confidence or better, and no inferred invocation (if the README doesn't
+# show the exact command, don't guess it from a package.json).
 #
-# Bump `catalog_version` whenever an entry changes; `tuff outdated` and
-# `tuff update` compare an installed server's recorded version against it.
-
-catalog_version = "2026.08.0"
-
-[[servers]]
-id = "github"
-description = "GitHub MCP server: issues, pull requests, and code search."
-transport = "stdio"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-github"]
-env = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
-tools_summary = "create_issue, create_pull_request, list_issues, search_code, get_file_contents"
+# Secrets are never listed as values: `env` names the variables the
+# developer must export, and the generated manifest references them with
+# `{ from_env = "NAME" }`. `tuff add mcp <id>` prompts for a different
+# variable name per entry (skip with --yes or a non-interactive shell).
+#
+# Each server has its own `version` -- bump only the entry that actually
+# changed. (Earlier releases used one version for the whole file; that made
+# every installed server show "outdated" whenever any entry changed.)
+#
+# Deliberately excluded, and why -- so the next person expanding this file
+# doesn't have to rediscover it:
+#   - postgres, sqlite, puppeteer, google-maps, gdrive, everart, gitlab,
+#     aws-kb-retrieval, redis, and the original @modelcontextprotocol/
+#     server-brave-search/server-slack/server-sentry packages: archived
+#     upstream (confirmed via the servers repo's own "Archived" section,
+#     not a search result -- one search result claimed gitlab was still
+#     official, which contradicts the primary-source README).
+#   - A community Slack fork (@zencoderai/slack-mcp-server): medium
+#     confidence *and* an inferred invocation (its README documents Docker/
+#     global-install, not an `npx` example) *and* third-party maintenance
+#     risk. Individually any one of those might clear the bar; combined,
+#     it doesn't.
+#   - linear, context7, and hosted Sentry: all authenticate via a custom
+#     `Authorization` header on an HTTP url, which this schema doesn't
+#     support yet (http transport here is a bare `url`, no `headers`).
+#     Real, separable schema extension -- not built speculatively for zero
+#     current consumers.
 
 [[servers]]
 id = "filesystem"
-description = "Filesystem MCP server scoped to the project directory."
+version = "1.0.0"
+description = "Read, write, and search files in the project directory."
 transport = "stdio"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
@@ -29,8 +46,103 @@ tools_summary = "read_file, write_file, list_directory, search_files, move_file"
 
 [[servers]]
 id = "memory"
-description = "Knowledge-graph memory MCP server for persistent notes across sessions."
+version = "1.0.0"
+description = "Knowledge-graph memory server for persistent notes across sessions."
 transport = "stdio"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
 tools_summary = "create_entities, create_relations, add_observations, search_nodes, read_graph"
+
+[[servers]]
+id = "github"
+version = "1.0.0"
+description = "GitHub's official MCP server: issues, pull requests, and code search. Requires Docker."
+transport = "stdio"
+command = "docker"
+args = ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
+env = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+tools_summary = "create_issue, create_pull_request, list_issues, search_code, get_file_contents"
+
+[[servers]]
+id = "fetch"
+version = "1.0.0"
+description = "Fetch a URL and convert it to Markdown for the agent to read."
+transport = "stdio"
+command = "uvx"
+args = ["mcp-server-fetch"]
+tools_summary = "fetch"
+
+[[servers]]
+id = "git"
+version = "1.0.0"
+description = "Read, search, and manipulate a local Git repository."
+transport = "stdio"
+command = "uvx"
+args = ["mcp-server-git"]
+tools_summary = "git_status, git_diff, git_commit, git_log, git_show"
+
+[[servers]]
+id = "time"
+version = "1.0.0"
+description = "Current time and timezone conversion."
+transport = "stdio"
+command = "uvx"
+args = ["mcp-server-time"]
+tools_summary = "get_current_time, convert_time"
+
+[[servers]]
+id = "sequentialthinking"
+version = "1.0.0"
+description = "Structured step-by-step reasoning for problems that benefit from an explicit chain of thought."
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+tools_summary = "sequentialthinking"
+
+[[servers]]
+id = "everything"
+version = "1.0.0"
+description = "Reference server exercising the full MCP surface (tools, resources, prompts). No API key needed -- a good first target for `tuff mcp doctor`."
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-everything"]
+tools_summary = "echo, add, longRunningOperation, sampleLLM, getTinyImage"
+
+[[servers]]
+id = "brave-search"
+version = "1.0.0"
+description = "Web and local search via the Brave Search API."
+transport = "stdio"
+command = "npx"
+args = ["-y", "@brave/brave-search-mcp-server", "--transport", "stdio"]
+env = ["BRAVE_API_KEY"]
+tools_summary = "brave_web_search, brave_local_search"
+
+[[servers]]
+id = "notion"
+version = "1.0.0"
+description = "Read and write Notion pages and databases."
+transport = "stdio"
+command = "npx"
+args = ["-y", "@notionhq/notion-mcp-server"]
+env = ["NOTION_TOKEN"]
+tools_summary = "search, fetch, create-pages, update-page, create-database"
+
+[[servers]]
+id = "playwright"
+version = "1.0.0"
+description = "Browser automation via Playwright -- navigate, click, fill forms, take screenshots."
+transport = "stdio"
+command = "npx"
+args = ["@playwright/mcp@latest"]
+tools_summary = "browser_navigate, browser_click, browser_type, browser_screenshot"
+
+[[servers]]
+id = "sentry"
+version = "1.0.0"
+description = "Query Sentry issues and events. Core access needs only SENTRY_ACCESS_TOKEN; a few AI-search tools additionally require an LLM provider key, configured separately if you use them."
+transport = "stdio"
+command = "npx"
+args = ["@sentry/mcp-server"]
+env = ["SENTRY_ACCESS_TOKEN"]
+tools_summary = "find_issues, get_issue_details, search_events"

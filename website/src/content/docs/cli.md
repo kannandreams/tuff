@@ -188,7 +188,11 @@ Each harness gets an entry in its own MCP config (`.mcp.json`,
 `<prefix>/mcp-servers/<id>/server.toml`. Secrets are emitted as environment
 references; Tuff prints which variables to export. The install is refused
 before anything is written if the config is malformed or already has an entry
-Tuff does not track. See [MCP Servers](/primitives/mcp-servers).
+Tuff does not track. Installing from the catalog at a real terminal asks,
+once per required variable, whether to use a different environment variable
+name than the catalog's default — never the secret's value. Skip with
+`--yes`, or it's automatic in a non-interactive shell. See
+[MCP Servers](/primitives/mcp-servers) for the full catalog list.
 
 For harness-native hooks, pass the hook fragment explicitly:
 
