@@ -149,6 +149,7 @@ mod tests {
                         lockfile::TargetLockEntry {
                             emitted_files: Vec::new(),
                             managed_hooks: Vec::new(),
+                            managed_mcp_entry: None,
                             ownership: lockfile::TargetOwnership::Generated,
                             sha256: String::new(),
                             installed_path: String::new(),

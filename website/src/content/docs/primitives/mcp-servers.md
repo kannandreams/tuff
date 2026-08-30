@@ -120,10 +120,18 @@ documented rather than hidden — native Codex emission is tracked separately.
 - **Unrelated keys survive.** Servers you added by hand next to Tuff's are
   left untouched on every add, update, and delete.
 
+## Drift detection
+
+Both artifacts are tracked. `server.toml` is hashed like any capability
+tree, and the `mcpServers.<id>` entry itself carries a per-entry baseline
+(recorded as `managedMcpEntry` in `tuff.lock`, the same treatment managed
+hooks get). A hand-edit to either shows as `modified` in `tuff list`, fails
+`tuff check`, and gates `tuff delete` behind `--force`. Neighbouring entries
+you maintain by hand are never inspected. To accept the canonical entry
+again, run `tuff update <id>`.
+
 ## Current limits
 
-- Drift detection covers `server.toml`; a hand-edit to the JSON entry itself
-  is not yet flagged by `tuff check`.
 - Catalog-installed servers cannot be included in a project pack yet.
 - There is no `tuff mcp doctor` yet — Tuff writes the entry but does not
   probe that the server starts.

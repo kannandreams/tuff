@@ -230,7 +230,21 @@ fn update_from_catalog(
         )));
     };
 
-    if latest == entry.installed_version {
+    // A hand-edited `mcpServers.<id>` entry counts as local drift too:
+    // reinstalling is also how the canonical entry is restored, so it must
+    // not hide behind an early "up to date" — and must not be clobbered
+    // without --force.
+    let entry_drifted = target_ids.iter().any(|target_id| {
+        entry
+            .targets
+            .get(target_id)
+            .and_then(|target| target.managed_mcp_entry.as_ref())
+            .is_some_and(|managed| {
+                lockfile::managed_mcp_entry_status(scope_root, id, managed) != "clean"
+            })
+    });
+
+    if latest == entry.installed_version && !entry_drifted {
         println!("'{}' is already up to date (catalog {latest})", id);
         return Ok(());
     }
@@ -251,7 +265,12 @@ fn update_from_catalog(
     }
 
     if check {
-        if all_clean {
+        if entry_drifted {
+            println!(
+                "'{}' has a hand-edited MCP config entry — update --force would restore the canonical entry",
+                id
+            );
+        } else if all_clean {
             println!(
                 "'{}' can be updated cleanly: catalog {} → {latest}",
                 id, entry.installed_version
@@ -265,7 +284,7 @@ fn update_from_catalog(
         return Ok(());
     }
 
-    if !all_clean && !force {
+    if (!all_clean || entry_drifted) && !force {
         return Err(TuffError::new(format!(
             "'{id}' has local changes; run 'tuff diff {id}' first or use --force to reload from the catalog"
         )));

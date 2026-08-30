@@ -591,6 +591,7 @@ fn adopt_capability_in_place(
         lockfile::TargetLockEntry {
             emitted_files,
             managed_hooks: Vec::new(),
+            managed_mcp_entry: None,
             ownership: lockfile::TargetOwnership::Imported,
             sha256: baseline_hash,
             installed_path: relative_or_absolute_canonical(capability_dir, install_root),
@@ -818,6 +819,7 @@ pub(crate) fn install_capability(
             TargetLockEntry {
                 emitted_files: emitted,
                 managed_hooks,
+                managed_mcp_entry: None,
                 ownership: target_ownership_for(capability, install_root, *adapter),
                 sha256: baseline_hash,
                 installed_path: lockfile::relative_or_absolute_fs(&installed_root, install_root),
@@ -850,6 +852,16 @@ pub(crate) fn install_capability(
                     &mcp_command,
                     &mcp_args,
                 )?;
+                // MCP-native tools get the same per-entry baseline as
+                // external servers: the entry shape below must match what
+                // `mcp::register_tool` writes.
+                let entry_value = serde_json::json!({"command": mcp_command, "args": mcp_args});
+                if let Some(target) = new_targets.get_mut(adapter.id()) {
+                    target.managed_mcp_entry = Some(lockfile::ManagedMcpEntry {
+                        config_path: adapter.mcp_config_relpath().to_string(),
+                        baseline_hash: lockfile::managed_mcp_entry_baseline(&entry_value)?,
+                    });
+                }
                 if report {
                     println!(
                         "registered MCP server {} ({}) -> {}",
@@ -877,13 +889,21 @@ pub(crate) fn install_capability(
         for adapter in &adapters {
             let mcp_path = install_root.join(adapter.mcp_config_relpath());
             let tracked = mcp_entry_tracked(&lockfile, &capability.id, adapter.id());
+            let entry_value = adapter.mcp_server_entry(server);
+            let baseline = lockfile::managed_mcp_entry_baseline(&entry_value)?;
             crate::adapters::mcp_register_server(
                 install_root,
                 &mcp_path,
                 &capability.id,
-                adapter.mcp_server_entry(server),
+                entry_value,
                 tracked,
             )?;
+            if let Some(target) = new_targets.get_mut(adapter.id()) {
+                target.managed_mcp_entry = Some(lockfile::ManagedMcpEntry {
+                    config_path: adapter.mcp_config_relpath().to_string(),
+                    baseline_hash: baseline,
+                });
+            }
             if report {
                 println!(
                     "registered MCP server {} ({}) -> {}",

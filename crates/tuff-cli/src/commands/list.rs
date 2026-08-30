@@ -115,6 +115,9 @@ pub(crate) fn collect_lockfile_inventory(
                 .managed_hooks
                 .iter()
                 .map(|hook| lockfile::managed_hook_status(root, hook))
+                .chain(target_entry.managed_mcp_entry.iter().map(|managed_entry| {
+                    lockfile::managed_mcp_entry_status(root, id, managed_entry)
+                }))
                 .find(|status| *status != "clean")
                 .unwrap_or("clean");
             if target_entry.emitted_files.is_empty() {
