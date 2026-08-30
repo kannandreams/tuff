@@ -197,13 +197,11 @@ fn capability_description(root: &Path, entry: &lockfile::CapabilityLockEntry) ->
         .unwrap_or_default()
 }
 
-fn capability_source_type(entry: &lockfile::CapabilityLockEntry) -> &'static str {
-    if let Some(source) = &entry.source
-        && source.source_type == "git"
-    {
-        return "git";
+fn capability_source_type(entry: &lockfile::CapabilityLockEntry) -> String {
+    match &entry.source {
+        Some(source) if !source.source_type.is_empty() => source.source_type.clone(),
+        _ => "local".to_string(),
     }
-    "local"
 }
 
 pub(crate) fn project_inventory(

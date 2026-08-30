@@ -12,6 +12,11 @@ pub enum CapabilityType {
     Hook,
     Workflow,
     Policy,
+    /// An external MCP server Tuff wires into each harness's native MCP
+    /// config. Distinct from a `tool` with `implementation.mcp = true`,
+    /// whose server code Tuff ships itself.
+    #[serde(rename = "mcp-server")]
+    McpServer,
 }
 
 impl CapabilityType {
@@ -22,6 +27,7 @@ impl CapabilityType {
             Self::Hook => "hooks",
             Self::Workflow => "workflows",
             Self::Policy => "policies",
+            Self::McpServer => "mcp-servers",
         }
     }
 
@@ -32,6 +38,7 @@ impl CapabilityType {
             Self::Hook => "hook",
             Self::Workflow => "workflow",
             Self::Policy => "policy",
+            Self::McpServer => "mcp-server",
         }
     }
 
@@ -42,6 +49,7 @@ impl CapabilityType {
             "hook" => Some(Self::Hook),
             "workflow" => Some(Self::Workflow),
             "policy" => Some(Self::Policy),
+            "mcp-server" | "mcp" => Some(Self::McpServer),
             _ => None,
         }
     }
@@ -71,11 +79,66 @@ pub struct CapabilityManifest {
     #[serde(default)]
     pub workflow: Option<WorkflowConfig>,
     #[serde(default)]
+    pub server: Option<McpServerConfig>,
+    #[serde(default)]
     #[allow(dead_code)]
     pub targets: Vec<String>,
 
     #[serde(skip)]
     pub root: PathBuf,
+}
+
+/// Declaration of an external MCP server (`type = "mcp-server"`).
+///
+/// Secrets never appear here: every `[server.env]` value must be an
+/// [`EnvRef`] naming the variable to read on the developer's machine, so a
+/// manifest can be committed and shared without leaking anything.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    #[serde(default)]
+    pub transport: McpTransport,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, EnvRef>,
+    #[serde(default)]
+    pub metadata: Option<McpServerMetadata>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum McpTransport {
+    #[default]
+    Stdio,
+    Http,
+}
+
+impl McpTransport {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Stdio => "stdio",
+            Self::Http => "http",
+        }
+    }
+}
+
+/// A reference to an environment variable on the machine running the
+/// harness. Deliberately the only shape an env value can take — a bare
+/// string literal is rejected at parse time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EnvRef {
+    pub from_env: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct McpServerMetadata {
+    #[serde(default)]
+    pub tools_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,8 +238,8 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
         )));
     }
 
-    let mut manifest: CapabilityManifest =
-        toml::from_str(&std::fs::read_to_string(&manifest_path)?)?;
+    let raw = std::fs::read_to_string(&manifest_path)?;
+    let mut manifest = parse_manifest(&raw, &manifest_path)?;
     manifest.root = capability_dir.to_path_buf();
 
     validate_non_empty("id", &manifest.id)?;
@@ -288,9 +351,74 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
         CapabilityType::Policy => {
             return Err(TuffError::new("policy capabilities are not supported yet"));
         }
+        CapabilityType::McpServer => {
+            let server = manifest.server.as_ref().ok_or_else(|| {
+                TuffError::new("mcp-server capability requires a [server] section")
+            })?;
+            validate_mcp_server(server)?;
+
+            if !manifest.files.is_empty() {
+                manifest.source_files()?;
+            }
+        }
     }
 
     Ok(manifest)
+}
+
+pub fn validate_mcp_server(server: &McpServerConfig) -> Result<()> {
+    match server.transport {
+        McpTransport::Stdio => {
+            if server
+                .command
+                .as_deref()
+                .is_none_or(|c| c.trim().is_empty())
+            {
+                return Err(TuffError::new(
+                    "mcp-server with transport = \"stdio\" requires a non-empty 'command'",
+                ));
+            }
+        }
+        McpTransport::Http => {
+            if server.url.as_deref().is_none_or(|u| u.trim().is_empty()) {
+                return Err(TuffError::new(
+                    "mcp-server with transport = \"http\" requires a non-empty 'url'",
+                ));
+            }
+        }
+    }
+    for (name, reference) in &server.env {
+        if name.trim().is_empty() {
+            return Err(TuffError::new("[server.env] keys must be non-empty"));
+        }
+        if reference.from_env.trim().is_empty() {
+            return Err(TuffError::new(format!(
+                "[server.env] {name} must reference a variable: {name} = {{ from_env = \"VAR\" }}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Parse a manifest, turning serde's opaque "invalid type: string" failure
+/// for a literal `[server.env]` value into an error that says what to write
+/// instead.
+fn parse_manifest(raw: &str, manifest_path: &Path) -> Result<CapabilityManifest> {
+    toml::from_str(raw).map_err(|error: toml::de::Error| {
+        let message = error.to_string();
+        let literal_env = raw.contains("[server.env]")
+            && (message.contains("invalid type: string") || message.contains("expected a table"));
+        if literal_env {
+            TuffError::new(format!(
+                "invalid manifest at {}: [server.env] values must be references, never \
+                 literals — write NAME = {{ from_env = \"NAME\" }} ({})",
+                manifest_path.display(),
+                message.trim()
+            ))
+        } else {
+            TuffError::from(error)
+        }
+    })
 }
 
 /// Writes a capability manifest as deterministic TOML.
@@ -329,6 +457,7 @@ pub fn synthetic_manifest(
         implementation: None,
         hook: None,
         workflow: None,
+        server: None,
         targets: Vec::new(),
         root: skill_dir.to_path_buf(),
     })
@@ -473,6 +602,7 @@ files = ["SKILL.md"]
             implementation: None,
             hook: None,
             workflow: None,
+            server: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };
@@ -494,6 +624,7 @@ files = ["SKILL.md"]
             implementation: None,
             hook: None,
             workflow: None,
+            server: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };
@@ -504,5 +635,72 @@ files = ["SKILL.md"]
     fn validate_non_empty_rejects_empty() {
         assert!(validate_non_empty("id", "").is_err());
         assert!(validate_non_empty("id", "ok").is_ok());
+    }
+
+    fn load_mcp(toml_body: &str) -> Result<CapabilityManifest> {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("tuff.toml"), toml_body).unwrap();
+        load_manifest(tmp.path())
+    }
+
+    const MCP_HEAD: &str =
+        "id = \"srv\"\nversion = \"1.0.0\"\ntype = \"mcp-server\"\ndescription = \"d\"\n";
+
+    #[test]
+    fn mcp_server_requires_server_section() {
+        let error = load_mcp(MCP_HEAD).unwrap_err().to_string();
+        assert!(error.contains("requires a [server] section"), "{error}");
+    }
+
+    #[test]
+    fn mcp_server_stdio_requires_command_and_http_requires_url() {
+        let error = load_mcp(&format!("{MCP_HEAD}[server]\ntransport = \"stdio\"\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("requires a non-empty 'command'"), "{error}");
+        let error = load_mcp(&format!("{MCP_HEAD}[server]\ntransport = \"http\"\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("requires a non-empty 'url'"), "{error}");
+        let ok = load_mcp(&format!(
+            "{MCP_HEAD}[server]\ntransport = \"http\"\nurl = \"https://example.test/mcp\"\n"
+        ))
+        .unwrap();
+        assert_eq!(ok.server.unwrap().transport, McpTransport::Http);
+    }
+
+    #[test]
+    fn mcp_server_env_must_be_a_reference_not_a_literal() {
+        let error = load_mcp(&format!(
+            "{MCP_HEAD}[server]\ncommand = \"npx\"\n[server.env]\nTOKEN = \"literal\"\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("from_env"), "{error}");
+
+        let ok = load_mcp(&format!(
+            "{MCP_HEAD}[server]\ncommand = \"npx\"\n[server.env]\nTOKEN = {{ from_env = \"MY_TOKEN\" }}\n"
+        ))
+        .unwrap();
+        assert_eq!(ok.server.unwrap().env["TOKEN"].from_env, "MY_TOKEN");
+    }
+
+    #[test]
+    fn capability_type_round_trips_the_hyphenated_name() {
+        assert_eq!(CapabilityType::McpServer.as_str(), "mcp-server");
+        assert_eq!(
+            CapabilityType::parse("mcp-server"),
+            Some(CapabilityType::McpServer)
+        );
+        assert_eq!(
+            CapabilityType::parse("mcp"),
+            Some(CapabilityType::McpServer)
+        );
+        let wire = toml::to_string(&Requirement {
+            id: "x".into(),
+            capability_type: CapabilityType::McpServer,
+        })
+        .unwrap();
+        assert!(wire.contains("type = \"mcp-server\""), "{wire}");
     }
 }

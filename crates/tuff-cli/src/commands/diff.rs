@@ -158,10 +158,18 @@ fn materialize_upstream(
     entry: &lockfile::CapabilityLockEntry,
     target: &str,
 ) -> Result<MaterializedTree> {
-    if entry.source.is_none() {
-        return Err(TuffError::new(
-            "upstream diff only available for git-sourced capabilities",
-        ));
+    match &entry.source {
+        None => {
+            return Err(TuffError::new(
+                "upstream diff only available for git-sourced capabilities",
+            ));
+        }
+        Some(source) if source.source_type == crate::catalog::SOURCE_TYPE => {
+            return Err(TuffError::new(
+                "upstream diff is not available for catalog capabilities; run `tuff outdated` to compare against the built-in catalog",
+            ));
+        }
+        Some(_) => {}
     }
     materialize_source(scope_root, id, entry, target, false)
 }
@@ -197,6 +205,18 @@ fn materialize_source(
         });
     }
 
+    if let Some(source) = source
+        && source.source_type == crate::catalog::SOURCE_TYPE
+    {
+        let manifest = crate::catalog::lookup(&source.skill)?.ok_or_else(|| {
+            TuffError::new(format!(
+                "The recorded baseline for \"{id}\" is not cached, and '{}' is no longer in the built-in catalog.",
+                source.skill
+            ))
+        })?;
+        return plan_into_temp(adapter, &manifest, entry, id, None);
+    }
+
     let (source_guard, source_dir) = if let Some(source) = source {
         let reference = pinned.then_some(source.source_ref.as_str());
         let (guard, path, _) = git::clone_to_temp(&source.url, reference)?;
@@ -222,7 +242,19 @@ fn materialize_source(
     } else {
         manifest::synthetic_manifest(&capability_dir, id, "materialized")?
     };
-    let capability = resolve_capability(&manifest)?;
+    plan_into_temp(adapter, &manifest, entry, id, source_guard)
+}
+
+/// Plan a manifest into a scratch tree and hand back the capability's
+/// installed root within it, keeping any source checkout alive alongside.
+fn plan_into_temp(
+    adapter: AdapterKind,
+    manifest: &manifest::CapabilityManifest,
+    entry: &lockfile::CapabilityLockEntry,
+    id: &str,
+    source_guard: Option<TempDir>,
+) -> Result<MaterializedTree> {
+    let capability = resolve_capability(manifest)?;
     let temp = TempDir::new()?;
     let plans = adapter.plan(&capability, temp.path())?;
     let target_root = temp

@@ -74,6 +74,7 @@ pub(crate) fn style_capability_type(capability_type: CapabilityType) -> String {
         CapabilityType::Hook => "33",
         CapabilityType::Workflow => "34",
         CapabilityType::Policy => "31",
+        CapabilityType::McpServer => "96",
     };
     paint(s, code)
 }
@@ -243,6 +244,7 @@ pub(crate) fn infer_from_path(path: &Path) -> (CapabilityType, String) {
         "tools" => CapabilityType::Tool,
         "hooks" => CapabilityType::Hook,
         "workflows" => CapabilityType::Workflow,
+        "mcp-servers" => CapabilityType::McpServer,
         _ => CapabilityType::Skill,
     };
 

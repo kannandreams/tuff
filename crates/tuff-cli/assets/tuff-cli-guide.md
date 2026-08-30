@@ -1,11 +1,11 @@
 ---
 name: tuff-cli-guide
-description: Reference for using Tuff CLI to manage agent capabilities — create, add, list, diff, check, update, and scope operations.
+description: Reference for using Tuff CLI to manage agent capabilities — create, add (including MCP servers), list, diff, check, update, and scope operations.
 ---
 
 # Tuff CLI Guide
 
-You have the Tuff capability lifecycle manager installed in this project. Use these commands when the user asks about managing skills, tools, hooks, or workflows, or when they mention "drift", "baseline", or "tuff".
+You have the Tuff capability lifecycle manager installed in this project. Use these commands when the user asks about managing skills, tools, hooks, workflows, or MCP servers, or when they mention "drift", "baseline", or "tuff".
 
 ## Available Commands
 
@@ -21,6 +21,7 @@ You have the Tuff capability lifecycle manager installed in this project. Use th
 - `tuff add <git-url> hook <name> -a <agent>` — install hook from git
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
+- `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: github, filesystem, memory) into each harness config; secrets stay as `${VAR}` references
 
 ### Packs
 - `tuff pack build --name <name>` — package accepted project capabilities into `tuff-dist/<name>-0.1.0.tuffpack`
@@ -73,6 +74,7 @@ You have the Tuff capability lifecycle manager installed in this project. Use th
 - `.agents/tools/` — create and edit tools here
 - `.agents/hooks/` — create and edit hooks here
 - `.agents/workflows/` — create and edit workflows here
+- `.agents/mcp-servers/` — generated `server.toml` records for external MCP servers (edit the manifest, not these)
 - `tuff.lock` — committed capability identity and lifecycle metadata
 - `tuff.config.json` — project preferences; `tuff.lock` remains the project source of truth
 - No separate source directory — agent files are the source
@@ -87,6 +89,7 @@ You have the Tuff capability lifecycle manager installed in this project. Use th
 tuff init                              # initialize repo and register open-agents
 tuff add <path> -a open-agents         # install capability (auto-detect type)
 tuff add skill <path> [name]           # install a skill explicitly
+tuff add mcp github -a claude         # wire a catalog MCP server
 tuff list                          # check drift
 tuff diff <id>                     # see what changed
 tuff check                         # CI validation

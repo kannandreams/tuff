@@ -15,6 +15,7 @@ complete command and flag reference.
 | Start | [`tuff init`](#tuff-init) |
 | Create or add capabilities | [`tuff create`](#tuff-create), [`tuff add`](#tuff-add) |
 | Build and deliver packs | [`tuff pack`](#tuff-pack), [`tuff add pack`](#install-a-pack) |
+| Wire MCP servers | [`tuff add mcp`](#install-an-mcp-server) |
 | Inspect and generate | [`tuff list`](#tuff-list), [`tuff status`](#tuff-status), [`tuff generate`](#tuff-generate), [`tuff outdated`](#tuff-outdated) |
 | Diff and update | [`tuff diff`](#tuff-diff), [`tuff update`](#tuff-update) |
 | Validate in CI | [`tuff check`](#tuff-check) |
@@ -76,9 +77,10 @@ two forms:
 2. Use an explicit capability-type subcommand when the type is known or when
    installing from a Git repository.
 
-The available capability types are `skill`, `tool`, `hook`, and `workflow`.
-In the examples below, `<capability-type>` means “replace this placeholder
-with one of those four types.”
+The available capability types are `skill`, `tool`, `hook`, `workflow`, and
+`mcp-server`. In the examples below, `<capability-type>` means “replace this
+placeholder with one of those types.” External MCP servers have their own
+subcommand, [`tuff add mcp`](#install-an-mcp-server).
 
 #### Local sources
 
@@ -169,6 +171,24 @@ tuff add pack ./engineering.tuffpack --agent open-agents \
 `tuff add pack` only ever sees the local artifact file; it has no way to know
 where it came from unless told. Without `--reference`, `tuff outdated` reports
 this pack's capabilities as `not checked` rather than guessing.
+
+#### Install an MCP server
+
+Wire an external MCP server into every selected harness from one declaration.
+Sources are built-in catalog ids, local directories holding a `tuff.toml`, or
+git URLs naming the directory; several can be given at once:
+
+```sh frame="terminal"
+tuff add mcp github filesystem -a claude -a cursor -a open-agents
+tuff add mcp ./mcp-servers/internal-search
+```
+
+Each harness gets an entry in its own MCP config (`.mcp.json`,
+`.cursor/mcp.json`, `.agents/mcp.json`) plus a tracked
+`<prefix>/mcp-servers/<id>/server.toml`. Secrets are emitted as environment
+references; Tuff prints which variables to export. The install is refused
+before anything is written if the config is malformed or already has an entry
+Tuff does not track. See [MCP Servers](/primitives/mcp-servers).
 
 For harness-native hooks, pass the hook fragment explicitly:
 

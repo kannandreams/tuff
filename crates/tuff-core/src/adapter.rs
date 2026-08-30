@@ -106,6 +106,9 @@ pub enum CapabilityKind {
     Workflow {
         workflow: crate::manifest::WorkflowConfig,
     },
+    McpServer {
+        server: crate::manifest::McpServerConfig,
+    },
 }
 
 impl CapabilityKind {
@@ -115,6 +118,7 @@ impl CapabilityKind {
             Self::Tool { .. } => CapabilityType::Tool,
             Self::Hook { .. } => CapabilityType::Hook,
             Self::Workflow { .. } => CapabilityType::Workflow,
+            Self::McpServer { .. } => CapabilityType::McpServer,
         }
     }
 }
@@ -169,6 +173,11 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
                     "policy capabilities are not installable yet",
                 ));
             }
+            CapabilityType::McpServer => CapabilityKind::McpServer {
+                server: manifest.server.clone().ok_or_else(|| {
+                    TuffError::new("mcp-server capability requires [server] section")
+                })?,
+            },
         };
     Ok(ResolvedCapability {
         id: manifest.id.clone(),
@@ -373,15 +382,56 @@ pub trait AgentAdapter {
         std::fs::create_dir_all(repo_root.join(self.dir_prefix()))
     }
 
+    /// How this harness spells a reference to an environment variable inside
+    /// its MCP config. Claude Code and most stdio clients expand `${VAR}`.
+    fn mcp_env_reference(&self, var: &str) -> String {
+        format!("${{{var}}}")
+    }
+
+    /// The `mcpServers.<id>` entry this harness needs for an external MCP
+    /// server. Secrets are emitted as env references, never values.
+    fn mcp_server_entry(&self, server: &crate::manifest::McpServerConfig) -> serde_json::Value {
+        use crate::manifest::McpTransport;
+        match server.transport {
+            McpTransport::Stdio => {
+                let mut entry = serde_json::json!({
+                    "command": server.command.clone().unwrap_or_default(),
+                    "args": server.args,
+                });
+                if !server.env.is_empty() {
+                    let env: serde_json::Map<String, serde_json::Value> = server
+                        .env
+                        .iter()
+                        .map(|(name, reference)| {
+                            (
+                                name.clone(),
+                                serde_json::Value::String(
+                                    self.mcp_env_reference(&reference.from_env),
+                                ),
+                            )
+                        })
+                        .collect();
+                    entry["env"] = serde_json::Value::Object(env);
+                }
+                entry
+            }
+            McpTransport::Http => serde_json::json!({
+                "type": "http",
+                "url": server.url.clone().unwrap_or_default(),
+            }),
+        }
+    }
+
     fn plan(&self, capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
         match capability.capability_type {
             CapabilityType::Tool => self.plan_tool(capability, repo_root),
             CapabilityType::Hook => self.plan_hook(capability, repo_root),
             CapabilityType::Workflow => self.plan_workflow(capability, repo_root),
+            CapabilityType::McpServer => self.plan_mcp_server(capability, repo_root),
             CapabilityType::Policy => Err(TuffError::new(
                 "policy capabilities are not installable yet",
             )),
-            _ => self.plan_skill(capability, repo_root),
+            CapabilityType::Skill => self.plan_skill(capability, repo_root),
         }
     }
 
@@ -392,7 +442,7 @@ pub trait AgentAdapter {
         managed_hooks: &[crate::lockfile::ManagedHook],
     ) -> Result<()> {
         let prefix = self.dir_prefix();
-        for kind in &["skills", "tools", "hooks", "workflows"] {
+        for kind in &["skills", "tools", "hooks", "workflows", "mcp-servers"] {
             self.remove_dir(repo_root, prefix, kind, primitive_id)?;
         }
         crate::mcp::remove_tool(&repo_root.join(self.mcp_config_relpath()), primitive_id)?;
@@ -560,6 +610,35 @@ pub trait AgentAdapter {
         )])
     }
 
+    /// Emit the canonical `server.toml` record. The JSON entry in the
+    /// harness's MCP config is the artifact the harness reads; this file is
+    /// what gives the capability a tree to hash, so `check`/`diff`/`delete`
+    /// work exactly as they do for every other kind.
+    fn plan_mcp_server(
+        &self,
+        capability: &ResolvedCapability,
+        repo_root: &Path,
+    ) -> Result<Vec<PlannedFile>> {
+        let CapabilityKind::McpServer { server } = &capability.kind else {
+            return Err(TuffError::new(
+                "plan_mcp_server called on non-mcp-server capability",
+            ));
+        };
+
+        let target_path = repo_root
+            .join(self.dir_prefix())
+            .join("mcp-servers")
+            .join(&capability.id)
+            .join("server.toml");
+
+        let content = serialize_mcp_server(capability, server)?;
+
+        Ok(vec![PlannedFile::new(
+            relative_or_absolute_fs(&target_path, repo_root),
+            content,
+        )])
+    }
+
     fn remove_dir(
         &self,
         repo_root: &Path,
@@ -627,6 +706,34 @@ fn serialize_workflow(
         capability_type: capability.capability_type,
         description: &capability.description,
         workflow,
+    };
+    let mut content = toml::to_string_pretty(&document)?;
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    Ok(content.into_bytes())
+}
+
+#[derive(Serialize)]
+struct McpServerDocument<'a> {
+    id: &'a str,
+    version: &'a str,
+    #[serde(rename = "type")]
+    capability_type: CapabilityType,
+    description: &'a str,
+    server: &'a crate::manifest::McpServerConfig,
+}
+
+fn serialize_mcp_server(
+    capability: &ResolvedCapability,
+    server: &crate::manifest::McpServerConfig,
+) -> Result<Vec<u8>> {
+    let document = McpServerDocument {
+        id: &capability.id,
+        version: &capability.version,
+        capability_type: capability.capability_type,
+        description: &capability.description,
+        server,
     };
     let mut content = toml::to_string_pretty(&document)?;
     if !content.ends_with('\n') {

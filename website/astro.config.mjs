@@ -48,6 +48,7 @@ export default defineConfig({
             { label: 'tuff.toml', slug: 'primitives/format' },
             { label: 'Skills', slug: 'primitives/skills' },
             { label: 'Tools', slug: 'primitives/tools' },
+            { label: 'MCP Servers', slug: 'primitives/mcp-servers' },
             { label: 'Hooks', slug: 'primitives/hooks' },
             { label: 'Policies', slug: 'primitives/policies' },
             { label: 'Workflows', slug: 'primitives/workflows' },

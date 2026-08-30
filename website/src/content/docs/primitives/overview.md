@@ -13,6 +13,7 @@ Tuff manages these capability types:
 |---|---|---|
 | [skill](/primitives/skills) | Prose instruction injected into agent context | **Implemented** |
 | [tool](/primitives/tools) | Executable capability with typed parameter contract | **Implemented** |
+| [mcp-server](/primitives/mcp-servers) | External MCP server wired into every harness from one declaration | **Implemented** |
 | [hook](/primitives/hooks) | Event-driven automation at lifecycle moments | **Implemented** |
 | [workflow](/primitives/workflows) | Composable patterns bundling skills, tools, and hooks | Roadmap |
 | policy | Constraints and guardrails on agent behavior | Roadmap |

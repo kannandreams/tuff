@@ -90,6 +90,18 @@ fn classify(
         );
     };
 
+    if src.source_type == crate::catalog::SOURCE_TYPE {
+        let latest = crate::catalog::version();
+        let status = match crate::catalog::lookup(&src.skill) {
+            Ok(Some(_)) if latest == entry.installed_version => "up to date",
+            Ok(Some(_)) => "outdated",
+            // Removed from the catalog, or the catalog itself is broken:
+            // either way there is nothing current to compare against.
+            _ => "error",
+        };
+        return (entry.installed_version.clone(), latest, status.to_string());
+    }
+
     match git::clone_to_temp(&src.url, None).and_then(|(_guard, d, _)| git::resolve_ref(&d)) {
         Err(_) => (
             short_sha(&entry.installed_version).to_string(),
@@ -204,6 +216,7 @@ mod tests {
             implementation: None,
             parameters: None,
             workflow: None,
+            server: None,
         }
     }
 

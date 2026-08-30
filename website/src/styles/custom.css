@@ -426,7 +426,7 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 .tuff-section-label { margin-bottom: .55rem; color: var(--tuff-dim); font-size: .7rem; letter-spacing: .04em; }
 .tuff-section h2 { max-width: 38rem; color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: 1.45rem; line-height: 1.25; letter-spacing: -.035em; font-weight: 600; }
 .tuff-section-head p { max-width: 35rem; margin-top: .55rem; color: var(--tuff-dim); font-size: .9rem; line-height: 1.65; }
-.tuff-cap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .4rem; background: var(--tuff-border); }
+.tuff-cap-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .4rem; background: var(--tuff-border); }
 .tuff-cap-card { display: flex; min-height: 11.5rem; flex-direction: column; padding: 1.35rem 1.15rem; background: var(--tuff-panel); }
 .tuff-cap-card--wide { grid-column: 1 / -1; min-height: auto; }
 .tuff-cap-card:hover, .tuff-cap-card:focus-visible { background: rgba(195, 90, 53, .12); box-shadow: inset 0 0 0 1px var(--tuff-accent); }
@@ -498,6 +498,7 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
   .tuff-landing--standalone { margin-left: 0; margin-right: 0; }
   .tuff-standalone-footer { padding-left: 1.25rem; padding-right: 1.25rem; }
   .tuff-cap-grid { grid-template-columns: repeat(2, 1fr); }
+  .tuff-cap-card:nth-child(5) { grid-column: span 2; }
   .tuff-steps-grid { grid-template-columns: repeat(2, 1fr); }
   .tuff-pack-showcase { grid-template-columns: 1fr; }
   .tuff-pack-flow { min-height: 2.8rem; }

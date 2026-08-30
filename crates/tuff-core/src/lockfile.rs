@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use crate::adapter::EmittedFile;
 use crate::error::{Result, TuffError};
-use crate::manifest::{CapabilityType, ImplementationConfig, WorkflowConfig};
+use crate::manifest::{CapabilityType, ImplementationConfig, McpServerConfig, WorkflowConfig};
 
 pub const LOCKFILE_VERSION: u8 = 1;
 
@@ -51,6 +51,8 @@ pub struct CapabilityLockEntry {
     /// installed target directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<WorkflowConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<McpServerConfig>,
 }
 
 fn default_scope() -> String {
@@ -282,17 +284,23 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
                 description: item.description,
                 source_path: item.source_path.clone(),
                 targets,
-                source: (item.source == "git").then_some(SourceMetadata {
-                    source_type: "git".to_string(),
-                    url: item.repository,
-                    source_ref: item.resolved_ref,
-                    skill: item.source_path,
-                }),
+                // Anything that isn't "local" is a remote source ("git",
+                // "catalog", ...). The type is recorded verbatim so each
+                // lifecycle verb can dispatch on it.
+                source: (!item.source.is_empty() && item.source != "local").then_some(
+                    SourceMetadata {
+                        source_type: item.source.clone(),
+                        url: item.repository,
+                        source_ref: item.resolved_ref,
+                        skill: item.source_path,
+                    },
+                ),
                 scope: "project".to_string(),
                 pack: item.pack,
                 implementation: item.implementation,
                 parameters: item.parameters,
                 workflow: item.workflow,
+                server: item.server,
             });
     }
     let lockfile = Lockfile {
@@ -322,7 +330,7 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
         for (target, target_entry) in &entry.targets {
             let (source, repository, source_path, resolved_ref) = match &entry.source {
                 Some(source) => (
-                    "git".to_string(),
+                    source.source_type.clone(),
                     source.url.clone(),
                     source.skill.clone(),
                     source.source_ref.clone(),
@@ -352,6 +360,7 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
                 implementation: entry.implementation.clone(),
                 parameters: entry.parameters.clone(),
                 workflow: entry.workflow.clone(),
+                server: entry.server.clone(),
             });
         }
     }
@@ -411,6 +420,8 @@ struct WireCapability {
     parameters: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     workflow: Option<WorkflowConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    server: Option<McpServerConfig>,
 }
 
 pub fn hash_bytes(content: &[u8]) -> String {
@@ -533,6 +544,7 @@ mod tests {
                 implementation: None,
                 parameters: None,
                 workflow: None,
+                server: None,
             },
         );
         write_lockfile_at(&path, &lf).unwrap();

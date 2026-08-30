@@ -8,7 +8,7 @@ const docs = '/getting-started';
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
-    <meta name="description" content="Manage project-owned skills, tools, hooks, and workflows for coding agents." />
+    <meta name="description" content="Manage project-owned skills, tools, hooks, workflows, and MCP servers for coding agents." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Tuff — manage coding-agent capabilities in your repo</title>
   </head>
@@ -49,7 +49,7 @@ const docs = '/getting-started';
       <section class="tuff-section">
         <div class="tuff-section-head"><div class="tuff-section-label">//how it works</div><h2>The lifecycle Tuff manages</h2><p>Agent capabilities are useful only if a team can tell what is installed, where it came from, and whether it changed.</p></div>
         <div class="tuff-steps-grid tuff-steps-grid--4">
-          <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5l11 6v10l-11 6-11-6V11z"/><path d="M5 11l11 6 11-6"/><path d="M16 17v10"/></svg><strong class="tuff-step-title tuff-step-title--install">Create or add</strong><p>Start a new skill, tool, hook, or workflow, or bring existing agent files under management without rewriting their content.</p></div>
+          <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5l11 6v10l-11 6-11-6V11z"/><path d="M5 11l11 6 11-6"/><path d="M16 17v10"/></svg><strong class="tuff-step-title tuff-step-title--install">Create or add</strong><p>Start a new skill, tool, hook, workflow, or MCP server, or bring existing agent files under management without rewriting their content.</p></div>
           <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h5l3-9 5 16 3-11 2 4h6"/></svg><strong class="tuff-step-title tuff-step-title--track">Track</strong><p>Record source, version, scope, harness, emitted path, and the clean install baseline in project state.</p></div>
           <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v8a4 4 0 004 4h8"/><path d="M16 14l4 4-4 4"/></svg><strong class="tuff-step-title tuff-step-title--diff">Diff</strong><p>Compare the current files against the baseline so intentional edits are visible and accidental drift is not silent.</p></div>
           <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4l10 4v8c0 7-4.5 10.5-10 12-5.5-1.5-10-5-10-12V8z"/><path d="M16 12v8"/><path d="M12 16h8"/></svg><strong class="tuff-step-title tuff-step-title--govern">Update or check</strong><p>Accept deliberate local changes, merge upstream updates where possible, and fail CI when tracked capabilities are not in the expected state.</p></div>
@@ -76,15 +76,16 @@ const docs = '/getting-started';
         <div class="tuff-section-head"><div class="tuff-section-label">//capabilities</div><h2>The things agents load should be first-class project assets</h2><p>Tuff treats these as managed files, not magic settings hidden inside one developer's local harness.</p></div>
         <div class="tuff-cap-grid">
           <a class="tuff-cap-card" href="/primitives/skills"><strong>Skill</strong><span>Instructions and references an agent can load for a project or task.</span></a>
-          <a class="tuff-cap-card" href="/primitives/tools"><strong>Tool</strong><span>Callable scripts, functions, or MCP servers with a clear contract.</span></a>
+          <a class="tuff-cap-card" href="/primitives/tools"><strong>Tool</strong><span>Callable scripts and functions with a typed contract, including servers you ship yourself.</span></a>
           <a class="tuff-cap-card" href="/primitives/hooks"><strong>Hook</strong><span>Automation attached to supported lifecycle events in a harness.</span></a>
           <a class="tuff-cap-card" href="/primitives/workflows"><strong>Workflow</strong><span>A repeatable sequence that composes capabilities for a larger job.</span></a>
-          <a class="tuff-cap-card tuff-cap-card--wide" href="/primitives/policies"><strong>Policy Control</strong><span>Governs all four. Set which capabilities can be installed, from which sources, and for which harnesses, enforced consistently across every agent your team runs.</span></a>
+          <a class="tuff-cap-card" href="/primitives/mcp-servers"><strong>MCP Server</strong><span>External servers wired into every harness from one declaration, with secrets kept as references.</span></a>
+          <a class="tuff-cap-card tuff-cap-card--wide" href="/primitives/policies"><strong>Policy Control</strong><span>Governs all five. Set which capabilities can be installed, from which sources, and for which harnesses, enforced consistently across every agent your team runs.</span></a>
         </div>
       </section>
 
       <section class="tuff-section" id="packs">
-        <div class="tuff-section-head"><div class="tuff-section-label">//tuff packs</div><h2 id="packs-title">Bundle once. Ship as a verified release.</h2><p id="packs-description">Bundle the skills, tools, hooks, and workflows behind an integration into one deterministic artifact. Publish it through OCI, pin it by digest, and deploy the same reviewed bundle to every agent runtime.</p></div>
+        <div class="tuff-section-head"><div class="tuff-section-label">//tuff packs</div><h2 id="packs-title">Bundle once. Ship as a verified release.</h2><p id="packs-description">Bundle the skills, tools, hooks, workflows, and MCP servers behind an integration into one deterministic artifact. Publish it through OCI, pin it by digest, and deploy the same reviewed bundle to every agent runtime.</p></div>
         <figure class="tuff-pack-showcase" aria-labelledby="packs-title" aria-describedby="packs-description">
           <div class="tuff-pack-stage tuff-pack-stage--capabilities">
             <div class="tuff-pack-stage-label">CRM capabilities</div>

@@ -160,6 +160,7 @@ mod tests {
                     implementation: None,
                     parameters: None,
                     workflow: None,
+                    server: None,
                 },
             );
         }

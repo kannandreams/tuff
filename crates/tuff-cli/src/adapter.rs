@@ -69,6 +69,14 @@ impl AgentAdapter for AdapterKind {
         self.implementation().mcp_config_relpath()
     }
 
+    fn mcp_env_reference(&self, var: &str) -> String {
+        self.implementation().mcp_env_reference(var)
+    }
+
+    fn mcp_server_entry(&self, server: &tuff_core::manifest::McpServerConfig) -> serde_json::Value {
+        self.implementation().mcp_server_entry(server)
+    }
+
     fn supported_agents(&self) -> &[&'static str] {
         self.implementation().supported_agents()
     }

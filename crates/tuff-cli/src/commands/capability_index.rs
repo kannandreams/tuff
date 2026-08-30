@@ -10,8 +10,9 @@
 //!
 //! Skills are excluded from the index (already natively visible, no
 //! indirection needed) and hooks are excluded (they fire automatically,
-//! there is nothing to "invoke"). An MCP section is deferred until RFC-102
-//! ships the MCP capability kind.
+//! there is nothing to "invoke"). External MCP servers (RFC-102) are listed
+//! for discoverability — the harness already loads them, but the agent has
+//! no other way to learn what a server is *for*.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -42,8 +43,9 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
     for adapter in &adapters {
         let tools = indexable(&lockfile, CapabilityType::Tool, adapter.id());
         let workflows = indexable(&lockfile, CapabilityType::Workflow, adapter.id());
+        let servers = indexable(&lockfile, CapabilityType::McpServer, adapter.id());
 
-        if tools.is_empty() && workflows.is_empty() {
+        if tools.is_empty() && workflows.is_empty() && servers.is_empty() {
             let already_indexed = lockfile
                 .capabilities
                 .get(CAPABILITY_INDEX_ID)
@@ -54,7 +56,7 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
             continue;
         }
 
-        let content = render_skill(adapter.dir_prefix(), &tools, &workflows);
+        let content = render_skill(adapter.dir_prefix(), &tools, &workflows, &servers);
         let content_hash = lockfile::hash_bytes(&content);
 
         let skill_path = repo_root
@@ -131,6 +133,7 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
             implementation: None,
             parameters: None,
             workflow: None,
+            server: None,
         },
     );
     lockfile::write_lockfile(repo_root, &lockfile)
@@ -158,6 +161,7 @@ fn render_skill(
     dir_prefix: &str,
     tools: &[(&String, &CapabilityLockEntry)],
     workflows: &[(&String, &CapabilityLockEntry)],
+    servers: &[(&String, &CapabilityLockEntry)],
 ) -> Vec<u8> {
     let mut body = String::new();
     body.push_str("# Installed capabilities\n");
@@ -173,6 +177,14 @@ fn render_skill(
         body.push_str("\n## Workflows\n");
         for (id, entry) in workflows {
             render_workflow(&mut body, id, entry);
+        }
+    }
+
+    if !servers.is_empty() {
+        body.push_str("\n## MCP Servers\n");
+        body.push_str("These are already loaded by the harness; call their tools directly.\n");
+        for (id, entry) in servers {
+            render_mcp_server(&mut body, id, entry);
         }
     }
 
@@ -279,6 +291,27 @@ fn render_workflow(body: &mut String, id: &str, entry: &CapabilityLockEntry) {
     }
 }
 
+fn render_mcp_server(body: &mut String, id: &str, entry: &CapabilityLockEntry) {
+    body.push_str(&format!(
+        "\n### {} — {}\n",
+        sanitize_inline(id),
+        sanitize_inline(&entry.description)
+    ));
+    let Some(server) = &entry.server else {
+        body.push_str("Details unavailable — reinstall this server to populate them.\n");
+        return;
+    };
+    body.push_str(&format!("Transport: {}\n", server.transport.as_str()));
+    if let Some(summary) = server
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.tools_summary.as_deref())
+        .filter(|summary| !summary.trim().is_empty())
+    {
+        body.push_str(&format!("Tools: {}\n", sanitize_inline(summary)));
+    }
+}
+
 /// Strip characters from user-controlled manifest text (descriptions,
 /// argument descriptions) that could inject a fake heading or otherwise
 /// distort the generated document's structure — the same class of risk RFC-
@@ -347,6 +380,7 @@ mod tests {
             }),
             parameters: Some(parameters),
             workflow: None,
+            server: None,
         }
     }
 
@@ -456,7 +490,7 @@ mod tests {
         );
         let id = "x".to_string();
         let tools = vec![(&id, &entry)];
-        let bytes = render_skill(".claude", &tools, &[]);
+        let bytes = render_skill(".claude", &tools, &[], &[]);
         let content = String::from_utf8(bytes).unwrap();
         let mut parts = content.splitn(3, "---\n");
         assert_eq!(parts.next(), Some(""));
