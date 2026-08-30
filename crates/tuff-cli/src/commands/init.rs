@@ -92,6 +92,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                         baseline_hash,
                     }],
                     managed_hooks: Vec::new(),
+                    managed_mcp_entry: None,
                     ownership: lockfile::TargetOwnership::Generated,
                     sha256: baseline_tree_hash,
                     installed_path: ".agents/skills/tuff-cli-guide".into(),

@@ -2084,6 +2084,113 @@ fn add_mcp_from_catalog_wires_every_selected_harness_in_its_own_dialect() {
 }
 
 #[test]
+fn hand_edited_mcp_entry_is_drift_gating_check_list_and_delete() {
+    let temp = TempDir::new().unwrap();
+    let server = make_mcp_server_primitive(temp.path(), "example");
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", server.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success();
+
+    // Tamper with the Tuff-managed entry, leaving a hand-written neighbour.
+    let mcp_path = temp.path().join(".agents/mcp.json");
+    let mut config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    config["mcpServers"]["example"]["command"] = serde_json::json!("tampered");
+    config["mcpServers"]["neighbour"] = serde_json::json!({"command": "hand-written"});
+    fs::write(&mcp_path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["list", "--type", "mcp-server"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("modified"));
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(".agents/mcp.json#example"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["delete", "example"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("local modifications"));
+
+    // --force deletes the tampered entry but never touches the neighbour.
+    tuff()
+        .current_dir(temp.path())
+        .args(["delete", "example", "--force"])
+        .assert()
+        .success();
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&mcp_path).unwrap()).unwrap();
+    assert!(after["mcpServers"]["example"].is_null());
+    assert_eq!(after["mcpServers"]["neighbour"]["command"], "hand-written");
+}
+
+#[test]
+fn update_force_restores_a_tampered_catalog_entry() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", "github", "-a", "open-agents"])
+        .assert()
+        .success();
+
+    let mcp_path = temp.path().join(".agents/mcp.json");
+    let canonical = fs::read_to_string(&mcp_path).unwrap();
+    let mut config: serde_json::Value = serde_json::from_str(&canonical).unwrap();
+    config["mcpServers"]["github"]["command"] = serde_json::json!("tampered");
+    fs::write(&mcp_path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
+
+    // The drifted entry blocks a plain update instead of hiding behind
+    // "already up to date", and --check names the recovery.
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "github", "--check"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hand-edited MCP config entry"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "github"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--force"));
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "github", "--force"])
+        .assert()
+        .success();
+    assert_eq!(fs::read_to_string(&mcp_path).unwrap(), canonical);
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success();
+}
+
+#[test]
 fn add_mcp_refuses_an_untracked_entry_before_writing_anything() {
     let temp = TempDir::new().unwrap();
     tuff()

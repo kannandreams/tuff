@@ -75,7 +75,13 @@ pub fn cmd_delete(
         let modified_hook = target_entry
             .managed_hooks
             .iter()
-            .any(|hook| lockfile::managed_hook_status(&scope_root, hook) == "modified");
+            .any(|hook| lockfile::managed_hook_status(&scope_root, hook) == "modified")
+            || target_entry
+                .managed_mcp_entry
+                .as_ref()
+                .is_some_and(|entry| {
+                    lockfile::managed_mcp_entry_status(&scope_root, id, entry) == "modified"
+                });
         if (modified || modified_hook) && !force {
             return Err(TuffError::new(format!(
                 "'{}' has local modifications for agent '{}'; use --force to delete",

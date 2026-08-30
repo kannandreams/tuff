@@ -86,6 +86,12 @@ fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<
                 }
             }
 
+            if let Some(managed_entry) = &target_entry.managed_mcp_entry
+                && lockfile::managed_mcp_entry_status(scope_root, id, managed_entry) != "clean"
+            {
+                failing_files.push(format!("{}#{}", managed_entry.config_path, id));
+            }
+
             let status = if failing_files.is_empty() {
                 "ok"
             } else {

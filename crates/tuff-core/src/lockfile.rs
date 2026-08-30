@@ -96,6 +96,12 @@ pub struct TargetLockEntry {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub managed_hooks: Vec<ManagedHook>,
+    #[serde(
+        default,
+        rename = "managedMcpEntry",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub managed_mcp_entry: Option<ManagedMcpEntry>,
     #[serde(default)]
     pub ownership: TargetOwnership,
     #[serde(default)]
@@ -118,6 +124,53 @@ pub struct ManagedHook {
     pub command: String,
     #[serde(rename = "baselineHash")]
     pub baseline_hash: String,
+}
+
+/// Baseline for one Tuff-managed `mcpServers.<id>` entry (RFC-102 stage b).
+///
+/// MCP config files are shared ground that users hand-edit, so the entry
+/// gets the managed-hook treatment: a content hash recorded at registration
+/// time, compared on every `check`/`list`, never whole-file ownership. The
+/// entry's key is the capability id, so only the file path and hash are
+/// stored.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedMcpEntry {
+    #[serde(rename = "configPath")]
+    pub config_path: String,
+    #[serde(rename = "baselineHash")]
+    pub baseline_hash: String,
+}
+
+/// Hash an MCP entry value exactly as `managed_mcp_entry_status` will when
+/// it re-reads the file: canonical `serde_json` bytes, so on-disk pretty-
+/// printing never matters.
+pub fn managed_mcp_entry_baseline(entry: &serde_json::Value) -> Result<String> {
+    Ok(hash_bytes(&serde_json::to_vec(entry)?))
+}
+
+/// `"clean"`, `"modified"`, or `"missing"` for a managed MCP entry.
+pub fn managed_mcp_entry_status(
+    repo_root: &Path,
+    capability_id: &str,
+    entry: &ManagedMcpEntry,
+) -> &'static str {
+    let path = repo_root.join(&entry.config_path);
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return "missing";
+    };
+    let Ok(config): std::result::Result<serde_json::Value, _> = serde_json::from_str(&raw) else {
+        return "modified";
+    };
+    let Some(current) = config
+        .get("mcpServers")
+        .and_then(|servers| servers.get(capability_id))
+    else {
+        return "missing";
+    };
+    match serde_json::to_vec(current) {
+        Ok(bytes) if hash_bytes(&bytes) == entry.baseline_hash => "clean",
+        _ => "modified",
+    }
 }
 
 pub fn managed_hooks_from_fragment(
@@ -268,6 +321,7 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
             TargetLockEntry {
                 emitted_files: Vec::new(),
                 managed_hooks: item.managed_hooks,
+                managed_mcp_entry: item.managed_mcp_entry,
                 ownership: item.ownership,
                 sha256: item.sha256,
                 installed_path: item.installed_path,
@@ -356,6 +410,7 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
                 description: entry.description.clone(),
                 ownership: target_entry.ownership,
                 managed_hooks: target_entry.managed_hooks.clone(),
+                managed_mcp_entry: target_entry.managed_mcp_entry.clone(),
                 pack: entry.pack.clone(),
                 implementation: entry.implementation.clone(),
                 parameters: entry.parameters.clone(),
@@ -412,6 +467,8 @@ struct WireCapability {
     ownership: TargetOwnership,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     managed_hooks: Vec<ManagedHook>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    managed_mcp_entry: Option<ManagedMcpEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pack: Option<PackProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -533,6 +590,7 @@ mod tests {
                     TargetLockEntry {
                         emitted_files: Vec::new(),
                         managed_hooks: Vec::new(),
+                        managed_mcp_entry: None,
                         ownership: TargetOwnership::Generated,
                         sha256: hash_bytes(b"content"),
                         installed_path: ".agents/skills/test".into(),
@@ -607,5 +665,56 @@ mod tests {
             baseline_hash: "abc".into(),
         };
         assert_eq!(drift_status(tmp.path(), &emitted), "missing");
+    }
+
+    #[test]
+    fn managed_mcp_entry_status_tracks_the_entry_not_the_file() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = tmp.path().join("mcp.json");
+        let entry_value = serde_json::json!({"command": "npx", "args": ["-y", "srv"]});
+        let both = |neighbour: &str| {
+            serde_json::to_string_pretty(&serde_json::json!({
+                "mcpServers": {"github": entry_value, "neighbour": {"command": neighbour}}
+            }))
+            .unwrap()
+        };
+        fs::write(&config_path, both("hand")).unwrap();
+        let managed = ManagedMcpEntry {
+            config_path: "mcp.json".into(),
+            baseline_hash: managed_mcp_entry_baseline(&entry_value).unwrap(),
+        };
+
+        // Pretty-printing and neighbouring hand-written entries never matter,
+        // and editing the neighbour leaves ours clean.
+        assert_eq!(
+            managed_mcp_entry_status(tmp.path(), "github", &managed),
+            "clean"
+        );
+        fs::write(&config_path, both("edited")).unwrap();
+        assert_eq!(
+            managed_mcp_entry_status(tmp.path(), "github", &managed),
+            "clean"
+        );
+
+        // Editing our entry is modified; removing it, or the file, is missing.
+        fs::write(
+            &config_path,
+            r#"{"mcpServers": {"github": {"command": "tampered"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            managed_mcp_entry_status(tmp.path(), "github", &managed),
+            "modified"
+        );
+        fs::write(&config_path, r#"{"mcpServers": {}}"#).unwrap();
+        assert_eq!(
+            managed_mcp_entry_status(tmp.path(), "github", &managed),
+            "missing"
+        );
+        fs::remove_file(&config_path).unwrap();
+        assert_eq!(
+            managed_mcp_entry_status(tmp.path(), "github", &managed),
+            "missing"
+        );
     }
 }
