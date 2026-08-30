@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-30
+
 ### Added
 
 - Added `--reference` to `tuff add pack`, recording the OCI reference a pack was pulled from so `tuff outdated` can check the registry for a newer version. `tuff outdated` gained `--plain-http` and `--ca-file`, matching `tuff pack push`/`pull`, for checking a self-hosted registry.
