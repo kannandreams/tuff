@@ -1,14 +1,14 @@
 [package]
 name = "tuff-hooks-spec"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 description = "Canonical hook event and compatibility types for Tuff-managed hooks."
-license = "MIT"
+license.workspace = true
 readme = "README.md"
-authors = ["Kannan Kalidasan"]
-homepage = "https://tuffcli.dev"
-documentation = "https://tuffcli.dev"
-repository = "https://github.com/kannandreams/tuff"
+authors.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
