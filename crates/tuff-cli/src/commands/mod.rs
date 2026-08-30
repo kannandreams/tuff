@@ -180,6 +180,18 @@ pub(crate) fn markdown_escape(value: &str) -> String {
     value.replace('|', "\\|")
 }
 
+/// Run a future to completion on a fresh single-threaded runtime.
+///
+/// `push`, `pull`, and `outdated`'s pack-registry check all need to call the
+/// async OCI client from otherwise-synchronous command code, and each needs
+/// exactly this. It was duplicated once already; one copy is the point.
+pub(crate) fn block_on_oci<T>(future: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(future)
+}
+
 pub(crate) fn home_dir() -> Result<PathBuf> {
     home_dir_opt().ok_or_else(|| TuffError::new("HOME environment variable not set"))
 }

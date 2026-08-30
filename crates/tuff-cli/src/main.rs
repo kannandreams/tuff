@@ -93,7 +93,16 @@ enum Command {
     },
 
     /// Show installed capabilities with upstream update status.
-    Outdated,
+    Outdated {
+        /// Use unencrypted HTTP for a development registry, when checking a
+        /// pack-sourced capability.
+        #[arg(long)]
+        plain_http: bool,
+        /// Additional PEM certificate authority to trust (repeatable), when
+        /// checking a pack-sourced capability.
+        #[arg(long = "ca-file")]
+        ca_file: Vec<PathBuf>,
+    },
 
     /// Diff an installed capability against baseline.
     Diff {
@@ -314,6 +323,13 @@ enum AddCommand {
         source: PathBuf,
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
+        /// OCI reference this pack was pulled from (e.g.
+        /// ghcr.io/acme/engineering:1.2.0), recorded so `tuff outdated` can
+        /// check whether a newer pack version has been published. Omit if
+        /// the pack did not come from a registry, or you do not want it
+        /// checked.
+        #[arg(long = "reference")]
+        reference: Option<String>,
     },
 }
 
@@ -610,9 +626,15 @@ fn run() -> Result<()> {
             Some(AddCommand::Pack {
                 source: typed_source,
                 agent: typed_agent,
+                reference: typed_reference,
             }) => {
                 reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
-                cmd_add_pack(&repo_root, &typed_source, &typed_agent)
+                cmd_add_pack(
+                    &repo_root,
+                    &typed_source,
+                    &typed_agent,
+                    typed_reference.as_deref(),
+                )
             }
         },
         Some(Command::Pack { action }) => match action {
@@ -688,7 +710,10 @@ fn run() -> Result<()> {
                 cmd_generate_report(&repo_root, output.as_deref())
             }
         },
-        Some(Command::Outdated) => cmd_outdated(&repo_root),
+        Some(Command::Outdated {
+            plain_http,
+            ca_file,
+        }) => cmd_outdated(&repo_root, plain_http, &ca_file),
         Some(Command::Diff {
             capability_id,
             agent,

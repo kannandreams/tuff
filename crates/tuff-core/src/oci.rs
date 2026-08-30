@@ -173,6 +173,37 @@ pub async fn push_pack(
     })
 }
 
+/// Normalize an arbitrary OCI reference into its repository form
+/// ("registry/repository", no tag), so it can be recorded once and re-queried
+/// for available tags later without a pinned tag going stale.
+pub fn normalize_pack_repository(raw: &str) -> Result<String> {
+    let reference = parse_reference(raw)?;
+    Ok(format!(
+        "{}/{}",
+        reference.registry(),
+        reference.repository()
+    ))
+}
+
+/// List the tags published under a pack's repository.
+///
+/// `repository_reference` is the "registry/repository" form produced by
+/// [`normalize_pack_repository`]; any tag on it is ignored, since listing
+/// tags does not require pinning one.
+pub async fn list_pack_versions(
+    repository_reference: &str,
+    options: &OciTransferOptions,
+) -> Result<Vec<String>> {
+    let reference = parse_reference(repository_reference)?;
+    let client = registry_client(options)?;
+    let auth = registry_auth(reference.registry())?;
+    let response = client
+        .list_tags(&reference, &auth, None, None)
+        .await
+        .map_err(|error| oci_error("list OCI pack tags", error))?;
+    Ok(response.tags)
+}
+
 /// Pulls one OCI-distributed pack, verifies both OCI and Tuff integrity, and persists it atomically.
 ///
 /// # Errors

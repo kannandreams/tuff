@@ -157,6 +157,19 @@ tuff add pack ./tuff-dist/crm-integration-1.2.0.tuffpack --agent open-agents
 
 Pack installation verifies the complete artifact, preflights every member, stages shared hook and MCP configuration, and refuses the entire installation if any member is already tracked or would overwrite an untracked file. `--agent` is optional and repeatable; pack installation does not support `--global`.
 
+If the pack came from a registry, pass `--reference` with the reference you
+pulled it from so `tuff outdated` can check for a newer version later:
+
+```sh frame="terminal"
+tuff pack pull ghcr.io/acme/engineering:1.2.0 --output ./engineering.tuffpack
+tuff add pack ./engineering.tuffpack --agent open-agents \
+  --reference ghcr.io/acme/engineering:1.2.0
+```
+
+`tuff add pack` only ever sees the local artifact file; it has no way to know
+where it came from unless told. Without `--reference`, `tuff outdated` reports
+this pack's capabilities as `not checked` rather than guessing.
+
 For harness-native hooks, pass the hook fragment explicitly:
 
 ```sh frame="terminal"
@@ -387,13 +400,26 @@ tuff outdated
 Example output:
 
 ```text
-find-skills              skill      open-agents  2adcfe5    def5678    outdated
-pre-commit-lint          hook       open-agents  1.0.0      none       up to date
-security-review          tool       claude       abc1234    2adcfe5    outdated
+find-skills               skill      open-agents  2adcfe5    def5678    outdated
+security-review           tool       claude       abc1234    2adcfe5    outdated
+rust-implement            skill      open-agents  1.2.0      1.4.0      outdated
+csv-workbench             skill      open-agents  1.0.0      —          not checked
 ```
 
-For git-sourced primitives, `CURRENT` and `LATEST` show the 7-character commit SHA.
-For local primitives, `LATEST` shows `none` and status is always `up to date` or `modified source`.
+For git-sourced capabilities, `CURRENT` and `LATEST` show the 7-character commit SHA.
+
+For a pack-sourced capability installed with `add pack --reference`,
+`CURRENT` and `LATEST` compare the *pack's* published versions — the numbers
+you passed to `tuff pack build --version` — since that is the artifact
+whose availability is actually being checked. Only tags that parse as
+[semver](https://semver.org) are compared; anything else is excluded rather
+than guessed at, and `1.9.0` is correctly treated as older than `1.10.0`
+(plain string comparison would get this backwards). Pass `--plain-http` or
+`--ca-file` for a self-hosted registry, matching `tuff pack push`/`pull`.
+
+Anything Tuff cannot check — a pack installed without `--reference`, or a
+local capability with no source at all — reports `not checked`, `—`, rather
+than a guessed `up to date`.
 
 ## Diff and Update
 
