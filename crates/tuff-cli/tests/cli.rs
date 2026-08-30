@@ -1773,6 +1773,134 @@ fn example_tools_install_and_register_mcp_entries() {
 }
 
 #[test]
+fn capability_index_reflects_installed_tool_and_updates_are_regenerated() {
+    let temp = TempDir::new().unwrap();
+    let tool = make_tool_primitive(temp.path(), "scan-tool");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", tool.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let index_path = temp
+        .path()
+        .join(".agents/skills/tuff-capabilities/SKILL.md");
+    let content = fs::read_to_string(&index_path).unwrap();
+    assert!(content.starts_with("---\nname: tuff-capabilities\n"));
+    assert!(content.contains("### scan-tool — A test tool."));
+    assert!(content.contains("Run: `bash .agents/tools/scan-tool/run.sh '<json-args>'`"));
+    assert!(content.contains("- `endpoint` (string, optional): The endpoint to scan"));
+
+    // A manifest edit picked up via `tuff update` regenerates the index too.
+    let manifest_path = tool.join("tuff.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest.replace("A test tool.", "An updated test tool."),
+    )
+    .unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "scan-tool", "--force"])
+        .assert()
+        .success();
+    let updated = fs::read_to_string(&index_path).unwrap();
+    assert!(updated.contains("### scan-tool — An updated test tool."));
+
+    // Deleting the only indexed capability removes the whole index skill.
+    tuff()
+        .current_dir(temp.path())
+        .args(["delete", "scan-tool", "--force"])
+        .assert()
+        .success();
+    assert!(!index_path.exists());
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(!lock.contains("tuff-capabilities"));
+}
+
+#[test]
+fn capability_index_lists_workflow_steps() {
+    let temp = TempDir::new().unwrap();
+    let workflow = make_workflow_primitive(temp.path(), "release-flow", &[("scan-tool", "tool")]);
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", workflow.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(
+        temp.path()
+            .join(".agents/skills/tuff-capabilities/SKILL.md"),
+    )
+    .unwrap();
+    assert!(content.contains("## Workflows"));
+    assert!(content.contains("### release-flow"));
+    assert!(content.contains("1. scan-tool (tool)"));
+}
+
+#[test]
+fn capability_index_is_generated_for_a_pack_install() {
+    let author = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let pack = make_pack(author.path());
+    let artifact = author.path().join("pack.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "pack",
+            artifact.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+
+    // The pack's own capability list never mentions the generated index, so
+    // this proves `collect_install_mutations` carries its staged files
+    // across to the real project (not just the lockfile entry).
+    let index_path = project
+        .path()
+        .join(".agents/skills/tuff-capabilities/SKILL.md");
+    assert!(index_path.is_file());
+    let content = fs::read_to_string(&index_path).unwrap();
+    assert!(content.contains("### pack-workflow"));
+}
+
+#[test]
 fn remove_tool_cleans_mcp_entry() {
     let temp = TempDir::new().unwrap();
     let tool = make_tool_primitive(temp.path(), "scan-tool");

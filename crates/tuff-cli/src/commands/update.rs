@@ -9,7 +9,7 @@ use crate::manifest::{self, load_manifest};
 use crate::resolver::{self, Scope};
 
 use super::add::{SourceMetaInput, install_capability};
-use super::{home_dir, resolve_agent_selection};
+use super::{capability_index, home_dir, resolve_agent_selection};
 
 fn update_local_baseline(
     scope_root: &Path,
@@ -90,6 +90,7 @@ fn update_local_baseline(
     }
     lockfile::write_lockfile(scope_root, &lf)?;
     lockfile::prune_unreferenced_baseline_objects(scope_root, &lf)?;
+    capability_index::regenerate_capability_index(scope_root)?;
 
     if changed_files == 0 {
         println!("'{}' is already up to date", id);

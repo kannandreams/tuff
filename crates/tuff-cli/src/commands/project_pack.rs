@@ -21,7 +21,11 @@ pub(crate) struct PreparedProjectPack {
 pub(crate) fn default_project_capabilities(lock: &Lockfile) -> Vec<String> {
     lock.capabilities
         .iter()
-        .filter(|(id, entry)| id.as_str() != TUFF_CLI_GUIDE_ID && entry.scope == "project")
+        .filter(|(id, entry)| {
+            id.as_str() != TUFF_CLI_GUIDE_ID
+                && id.as_str() != super::capability_index::CAPABILITY_INDEX_ID
+                && entry.scope == "project"
+        })
         .map(|(id, _)| id.clone())
         .collect()
 }

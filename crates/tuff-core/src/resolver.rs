@@ -157,6 +157,9 @@ mod tests {
                     source: None,
                     scope: "project".into(),
                     pack: None,
+                    implementation: None,
+                    parameters: None,
+                    workflow: None,
                 },
             );
         }

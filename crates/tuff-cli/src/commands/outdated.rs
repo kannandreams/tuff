@@ -201,6 +201,9 @@ mod tests {
             source,
             scope: "project".to_string(),
             pack: None,
+            implementation: None,
+            parameters: None,
+            workflow: None,
         }
     }
 
