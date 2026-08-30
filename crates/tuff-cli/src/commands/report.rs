@@ -257,6 +257,7 @@ fn ordered_capability_types(rows: &[InventoryRow]) -> Vec<CapabilityType> {
         CapabilityType::Tool,
         CapabilityType::Hook,
         CapabilityType::Workflow,
+        CapabilityType::McpServer,
     ] {
         if remaining.remove(&capability_type) {
             ordered.push(capability_type);
@@ -281,5 +282,6 @@ fn capability_type_heading(capability_type: CapabilityType) -> String {
         CapabilityType::Hook => "Hooks".to_string(),
         CapabilityType::Workflow => "Workflows".to_string(),
         CapabilityType::Policy => "Policies".to_string(),
+        CapabilityType::McpServer => "MCP Servers".to_string(),
     }
 }

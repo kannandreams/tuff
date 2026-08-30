@@ -724,6 +724,20 @@ fn register_mcp_if_needed(
     adapter: AdapterKind,
     root: &Path,
 ) -> Result<()> {
+    if let CapabilityKind::McpServer { server } = &capability.kind {
+        // `root` is the staging tree here, seeded with the live lockfile and
+        // MCP config, so "already tracked" means "this pack is re-installing
+        // over its own earlier install" — the one case overwriting is right.
+        let tracked = lockfile::require_lockfile(root)
+            .map(|lock| super::add::mcp_entry_tracked(&lock, &capability.id, adapter.id()))
+            .unwrap_or(false);
+        return tuff_core::mcp::register_server(
+            &root.join(adapter.mcp_config_relpath()),
+            &capability.id,
+            adapter.mcp_server_entry(server),
+            tracked,
+        );
+    }
     let CapabilityKind::Tool { implementation, .. } = &capability.kind else {
         return Ok(());
     };

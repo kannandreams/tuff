@@ -43,10 +43,10 @@ Entries are deterministically ordered by name, type, target, and installed path.
 | Field | Description |
 |---|---|
 | `name` | Capability identifier |
-| `type` | `"skill"`, `"tool"`, `"hook"`, `"workflow"`, or `"policy"` |
-| `source` | `local` or `git` |
+| `type` | `"skill"`, `"tool"`, `"hook"`, `"workflow"`, `"mcp-server"`, or `"policy"` |
 | `source_path` | Local path, or path within the Git repository |
-| `repository` | Git repository URL when `source = "git"` |
+| `source` | `local`, `git`, or `catalog` (built-in MCP server catalog) |
+| `repository` | Git repository URL when `source = "git"`; `builtin` for `catalog` |
 | `resolved_ref` | Commit resolved at install time for Git sources |
 | `sha256` | Hash of the materialized capability directory |
 | `target` | Canonical adapter ID |

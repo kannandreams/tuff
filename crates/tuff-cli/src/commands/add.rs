@@ -58,6 +58,104 @@ pub fn cmd_add(
     )
 }
 
+/// `tuff add mcp <source>...` — each source is a built-in catalog id, a
+/// local directory holding a `tuff.toml`, or a git URL. Paths and URLs go
+/// through the normal typed-add route; catalog ids are synthesized in
+/// memory and installed through the same `install_capability` so every
+/// lifecycle verb sees an ordinary capability.
+pub fn cmd_add_mcp(
+    repo_root: &Path,
+    sources: &[String],
+    target_ids: &[String],
+    global: bool,
+) -> Result<()> {
+    if sources.is_empty() {
+        return Err(TuffError::new(
+            "at least one catalog id, path, or git URL is required",
+        ));
+    }
+
+    for source in sources {
+        let as_path = Path::new(source);
+        if git::is_git_url(source) || as_path.exists() {
+            cmd_add(
+                repo_root,
+                Some(as_path),
+                None,
+                Some("mcp-server"),
+                target_ids,
+                global,
+                None,
+            )?;
+            continue;
+        }
+
+        let Some(manifest) = crate::catalog::lookup(source)? else {
+            return Err(TuffError::new(format!(
+                "'{source}' is not a path, a git URL, or a catalog entry; catalog ids: {}",
+                crate::catalog::ids().join(", ")
+            )));
+        };
+        add_catalog_server(repo_root, &manifest, target_ids, global)?;
+    }
+    Ok(())
+}
+
+fn add_catalog_server(
+    repo_root: &Path,
+    manifest: &manifest::CapabilityManifest,
+    target_ids: &[String],
+    global: bool,
+) -> Result<()> {
+    let (scope, install_root) = if global {
+        let home = home_dir()?;
+        let lock_path = crate::paths::global_lockfile(&home);
+        lockfile::init_lockfile_at(&lock_path)?;
+        (Scope::Global, home)
+    } else {
+        (Scope::Project, repo_root.to_path_buf())
+    };
+    let target_ids = resolve_agent_selection(&install_root, target_ids, global)?;
+    let capability = resolve_capability(manifest)?;
+
+    if scope == Scope::Project
+        && let Some(warning) =
+            resolver::check_collision(&capability.id, repo_root, Some(crate::catalog::SOURCE_URL))?
+    {
+        eprintln!("{warning}");
+    }
+
+    install_capability(
+        &install_root,
+        scope,
+        &capability,
+        manifest,
+        &target_ids,
+        Some(&SourceMetaInput {
+            source_type: crate::catalog::SOURCE_TYPE.to_string(),
+            url: crate::catalog::SOURCE_URL.to_string(),
+            source_ref: manifest.version.clone(),
+            skill: manifest.id.clone(),
+        }),
+        true,
+    )?;
+    println!(
+        "installed {} from the built-in catalog (catalog {})",
+        capability.id, manifest.version
+    );
+    Ok(())
+}
+
+/// Whether the lockfile already records `id` for `target` — the one case in
+/// which overwriting an existing `mcpServers.<id>` entry is a re-install of
+/// our own work rather than clobbering something a person wrote by hand.
+pub(crate) fn mcp_entry_tracked(lockfile: &lockfile::Lockfile, id: &str, target: &str) -> bool {
+    lockfile
+        .capabilities
+        .get(id)
+        .is_some_and(|entry| entry.targets.contains_key(target))
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "CLI dispatch passes source and install context"
@@ -72,9 +170,6 @@ fn cmd_add_git(
     project_root: &Path,
     hook_file: Option<&Path>,
 ) -> Result<()> {
-    let name =
-        name.ok_or_else(|| TuffError::new("--name is required when installing from a git URL"))?;
-
     let (source_guard, cache_dir, clean_url) = git::clone_to_temp(url, None)?;
     let source_path = git::source_subdirectory(url);
     let commit_sha = git::resolve_ref(&cache_dir)?;
@@ -91,17 +186,44 @@ fn cmd_add_git(
             )));
         }
         path
+    } else if cap_type == CapabilityType::McpServer {
+        // No SKILL.md-style discovery exists for servers; the URL must name
+        // the directory holding the tuff.toml.
+        return Err(TuffError::new(
+            "installing an mcp-server from git requires a subdirectory in the URL (e.g. <repo>//mcp-servers/github)",
+        ));
     } else {
+        let name = name.ok_or_else(|| {
+            TuffError::new(
+                "--name is required when installing from a git URL without a subdirectory",
+            )
+        })?;
         git::discover_capability(&cache_dir, name, cap_type)?
     };
-    let source_skill = source_path.as_deref().unwrap_or(name);
 
-    let manifest = if cap_type == CapabilityType::Hook && hook_file.is_some() {
+    let native_hook = cap_type == CapabilityType::Hook && hook_file.is_some();
+    let manifest = if native_hook {
         synthetic_local_manifest(&skill_dir, Some(cap_type))?
+    } else if skill_dir.join("tuff.toml").is_file() {
+        // A real manifest: honour its declared type and sections, but pin
+        // the installed version to the commit so `update` can compare refs
+        // exactly as it does for synthesized skills.
+        let mut manifest = load_manifest(&skill_dir)?;
+        if let Some(name) = name {
+            manifest.id = name.to_string();
+        }
+        manifest.version = commit_sha.clone();
+        manifest
     } else {
+        let name = name.ok_or_else(|| {
+            TuffError::new("--name is required when the git source has no tuff.toml")
+        })?;
         manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?
     };
-    let capability = if cap_type == CapabilityType::Hook && hook_file.is_some() {
+    let name: &str = name.unwrap_or(&manifest.id);
+    let source_skill = source_path.as_deref().unwrap_or(name);
+
+    let capability = if native_hook {
         resolve_native_hook_capability(&skill_dir, Some(name), &commit_sha, hook_file)?
     } else {
         resolve_capability(&manifest)?
@@ -256,6 +378,7 @@ fn synthetic_local_manifest(
         implementation: None,
         hook: None,
         workflow: None,
+        server: None,
         targets: vec![],
         root: capability_dir.to_path_buf(),
     })
@@ -488,6 +611,7 @@ fn adopt_capability_in_place(
             implementation: manifest.implementation.clone(),
             parameters: manifest.parameters.clone(),
             workflow: manifest.workflow.clone(),
+            server: manifest.server.clone(),
         },
     );
     lockfile::write_lockfile(install_root, &lockfile)?;
@@ -595,10 +719,27 @@ pub(crate) fn install_capability(
         }
     }
 
-    if matches!(capability.kind, CapabilityKind::Tool { .. }) {
+    if matches!(
+        capability.kind,
+        CapabilityKind::Tool { .. } | CapabilityKind::McpServer { .. }
+    ) {
         for adapter in &adapters {
             let mcp_path = install_root.join(adapter.mcp_config_relpath());
             tuff_core::mcp::validate_config(&mcp_path)?;
+
+            // For an external server the JSON entry *is* the product, so an
+            // entry Tuff never wrote is a collision — refuse here, before a
+            // single file lands, rather than after `server.toml` is written.
+            if matches!(capability.kind, CapabilityKind::McpServer { .. })
+                && !mcp_entry_tracked(&lockfile, &capability.id, adapter.id())
+                && tuff_core::mcp::has_server(&mcp_path, &capability.id)?
+            {
+                return Err(TuffError::new(format!(
+                    "refusing to overwrite untracked MCP server '{}' in {}; remove it by hand or choose a different capability id",
+                    capability.id,
+                    lockfile::relative_or_absolute_fs(&mcp_path, install_root)
+                )));
+            }
         }
     }
 
@@ -732,6 +873,41 @@ pub(crate) fn install_capability(
         }
     }
 
+    if let CapabilityKind::McpServer { ref server } = capability.kind {
+        for adapter in &adapters {
+            let mcp_path = install_root.join(adapter.mcp_config_relpath());
+            let tracked = mcp_entry_tracked(&lockfile, &capability.id, adapter.id());
+            crate::adapters::mcp_register_server(
+                install_root,
+                &mcp_path,
+                &capability.id,
+                adapter.mcp_server_entry(server),
+                tracked,
+            )?;
+            if report {
+                println!(
+                    "registered MCP server {} ({}) -> {}",
+                    capability.id,
+                    adapter.id(),
+                    lockfile::relative_or_absolute_fs(&mcp_path, install_root)
+                );
+            }
+        }
+        let required = crate::catalog::required_env(server);
+        if report && !required.is_empty() {
+            eprintln!(
+                "note: '{}' reads {} from the environment; export {} before starting the harness",
+                capability.id,
+                if required.len() == 1 {
+                    "a variable"
+                } else {
+                    "variables"
+                },
+                required.join(", ")
+            );
+        }
+    }
+
     let mut lockfile = lockfile;
     let existing_targets = lockfile
         .capabilities
@@ -769,6 +945,7 @@ pub(crate) fn install_capability(
             implementation: manifest.implementation.clone(),
             parameters: manifest.parameters.clone(),
             workflow: manifest.workflow.clone(),
+            server: manifest.server.clone(),
         },
     );
 

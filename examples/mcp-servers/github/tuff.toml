@@ -1,0 +1,24 @@
+id = "github"
+version = "1.0.0"
+type = "mcp-server"
+description = "GitHub MCP server: issues, pull requests, and code search."
+
+# An external MCP server: Tuff does not ship its code, only the declaration.
+# Each harness gets an entry in its own MCP config (.mcp.json for Claude
+# Code, .cursor/mcp.json for Cursor, .agents/mcp.json for Open Agents and
+# Codex), and a canonical server.toml under <prefix>/mcp-servers/github/ so
+# `tuff check` and `tuff diff` can track it like any other capability.
+[server]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+# Secrets are references, never values. The harness reads the variable from
+# the developer's environment; this file can be committed as-is.
+[server.env]
+GITHUB_PERSONAL_ACCESS_TOKEN = { from_env = "GITHUB_PERSONAL_ACCESS_TOKEN" }
+
+# Optional. Surfaces in the generated capability index so the agent knows
+# what the server is for without probing it.
+[server.metadata]
+tools_summary = "create_issue, create_pull_request, list_issues, search_code, get_file_contents"

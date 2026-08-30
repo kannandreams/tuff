@@ -205,6 +205,89 @@ fn update_local_from_source(
     Ok(())
 }
 
+/// Re-resolve a catalog-installed MCP server against the catalog compiled
+/// into this binary. The catalog version is the "upstream ref": a newer Tuff
+/// can carry a newer catalog, and that is the only way an entry changes.
+fn update_from_catalog(
+    scope_root: &Path,
+    scope: Scope,
+    id: &str,
+    entry: &lockfile::CapabilityLockEntry,
+    target_ids: &[String],
+    check: bool,
+    force: bool,
+) -> Result<()> {
+    let source = entry
+        .source
+        .as_ref()
+        .expect("catalog source checked by caller");
+    let latest = crate::catalog::version();
+    let Some(manifest) = crate::catalog::lookup(&source.skill)? else {
+        return Err(TuffError::new(format!(
+            "'{}' is no longer in the built-in catalog (installed from catalog {}); \
+             delete it or reinstall from a path",
+            source.skill, entry.installed_version
+        )));
+    };
+
+    if latest == entry.installed_version {
+        println!("'{}' is already up to date (catalog {latest})", id);
+        return Ok(());
+    }
+
+    let mut all_clean = true;
+    for target_id in target_ids {
+        let target_entry = entry.targets.get(target_id).ok_or_else(|| {
+            TuffError::new(format!(
+                "'{}' is not installed for agent '{}'",
+                id, target_id
+            ))
+        })?;
+        if crate::cache::hash_tree(&scope_root.join(&target_entry.installed_path))?
+            != target_entry.sha256
+        {
+            all_clean = false;
+        }
+    }
+
+    if check {
+        if all_clean {
+            println!(
+                "'{}' can be updated cleanly: catalog {} → {latest}",
+                id, entry.installed_version
+            );
+        } else {
+            println!(
+                "'{}' has local changes — update would replace the materialized tree",
+                id
+            );
+        }
+        return Ok(());
+    }
+
+    if !all_clean && !force {
+        return Err(TuffError::new(format!(
+            "'{id}' has local changes; run 'tuff diff {id}' first or use --force to reload from the catalog"
+        )));
+    }
+
+    let capability = resolve_capability(&manifest)?;
+    install_capability(
+        scope_root,
+        scope,
+        &capability,
+        &manifest,
+        target_ids,
+        Some(&SourceMetaInput {
+            source_type: crate::catalog::SOURCE_TYPE.to_string(),
+            url: crate::catalog::SOURCE_URL.to_string(),
+            source_ref: latest,
+            skill: source.skill.clone(),
+        }),
+        true,
+    )
+}
+
 pub fn cmd_update(
     repo_root: &Path,
     id: &str,
@@ -256,6 +339,10 @@ pub fn cmd_update(
     }
 
     let source = entry.source.as_ref().expect("source checked above");
+
+    if source.source_type == crate::catalog::SOURCE_TYPE {
+        return update_from_catalog(&scope_root, scope, id, &entry, &target_ids, check, force);
+    }
 
     let (_source_guard, cache_dir, _clean_url) = git::clone_to_temp(&source.url, None)?;
     let latest_sha = git::resolve_ref(&cache_dir)?;

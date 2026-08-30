@@ -18,6 +18,7 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::Tool,
     CapabilityType::Hook,
     CapabilityType::Workflow,
+    CapabilityType::McpServer,
 ];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Cursor"];
@@ -238,6 +239,12 @@ impl AgentAdapter for Cursor {
         ".cursor/mcp.json"
     }
 
+    /// Cursor interpolates `${env:VAR}` in `mcp.json`, not the bare `${VAR}`
+    /// form Claude Code and most stdio clients use.
+    fn mcp_env_reference(&self, var: &str) -> String {
+        format!("${{env:{var}}}")
+    }
+
     fn supported_agents(&self) -> &[&'static str] {
         SUPPORTED_AGENTS
     }
@@ -299,7 +306,7 @@ mod tests {
 
     #[test]
     fn supported_types_covers_all_capability_types() {
-        assert_eq!(SUPPORTED_TYPES.len(), 4);
+        assert_eq!(SUPPORTED_TYPES.len(), 5);
     }
 
     #[test]

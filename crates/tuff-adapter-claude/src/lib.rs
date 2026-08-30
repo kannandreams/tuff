@@ -20,6 +20,7 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::Tool,
     CapabilityType::Hook,
     CapabilityType::Workflow,
+    CapabilityType::McpServer,
 ];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Claude Code"];
@@ -336,7 +337,7 @@ mod tests {
 
     #[test]
     fn supported_types_covers_all_capability_types() {
-        assert_eq!(SUPPORTED_TYPES.len(), 4);
+        assert_eq!(SUPPORTED_TYPES.len(), 5);
     }
 
     #[test]

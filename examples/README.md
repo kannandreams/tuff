@@ -10,6 +10,7 @@ examples/
   tools/<id>/
   hooks/<id>/
   workflows/<id>/
+  mcp-servers/<id>/
 ```
 
 For test-only inputs such as malformed manifests or legacy lockfiles, use

@@ -1900,6 +1900,292 @@ fn capability_index_is_generated_for_a_pack_install() {
     assert!(content.contains("### pack-workflow"));
 }
 
+fn make_mcp_server_primitive(root: &Path, id: &str) -> std::path::PathBuf {
+    let primitive = root.join("mcp-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("tuff.toml"),
+        format!(
+            r#"id = "{id}"
+version = "1.0.0"
+type = "mcp-server"
+description = "A test MCP server."
+
+[server]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@example/server"]
+
+[server.env]
+EXAMPLE_TOKEN = {{ from_env = "EXAMPLE_TOKEN" }}
+
+[server.metadata]
+tools_summary = "do_thing, list_things"
+"#
+        ),
+    )
+    .unwrap();
+    primitive
+}
+
+#[test]
+fn add_mcp_from_local_path_emits_record_and_entry_and_delete_removes_both() {
+    let temp = TempDir::new().unwrap();
+    let server = make_mcp_server_primitive(temp.path(), "example");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", server.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "registered MCP server example (open-agents) -> .agents/mcp.json",
+        ))
+        .stderr(predicate::str::contains("export EXAMPLE_TOKEN"));
+
+    let record = temp.path().join(".agents/mcp-servers/example/server.toml");
+    assert!(record.is_file());
+    let record_text = fs::read_to_string(&record).unwrap();
+    assert!(record_text.contains("type = \"mcp-server\""));
+    assert!(record_text.contains("from_env = \"EXAMPLE_TOKEN\""));
+
+    let mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    assert_eq!(mcp["mcpServers"]["example"]["command"], "npx");
+    assert_eq!(
+        mcp["mcpServers"]["example"]["env"]["EXAMPLE_TOKEN"],
+        "${EXAMPLE_TOKEN}"
+    );
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["list", "--type", "mcp-server"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("example"))
+        .stdout(predicate::str::contains("mcp-server"));
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success();
+
+    let index = fs::read_to_string(
+        temp.path()
+            .join(".agents/skills/tuff-capabilities/SKILL.md"),
+    )
+    .unwrap();
+    assert!(index.contains("## MCP Servers"));
+    assert!(index.contains("Tools: do_thing, list_things"));
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["delete", "example"])
+        .assert()
+        .success();
+    assert!(!record.exists());
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    assert!(after["mcpServers"]["example"].is_null());
+    assert!(
+        !fs::read_to_string(temp.path().join("tuff.lock"))
+            .unwrap()
+            .contains("name = \"example\"")
+    );
+}
+
+#[test]
+fn add_mcp_from_catalog_wires_every_selected_harness_in_its_own_dialect() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    for agent in ["claude", "cursor"] {
+        tuff()
+            .current_dir(temp.path())
+            .args(["agent", "add", agent])
+            .assert()
+            .success();
+    }
+
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "mcp",
+            "github",
+            "filesystem",
+            "-a",
+            "claude",
+            "-a",
+            "cursor",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed github from the built-in catalog",
+        ))
+        .stderr(predicate::str::contains(
+            "export GITHUB_PERSONAL_ACCESS_TOKEN",
+        ));
+
+    // Claude Code and Open Agents expand `${VAR}`; Cursor needs `${env:VAR}`.
+    let claude = fs::read_to_string(temp.path().join(".mcp.json")).unwrap();
+    assert!(claude.contains("\"${GITHUB_PERSONAL_ACCESS_TOKEN}\""));
+    let cursor = fs::read_to_string(temp.path().join(".cursor/mcp.json")).unwrap();
+    assert!(cursor.contains("\"${env:GITHUB_PERSONAL_ACCESS_TOKEN}\""));
+    let agents: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    assert!(agents["mcpServers"]["github"].is_object());
+    assert!(agents["mcpServers"]["filesystem"].is_object());
+    for prefix in [".claude", ".cursor", ".agents"] {
+        assert!(
+            temp.path()
+                .join(prefix)
+                .join("mcp-servers/github/server.toml")
+                .is_file()
+        );
+    }
+
+    // The lockfile round-trips a non-git remote source verbatim.
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("source = \"catalog\""));
+    assert!(lock.contains("repository = \"builtin\""));
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("up to date"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "github"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already up to date"));
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success();
+}
+
+#[test]
+fn add_mcp_refuses_an_untracked_entry_before_writing_anything() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    let mcp_path = temp.path().join(".agents/mcp.json");
+    let original = "{\n  \"mcpServers\": {\n    \"memory\": {\n      \"command\": \"hand-written\"\n    }\n  }\n}\n";
+    fs::write(&mcp_path, original).unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", "memory", "-a", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "refusing to overwrite untracked MCP server 'memory'",
+        ));
+
+    assert_eq!(fs::read_to_string(&mcp_path).unwrap(), original);
+    assert!(!temp.path().join(".agents/mcp-servers/memory").exists());
+    assert!(
+        !fs::read_to_string(temp.path().join("tuff.lock"))
+            .unwrap()
+            .contains("name = \"memory\"")
+    );
+}
+
+#[test]
+fn add_mcp_fails_closed_on_malformed_config() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    let mcp_path = temp.path().join(".agents/mcp.json");
+    fs::write(&mcp_path, "{ malformed\n").unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", "github", "-a", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid MCP config"));
+
+    assert_eq!(fs::read_to_string(&mcp_path).unwrap(), "{ malformed\n");
+    assert!(!temp.path().join(".agents/mcp-servers/github").exists());
+}
+
+#[test]
+fn add_mcp_rejects_literal_env_values_and_unknown_ids() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let leaky = temp.path().join("leaky");
+    fs::create_dir_all(&leaky).unwrap();
+    fs::write(
+        leaky.join("tuff.toml"),
+        r#"id = "leaky"
+version = "1.0.0"
+type = "mcp-server"
+description = "Puts a secret in the manifest."
+
+[server]
+command = "npx"
+
+[server.env]
+TOKEN = "ghp_literal_secret"
+"#,
+    )
+    .unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", leaky.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("from_env"));
+    assert!(!temp.path().join(".agents/mcp-servers/leaky").exists());
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "mcp", "not-a-real-server"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "catalog ids: github, filesystem, memory",
+        ));
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["create", "mcp-server", "x"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("use `tuff add mcp"));
+}
+
 #[test]
 fn remove_tool_cleans_mcp_entry() {
     let temp = TempDir::new().unwrap();

@@ -1,0 +1,36 @@
+# Built-in MCP server catalog (RFC-102).
+#
+# Every entry here is a server whose launch command is public and stable
+# enough to ship in the binary. Secrets are never listed as values: `env`
+# names the variables the developer must export, and the generated manifest
+# references them with `{ from_env = "NAME" }`.
+#
+# Bump `catalog_version` whenever an entry changes; `tuff outdated` and
+# `tuff update` compare an installed server's recorded version against it.
+
+catalog_version = "2026.08.0"
+
+[[servers]]
+id = "github"
+description = "GitHub MCP server: issues, pull requests, and code search."
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+tools_summary = "create_issue, create_pull_request, list_issues, search_code, get_file_contents"
+
+[[servers]]
+id = "filesystem"
+description = "Filesystem MCP server scoped to the project directory."
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+tools_summary = "read_file, write_file, list_directory, search_files, move_file"
+
+[[servers]]
+id = "memory"
+description = "Knowledge-graph memory MCP server for persistent notes across sessions."
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-memory"]
+tools_summary = "create_entities, create_relations, add_observations, search_nodes, read_graph"

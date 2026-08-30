@@ -12,7 +12,7 @@ A tool is something the agent can invoke, such as:
 
 - a local binary
 - a Python or Node script
-- an MCP server
+- an MCP server whose code you ship (for external servers, see [MCP Servers](/primitives/mcp-servers))
 - an HTTP API
 - a repository command
 - a Docker container

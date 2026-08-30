@@ -4,8 +4,8 @@ mod commands;
 mod display;
 
 pub use tuff_core::{
-    cache, check, config, error, git, lockfile, manifest, oci, pack, paths, resolver, tool,
-    tree_diff,
+    cache, catalog, check, config, error, git, lockfile, manifest, oci, pack, paths, resolver,
+    tool, tree_diff,
 };
 
 use std::path::PathBuf;
@@ -13,12 +13,12 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    PackBuildOptions, PackInitOptions, cmd_add, cmd_add_pack, cmd_agent_add, cmd_agent_list,
-    cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check, cmd_create, cmd_delete,
-    cmd_diff, cmd_generate_index, cmd_generate_report, cmd_hooks_check_portability,
-    cmd_hooks_matrix, cmd_init, cmd_list, cmd_outdated, cmd_pack_build, cmd_pack_check,
-    cmd_pack_extract, cmd_pack_init, cmd_pack_inspect, cmd_pack_pull, cmd_pack_push,
-    cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
+    PackBuildOptions, PackInitOptions, cmd_add, cmd_add_mcp, cmd_add_pack, cmd_agent_add,
+    cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check,
+    cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
+    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_outdated,
+    cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
+    cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -78,7 +78,7 @@ enum Command {
         #[arg(short = 's', long = "scope", default_value = "all")]
         scope: String,
 
-        /// Filter by capability type: skill, tool, hook.
+        /// Filter by capability type: skill, tool, hook, workflow, mcp-server.
         #[arg(short = 'p', long = "type")]
         kind: Option<String>,
     },
@@ -271,6 +271,15 @@ enum CreateCommand {
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
     },
+    /// MCP servers are not scaffolded; use `tuff add mcp` instead.
+    #[command(name = "mcp-server")]
+    McpServer {
+        /// Capability id.
+        id: String,
+        /// Agent harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -330,6 +339,20 @@ enum AddCommand {
         /// checked.
         #[arg(long = "reference")]
         reference: Option<String>,
+    },
+    /// Install external MCP servers from the built-in catalog, a local path,
+    /// or a git URL — and wire each into every selected harness's MCP config.
+    Mcp {
+        /// Catalog ids (see `tuff add mcp --help`), paths to a directory
+        /// with a tuff.toml, or git URLs. Several may be given at once.
+        #[arg(required = true)]
+        sources: Vec<String>,
+        /// Agent harness to emit for (repeatable).
+        #[arg(short = 'a', long = "agent")]
+        agent: Vec<String>,
+        /// Install to global scope.
+        #[arg(short = 'g', long = "global")]
+        global: bool,
     },
 }
 
@@ -537,6 +560,9 @@ fn run() -> Result<()> {
             CreateCommand::Workflow { id, agent } => {
                 cmd_create(&repo_root, CapabilityType::Workflow, &id, &agent)
             }
+            CreateCommand::McpServer { id, agent } => {
+                cmd_create(&repo_root, CapabilityType::McpServer, &id, &agent)
+            }
         },
         Some(Command::Add {
             source,
@@ -635,6 +661,14 @@ fn run() -> Result<()> {
                     &typed_agent,
                     typed_reference.as_deref(),
                 )
+            }
+            Some(AddCommand::Mcp {
+                sources,
+                agent: typed_agent,
+                global: typed_global,
+            }) => {
+                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                cmd_add_mcp(&repo_root, &sources, &typed_agent, typed_global)
             }
         },
         Some(Command::Pack { action }) => match action {

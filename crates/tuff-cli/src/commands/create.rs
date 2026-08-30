@@ -183,6 +183,7 @@ pub fn cmd_create(
             implementation: None,
             parameters: None,
             workflow: None,
+            server: None,
         },
     );
     config::write_config(repo_root, &config)?;
@@ -198,6 +199,7 @@ fn default_capability_description(kind: CapabilityType) -> &'static str {
         CapabilityType::Hook => "What this hook enforces.",
         CapabilityType::Workflow => "When the agent should run this workflow.",
         CapabilityType::Policy => "Policy capabilities are not scaffolded yet.",
+        CapabilityType::McpServer => "MCP servers are added, not scaffolded.",
     }
 }
 
@@ -253,6 +255,11 @@ fn create_scaffold_files(
         )],
         CapabilityType::Policy => {
             return Err(TuffError::new("policy capabilities are not scaffolded yet"));
+        }
+        CapabilityType::McpServer => {
+            return Err(TuffError::new(
+                "mcp-server capabilities are not scaffolded; use `tuff add mcp <catalog-id|path|git-url>` instead",
+            ));
         }
     };
     let relative_dir = kind.plural_dir();
