@@ -350,9 +350,9 @@ body.tuff-standalone {
 }
 .tuff-nav-left { display: flex; align-items: center; gap: 2.2rem; }
 .tuff-brand { display: inline-flex; align-items: center; color: var(--tuff-accent, #c35a35); font-size: 1.18rem; font-weight: 700; letter-spacing: -.05em; text-decoration: none; }
-.tuff-nav-links { display: flex; align-items: center; gap: 1.7rem; }
-.tuff-nav-links a { color: #6d6861; font-size: .85rem; font-weight: 500; text-decoration: none; transition: color .15s ease; }
-.tuff-nav-links a:hover { color: #1a1918; }
+.tuff-nav-links { display: flex; align-items: center; gap: .55rem; }
+.tuff-nav-links a { display: inline-flex; align-items: center; padding: .42rem .7rem; border-radius: .3rem; color: #6d6861; font-size: .85rem; font-weight: 500; text-decoration: none; transition: color .15s ease, background-color .15s ease; }
+.tuff-nav-links a:hover, .tuff-nav-links a:focus-visible { color: #eeeae2; background: #1b1e1b; outline: none; }
 .tuff-github-button { display: inline-flex; align-items: center; gap: .45rem; padding: .48rem .72rem; border: 1px solid #343934; border-radius: .3rem; color: #eeeae2; background: #1b1e1b; box-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset; font-family: 'JetBrains Mono', monospace; font-size: .8rem; text-decoration: none; }
 .tuff-github-button:hover { color: #fff; background: #242824; }
 .tuff-github-button svg { width: .85rem; height: .85rem; fill: currentColor; }
