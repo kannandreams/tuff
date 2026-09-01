@@ -488,6 +488,29 @@ tuff update <id> --force
 tuff update <id> --scope global
 ```
 
+#### Update a pack
+
+A capability installed by `tuff add pack` moves forward with its pack, never on its own. Naming any member updates every member: capabilities the new release drops are removed, new ones are installed, and the rest are replaced, with shared hook and MCP registrations adjusted to match. The pack is the unit of versioning and verification, so a lockfile never records two releases of one pack.
+
+```sh frame="terminal"
+# Resolve the registry recorded by `tuff add pack --reference`, pull the
+# newest semver tag, and apply it
+tuff update <member-id>
+
+# Preview: the version, what would be added, updated, or removed, and
+# whether local edits stand in the way
+tuff update <member-id> --check
+
+# Apply a pulled artifact instead of resolving the registry (offline, or a
+# pack installed without --reference)
+tuff update <member-id> --pack ./engineering-1.2.0.tuffpack
+
+# Development registries, as for `tuff outdated`
+tuff update <member-id> --plain-http --ca-file ./registry-ca.pem
+```
+
+A pack update applies to every agent the pack is installed for; a narrower `--agent` selection is refused rather than leaving one agent on the old release. Local edits to any member block the update unless `--force` is given. Only semver tags are compared when resolving the registry, matching `tuff outdated`; when nothing parses, pass `--pack` with the artifact you mean.
+
 ## Validate in CI
 
 ### `tuff check`

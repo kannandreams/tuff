@@ -5354,3 +5354,507 @@ fn add_pack_merges_hook_and_mcp_configuration_without_executing_members() {
     let hooks = fs::read_to_string(project.path().join(".agents/hook.json")).unwrap();
     assert!(hooks.contains("pack-hook"));
 }
+
+// ── pack updates ─────────────────────────────────────────────────────
+
+/// A release of `com.acme/engineering` with a chosen membership, so two
+/// releases can differ in content, drop a member, and add one.
+fn make_pack_release(
+    root: &Path,
+    version: &str,
+    skill_body: &str,
+    with_workflow: bool,
+    with_notes: bool,
+) -> std::path::PathBuf {
+    let pack = root.join(format!("engineering-{version}"));
+    let skill = pack.join("capabilities/pack-skill");
+    fs::create_dir_all(&skill).unwrap();
+    let mut manifest = format!(
+        r#"schema = 1
+name = "com.acme/engineering"
+version = "{version}"
+description = "A versioned test pack."
+
+[build]
+targets = ["open-agents"]
+
+[[capabilities]]
+path = "capabilities/pack-skill"
+"#
+    );
+    fs::write(
+        skill.join("tuff.toml"),
+        format!(
+            r#"id = "pack-skill"
+version = "{version}"
+type = "skill"
+description = "A skill shipped in a pack."
+files = ["SKILL.md"]
+"#
+        ),
+    )
+    .unwrap();
+    fs::write(skill.join("SKILL.md"), skill_body).unwrap();
+    if with_workflow {
+        let workflow = pack.join("capabilities/pack-workflow");
+        fs::create_dir_all(&workflow).unwrap();
+        fs::write(
+            workflow.join("tuff.toml"),
+            r#"id = "pack-workflow"
+version = "1.0.0"
+type = "workflow"
+description = "A workflow shipped in a pack."
+
+[[workflow.requires]]
+id = "pack-skill"
+type = "skill"
+"#,
+        )
+        .unwrap();
+        manifest.push_str("\n[[capabilities]]\npath = \"capabilities/pack-workflow\"\n");
+    }
+    if with_notes {
+        let notes = pack.join("capabilities/pack-notes");
+        fs::create_dir_all(&notes).unwrap();
+        fs::write(
+            notes.join("tuff.toml"),
+            r#"id = "pack-notes"
+version = "1.0.0"
+type = "skill"
+description = "A skill added in a later release."
+files = ["SKILL.md"]
+"#,
+        )
+        .unwrap();
+        fs::write(notes.join("SKILL.md"), "# Notes\n").unwrap();
+        manifest.push_str("\n[[capabilities]]\npath = \"capabilities/pack-notes\"\n");
+    }
+    fs::write(pack.join("tuff-pack.toml"), manifest).unwrap();
+    let artifact = root.join(format!("engineering-{version}.tuffpack"));
+    tuff()
+        .current_dir(root)
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    artifact
+}
+
+/// A project with the 1.0.0 release (skill + workflow) installed.
+fn project_with_pack_release(artifact: &Path, home: &Path) -> TempDir {
+    let project = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home)
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home)
+        .args([
+            "add",
+            "pack",
+            artifact.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+    project
+}
+
+#[test]
+fn update_pack_from_artifact_moves_every_member_forward() {
+    let author = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let older = make_pack_release(author.path(), "1.0.0", "# v1\n", true, false);
+    let newer = make_pack_release(author.path(), "1.1.0", "# v2\n", false, true);
+    let project = project_with_pack_release(&older, home.path());
+    assert!(
+        project
+            .path()
+            .join(".agents/skills/tuff-capabilities/SKILL.md")
+            .is_file(),
+        "the workflow gives the 1.0.0 release something to index"
+    );
+
+    // Naming any member updates the whole pack.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["update", "pack-workflow", "--pack", newer.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "updated pack com.acme/engineering 1.0.0 -> 1.1.0",
+        ))
+        .stdout(predicate::str::contains("added pack-notes 1.0.0"))
+        .stdout(predicate::str::contains("updated pack-skill 1.1.0"))
+        .stdout(predicate::str::contains("removed pack-workflow"));
+
+    assert_eq!(
+        fs::read_to_string(project.path().join(".agents/skills/pack-skill/SKILL.md")).unwrap(),
+        "# v2\n"
+    );
+    assert!(
+        project
+            .path()
+            .join(".agents/skills/pack-notes/SKILL.md")
+            .is_file()
+    );
+    assert!(
+        !project.path().join(".agents/workflows").exists(),
+        "a member dropped by the new release is removed, directory included"
+    );
+    assert!(
+        !project
+            .path()
+            .join(".agents/skills/tuff-capabilities")
+            .exists(),
+        "the derived index goes with the last workflow rather than lingering untracked"
+    );
+
+    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    assert!(!lock.contains("pack-workflow"));
+    assert!(lock.contains("name = \"pack-notes\""));
+    assert!(!lock.contains("version = \"1.0.0\"\ndigest"));
+    assert_eq!(
+        lock.matches("version = \"1.1.0\"\ndigest").count(),
+        2,
+        "both members carry the new release's provenance: {lock}"
+    );
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("check")
+        .assert()
+        .success();
+
+    // Applying the same release again is a no-op, not a reinstall.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["update", "pack-skill", "--pack", newer.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "pack com.acme/engineering is already up to date (1.1.0)",
+        ));
+}
+
+#[test]
+fn update_pack_check_previews_the_release_without_changing_files() {
+    let author = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let older = make_pack_release(author.path(), "1.0.0", "# v1\n", true, false);
+    let newer = make_pack_release(author.path(), "1.1.0", "# v2\n", false, true);
+    let project = project_with_pack_release(&older, home.path());
+    let lock_before = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "update",
+            "pack-skill",
+            "--check",
+            "--pack",
+            newer.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "pack com.acme/engineering can be updated 1.0.0 -> 1.1.0 for open-agents",
+        ))
+        .stdout(predicate::str::contains("add pack-notes 1.0.0"))
+        .stdout(predicate::str::contains("update pack-skill 1.1.0"))
+        .stdout(predicate::str::contains("remove pack-workflow"))
+        .stdout(predicate::str::contains("would apply cleanly"));
+
+    assert_eq!(
+        fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
+        lock_before
+    );
+    assert_eq!(
+        fs::read_to_string(project.path().join(".agents/skills/pack-skill/SKILL.md")).unwrap(),
+        "# v1\n"
+    );
+    assert!(
+        project
+            .path()
+            .join(".agents/workflows/pack-workflow/workflow.toml")
+            .is_file()
+    );
+}
+
+#[test]
+fn update_pack_refuses_local_changes_unless_forced() {
+    let author = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let older = make_pack_release(author.path(), "1.0.0", "# v1\n", true, false);
+    let newer = make_pack_release(author.path(), "1.1.0", "# v2\n", false, true);
+    let project = project_with_pack_release(&older, home.path());
+    let skill = project.path().join(".agents/skills/pack-skill/SKILL.md");
+    fs::write(&skill, "# v1, edited locally\n").unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "update",
+            "pack-skill",
+            "--check",
+            "--pack",
+            newer.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "local changes in pack-skill (open-agents); the update would need --force",
+        ));
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["update", "pack-skill", "--pack", newer.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "pack com.acme/engineering has local changes in pack-skill (open-agents)",
+        ))
+        .stderr(predicate::str::contains("--force"));
+    assert_eq!(
+        fs::read_to_string(&skill).unwrap(),
+        "# v1, edited locally\n",
+        "a refused update leaves the project untouched"
+    );
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "update",
+            "pack-skill",
+            "--force",
+            "--pack",
+            newer.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    assert_eq!(fs::read_to_string(&skill).unwrap(), "# v2\n");
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("check")
+        .assert()
+        .success();
+}
+
+#[test]
+fn update_pack_rejects_another_pack_a_narrower_agent_selection_and_non_pack_use() {
+    let author = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let older = make_pack_release(author.path(), "1.0.0", "# v1\n", true, false);
+    let newer = make_pack_release(author.path(), "1.1.0", "# v2\n", false, true);
+    let project = project_with_pack_release(&older, home.path());
+
+    // A different pack under the same member ids is not an update.
+    let other = make_pack(author.path());
+    let other_manifest = fs::read_to_string(other.join("tuff-pack.toml")).unwrap();
+    fs::write(
+        other.join("tuff-pack.toml"),
+        other_manifest.replace("com.acme/engineering", "com.acme/other"),
+    )
+    .unwrap();
+    let other_artifact = author.path().join("other.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            other.to_str().unwrap(),
+            "--output",
+            other_artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "update",
+            "pack-skill",
+            "--pack",
+            other_artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "refusing to update pack com.acme/engineering from an artifact for pack com.acme/other",
+        ));
+
+    // The pack moves for every agent it is installed for, or not at all.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "update",
+            "pack-skill",
+            "--agent",
+            "claude",
+            "--pack",
+            newer.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "a pack update applies to every agent the pack is installed for (open-agents); drop --agent",
+        ));
+
+    // Without a registry on record and without --pack there is nothing to
+    // resolve against, and the message says how to proceed.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["update", "pack-skill"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "pack com.acme/engineering was installed without --reference",
+        ))
+        .stderr(predicate::str::contains("--pack <artifact>"));
+
+    // --pack is meaningless for a capability that did not come from a pack.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "update",
+            "tuff-cli-guide",
+            "--pack",
+            newer.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--pack only applies to a capability installed from a pack; 'tuff-cli-guide' was not",
+        ));
+
+    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    assert!(
+        lock.contains("version = \"1.0.0\"\ndigest"),
+        "nothing above changed the install"
+    );
+}
+
+#[test]
+fn update_pack_replaces_shared_hook_and_mcp_registrations() {
+    let author = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+
+    // 1.0.0: an MCP-native tool and a hook, both registered in shared files.
+    let pack = make_runtime_pack(author.path());
+    let older = author.path().join("runtime-1.0.0.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            older.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // 1.1.0: the tool only. The hook registration must leave with it.
+    let manifest_path = pack.join("tuff-pack.toml");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    fs::write(
+        &manifest_path,
+        manifest
+            .replace("version = \"1.0.0\"", "version = \"1.1.0\"")
+            .replace(
+                "\n[[capabilities]]\npath = \"capabilities/hook-primitive\"\n",
+                "\n",
+            ),
+    )
+    .unwrap();
+    let newer = author.path().join("runtime-1.1.0.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            newer.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    fs::write(
+        project.path().join(".agents/mcp.json"),
+        r#"{"custom":{"preserved":true}}"#,
+    )
+    .unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "pack",
+            older.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+    let hooks = fs::read_to_string(project.path().join(".agents/hook.json")).unwrap();
+    assert!(hooks.contains("pack-hook"));
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["update", "pack-mcp", "--pack", newer.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed pack-hook"));
+
+    let mcp: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path().join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        mcp["custom"]["preserved"], true,
+        "neighbouring config survives"
+    );
+    assert!(mcp["mcpServers"]["pack-mcp"].is_object());
+    let hooks = fs::read_to_string(project.path().join(".agents/hook.json")).unwrap_or_default();
+    assert!(
+        !hooks.contains("pack-hook"),
+        "the dropped hook's registration is gone: {hooks}"
+    );
+    assert!(!project.path().join(".agents/hooks/pack-hook").exists());
+    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    assert!(!lock.contains("pack-hook"));
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("check")
+        .assert()
+        .success();
+}

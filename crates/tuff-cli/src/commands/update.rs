@@ -6,6 +6,7 @@ use crate::error::{Result, TuffError};
 use crate::git;
 use crate::lockfile;
 use crate::manifest::{self, load_manifest};
+use crate::oci::OciTransferOptions;
 use crate::resolver::{self, Scope};
 
 use super::add::{SourceMetaInput, install_capability};
@@ -308,14 +309,26 @@ fn update_from_catalog(
     )
 }
 
-pub fn cmd_update(
-    repo_root: &Path,
-    id: &str,
-    scope_str: Option<&str>,
-    requested_targets: &[String],
-    check: bool,
-    force: bool,
-) -> Result<()> {
+pub struct UpdateOptions<'a> {
+    pub scope: Option<&'a str>,
+    pub requested_targets: &'a [String],
+    pub check: bool,
+    pub force: bool,
+    /// Pack artifact to update from instead of resolving the pack's
+    /// registry; only meaningful for a pack-installed capability.
+    pub pack_artifact: Option<&'a Path>,
+    pub oci_options: OciTransferOptions,
+}
+
+pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Result<()> {
+    let UpdateOptions {
+        scope: scope_str,
+        requested_targets,
+        check,
+        force,
+        pack_artifact,
+        oci_options,
+    } = options;
     let (scope, entry, scope_root) = if let Some(s) = scope_str {
         let scope = resolver::Scope::parse(s)
             .ok_or_else(|| TuffError::new(format!("invalid scope '{}'", s)))?;
@@ -346,6 +359,29 @@ pub fn cmd_update(
             }
         }
     };
+
+    if entry.pack.is_some() {
+        // Pack members move with their pack; see `cmd_update_pack`.
+        if scope == Scope::Global {
+            return Err(TuffError::new(format!(
+                "'{id}' is a pack member; packs are installed in project scope only"
+            )));
+        }
+        return super::pack::cmd_update_pack(super::pack::PackUpdateRequest {
+            repo_root: &scope_root,
+            id,
+            requested_targets,
+            check,
+            force,
+            artifact: pack_artifact,
+            oci_options: &oci_options,
+        });
+    }
+    if pack_artifact.is_some() {
+        return Err(TuffError::new(format!(
+            "--pack only applies to a capability installed from a pack; '{id}' was not"
+        )));
+    }
 
     let target_ids =
         resolve_agent_selection(&scope_root, requested_targets, scope == Scope::Global)?;

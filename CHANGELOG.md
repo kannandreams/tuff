@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- Added pack updates: `tuff update <member>` on a capability installed by `tuff add pack` now moves the whole pack forward. With a registry on record it resolves the newest semver tag, pulls it, and applies it; `--pack <artifact>` applies a pulled file instead, for offline use or a pack installed without `--reference`. Members the new release drops are removed, new members are installed, shared hook and MCP registrations follow, and `--check` previews all of it. Local edits block the update unless `--force` is given. `tuff update` gained `--plain-http` and `--ca-file`, matching `tuff outdated`.
+
 ## [0.1.8] - 2026-09-01
 
 ### Added

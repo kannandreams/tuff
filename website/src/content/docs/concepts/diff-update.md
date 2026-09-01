@@ -114,6 +114,8 @@ If you want to discard local changes and take upstream as-is:
 tuff update rust-implement --force
 ```
 
+For a capability installed from a pack, `tuff update <member>` updates the whole pack: it resolves the registry recorded at install time (or takes an artifact with `--pack`), then replaces, adds, and removes members so the project matches the new release. See [Capability Packs](/concepts/packs#update-an-installed-pack).
+
 ## Command reference
 
 | Command | Purpose |
@@ -125,6 +127,7 @@ tuff update rust-implement --force
 | `tuff update <id>` | Update the configured default agent |
 | `tuff update <id> -a <agent>` | Update one explicitly selected agent |
 | `tuff update <id> --force` | Replace local files with recorded source output |
+| `tuff update <member> --pack <artifact>` | Move a pack-installed capability's whole pack to the release in `<artifact>` |
 
 ## Important distinction
 

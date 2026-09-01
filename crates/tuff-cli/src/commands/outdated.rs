@@ -19,8 +19,18 @@ struct OutdatedRow {
     status: String,
 }
 
-/// Pick the newest published pack version, if the available tags say
-/// anything conclusive.
+/// What the registry's tags say about an installed pack version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PackVersionStatus {
+    /// A newer semver tag is published.
+    Newer(String),
+    /// The installed version is the newest semver tag.
+    Current,
+    /// Nothing conclusive: the installed version or every tag is unparsable.
+    Unknown,
+}
+
+/// Compare an installed pack version against the tags published for it.
 ///
 /// Tags are not compared as strings: `"1.9.0" > "1.10.0"` under plain
 /// lexicographic ordering, which is the wrong answer and exactly the kind of
@@ -29,19 +39,24 @@ struct OutdatedRow {
 /// else is excluded rather than guessed at. `tuff pack build --version` does
 /// not enforce a version scheme, so an unparsable installed version is a
 /// real case, not a hypothetical one.
+pub(crate) fn compare_pack_versions(installed: &str, tags: &[String]) -> PackVersionStatus {
+    let Ok(installed_version) = Version::parse(installed) else {
+        return PackVersionStatus::Unknown;
+    };
+    match tags.iter().filter_map(|tag| Version::parse(tag).ok()).max() {
+        None => PackVersionStatus::Unknown,
+        Some(latest) if latest > installed_version => PackVersionStatus::Newer(latest.to_string()),
+        Some(_) => PackVersionStatus::Current,
+    }
+}
+
+/// Render [`compare_pack_versions`] as an `outdated` table row.
 fn pick_latest_pack_version(installed: &str, tags: &[String]) -> (String, String, String) {
     let current = installed.to_string();
-
-    let Ok(installed_version) = Version::parse(installed) else {
-        return (current, "—".to_string(), "not checked".to_string());
-    };
-
-    match tags.iter().filter_map(|tag| Version::parse(tag).ok()).max() {
-        None => (current, "—".to_string(), "not checked".to_string()),
-        Some(latest) if latest > installed_version => {
-            (current, latest.to_string(), "outdated".to_string())
-        }
-        Some(_) => (current.clone(), current, "up to date".to_string()),
+    match compare_pack_versions(installed, tags) {
+        PackVersionStatus::Unknown => (current, "—".to_string(), "not checked".to_string()),
+        PackVersionStatus::Newer(latest) => (current, latest, "outdated".to_string()),
+        PackVersionStatus::Current => (current.clone(), current, "up to date".to_string()),
     }
 }
 
