@@ -3,7 +3,7 @@ title: MCP Servers
 description: Declare an external MCP server once and wire it into every harness's native MCP config.
 ---
 
-An `mcp-server` capability is an **external** MCP server — one whose code you
+An `mcp-server` capability is an **external** MCP server, one whose code you
 do not ship, only point at: the GitHub server, a filesystem server, something a
 teammate published. Tuff turns one declaration into the right entry in each
 harness's MCP config, then tracks it like any other capability: listed,
@@ -12,10 +12,10 @@ checked for drift, updatable, deletable.
 :::note[MCP server vs. MCP-native tool]
 Two different things carry "MCP" in this documentation:
 
-- **MCP server** (`type = "mcp-server"`, this page) — an external server.
+- **MCP server** (`type = "mcp-server"`, this page): an external server.
   Tuff writes the config entry that launches or connects to it.
 - **MCP-native tool** (`type = "tool"` with `implementation.mcp = true`, see
-  [Tools](/primitives/tools)) — a server whose code Tuff copies into the
+  [Tools](/primitives/tools)): a server whose code Tuff copies into the
   project and registers. Use this when the server is *yours*.
 :::
 
@@ -37,8 +37,8 @@ description = "GitHub MCP server: issues, pull requests, and code search."
 
 [server]
 transport = "stdio"          # "stdio" (default) or "http"
-command = "npx"              # required for stdio
-args = ["-y", "@modelcontextprotocol/server-github"]
+command = "docker"           # required for stdio
+args = ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
 # url = "https://…"          # required for http
 
 [server.env]
@@ -66,7 +66,7 @@ export.
 
 ## Installing
 
-From the built-in catalog, a local directory, or a git URL — several at once:
+From the built-in catalog, a local directory, or a git URL, several at once:
 
 ```sh frame="terminal"
 tuff add mcp github filesystem -a claude -a cursor -a open-agents
@@ -78,43 +78,55 @@ Git sources must name the subdirectory holding `tuff.toml`.
 
 ### The catalog
 
-Every entry is verified against a primary source — the vendor's own README,
-or the `modelcontextprotocol/servers` repo — not a search snippet or memory.
+Every entry is verified against a primary source, the vendor's own README
+or the `modelcontextprotocol/servers` repo, not a search snippet or memory.
 A wrong package name in something billed as "curated" wastes your time, so
 entries below medium confidence, or with an invocation inferred rather than
 documented, are left out rather than guessed at.
 
+The catalog is a list of launch declarations, not server code. It lives in
+the repository at `crates/tuff-core/assets/mcp-catalog.toml` and is compiled
+into the `tuff` binary, so `tuff add mcp <id>` resolves an entry without
+network access. Each entry records what a manifest would: the `command` and
+`args` that start the server, and the names of the environment variables it
+needs. The server itself is fetched when the harness launches it, by `npx`,
+`uvx`, or `docker` from the vendor's public package or image, exactly as the
+vendor's own README documents. Tuff ships none of that code. Because the
+catalog is part of the binary, `tuff outdated` compares an installed entry
+against that entry's version in the catalog your `tuff` carries, and a newer
+catalog arrives with a newer Tuff release.
+
 | id | what it needs | notes |
 |---|---|---|
-| `filesystem` | — | read/write/search files in the project directory |
-| `memory` | — | knowledge-graph notes persisted across sessions |
+| `filesystem` | none | read/write/search files in the project directory |
+| `memory` | none | knowledge-graph notes persisted across sessions |
 | `github` | `GITHUB_PERSONAL_ACCESS_TOKEN`, Docker | GitHub's own server; the old npm package was archived upstream in 2025 |
-| `fetch` | — | fetch a URL, convert to Markdown |
-| `git` | — | read/search/manipulate a local Git repo |
-| `time` | — | current time, timezone conversion |
-| `sequentialthinking` | — | structured step-by-step reasoning |
-| `everything` | — | protocol reference/demo server — a good first `tuff mcp doctor` target, no API key needed |
+| `fetch` | none | fetch a URL, convert to Markdown |
+| `git` | none | read/search/manipulate a local Git repo |
+| `time` | none | current time, timezone conversion |
+| `sequentialthinking` | none | structured step-by-step reasoning |
+| `everything` | none | protocol reference/demo server; a good first `tuff mcp doctor` target, no API key needed |
 | `brave-search` | `BRAVE_API_KEY` | web and local search |
 | `notion` | `NOTION_TOKEN` | read/write Notion pages and databases |
-| `playwright` | — | browser automation |
+| `playwright` | none | browser automation |
 | `sentry` | `SENTRY_ACCESS_TOKEN` | issue/event search; a few AI-search tools need an additional LLM key |
 
 **Not yet supported:** `linear` and `context7` both authenticate via a custom
 `Authorization` header on an HTTP endpoint, which this schema doesn't express
-yet (`http` transport here is a bare `url`, no `headers`) — a real extension,
-not built speculatively for zero other current consumers.
+yet (`http` transport here is a bare `url`, no `headers`). That is a real
+extension, not built speculatively for zero other current consumers.
 
 ### Choosing your own variable name
 
-At a real terminal, installing from the catalog asks — once per required
-variable — whether to use a different environment variable name than the
+At a real terminal, installing from the catalog asks, once per required
+variable, whether to use a different environment variable name than the
 catalog's default:
 
 ```
 github: reads GITHUB_PERSONAL_ACCESS_TOKEN from your environment. Press enter to keep it, or type a different variable name: GH_TOKEN
 ```
 
-It never asks for the secret's *value* — only which variable holds it, so a
+It never asks for the secret's *value*, only which variable holds it, so a
 catalog default that doesn't match what you already have exported doesn't
 force a rename of your own environment. Press enter to keep the default.
 Skipped automatically in a non-interactive shell or CI, or explicitly with
@@ -149,7 +161,7 @@ exactly like a skill or tool.
 The Codex adapter currently emits the same `.agents/mcp.json` entry as
 Open Agents; it does not write `[mcp_servers.<id>]` into Codex's own
 `~/.codex/config.toml`. This matches how MCP-native tools behave today and is
-documented rather than hidden — native Codex emission is tracked separately.
+documented rather than hidden. Native Codex emission is tracked separately.
 :::
 
 ## Safety rules
@@ -175,7 +187,7 @@ again, run `tuff update <id>`.
 
 ## Diagnosing a server
 
-Everything above proves the *configuration* is right — a well-formed entry,
+Everything above proves the *configuration* is right: a well-formed entry,
 in the right file, matching a tracked baseline. It doesn't prove the server
 actually starts. `tuff mcp doctor` closes that gap: it spawns each installed
 server for real, completes the MCP `initialize` handshake, and calls
@@ -193,18 +205,18 @@ tuff mcp doctor
 └────────┴───────────┴─────────────┴────────┴─────────────┘
 ```
 
-One row per server, not per harness — the underlying process is the same
+One row per server, not per harness. The underlying process is the same
 regardless of which harness's dialect wired it in, so doctor probes it once
 and lists every harness it's registered for in the `HARNESSES` column.
 
 | Status | Meaning |
 |---|---|
 | `ok` | Handshake and `tools/list` both succeeded |
-| `missing env` | A required `[server.env]` variable isn't set in your shell — the server was never spawned |
+| `missing env` | A required `[server.env]` variable isn't set in your shell, so the server was never spawned |
 | `spawn failed` | The `command` couldn't be launched (not on `PATH`, permission denied, …) |
 | `timeout` | No valid response within `--timeout` seconds (default 10) |
 | `protocol error` | The server responded, but not with a valid MCP handshake |
-| `unsupported transport` | `http`-transport servers aren't probed yet — see below |
+| `unsupported transport` | `http`-transport servers aren't probed yet; see below |
 
 Flags: `--agent <id>` (repeatable, only check servers wired into a given
 harness), `--global`, `--json`, `--timeout <seconds>`, and
@@ -216,8 +228,8 @@ wire into CI alongside `tuff check`.
 
 - Catalog-installed servers cannot be included in a project pack yet.
 - `doctor` only probes `stdio`-transport servers. `http` transport exists in
-  the schema but isn't dialed yet — the real Streamable HTTP spec (SSE or
+  the schema but isn't dialed yet. The real Streamable HTTP spec (SSE or
   JSON responses, session ids) is meaningfully more work than stdio, and no
   catalog or example entry currently uses it.
 - `doctor` covers `mcp-server` capabilities only, not MCP-native tools
-  (`type = "tool"` with `mcp = true`) — a natural follow-up, not yet done.
+  (`type = "tool"` with `mcp = true`). A natural follow-up, not yet done.
