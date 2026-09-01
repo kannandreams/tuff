@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightBlog from 'starlight-blog';
 
 export default defineConfig({
   site: 'https://tuffcli.dev',
@@ -12,6 +13,20 @@ export default defineConfig({
       description: 'Capability lifecycle management for coding agents.',
       favicon: '/favicon.svg',
       customCss: ['./src/styles/custom.css'],
+      plugins: [
+        starlightBlog({
+          title: 'Blog',
+          navigation: 'header-end',
+          postCount: 10,
+          authors: {
+            kannan: {
+              name: 'Kannan Kalidasan',
+              title: 'Tuff maintainer',
+              url: 'https://github.com/kannandreams',
+            },
+          },
+        }),
+      ],
       social: [
         {
           icon: 'github',
