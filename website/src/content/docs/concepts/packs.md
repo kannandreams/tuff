@@ -228,11 +228,33 @@ Tuff verifies and stages the entire installation before changing the project. A 
 
 Each member remains an ordinary lockfile capability with its normal baseline and drift behavior. Optional pack provenance records the pack name, pack release version, and artifact digest without replacing the member capability version.
 
+## Update an installed pack
+
+Members move with their pack. The pack is the unit of versioning and verification: the artifact's target hashes are checked as a whole and every member records the same provenance, so updating one member alone would leave a lockfile claiming two releases of one pack and no artifact that reproduces either. `tuff update` on any member therefore updates all of them.
+
+```sh frame="terminal"
+tuff outdated --plain-http                    # crm-skill  1.0.0  1.2.0  outdated
+tuff update crm-skill --check                 # what 1.2.0 would add, update, and remove
+tuff update crm-skill                         # pull 1.2.0 from the recorded registry and apply it
+```
+
+With a registry on record (from `tuff add pack --reference`), Tuff lists the repository's tags, picks the newest semver tag, pulls it, and verifies the artifact before touching the project. Without one, or offline, pass the artifact directly:
+
+```sh frame="terminal"
+tuff pack pull ghcr.io/acme/crm-integration:1.2.0 --output ./crm-1.2.0.tuffpack
+tuff update crm-skill --pack ./crm-1.2.0.tuffpack
+```
+
+The new release is staged exactly like a fresh installation: the old members are removed from the staging copy the way `tuff delete` removes them, hook registrations and MCP entries included, and the new members are installed on top. The project changes only after every step has succeeded. Files the old release emitted and the new one does not, including a capability index left with nothing to list, are removed afterwards.
+
+Local edits to any member block the update; `tuff diff <member>` shows them and `--force` replaces them. A `--agent` selection narrower than the agents the pack is installed for is refused. An artifact for a different pack name is refused, and a same-version artifact with a different digest is refused without `--force`.
+
 ## Current boundaries
 
 - A built artifact always contains canonical portable member sources and pre-rendered targets; project-backed selection is an authoring convenience, not a new artifact format.
 - Standalone source packs contain local manifest-backed members only.
 - Pack installation is project-scoped; `--global` is not supported.
-- Tuff does not resolve pack-to-pack dependencies or semantic-version constraints.
+- Tuff does not resolve pack-to-pack dependencies or semantic-version constraints. Registry resolution picks the newest semver tag; it does not pin to a range.
+- `tuff outdated` and `tuff update` compare a tag name against the installed version. Whether a tag still points at the bytes it pointed at when the pack was installed is not checked yet.
 - Tuff does not install language or system dependencies.
 - Signatures, attestations, referrer discovery, and policy enforcement are future trust layers.

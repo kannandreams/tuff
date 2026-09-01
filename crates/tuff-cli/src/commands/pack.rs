@@ -1128,6 +1128,545 @@ fn default_artifact_path(loaded: &LoadedPack) -> PathBuf {
         .join(format!("{leaf}-{}.tuffpack", loaded.manifest.version))
 }
 
+// ── pack updates ─────────────────────────────────────────────────────
+
+/// A pack-installed capability moves forward with its pack, never alone.
+///
+/// The pack is the unit of versioning, verification, and preflight: the
+/// artifact's target hashes are checked as a whole, and every member records
+/// the same `PackProvenance`. Updating one member to 1.2.0 while its siblings
+/// stayed at 1.0.0 would leave the lockfile claiming two releases of one pack
+/// and no artifact that reproduces either. So `tuff update <member>` resolves
+/// the pack every member came from and moves all of them together: members
+/// dropped by the new release are removed, new members are installed, and
+/// the rest are replaced.
+pub struct PackUpdateRequest<'a> {
+    pub repo_root: &'a Path,
+    pub id: &'a str,
+    pub requested_targets: &'a [String],
+    pub check: bool,
+    pub force: bool,
+    /// Update from this artifact instead of resolving the registry. The
+    /// offline counterpart of `tuff add pack <file>`: a pulled artifact can
+    /// be applied without the registry being reachable at update time.
+    pub artifact: Option<&'a Path>,
+    pub oci_options: &'a OciTransferOptions,
+}
+
+/// Where the new release came from, for the summary line.
+enum PackReleaseSource {
+    Registry(String),
+    Artifact(PathBuf),
+}
+
+pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
+    let PackUpdateRequest {
+        repo_root,
+        id,
+        requested_targets,
+        check,
+        force,
+        artifact,
+        oci_options,
+    } = request;
+    let lock = lockfile::require_lockfile(repo_root)?;
+    let entry = lock
+        .capabilities
+        .get(id)
+        .ok_or_else(|| TuffError::new(format!("'{id}' is not installed")))?;
+    let provenance = entry
+        .pack
+        .clone()
+        .ok_or_else(|| TuffError::new(format!("'{id}' was not installed from a pack")))?;
+
+    let members = pack_members(&lock, &provenance.name);
+    let target_ids = pack_update_targets(&lock, &members, requested_targets)?;
+
+    let (artifact, source) = match artifact {
+        Some(path) => {
+            let artifact = pack::read_artifact(path)?;
+            (artifact, PackReleaseSource::Artifact(path.to_path_buf()))
+        }
+        None => {
+            let Some(registry) = provenance.registry.as_deref() else {
+                return Err(TuffError::new(format!(
+                    "pack {} was installed without --reference, so there is no registry to check; \
+                     reinstall with 'tuff add pack <artifact> --reference <registry/repository:tag>' \
+                     or pass --pack <artifact> to update from a pulled file",
+                    provenance.name
+                )));
+            };
+            let tags = block_on_oci(oci::list_pack_versions(registry, oci_options))?;
+            let latest = match super::outdated::compare_pack_versions(&provenance.version, &tags) {
+                super::outdated::PackVersionStatus::Current => {
+                    println!(
+                        "pack {} is already up to date ({})",
+                        provenance.name, provenance.version
+                    );
+                    return Ok(());
+                }
+                super::outdated::PackVersionStatus::Unknown => {
+                    return Err(TuffError::new(format!(
+                        "cannot tell whether pack {} {} is current: only semver tags are compared, \
+                         and {registry} publishes none that parse; pass --pack <artifact> to update \
+                         from a specific file",
+                        provenance.name, provenance.version
+                    )));
+                }
+                super::outdated::PackVersionStatus::Newer(latest) => latest,
+            };
+            if check {
+                // A dry run answers "what would change" without a pull:
+                // the version and the membership come from the lockfile
+                // and the tag list, the dirtiness from disk.
+                return report_pack_update_plan(
+                    repo_root,
+                    &provenance,
+                    &latest,
+                    &members,
+                    None,
+                    &target_ids,
+                );
+            }
+            let pulled = tempfile::tempdir()?;
+            let output = pulled.path().join("pack.tuffpack");
+            let reference = format!("{registry}:{latest}");
+            block_on_oci(oci::pull_pack(&reference, &output, oci_options))?;
+            let artifact = pack::read_artifact(&output)?;
+            (artifact, PackReleaseSource::Registry(reference))
+        }
+    };
+
+    if artifact.metadata.name != provenance.name {
+        return Err(TuffError::new(format!(
+            "refusing to update pack {} from an artifact for pack {}",
+            provenance.name, artifact.metadata.name
+        )));
+    }
+    if artifact.metadata.version == provenance.version {
+        if artifact.digest == provenance.digest {
+            println!(
+                "pack {} is already up to date ({})",
+                provenance.name, provenance.version
+            );
+            return Ok(());
+        }
+        if !force {
+            return Err(TuffError::new(format!(
+                "pack {} {} is installed from sha256:{} but the artifact with the same version \
+                 has sha256:{}; the version was republished with different content, use --force \
+                 to replace it",
+                provenance.name, provenance.version, provenance.digest, artifact.digest
+            )));
+        }
+    }
+    for target in &target_ids {
+        artifact_target(&artifact, target)?;
+    }
+
+    if check {
+        return report_pack_update_plan(
+            repo_root,
+            &provenance,
+            &artifact.metadata.version,
+            &members,
+            Some(&artifact),
+            &target_ids,
+        );
+    }
+
+    let dirty = dirty_pack_members(repo_root, &lock, &members, &target_ids);
+    if !dirty.is_empty() && !force {
+        return Err(TuffError::new(format!(
+            "pack {} has local changes in {}; run 'tuff diff <id>' first or use --force to replace them",
+            provenance.name,
+            dirty.join(", ")
+        )));
+    }
+
+    apply_pack_update(
+        repo_root,
+        &lock,
+        &provenance,
+        &members,
+        &artifact,
+        &target_ids,
+    )?;
+
+    let from = match &source {
+        PackReleaseSource::Registry(reference) => reference.clone(),
+        PackReleaseSource::Artifact(path) => path.display().to_string(),
+    };
+    println!(
+        "updated pack {} {} -> {} (sha256:{}) from {from}",
+        provenance.name, provenance.version, artifact.metadata.version, artifact.digest
+    );
+    let new_ids = artifact
+        .metadata
+        .capabilities
+        .iter()
+        .map(|capability| capability.id.as_str())
+        .collect::<BTreeSet<_>>();
+    for capability in &artifact.metadata.capabilities {
+        let marker = if members.iter().any(|member| member == &capability.id) {
+            "updated"
+        } else {
+            "added"
+        };
+        println!("  {marker} {} {}", capability.id, capability.version);
+    }
+    for member in &members {
+        if !new_ids.contains(member.as_str()) {
+            println!("  removed {member}");
+        }
+    }
+    Ok(())
+}
+
+/// Every capability the lockfile attributes to one pack, sorted by id.
+fn pack_members(lock: &lockfile::Lockfile, pack_name: &str) -> Vec<String> {
+    lock.capabilities
+        .iter()
+        .filter(|(_, entry)| {
+            entry
+                .pack
+                .as_ref()
+                .is_some_and(|pack| pack.name == pack_name)
+        })
+        .map(|(id, _)| id.clone())
+        .collect()
+}
+
+/// The agents a pack update applies to: every agent the pack is installed
+/// for. A narrower `--agent` selection is refused rather than honoured,
+/// because it would leave one agent's copy at the old release with a
+/// lockfile that can only record one pack version per member.
+fn pack_update_targets(
+    lock: &lockfile::Lockfile,
+    members: &[String],
+    requested: &[String],
+) -> Result<Vec<String>> {
+    let installed = members
+        .iter()
+        .filter_map(|member| lock.capabilities.get(member))
+        .flat_map(|entry| entry.targets.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    let installed = installed.into_iter().collect::<Vec<_>>();
+    if requested.is_empty() {
+        return Ok(installed);
+    }
+    let requested = canonical_target_ids(requested)?;
+    let requested_set = requested.iter().collect::<BTreeSet<_>>();
+    let installed_set = installed.iter().collect::<BTreeSet<_>>();
+    if requested_set != installed_set {
+        return Err(TuffError::new(format!(
+            "a pack update applies to every agent the pack is installed for ({}); drop --agent",
+            installed.join(", ")
+        )));
+    }
+    Ok(installed)
+}
+
+/// Members with local edits on any selected target, as `id (agent)`.
+fn dirty_pack_members(
+    repo_root: &Path,
+    lock: &lockfile::Lockfile,
+    members: &[String],
+    target_ids: &[String],
+) -> Vec<String> {
+    let mut dirty = Vec::new();
+    for member in members {
+        let Some(entry) = lock.capabilities.get(member) else {
+            continue;
+        };
+        for target in target_ids {
+            if let Some(target_entry) = entry.targets.get(target)
+                && super::delete::local_modifications(repo_root, member, target_entry).any()
+            {
+                dirty.push(format!("{member} ({target})"));
+            }
+        }
+    }
+    dirty
+}
+
+fn report_pack_update_plan(
+    repo_root: &Path,
+    provenance: &PackProvenance,
+    latest: &str,
+    members: &[String],
+    artifact: Option<&PackArtifact>,
+    target_ids: &[String],
+) -> Result<()> {
+    let lock = lockfile::require_lockfile(repo_root)?;
+    println!(
+        "pack {} can be updated {} -> {} for {}",
+        provenance.name,
+        provenance.version,
+        latest,
+        target_ids.join(", ")
+    );
+    match artifact {
+        Some(artifact) => {
+            let new_ids = artifact
+                .metadata
+                .capabilities
+                .iter()
+                .map(|capability| capability.id.as_str())
+                .collect::<BTreeSet<_>>();
+            for capability in &artifact.metadata.capabilities {
+                let marker = if members.iter().any(|member| member == &capability.id) {
+                    "update"
+                } else {
+                    "add"
+                };
+                println!("  {marker} {} {}", capability.id, capability.version);
+            }
+            for member in members {
+                if !new_ids.contains(member.as_str()) {
+                    println!("  remove {member}");
+                }
+            }
+        }
+        None => {
+            // Without the artifact in hand, membership of the new release
+            // is unknown; say what is installed rather than guess.
+            for member in members {
+                println!("  update {member}");
+            }
+        }
+    }
+    let dirty = dirty_pack_members(repo_root, &lock, members, target_ids);
+    if dirty.is_empty() {
+        println!("no local changes; the update would apply cleanly");
+    } else {
+        println!(
+            "local changes in {}; the update would need --force",
+            dirty.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Replace one pack release with another in a staging tree, then commit
+/// the result to the project as one set of file writes plus the removal of
+/// whatever the old release emitted and the new one does not.
+///
+/// The staging tree starts from the project's lockfile and shared
+/// configuration, the old members are removed from it exactly as
+/// `tuff delete` would remove them (hook registrations and MCP entries
+/// included), and the new release is installed on top through the same
+/// path as `tuff add pack`. The project itself is untouched until every
+/// step has succeeded.
+fn apply_pack_update(
+    repo_root: &Path,
+    lock: &lockfile::Lockfile,
+    provenance: &PackProvenance,
+    members: &[String],
+    artifact: &PackArtifact,
+    target_ids: &[String],
+) -> Result<()> {
+    let staging = tempfile::tempdir()?;
+    let staged_lock_path = staging.path().join("tuff.lock");
+    lockfile::write_lockfile_at(&staged_lock_path, lock)?;
+    let mut staged_lock = lockfile::read_lockfile_at(&staged_lock_path)?;
+
+    // Paths the old release owns in the project. Each is either rewritten
+    // by the new release (present in staging afterwards) or stale.
+    let mut previous_paths = BTreeSet::<PathBuf>::new();
+    for member in members {
+        let Some(entry) = lock.capabilities.get(member) else {
+            continue;
+        };
+        for target in target_ids {
+            let Some(target_entry) = entry.targets.get(target) else {
+                continue;
+            };
+            if !target_entry.installed_path.is_empty() {
+                let tree = repo_root.join(&target_entry.installed_path);
+                if tree.is_dir() {
+                    collect_project_tree(repo_root, &tree, &mut previous_paths)?;
+                }
+            }
+            for emitted in &target_entry.emitted_files {
+                previous_paths.insert(PathBuf::from(&emitted.path));
+            }
+            for hook in &target_entry.managed_hooks {
+                previous_paths.insert(PathBuf::from(&hook.settings_path));
+            }
+            if let Some(mcp_entry) = &target_entry.managed_mcp_entry {
+                previous_paths.insert(PathBuf::from(&mcp_entry.config_path));
+            }
+        }
+    }
+
+    // The capability index is derived from the lockfile, so the old
+    // release's index is owned by the old release too: when the new one
+    // leaves nothing to index, the file must go rather than linger untracked.
+    if let Some(index_entry) = lock.capabilities.get(capability_index::CAPABILITY_INDEX_ID) {
+        for target in target_ids {
+            let Some(target_entry) = index_entry.targets.get(target) else {
+                continue;
+            };
+            let tree = repo_root.join(&target_entry.installed_path);
+            if !target_entry.installed_path.is_empty() && tree.is_dir() {
+                collect_project_tree(repo_root, &tree, &mut previous_paths)?;
+            }
+            for emitted in &target_entry.emitted_files {
+                previous_paths.insert(PathBuf::from(&emitted.path));
+            }
+        }
+    }
+
+    copy_shared_configuration(repo_root, staging.path(), target_ids)?;
+    for member in members {
+        let Some(entry) = lock.capabilities.get(member) else {
+            continue;
+        };
+        for target in target_ids {
+            let Some(target_entry) = entry.targets.get(target) else {
+                continue;
+            };
+            let adapter = AdapterKind::from_id(target)
+                .ok_or_else(|| TuffError::new(format!("unknown agent '{target}'")))?;
+            adapter.remove(member, staging.path(), &target_entry.managed_hooks)?;
+        }
+        staged_lock.capabilities.remove(member);
+    }
+    lockfile::write_lockfile_at(&staged_lock_path, &staged_lock)?;
+
+    // Now identical to a fresh `tuff add pack` against the staged state.
+    for capability in &artifact.metadata.capabilities {
+        if staged_lock.capabilities.contains_key(&capability.id) {
+            return Err(TuffError::new(format!(
+                "capability '{}' in pack {} {} is already tracked from another source; pack update is all-or-nothing",
+                capability.id, artifact.metadata.name, artifact.metadata.version
+            )));
+        }
+    }
+    let sources = staging.path().join("sources");
+    pack::extract_prefix(artifact, "sources", &sources)?;
+    for capability in &artifact.metadata.capabilities {
+        let manifest = manifest::load_manifest(&sources.join(&capability.id))?;
+        validate_artifact_member(capability, &manifest)?;
+        let resolved = resolve_capability(&manifest)?;
+        install_capability(
+            staging.path(),
+            Scope::Project,
+            &resolved,
+            &manifest,
+            target_ids,
+            None,
+            false,
+        )?;
+    }
+    validate_staged_target_hashes(staging.path(), artifact, target_ids)?;
+
+    let mut staged_lock = lockfile::read_lockfile_at(&staged_lock_path)?;
+    let new_provenance = PackProvenance {
+        name: artifact.metadata.name.clone(),
+        version: artifact.metadata.version.clone(),
+        digest: artifact.digest.clone(),
+        registry: provenance.registry.clone(),
+    };
+    for capability in &artifact.metadata.capabilities {
+        let entry = staged_lock
+            .capabilities
+            .get_mut(&capability.id)
+            .ok_or_else(|| {
+                TuffError::new(format!(
+                    "staged pack update did not track '{}'",
+                    capability.id
+                ))
+            })?;
+        entry.source_path.clear();
+        entry.source = None;
+        entry.pack = Some(new_provenance.clone());
+    }
+    lockfile::write_lockfile_at(&staged_lock_path, &staged_lock)?;
+
+    let mut mutations = collect_install_mutations(
+        repo_root,
+        staging.path(),
+        artifact,
+        &staged_lock,
+        target_ids,
+    )?;
+    // Files the old release emitted may legitimately exist in the project;
+    // the new release overwrites them. Anything the old release owned that
+    // the new one no longer writes is removed after the commit.
+    let mut stale = Vec::new();
+    for relative in &previous_paths {
+        let destination = repo_root.join(relative);
+        if let Some(mutation) = mutations
+            .iter_mut()
+            .find(|mutation| mutation.path == destination)
+        {
+            mutation.must_be_absent = false;
+        } else if staging.path().join(relative).is_file() {
+            mutations.push(FileMutation {
+                path: destination,
+                bytes: fs::read(staging.path().join(relative))?,
+                must_be_absent: false,
+            });
+        } else {
+            stale.push(destination);
+        }
+    }
+    commit_mutations(&mutations)?;
+    for path in stale {
+        if path.is_file() {
+            fs::remove_file(&path)?;
+        }
+        remove_empty_parents(&path, repo_root);
+    }
+    lockfile::prune_unreferenced_baseline_objects(repo_root, &staged_lock)?;
+    Ok(())
+}
+
+/// Collect every regular file under `current`, relative to `repo_root`.
+fn collect_project_tree(
+    repo_root: &Path,
+    current: &Path,
+    paths: &mut BTreeSet<PathBuf>,
+) -> Result<()> {
+    let mut entries = fs::read_dir(current)?.collect::<std::io::Result<Vec<_>>>()?;
+    entries.sort_by_key(fs::DirEntry::file_name);
+    for entry in entries {
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.is_dir() {
+            collect_project_tree(repo_root, &path, paths)?;
+        } else if metadata.is_file() {
+            let relative = path
+                .strip_prefix(repo_root)
+                .map_err(|error| TuffError::new(error.to_string()))?;
+            paths.insert(relative.to_path_buf());
+        }
+    }
+    Ok(())
+}
+
+/// Remove directories left empty by a stale-file removal, stopping at the
+/// project root. Best effort: a directory that cannot be removed is left.
+fn remove_empty_parents(path: &Path, repo_root: &Path) {
+    let mut parent = path.parent();
+    while let Some(directory) = parent {
+        if directory == repo_root
+            || !directory.starts_with(repo_root)
+            || fs::read_dir(directory)
+                .map(|mut entries| entries.next().is_some())
+                .unwrap_or(true)
+        {
+            break;
+        }
+        if fs::remove_dir(directory).is_err() {
+            break;
+        }
+        parent = directory.parent();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

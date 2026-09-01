@@ -141,9 +141,24 @@ enum Command {
         #[arg(short = 'a', long = "agent")]
         agent: Vec<String>,
 
-        /// Force overwrite local changes with upstream (Git sources only).
+        /// Force overwrite local changes with upstream (Git and pack sources).
         #[arg(short = 'f', long = "force")]
         force: bool,
+
+        /// For a pack-installed capability: update the whole pack from this
+        /// artifact instead of resolving its registry.
+        #[arg(long = "pack", value_name = "ARTIFACT")]
+        pack: Option<PathBuf>,
+
+        /// Use unencrypted HTTP for a development registry, when updating a
+        /// pack-installed capability.
+        #[arg(long)]
+        plain_http: bool,
+
+        /// Additional PEM certificate authority to trust (repeatable), when
+        /// updating a pack-installed capability.
+        #[arg(long = "ca-file")]
+        ca_file: Vec<PathBuf>,
     },
 
     /// Validate installed capabilities (CI mode).
@@ -803,7 +818,24 @@ fn run() -> Result<()> {
             check,
             agent,
             force,
-        }) => cmd_update(&repo_root, &id, scope.as_deref(), &agent, check, force),
+            pack,
+            plain_http,
+            ca_file,
+        }) => cmd_update(
+            &repo_root,
+            &id,
+            commands::UpdateOptions {
+                scope: scope.as_deref(),
+                requested_targets: &agent,
+                check,
+                force,
+                pack_artifact: pack.as_deref(),
+                oci_options: tuff_core::oci::OciTransferOptions {
+                    plain_http,
+                    ca_files: ca_file,
+                },
+            },
+        ),
         Some(Command::Check {
             json,
             ignore_failures,
