@@ -6,6 +6,27 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-09-01
+
+### Added
+
+- Added `mcp-server` as a capability type. One `[server]` declaration in `tuff.toml` becomes the correct `mcpServers` entry in every selected harness's config, in that harness's dialect, plus a tracked `server.toml`, so `list`, `check`, `diff`, `update`, `delete`, and `outdated` all work on it unchanged. Secrets are references only: `[server.env]` accepts `{ from_env = "NAME" }` and rejects a literal value at parse time. An existing `mcpServers` entry that Tuff does not track is refused before any file is written.
+- Added `tuff add mcp <id>...` with a built-in catalog of 12 verified servers: `filesystem`, `memory`, `github`, `fetch`, `git`, `time`, `sequentialthinking`, `everything`, `brave-search`, `notion`, `playwright`, and `sentry`. Catalog installs record `source = "catalog"` and re-resolve against the embedded catalog on `update` and `outdated` instead of cloning. At a terminal, `tuff add mcp` asks once per required environment variable whether to use a different variable name than the catalog default; `--yes` or a non-terminal stdin skips the prompt.
+- Added `tuff mcp doctor`, which spawns each installed MCP server, completes the `initialize` handshake, and lists its tools, so a mistyped command, a missing package, or an unset token is reported instead of failing silently inside the harness. Supports `--agent`, `--global`, `--json`, `--timeout`, and `--ignore-failures`, and exits non-zero on any unhealthy server. Stdio transport only; `http` reports `unsupported transport`.
+- Added drift detection for managed MCP config entries. Registering a server (or an MCP-native tool) records a baseline hash of its `mcpServers` entry, so `tuff check` fails on a hand-edited or removed entry, `tuff list` shows it as modified, `tuff delete` requires `--force`, and `tuff update --force` restores a tampered catalog entry. Entries installed before this release are unchecked until reinstalled.
+- Added a generated per-harness capability index: a `tuff-capabilities` skill listing every installed tool, workflow, and MCP server with its exact invocation. It is regenerated on every install, update, and delete, including `tuff add pack`, and removed once a harness has nothing left to list.
+- Added `implementation`, `parameters`, `workflow`, and `server` fields to capability lock entries, cached at install time so the index and `update` can see a capability's shape after its manifest is gone. Existing lockfiles parse unchanged.
+
+### Fixed
+
+- Fixed `tuff add pack` staging installs in a temporary directory that had no `tuff.config.json`, so any per-harness step there silently saw zero configured agents.
+- Fixed the wire framing in the `mcp-server-tool` example server, which used LSP-style `Content-Length` headers instead of the newline-delimited JSON-RPC that real MCP servers speak.
+- Fixed the lockfile writer hardcoding `source = "git"`; it now persists the recorded source type.
+
+### Improved
+
+- Refreshed the landing page: two-column hero with the terminal demo beside the copy, a `brew` install tab, a strip of supported harnesses, and fixes for desktop horizontal overflow, a squeezed mobile capability grid, unstyled footer links, and a dark band under the footer.
+
 ## [0.1.7] - 2026-08-30
 
 ### Added
@@ -118,7 +139,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/kannandreams/tuff/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/kannandreams/tuff/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/kannandreams/tuff/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/kannandreams/tuff/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/kannandreams/tuff/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/kannandreams/tuff/compare/v0.1.2...v0.1.3
