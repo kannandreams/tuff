@@ -118,6 +118,14 @@ The `commit-msg` hook (installed by `mise run hooks`) enforces this locally. The
 
 User-facing changes should update the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) under `Added`, `Improved`, or `Fixed`. Release preparation moves those entries into a dated version section and updates the comparison links without rewriting an existing release tag.
 
+The website renders `CHANGELOG.md` as its [Changelog page](https://tuffcli.dev/changelog/). The page is generated at build time by `website/scripts/sync-changelog.mjs`, so there is nothing to update by hand; keep the root file as the only copy.
+
+To cut a release:
+
+1. Open a `chore: prepare tuffcli X.Y.Z release` pull request that moves the `Unreleased` entries into a dated `[X.Y.Z]` section, adds the section's comparison link, bumps `version` and the internal path-dependency pins in the root `Cargo.toml`, refreshes `Cargo.lock`, and updates the `--version` integration test. Every pull request merged since the previous tag must have an entry; write one from the pull request description if it was skipped.
+2. Merge it, then tag the merge commit with `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag triggers the release, crates.io, and PyPI workflows and pushes the Homebrew formula.
+3. Confirm the GitHub release, crates.io, PyPI, and the Homebrew tap all show the new version.
+
 GitHub release notes are generated automatically from merged pull requests. Apply the `enhancement` or `feature`, `documentation`, `dependencies`, `maintenance`, `ci`, `bug`, or `fix` label when one category clearly applies; unlabeled changes remain visible under “Other Changes.” The curated changelog remains the authoritative summary of user-visible behavior.
 
 ## Checks

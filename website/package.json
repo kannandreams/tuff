@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync-changelog": "node scripts/sync-changelog.mjs",
+    "predev": "npm run sync-changelog",
     "dev": "astro dev",
+    "prebuild": "npm run sync-changelog",
     "build": "astro build",
     "preview": "astro preview",
+    "precheck": "npm run sync-changelog",
     "check": "astro check"
   },
   "dependencies": {
