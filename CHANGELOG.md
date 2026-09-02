@@ -8,6 +8,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Added
 
+- Every command now reports failures by kind, so the exit code and the `--json` envelope say what kind of problem it is: a mistyped flag or argument exits `2`, while a missing capability, a refused overwrite, local changes, an unreachable source, an unreadable file, and an unsupported request all exit `1` with a distinct `kind`. Advice that used to be appended to a message with a semicolon, such as `run 'tuff agent list'` or `use --force`, now prints on its own `hint:` line.
 - Pack commands now report failures by kind: an artifact that will not parse reads as corrupt, a refused overwrite as refused, local changes as drift, an unreachable registry as a source failure, and a mistyped flag exits 2. Advice that used to be appended to a message with a semicolon now prints on its own `hint:` line.
 - Errors now carry a kind, and commands use it to choose an exit code: `0` success, `1` a failed operation, `2` a command called wrongly, `70` a bug in Tuff. Messages that suggested a next step now print it as a separate `hint:` line, and a `--json` invocation reports failures as one JSON line on stderr with `kind`, `message`, and `hint` fields rather than prose.
 

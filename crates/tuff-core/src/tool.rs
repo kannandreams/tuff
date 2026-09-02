@@ -5,25 +5,25 @@ use crate::error::{Result, TuffError};
 pub fn validate_json_schema(value: &serde_json::Value) -> Result<()> {
     let obj = value
         .as_object()
-        .ok_or_else(|| TuffError::new("parameters must be a JSON object with 'type: object'"))?;
+        .ok_or_else(|| TuffError::usage("parameters must be a JSON object with 'type: object'"))?;
 
     let schema_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if schema_type != "object" {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "parameters 'type' must be 'object', got '{}'",
             schema_type
         )));
     }
 
     if !obj.contains_key("properties") {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "parameters must have a 'properties' section defining the tool's input schema",
         ));
     }
 
     let properties = obj.get("properties").and_then(|v| v.as_object());
     if properties.is_none() || properties.unwrap().is_empty() {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "parameters 'properties' must contain at least one parameter definition",
         ));
     }
@@ -31,7 +31,7 @@ pub fn validate_json_schema(value: &serde_json::Value) -> Result<()> {
     if obj.contains_key("required") {
         let required = obj.get("required").and_then(|v| v.as_array());
         if required.is_none() {
-            return Err(TuffError::new(
+            return Err(TuffError::usage(
                 "parameters 'required' must be an array of field names",
             ));
         }
@@ -45,14 +45,14 @@ pub fn validate_entrypoint(primitive_dir: &Path, entrypoint: &str) -> Result<()>
 
     let path = primitive_dir.join(entrypoint);
     if !path.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::not_found(format!(
             "implementation entrypoint not found: {}",
             path.display()
         )));
     }
 
     if !path.is_file() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "implementation entrypoint must be a file, not a directory: {}",
             path.display()
         )));
@@ -63,13 +63,13 @@ pub fn validate_entrypoint(primitive_dir: &Path, entrypoint: &str) -> Result<()>
 
 pub fn check_path_traversal(entrypoint: &str) -> Result<()> {
     if entrypoint.is_empty() {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "implementation entrypoint must not be empty",
         ));
     }
 
     if entrypoint.starts_with('/') {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "implementation entrypoint must be a relative path, not absolute",
         ));
     }
@@ -78,7 +78,7 @@ pub fn check_path_traversal(entrypoint: &str) -> Result<()> {
 
     for component in clean.split('/') {
         if component == ".." {
-            return Err(TuffError::new(
+            return Err(TuffError::refused(
                 "implementation entrypoint must not use '..' — path traversal is not allowed",
             ));
         }

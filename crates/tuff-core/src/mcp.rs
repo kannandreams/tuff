@@ -47,11 +47,11 @@ pub fn register_server(
 
     if !allow_overwrite && servers.contains_key(server_id) {
         return Err(TuffError::refused(format!(
-            "refusing to overwrite untracked MCP server '{}' in {}; remove it by hand or \
-             choose a different capability id",
+            "refusing to overwrite untracked MCP server '{}' in {}",
             server_id,
             mcp_config_path.display()
-        )));
+        ))
+        .with_hint("remove it by hand, or choose a different capability id"));
     }
 
     servers.insert(server_id.to_string(), entry);

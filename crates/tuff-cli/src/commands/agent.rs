@@ -70,10 +70,8 @@ pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
 
 pub fn cmd_agent_add(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
-        crate::error::TuffError::new(format!(
-            "unknown agent '{}'; use 'tuff agent list' to see available agents",
-            id
-        ))
+        crate::error::TuffError::usage(format!("unknown agent '{}'", id,))
+            .with_hint("run 'tuff agent list' to see available agents")
     })?;
 
     let mut config = config::read_config(repo_root)?;
@@ -95,10 +93,8 @@ pub fn cmd_agent_add(repo_root: &Path, id: &str) -> Result<()> {
 
 pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
-        crate::error::TuffError::new(format!(
-            "unknown agent '{}'; use 'tuff agent list' to see available agents",
-            id
-        ))
+        crate::error::TuffError::usage(format!("unknown agent '{}'", id,))
+            .with_hint("run 'tuff agent list' to see available agents")
     })?;
 
     let mut config = config::read_config(repo_root)?;
@@ -117,10 +113,8 @@ pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
 
 pub fn cmd_agent_set_default(repo_root: &Path, id: &str, global: bool) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
-        crate::error::TuffError::new(format!(
-            "unknown agent '{}'; use 'tuff agent list' to see available agents",
-            id
-        ))
+        crate::error::TuffError::usage(format!("unknown agent '{}'", id,))
+            .with_hint("run 'tuff agent list' to see available agents")
     })?;
     let config_root = if global {
         home_dir()?

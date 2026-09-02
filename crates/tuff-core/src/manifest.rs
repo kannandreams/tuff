@@ -183,7 +183,7 @@ impl CapabilityManifest {
             let clean = f.trim_start_matches("./");
             let path = self.root.join(clean);
             if !path.exists() {
-                return Err(TuffError::new(format!(
+                return Err(TuffError::not_found(format!(
                     "capability source file not found: {}",
                     path.display()
                 )));
@@ -222,7 +222,7 @@ impl CapabilityManifest {
 
 fn validate_non_empty(field: &str, value: &str) -> Result<()> {
     if value.is_empty() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "capability manifest field '{field}' must be a non-empty string"
         )));
     }
@@ -232,7 +232,7 @@ fn validate_non_empty(field: &str, value: &str) -> Result<()> {
 pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     let manifest_path = capability_dir.join("tuff.toml");
     if !manifest_path.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::not_found(format!(
             "capability manifest not found: {}",
             manifest_path.display()
         )));
@@ -250,18 +250,20 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     match manifest.capability_type {
         CapabilityType::Skill => {
             if manifest.files.is_empty() {
-                return Err(TuffError::new("skill capability 'files' must not be empty"));
+                return Err(TuffError::usage(
+                    "skill capability 'files' must not be empty",
+                ));
             }
             manifest.source_files()?;
         }
         CapabilityType::Tool => {
             if manifest.parameters.is_none() {
-                return Err(TuffError::new(
+                return Err(TuffError::usage(
                     "tool capability requires a [parameters] section with JSON Schema",
                 ));
             }
             if manifest.implementation.is_none() {
-                return Err(TuffError::new(
+                return Err(TuffError::usage(
                     "tool capability requires an [implementation] section",
                 ));
             }
@@ -287,13 +289,15 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             let hook_cfg = manifest
                 .hook
                 .as_ref()
-                .ok_or_else(|| TuffError::new("hook capability requires a [hook] section"))?;
+                .ok_or_else(|| TuffError::usage("hook capability requires a [hook] section"))?;
 
             if hook_cfg.event.trim().is_empty() {
-                return Err(TuffError::new("hook 'event' must be a non-empty string"));
+                return Err(TuffError::usage("hook 'event' must be a non-empty string"));
             }
             if hook_cfg.command.trim().is_empty() {
-                return Err(TuffError::new("hook 'command' must be a non-empty string"));
+                return Err(TuffError::usage(
+                    "hook 'command' must be a non-empty string",
+                ));
             }
 
             crate::tool::check_path_traversal(&hook_cfg.working_directory)?;
@@ -309,11 +313,11 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
         }
         CapabilityType::Workflow => {
             let wf = manifest.workflow.as_ref().ok_or_else(|| {
-                TuffError::new("workflow capability requires a [[workflow.requires]] section")
+                TuffError::usage("workflow capability requires a [[workflow.requires]] section")
             })?;
 
             if wf.requires.is_empty() {
-                return Err(TuffError::new(
+                return Err(TuffError::usage(
                     "workflow 'requires' must have at least one entry",
                 ));
             }
@@ -321,15 +325,15 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             let mut seen = std::collections::HashSet::new();
             for req in &wf.requires {
                 if req.id.trim().is_empty() {
-                    return Err(TuffError::new(
+                    return Err(TuffError::usage(
                         "workflow requirement 'id' must not be empty",
                     ));
                 }
                 if req.id == manifest.id {
-                    return Err(TuffError::new("workflow cannot require itself"));
+                    return Err(TuffError::usage("workflow cannot require itself"));
                 }
                 if !seen.insert(&req.id) {
-                    return Err(TuffError::new(format!(
+                    return Err(TuffError::usage(format!(
                         "duplicate requirement '{}' in workflow",
                         req.id
                     )));
@@ -349,11 +353,13 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             );
         }
         CapabilityType::Policy => {
-            return Err(TuffError::new("policy capabilities are not supported yet"));
+            return Err(TuffError::unsupported(
+                "policy capabilities are not supported yet",
+            ));
         }
         CapabilityType::McpServer => {
             let server = manifest.server.as_ref().ok_or_else(|| {
-                TuffError::new("mcp-server capability requires a [server] section")
+                TuffError::usage("mcp-server capability requires a [server] section")
             })?;
             validate_mcp_server(server)?;
 
@@ -374,14 +380,14 @@ pub fn validate_mcp_server(server: &McpServerConfig) -> Result<()> {
                 .as_deref()
                 .is_none_or(|c| c.trim().is_empty())
             {
-                return Err(TuffError::new(
+                return Err(TuffError::usage(
                     "mcp-server with transport = \"stdio\" requires a non-empty 'command'",
                 ));
             }
         }
         McpTransport::Http => {
             if server.url.as_deref().is_none_or(|u| u.trim().is_empty()) {
-                return Err(TuffError::new(
+                return Err(TuffError::usage(
                     "mcp-server with transport = \"http\" requires a non-empty 'url'",
                 ));
             }
@@ -389,10 +395,10 @@ pub fn validate_mcp_server(server: &McpServerConfig) -> Result<()> {
     }
     for (name, reference) in &server.env {
         if name.trim().is_empty() {
-            return Err(TuffError::new("[server.env] keys must be non-empty"));
+            return Err(TuffError::usage("[server.env] keys must be non-empty"));
         }
         if reference.from_env.trim().is_empty() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "[server.env] {name} must reference a variable: {name} = {{ from_env = \"VAR\" }}"
             )));
         }
@@ -409,7 +415,7 @@ fn parse_manifest(raw: &str, manifest_path: &Path) -> Result<CapabilityManifest>
         let literal_env = raw.contains("[server.env]")
             && (message.contains("invalid type: string") || message.contains("expected a table"));
         if literal_env {
-            TuffError::new(format!(
+            TuffError::usage(format!(
                 "invalid manifest at {}: [server.env] values must be references, never \
                  literals — write NAME = {{ from_env = \"NAME\" }} ({})",
                 manifest_path.display(),
@@ -438,7 +444,7 @@ pub fn synthetic_manifest(
 ) -> Result<CapabilityManifest> {
     let skill_file = skill_dir.join("SKILL.md");
     if !skill_file.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::not_found(format!(
             "skill entrypoint not found: {}",
             skill_file.display()
         )));
@@ -469,7 +475,7 @@ fn walk_skill_dir(base: &Path, prefix: &str, files: &mut Vec<String>) -> Result<
         let path = entry.path();
         let metadata = std::fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "symbolic links are not allowed in capability sources: {}",
                 path.display()
             )));

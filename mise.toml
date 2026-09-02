@@ -46,21 +46,23 @@ run = [
 ]
 
 [tasks.lint-error-kinds]
-description = "Hold the line on untyped errors (RFC-105 D6)"
+description = "Keep untyped errors from creeping back (RFC-105 D6)"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
-# `TuffError::new` builds an Internal error: a bug in Tuff, not a message
-# for the user. Every remaining use is one that has not been classified
-# yet. The budget only ever goes down; lower it in the same commit that
-# converts a module, and delete this task when it reaches zero.
-budget=202
+# `TuffError::new` builds an Internal error: an invariant Tuff itself broke,
+# not a message for the user to act on. The remaining uses are all genuinely
+# that -- staged-lockfile invariants, plan_* called on the wrong capability
+# type, a malformed entry in the catalog compiled into the binary. Anything
+# a user can cause should carry a kind instead:
+# usage / not_found / refused / drift / source_failed / corrupt / unsupported.
+budget=13
 count=$(grep -rn 'TuffError::new' crates/*/src --include='*.rs' | grep -vc 'crates/tuff-core/src/error.rs')
 
 if [ "$count" -gt "$budget" ]; then
   echo "untyped TuffError::new sites: $count (budget $budget)" >&2
-  echo "Give the new error a kind: TuffError::usage/not_found/refused/drift/source_failed/corrupt/unsupported." >&2
+  echo "A new one needs a kind, or a comment saying why it is an internal invariant." >&2
   exit 1
 fi
 if [ "$count" -lt "$budget" ]; then

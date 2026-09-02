@@ -49,7 +49,7 @@ pub fn cmd_diff(
             (scope, entry, root)
         }
         None => {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::not_found(format!(
                 "capability is not installed: {capability_id}"
             )));
         }
@@ -65,7 +65,7 @@ pub fn cmd_diff(
 
     for target in targets {
         let target_entry = entry.targets.get(&target).ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::not_found(format!(
                 "'{capability_id}' is not installed for target '{target}'"
             ))
         })?;
@@ -111,13 +111,12 @@ pub(crate) fn materialize_baseline(
     entry: &lockfile::CapabilityLockEntry,
     target: &str,
 ) -> Result<MaterializedTree> {
-    let target_entry = entry
-        .targets
-        .get(target)
-        .ok_or_else(|| TuffError::new(format!("no lock entry for '{id}' at target '{target}'")))?;
+    let target_entry = entry.targets.get(target).ok_or_else(|| {
+        TuffError::not_found(format!("no lock entry for '{id}' at target '{target}'"))
+    })?;
     let expected = &target_entry.sha256;
     if expected.is_empty() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "lock entry for '{id}' has no materialized baseline hash"
         )));
     }
@@ -136,11 +135,11 @@ pub(crate) fn materialize_baseline(
             && !Path::new(source_path).is_absolute()
             && !scope_root.join(source_path).exists()
         {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::not_found(format!(
                 "The recorded baseline for \"{id}\" is not cached, and its local source \"{source_path}\" is no longer available.\n\nRestore the source, reinstall the capability, or run the appropriate Tuff command to accept the current content as a new baseline."
             )));
         }
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "recorded baseline verification failed for '{id}': expected {expected}, got {actual}; the source does not reproduce the recorded baseline"
         )));
     }
@@ -159,14 +158,15 @@ fn materialize_upstream(
 ) -> Result<MaterializedTree> {
     match &entry.source {
         CapabilitySource::Local(_) | CapabilitySource::Pack(_) => {
-            return Err(TuffError::new(
+            return Err(TuffError::unsupported(
                 "upstream diff only available for git-sourced capabilities",
             ));
         }
         CapabilitySource::Catalog(_) => {
-            return Err(TuffError::new(
-                "upstream diff is not available for catalog capabilities; run `tuff outdated` to compare against the built-in catalog",
-            ));
+            return Err(TuffError::unsupported(
+                "upstream diff is not available for catalog capabilities",
+            )
+            .with_hint("run 'tuff outdated' to compare against the built-in catalog"));
         }
         CapabilitySource::Git(_) => {}
     }
@@ -181,9 +181,9 @@ fn materialize_source(
     pinned: bool,
 ) -> Result<MaterializedTree> {
     let adapter = AdapterKind::from_id(target)
-        .ok_or_else(|| TuffError::new(format!("unknown target '{target}'")))?;
+        .ok_or_else(|| TuffError::usage(format!("unknown target '{target}'")))?;
     let missing_local = |source_path: &str| {
-        TuffError::new(format!(
+        TuffError::not_found(format!(
             "The recorded baseline for \"{id}\" is not cached, and its local source \"{source_path}\" is no longer available.\n\nRestore the source, reinstall the capability, or run the appropriate Tuff command to accept the current content as a new baseline."
         ))
     };
@@ -216,7 +216,7 @@ fn materialize_source(
     let (source_guard, capability_dir) = match &entry.source {
         CapabilitySource::Catalog(catalog) => {
             let manifest = crate::catalog::lookup(&catalog.id)?.ok_or_else(|| {
-                TuffError::new(format!(
+                TuffError::not_found(format!(
                     "The recorded baseline for \"{id}\" is not cached, and '{}' is no longer in the built-in catalog.",
                     catalog.id
                 ))

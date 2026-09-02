@@ -24,7 +24,7 @@ pub fn cmd_add(
     global: bool,
     hook_file: Option<&Path>,
 ) -> Result<()> {
-    let source = source.ok_or_else(|| TuffError::new("source path or URL is required"))?;
+    let source = source.ok_or_else(|| TuffError::usage("source path or URL is required"))?;
     let (scope, install_root) = if global {
         let home = home_dir()?;
         let lock_path = crate::paths::global_lockfile(&home);
@@ -72,7 +72,7 @@ pub fn cmd_add_mcp(
     yes: bool,
 ) -> Result<()> {
     if sources.is_empty() {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "at least one catalog id, path, or git URL is required",
         ));
     }
@@ -93,7 +93,7 @@ pub fn cmd_add_mcp(
         }
 
         let Some(mut manifest) = crate::catalog::lookup(source)? else {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "'{source}' is not a path, a git URL, or a catalog entry; catalog ids: {}",
                 crate::catalog::ids().join(", ")
             )));
@@ -242,7 +242,7 @@ fn cmd_add_git(
         crate::tool::check_path_traversal(path)?;
         let path = cache_dir.join(path);
         if !path.is_dir() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::not_found(format!(
                 "capability directory not found in repository: {}",
                 path.display()
             )));
@@ -251,12 +251,12 @@ fn cmd_add_git(
     } else if cap_type == CapabilityType::McpServer {
         // No SKILL.md-style discovery exists for servers; the URL must name
         // the directory holding the tuff.toml.
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "installing an mcp-server from git requires a subdirectory in the URL (e.g. <repo>//mcp-servers/github)",
         ));
     } else {
         let name = name.ok_or_else(|| {
-            TuffError::new(
+            TuffError::usage(
                 "--name is required when installing from a git URL without a subdirectory",
             )
         })?;
@@ -278,7 +278,7 @@ fn cmd_add_git(
         manifest
     } else {
         let name = name.ok_or_else(|| {
-            TuffError::new("--name is required when the git source has no tuff.toml")
+            TuffError::usage("--name is required when the git source has no tuff.toml")
         })?;
         manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?
     };
@@ -376,7 +376,7 @@ fn cmd_add_local(
 
 fn validate_capability_name(name: &str) -> Result<()> {
     if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "capability name must be a non-empty single path component",
         ));
     }
@@ -399,7 +399,7 @@ fn synthetic_local_manifest(
     inferred_type: Option<CapabilityType>,
 ) -> Result<manifest::CapabilityManifest> {
     if !capability_dir.exists() || !capability_dir.is_dir() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::not_found(format!(
             "directory not found: {}",
             capability_dir.display()
         )));
@@ -407,7 +407,7 @@ fn synthetic_local_manifest(
 
     let id = capability_dir
         .file_name()
-        .ok_or_else(|| TuffError::new("capability directory must have a name"))?
+        .ok_or_else(|| TuffError::usage("capability directory must have a name"))?
         .to_string_lossy()
         .to_string();
     let capability_type = inferred_type.unwrap_or(CapabilityType::Skill);
@@ -425,7 +425,7 @@ fn synthetic_local_manifest(
     }
     files.sort();
     if files.is_empty() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "no source files found in {}",
             capability_dir.display()
         )));
@@ -453,7 +453,7 @@ fn resolve_native_hook_capability(
     version: &str,
     hook_file: Option<&Path>,
 ) -> Result<adapter::ResolvedCapability> {
-    let hook_file = hook_file.ok_or_else(|| TuffError::new("--hook-file is required"))?;
+    let hook_file = hook_file.ok_or_else(|| TuffError::usage("--hook-file is required"))?;
     let id = name
         .map(str::to_string)
         .or_else(|| {
@@ -461,7 +461,7 @@ fn resolve_native_hook_capability(
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
         })
-        .ok_or_else(|| TuffError::new("hook directory must have a name"))?;
+        .ok_or_else(|| TuffError::usage("hook directory must have a name"))?;
 
     let hook_path = if hook_file.is_absolute() {
         hook_file.to_path_buf()
@@ -469,14 +469,14 @@ fn resolve_native_hook_capability(
         capability_dir.join(hook_file)
     };
     if !hook_path.is_file() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::not_found(format!(
             "hook fragment not found: {}",
             hook_path.display()
         )));
     }
     let hook_rel = hook_path
         .strip_prefix(capability_dir)
-        .map_err(|_| TuffError::new("--hook-file must be inside the hook source directory"))?
+        .map_err(|_| TuffError::usage("--hook-file must be inside the hook source directory"))?
         .to_string_lossy()
         .replace('\\', "/");
     crate::tool::check_path_traversal(&hook_rel)?;
@@ -618,7 +618,7 @@ fn adopt_capability_in_place(
 ) -> Result<()> {
     for target_id in target_ids {
         if target_id != inferred_target {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "{} is already in the '{}' agent layout; use -a {}",
                 lockfile::relative_or_absolute_fs(capability_dir, install_root),
                 inferred_target,
@@ -629,9 +629,13 @@ fn adopt_capability_in_place(
 
     let mut lockfile = lockfile::require_scoped_lockfile(install_root, scope)?;
     if lockfile.capabilities.contains_key(&capability.id) {
-        return Err(TuffError::new(format!(
-            "capability '{}' is already tracked; use 'tuff update {}' for tracked changes",
-            capability.id, capability.id
+        return Err(TuffError::refused(format!(
+            "capability '{}' is already tracked",
+            capability.id
+        ))
+        .with_hint(format!(
+            "use 'tuff update {}' for tracked changes",
+            capability.id
         )));
     }
 
@@ -714,13 +718,11 @@ pub(crate) fn install_capability(
     let mut adapters = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
-            TuffError::new(format!(
-                "unknown agent '{}'; run 'tuff agent list' to see available agents",
-                tid
-            ))
+            TuffError::usage(format!("unknown agent '{}'", tid,))
+                .with_hint("run 'tuff agent list' to see available agents")
         })?;
         if !adapter.supports(capability.capability_type) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "{} does not yet support {} capabilities",
                 adapter.display_name(),
                 capability.capability_type
@@ -755,10 +757,11 @@ pub(crate) fn install_capability(
                 }
                 let target_path = install_root.join(&f.path);
                 if target_path.exists() {
-                    return Err(TuffError::new(format!(
-                        "refusing to overwrite untracked file at {}; remove it or track it in Tuff first",
+                    return Err(TuffError::refused(format!(
+                        "refusing to overwrite untracked file at {}",
                         lockfile::relative_or_absolute_fs(&target_path, install_root)
-                    )));
+                    ))
+                    .with_hint("remove it, or track it in Tuff first"));
                 }
             }
         }
@@ -779,11 +782,12 @@ pub(crate) fn install_capability(
                 && !mcp_entry_tracked(&lockfile, &capability.id, adapter.id())
                 && tuff_core::mcp::has_server(&mcp_path, &capability.id)?
             {
-                return Err(TuffError::new(format!(
-                    "refusing to overwrite untracked MCP server '{}' in {}; remove it by hand or choose a different capability id",
+                return Err(TuffError::refused(format!(
+                    "refusing to overwrite untracked MCP server '{}' in {}",
                     capability.id,
                     lockfile::relative_or_absolute_fs(&mcp_path, install_root)
-                )));
+                ))
+                .with_hint("remove it by hand, or choose a different capability id"));
             }
         }
     }
