@@ -428,14 +428,22 @@ find-skills               skill      open-agents  2adcfe5    def5678    outdated
 security-review           tool       claude       abc1234    2adcfe5    outdated
 rust-implement            skill      open-agents  1.2.0      1.4.0      outdated
 csv-workbench             skill      open-agents  1.0.0      —          not checked
+crm-skill                 skill      open-agents  1.0.0      1.0.0      repointed
 ```
 
 For git-sourced capabilities, `CURRENT` and `LATEST` show the 7-character commit SHA.
 
 For a pack-sourced capability installed with `add pack --reference`,
-`CURRENT` and `LATEST` compare the *pack's* published versions — the numbers
-you passed to `tuff pack build --version` — since that is the artifact
-whose availability is actually being checked. Only tags that parse as
+`CURRENT` and `LATEST` compare the *pack's* published versions, the numbers
+you passed to `tuff pack build --version`, since that is the artifact
+whose availability is actually being checked. The installed tag is also
+resolved and its digest compared with the one recorded at install time. A
+tag is mutable by design, so if someone republished different bytes under
+the same version, the row reads `repointed` rather than `up to date`, and a
+tag the registry no longer has reads `tag missing`. Either finding wins over
+`outdated`, since it changes what `LATEST` means, while `LATEST` still shows
+the newest published version. This costs one small manifest fetch per pack
+per run, not per member, and no artifact is downloaded. Only tags that parse as
 [semver](https://semver.org) are compared; anything else is excluded rather
 than guessed at, and `1.9.0` is correctly treated as older than `1.10.0`
 (plain string comparison would get this backwards). Pass `--plain-http` or

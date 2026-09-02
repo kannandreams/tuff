@@ -249,12 +249,14 @@ The new release is staged exactly like a fresh installation: the old members are
 
 Local edits to any member block the update; `tuff diff <member>` shows them and `--force` replaces them. A `--agent` selection narrower than the agents the pack is installed for is refused. An artifact for a different pack name is refused, and a same-version artifact with a different digest is refused without `--force`.
 
+When the installed version is already the newest tag, `tuff update` still resolves that tag and compares its digest with the one recorded at install. If the tag was republished with different content, the update stops and says so, with both digests; `--check` reports the same finding without changing anything, and `--force` replaces the installed release with what the tag serves now and records the new digest. A tag the registry has deleted is reported as unreproducible rather than current. `tuff outdated` shows the same findings as `repointed` and `tag missing`.
+
 ## Current boundaries
 
 - A built artifact always contains canonical portable member sources and pre-rendered targets; project-backed selection is an authoring convenience, not a new artifact format.
 - Standalone source packs contain local manifest-backed members only.
 - Pack installation is project-scoped; `--global` is not supported.
 - Tuff does not resolve pack-to-pack dependencies or semantic-version constraints. Registry resolution picks the newest semver tag; it does not pin to a range.
-- `tuff outdated` and `tuff update` compare a tag name against the installed version. Whether a tag still points at the bytes it pointed at when the pack was installed is not checked yet.
+- `tuff outdated` verifies that the installed tag still serves the installed digest, and `tuff update` refuses to call a republished tag "up to date". Neither verifies signatures; a repointed tag is detected, not prevented.
 - Tuff does not install language or system dependencies.
 - Signatures, attestations, referrer discovery, and policy enforcement are future trust layers.

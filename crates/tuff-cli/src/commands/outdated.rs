@@ -50,6 +50,47 @@ pub(crate) fn compare_pack_versions(installed: &str, tags: &[String]) -> PackVer
     }
 }
 
+/// Whether the installed pack tag still names the bytes that were installed.
+///
+/// A tag is mutable by design. `PackProvenance.digest` records the artifact
+/// that was actually installed, and the tag's manifest names the artifact it
+/// points at now; when they differ, someone published different bytes under
+/// the same version. That is a different finding from "a newer version
+/// exists": it means the version you have may not be what you think it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PackTagIntegrity {
+    /// The tag still points at the installed artifact.
+    Matches,
+    /// The tag now points at a different artifact.
+    Repointed { live_digest: String },
+    /// The registry no longer has the tag at all.
+    Missing,
+    /// The tag could not be resolved (network, auth, or protocol failure).
+    Unavailable(String),
+}
+
+/// Resolve the installed tag and compare it against the recorded digest.
+pub(crate) fn verify_pack_tag(
+    pack: &lockfile::PackProvenance,
+    registry: &str,
+    options: &OciTransferOptions,
+) -> PackTagIntegrity {
+    let reference = format!("{registry}:{}", pack.version);
+    match super::block_on_oci(oci::resolve_pack_tag(&reference, options)) {
+        Err(error) => PackTagIntegrity::Unavailable(error.to_string()),
+        Ok(None) => PackTagIntegrity::Missing,
+        Ok(Some(resolved)) => {
+            if resolved.artifact_digest == format!("sha256:{}", pack.digest) {
+                PackTagIntegrity::Matches
+            } else {
+                PackTagIntegrity::Repointed {
+                    live_digest: resolved.artifact_digest,
+                }
+            }
+        }
+    }
+}
+
 /// Render [`compare_pack_versions`] as an `outdated` table row.
 fn pick_latest_pack_version(installed: &str, tags: &[String]) -> (String, String, String) {
     let current = installed.to_string();
@@ -58,6 +99,35 @@ fn pick_latest_pack_version(installed: &str, tags: &[String]) -> (String, String
         PackVersionStatus::Newer(latest) => (current, latest, "outdated".to_string()),
         PackVersionStatus::Current => (current.clone(), current, "up to date".to_string()),
     }
+}
+
+/// Fold the tag integrity into a version row. Integrity findings win: a
+/// repointed or deleted tag is reported even when a newer version exists,
+/// because "what you have is not what you installed" changes what the
+/// LATEST column means. LATEST is still shown, so the way forward is visible.
+fn pack_row(
+    installed: &str,
+    tags: &[String],
+    integrity: &PackTagIntegrity,
+) -> (String, String, String) {
+    let (current, latest, status) = pick_latest_pack_version(installed, tags);
+    let status = match integrity {
+        PackTagIntegrity::Matches => status,
+        PackTagIntegrity::Repointed { .. } => "repointed".to_string(),
+        PackTagIntegrity::Missing => "tag missing".to_string(),
+        PackTagIntegrity::Unavailable(_) => "error".to_string(),
+    };
+    (current, latest, status)
+}
+
+/// One registry round trip per pack per run, not per member per harness.
+///
+/// Every member of a pack shares the same provenance, and `outdated` emits a
+/// row per member per target, so without this a four-member pack installed
+/// for two harnesses would list the registry's tags eight times.
+#[derive(Default)]
+pub(crate) struct PackCheckCache {
+    rows: std::collections::BTreeMap<String, (String, String, String)>,
 }
 
 /// Check a pack-sourced capability against its registry.
@@ -69,15 +139,25 @@ fn classify_pack(
     pack: &lockfile::PackProvenance,
     registry: &str,
     options: &OciTransferOptions,
+    cache: &mut PackCheckCache,
 ) -> (String, String, String) {
-    match super::block_on_oci(oci::list_pack_versions(registry, options)) {
+    let key = format!("{registry}:{}@{}", pack.version, pack.digest);
+    if let Some(row) = cache.rows.get(&key) {
+        return row.clone();
+    }
+    let row = match super::block_on_oci(oci::list_pack_versions(registry, options)) {
         Err(_) => (
             pack.version.clone(),
             "unavailable".to_string(),
             "error".to_string(),
         ),
-        Ok(tags) => pick_latest_pack_version(&pack.version, &tags),
-    }
+        Ok(tags) => {
+            let integrity = verify_pack_tag(pack, registry, options);
+            pack_row(&pack.version, &tags, &integrity)
+        }
+    };
+    cache.rows.insert(key, row.clone());
+    row
 }
 
 /// Classify one capability against its upstream.
@@ -90,11 +170,12 @@ fn classify_pack(
 fn classify(
     entry: &lockfile::CapabilityLockEntry,
     oci_options: &OciTransferOptions,
+    cache: &mut PackCheckCache,
 ) -> (String, String, String) {
     if let Some(pack) = &entry.pack
         && let Some(registry) = &pack.registry
     {
-        return classify_pack(pack, registry, oci_options);
+        return classify_pack(pack, registry, oci_options, cache);
     }
 
     let Some(src) = &entry.source else {
@@ -142,11 +223,12 @@ fn classify(
 fn collect_rows(
     lf: &lockfile::Lockfile,
     oci_options: &OciTransferOptions,
+    cache: &mut PackCheckCache,
     rows: &mut Vec<OutdatedRow>,
 ) {
     for (id, entry) in &lf.capabilities {
         for target_id in entry.targets.keys() {
-            let (current, latest, status) = classify(entry, oci_options);
+            let (current, latest, status) = classify(entry, oci_options, cache);
             rows.push(OutdatedRow {
                 id: id.clone(),
                 capability_type: entry.capability_type,
@@ -169,15 +251,16 @@ pub fn cmd_outdated(
         ca_files: ca_files.to_vec(),
     };
     let mut rows: Vec<OutdatedRow> = Vec::new();
+    let mut cache = PackCheckCache::default();
 
     if let Ok(lf) = lockfile::require_lockfile(repo_root) {
-        collect_rows(&lf, &oci_options, &mut rows);
+        collect_rows(&lf, &oci_options, &mut cache, &mut rows);
     }
 
     if let Some(home) = home_dir_opt() {
         let lock_path = crate::paths::global_lockfile(&home);
         if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
-            collect_rows(&lf, &oci_options, &mut rows);
+            collect_rows(&lf, &oci_options, &mut cache, &mut rows);
         }
     }
 
@@ -242,7 +325,11 @@ mod tests {
         // local path, has no git source and no registry to check. Reporting
         // "up to date" here states a conclusion that was never reached: the
         // row would claim the capability is current while LATEST is unknown.
-        let (current, latest, status) = classify(&entry(None), &OciTransferOptions::default());
+        let (current, latest, status) = classify(
+            &entry(None),
+            &OciTransferOptions::default(),
+            &mut PackCheckCache::default(),
+        );
 
         assert_eq!(status, "not checked");
         assert_ne!(
@@ -306,5 +393,52 @@ mod tests {
         assert_eq!(status, "not checked");
         assert_eq!(latest, "—");
         assert_eq!(current, "release-42");
+    }
+
+    #[test]
+    fn a_repointed_tag_is_reported_even_when_a_newer_version_exists() {
+        // "A newer version exists" and "the version you have is not what
+        // you installed" are different findings; the second must not hide
+        // behind the first. LATEST still shows the way forward.
+        let tags = vec!["1.0.0".to_string(), "1.2.0".to_string()];
+        let integrity = PackTagIntegrity::Repointed {
+            live_digest: "sha256:beef".to_string(),
+        };
+        let (current, latest, status) = pack_row("1.0.0", &tags, &integrity);
+
+        assert_eq!(status, "repointed");
+        assert_eq!(current, "1.0.0");
+        assert_eq!(latest, "1.2.0");
+    }
+
+    #[test]
+    fn a_repointed_tag_never_reads_as_up_to_date() {
+        let tags = vec!["1.0.0".to_string()];
+        let integrity = PackTagIntegrity::Repointed {
+            live_digest: "sha256:beef".to_string(),
+        };
+        let (_, _, status) = pack_row("1.0.0", &tags, &integrity);
+
+        assert_eq!(status, "repointed");
+    }
+
+    #[test]
+    fn a_deleted_tag_is_its_own_status() {
+        let tags = vec!["1.2.0".to_string()];
+        let (_, latest, status) = pack_row("1.0.0", &tags, &PackTagIntegrity::Missing);
+
+        assert_eq!(status, "tag missing");
+        assert_eq!(latest, "1.2.0");
+    }
+
+    #[test]
+    fn a_matching_tag_leaves_the_version_verdict_alone() {
+        let tags = vec!["1.0.0".to_string(), "1.2.0".to_string()];
+        let (_, _, status) = pack_row("1.0.0", &tags, &PackTagIntegrity::Matches);
+        assert_eq!(status, "outdated");
+
+        let tags = vec!["1.0.0".to_string()];
+        let (_, _, status) = pack_row("1.0.0", &tags, &PackTagIntegrity::Matches);
+        assert_eq!(status, "up to date");
     }
 }
