@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
 ### Added
 
 - Every command now reports failures by kind, so the exit code and the `--json` envelope say what kind of problem it is: a mistyped flag or argument exits `2`, while a missing capability, a refused overwrite, local changes, an unreachable source, an unreadable file, and an unsupported request all exit `1` with a distinct `kind`. Advice that used to be appended to a message with a semicolon, such as `run 'tuff agent list'` or `use --force`, now prints on its own `hint:` line.
@@ -173,7 +175,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kannandreams/tuff/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kannandreams/tuff/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/kannandreams/tuff/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kannandreams/tuff/compare/v0.1.6...v0.1.7
