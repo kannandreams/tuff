@@ -182,7 +182,9 @@ async fn read_response(
 ) -> Result<serde_json::Value> {
     loop {
         let Some(line) = lines.next_line().await? else {
-            return Err(TuffError::new("server closed stdout before responding"));
+            return Err(TuffError::source_failed(
+                "server closed stdout before responding",
+            ));
         };
         let Some(message) = parse_response_line(&line, expected_id) else {
             continue;
@@ -204,7 +206,7 @@ fn parse_response_line(line: &str, expected_id: i64) -> Option<Result<serde_json
         return None;
     }
     if let Some(error) = message.get("error") {
-        return Some(Err(TuffError::new(format!(
+        return Some(Err(TuffError::source_failed(format!(
             "server returned an error: {error}"
         ))));
     }

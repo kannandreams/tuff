@@ -126,7 +126,7 @@ pub fn merge_hook_fragment(
     };
     let settings_obj = settings
         .as_object_mut()
-        .ok_or_else(|| TuffError::new(".cursor/hooks.json must be a JSON object"))?;
+        .ok_or_else(|| TuffError::corrupt(".cursor/hooks.json must be a JSON object"))?;
     settings_obj
         .entry("version")
         .or_insert_with(|| serde_json::json!(1));
@@ -137,17 +137,17 @@ pub fn merge_hook_fragment(
         .entry("hooks")
         .or_insert_with(|| serde_json::json!({}))
         .as_object_mut()
-        .ok_or_else(|| TuffError::new(".cursor/hooks.json field 'hooks' must be an object"))?;
+        .ok_or_else(|| TuffError::corrupt(".cursor/hooks.json field 'hooks' must be an object"))?;
     for (event, additions) in fragment_hooks {
-        let additions = additions
-            .as_array()
-            .ok_or_else(|| TuffError::new(format!("--hook-file hooks.{event} must be an array")))?;
+        let additions = additions.as_array().ok_or_else(|| {
+            TuffError::usage(format!("--hook-file hooks.{event} must be an array"))
+        })?;
         let groups = settings_hooks
             .entry(event.clone())
             .or_insert_with(|| serde_json::json!([]))
             .as_array_mut()
             .ok_or_else(|| {
-                TuffError::new(format!(".cursor/hooks.json hooks.{event} must be an array"))
+                TuffError::corrupt(format!(".cursor/hooks.json hooks.{event} must be an array"))
             })?;
         extend_hook_groups(groups, additions);
     }
@@ -208,14 +208,14 @@ pub fn remove_hook_settings(
 fn validate_hook_fragment(fragment: &serde_json::Value) -> Result<()> {
     let obj = fragment
         .as_object()
-        .ok_or_else(|| TuffError::new("--hook-file fragment must be a JSON object"))?;
+        .ok_or_else(|| TuffError::usage("--hook-file fragment must be a JSON object"))?;
     if !obj.contains_key("hooks") || obj.keys().any(|key| key != "hooks" && key != "version") {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "--hook-file must contain only 'hooks' and optional 'version'",
         ));
     }
     if !fragment["hooks"].is_object() {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "--hook-file field 'hooks' must be an object",
         ));
     }

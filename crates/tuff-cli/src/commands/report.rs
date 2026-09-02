@@ -20,10 +20,8 @@ pub fn cmd_generate_index(
         .unwrap_or_default();
     let selected = resolve_agent_selection(repo_root, &requested, false)?;
     let adapter = AdapterKind::from_id(&selected[0]).ok_or_else(|| {
-        TuffError::new(format!(
-            "unknown agent '{}'; use 'tuff agent list' to see available agents",
-            selected[0]
-        ))
+        TuffError::usage(format!("unknown agent '{}'", selected[0],))
+            .with_hint("run 'tuff agent list' to see available agents")
     })?;
     let canonical_agent = adapter.id();
 

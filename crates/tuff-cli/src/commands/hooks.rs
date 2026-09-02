@@ -52,22 +52,20 @@ pub fn cmd_hooks_matrix(repo_root: &Path) -> Result<()> {
 
 pub fn cmd_hooks_check_portability(repo_root: &Path, hook_id: &str, target: &str) -> Result<()> {
     let target = AdapterKind::from_id(target).ok_or_else(|| {
-        TuffError::new(format!(
-            "unknown agent '{}'; use 'tuff agent list' to see available agents",
-            target
-        ))
+        TuffError::usage(format!("unknown agent '{}'", target,))
+            .with_hint("run 'tuff agent list' to see available agents")
     })?;
     ensure_registered(repo_root, target)?;
 
     let lock = lockfile::require_lockfile(repo_root)?;
     let entry = lock.capabilities.get(hook_id).ok_or_else(|| {
-        TuffError::new(format!(
+        TuffError::not_found(format!(
             "hook capability '{}' is not tracked in tuff.lock",
             hook_id
         ))
     })?;
     if entry.capability_type != CapabilityType::Hook {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "'{hook_id}' is not a hook capability"
         )));
     }
@@ -157,10 +155,8 @@ pub(crate) fn registered_adapters(repo_root: &Path) -> Result<Vec<AdapterKind>> 
     let mut adapters = Vec::new();
     for id in config.agents {
         let adapter = AdapterKind::from_id(&id).ok_or_else(|| {
-            TuffError::new(format!(
-                "unknown registered agent '{}'; use 'tuff agent list' to inspect config",
-                id
-            ))
+            TuffError::usage(format!("unknown registered agent '{}'", id))
+                .with_hint("run 'tuff agent list' to inspect config")
         })?;
         if !adapters.contains(&adapter) {
             adapters.push(adapter);
@@ -174,11 +170,11 @@ fn ensure_registered(repo_root: &Path, adapter: AdapterKind) -> Result<()> {
     if registered.contains(&adapter) {
         return Ok(());
     }
-    Err(TuffError::new(format!(
-        "agent '{}' is not registered in this project; run 'tuff agent add {}' first",
-        adapter.id(),
+    Err(TuffError::usage(format!(
+        "agent '{}' is not registered in this project",
         adapter.id()
-    )))
+    ))
+    .with_hint(format!("run 'tuff agent add {}' first", adapter.id())))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

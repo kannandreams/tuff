@@ -33,10 +33,9 @@ pub(crate) fn prepare_project_pack(
     repo_root: &Path,
     mut source_manifest: PackManifest,
 ) -> Result<PreparedProjectPack> {
-    let project = source_manifest
-        .project
-        .take()
-        .ok_or_else(|| TuffError::new("project pack manifest is missing a [project] selection"))?;
+    let project = source_manifest.project.take().ok_or_else(|| {
+        TuffError::usage("project pack manifest is missing a [project] selection")
+    })?;
     let lock = lockfile::require_lockfile(repo_root)?;
     let staging = tempfile::Builder::new()
         .prefix("tuff-project-pack-")
@@ -51,9 +50,8 @@ pub(crate) fn prepare_project_pack(
             continue;
         }
         let entry = lock.capabilities.get(&id).ok_or_else(|| {
-            TuffError::new(format!(
-                "capability '{id}' is not tracked in this project; run 'tuff list --scope project' to see available capabilities"
-            ))
+            TuffError::not_found(format!("capability '{id}' is not tracked in this project"))
+                .with_hint("run 'tuff list --scope project' to see available capabilities")
         })?;
         let relative = format!("capabilities/member-{:04}", selected.len() + 1);
         let destination = staging.path().join(&relative);
@@ -63,13 +61,13 @@ pub(crate) fn prepare_project_pack(
         if let Some(workflow) = &capability.workflow {
             for requirement in &workflow.requires {
                 let required = lock.capabilities.get(&requirement.id).ok_or_else(|| {
-                    TuffError::new(format!(
+                    TuffError::usage(format!(
                         "workflow '{}' requires '{}', but it is not tracked in this project",
                         capability.id, requirement.id
                     ))
                 })?;
                 if required.capability_type != requirement.capability_type {
-                    return Err(TuffError::new(format!(
+                    return Err(TuffError::usage(format!(
                         "workflow '{}' requires '{}' as {}, but tuff.lock records it as {}",
                         capability.id,
                         requirement.id,
@@ -155,10 +153,11 @@ fn installed_source(repo_root: &Path, id: &str, entry: &CapabilityLockEntry) -> 
         .map(|target| repo_root.join(&target.installed_path))
         .ok_or_else(|| unsupported_source_error(id, entry))?;
     if !path.is_dir() {
-        return Err(TuffError::new(format!(
-            "cannot package '{id}': installed capability directory is missing at {}; run 'tuff update {id}' or reinstall it",
+        return Err(TuffError::not_found(format!(
+            "cannot package '{id}': installed capability directory is missing at {}",
             path.display()
-        )));
+        ))
+        .with_hint(format!("run 'tuff update {id}', or reinstall it")));
     }
     Ok(path)
 }
@@ -168,7 +167,7 @@ fn copy_manifest_source(capability: &CapabilityManifest, destination: &Path) -> 
     manifest::write_manifest(&destination.join("tuff.toml"), capability)?;
     for source in capability.source_files()? {
         let relative = source.strip_prefix(&capability.root).map_err(|_| {
-            TuffError::new(format!(
+            TuffError::refused(format!(
                 "capability source escaped its root: {}",
                 source.display()
             ))
@@ -176,7 +175,7 @@ fn copy_manifest_source(capability: &CapabilityManifest, destination: &Path) -> 
         crate::tool::check_path_traversal(&relative.to_string_lossy())?;
         let metadata = fs::symlink_metadata(&source)?;
         if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "capability source must be a regular file: {}",
                 source.display()
             )));
@@ -200,8 +199,11 @@ fn validate_source_identity(
         || capability.version != entry.version
         || capability.description != entry.description
     {
-        return Err(TuffError::new(format!(
-            "source for '{expected_id}' no longer matches its accepted tuff.lock metadata; run 'tuff update {expected_id}' before building the pack"
+        return Err(TuffError::drift(format!(
+            "source for '{expected_id}' no longer matches its accepted tuff.lock metadata"
+        ))
+        .with_hint(format!(
+            "run 'tuff update {expected_id}' before building the pack"
         )));
     }
     Ok(())
@@ -236,10 +238,11 @@ fn validate_clean_installations<'a>(
     if failures.is_empty() {
         return Ok(());
     }
-    Err(TuffError::new(format!(
-        "selected capabilities have unaccepted changes:\n  - {}\nRun 'tuff update <capability>' for intentional changes, then build again.",
+    Err(TuffError::drift(format!(
+        "selected capabilities have unaccepted changes:\n  - {}",
         failures.join("\n  - ")
-    )))
+    ))
+    .with_hint("run 'tuff update <capability>' for intentional changes, then build again"))
 }
 
 fn unsupported_source_error(id: &str, entry: &CapabilityLockEntry) -> TuffError {
@@ -248,8 +251,9 @@ fn unsupported_source_error(id: &str, entry: &CapabilityLockEntry) -> TuffError 
         .as_pack()
         .map(|pack| format!(" from pack {} {}", pack.name, pack.version))
         .unwrap_or_default();
-    TuffError::new(format!(
-        "cannot reconstruct portable source for {} capability '{id}'{provenance}; reinstall it from a manifest-backed local source or select a different capability",
+    TuffError::unsupported(format!(
+        "cannot reconstruct portable source for {} capability '{id}'{provenance}",
         entry.capability_type
     ))
+    .with_hint("reinstall it from a manifest-backed local source, or select a different capability")
 }

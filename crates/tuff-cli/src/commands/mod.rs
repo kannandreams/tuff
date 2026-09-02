@@ -201,7 +201,7 @@ pub(crate) fn block_on_oci<T>(future: impl std::future::Future<Output = Result<T
 }
 
 pub(crate) fn home_dir() -> Result<PathBuf> {
-    home_dir_opt().ok_or_else(|| TuffError::new("HOME environment variable not set"))
+    home_dir_opt().ok_or_else(|| TuffError::usage("HOME environment variable not set"))
 }
 
 pub(crate) fn home_dir_opt() -> Option<PathBuf> {
@@ -227,10 +227,8 @@ pub(crate) fn resolve_agent_selection(
     let mut selected = Vec::new();
     for value in values {
         let adapter = AdapterKind::from_id(&value).ok_or_else(|| {
-            TuffError::new(format!(
-                "unknown agent '{}'; use 'tuff agent list' to see available agents",
-                value
-            ))
+            TuffError::usage(format!("unknown agent '{}'", value,))
+                .with_hint("run 'tuff agent list' to see available agents")
         })?;
         if !selected.iter().any(|existing| existing == adapter.id()) {
             selected.push(adapter.id().to_string());

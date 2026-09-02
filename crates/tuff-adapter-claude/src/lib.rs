@@ -130,23 +130,23 @@ pub fn merge_hook_fragment(
     };
     let settings_obj = settings
         .as_object_mut()
-        .ok_or_else(|| TuffError::new(".claude/settings.json must be a JSON object"))?;
+        .ok_or_else(|| TuffError::corrupt(".claude/settings.json must be a JSON object"))?;
 
     let fragment_hooks = fragment
         .get("hooks")
         .and_then(|hooks| hooks.as_object())
-        .ok_or_else(|| TuffError::new("--hook-file fragment must contain a 'hooks' object"))?;
+        .ok_or_else(|| TuffError::usage("--hook-file fragment must contain a 'hooks' object"))?;
 
     let settings_hooks = settings_obj
         .entry("hooks")
         .or_insert_with(|| serde_json::json!({}));
-    let settings_hooks = settings_hooks
-        .as_object_mut()
-        .ok_or_else(|| TuffError::new(".claude/settings.json field 'hooks' must be an object"))?;
+    let settings_hooks = settings_hooks.as_object_mut().ok_or_else(|| {
+        TuffError::corrupt(".claude/settings.json field 'hooks' must be an object")
+    })?;
 
     for (event, additions) in fragment_hooks {
         let additions = additions.as_array().ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::usage(format!(
                 "--hook-file hooks.{event} must be an array of hook groups"
             ))
         })?;
@@ -154,7 +154,7 @@ pub fn merge_hook_fragment(
             .entry(event.clone())
             .or_insert_with(|| serde_json::json!([]));
         let existing_event = existing_event.as_array_mut().ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::corrupt(format!(
                 ".claude/settings.json hooks.{event} must be an array"
             ))
         })?;
@@ -233,19 +233,19 @@ pub fn remove_hook_settings(
 fn validate_hook_fragment(fragment: &serde_json::Value) -> Result<()> {
     let obj = fragment
         .as_object()
-        .ok_or_else(|| TuffError::new("--hook-file fragment must be a JSON object"))?;
+        .ok_or_else(|| TuffError::usage("--hook-file fragment must be a JSON object"))?;
     if !obj.contains_key("hooks") {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "--hook-file fragment must contain a top-level 'hooks' object",
         ));
     }
     if obj.keys().any(|key| key != "hooks") {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "--hook-file must be a hooks-only fragment, not a full settings.json",
         ));
     }
     if !fragment["hooks"].is_object() {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "--hook-file field 'hooks' must be an object",
         ));
     }

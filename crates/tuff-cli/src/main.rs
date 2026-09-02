@@ -538,7 +538,7 @@ fn reject_parent_add_options(
     global: bool,
 ) -> Result<()> {
     if source.is_some() || name.is_some() || !agent.is_empty() || global {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "for typed 'tuff add' commands, put --agent and --global after the capability source",
         ));
     }

@@ -139,7 +139,9 @@ fn collect_paths(root: &Path, current: &Path, output: &mut Vec<PathBuf>) -> Resu
             output.push(
                 path.strip_prefix(root)
                     .map(PathBuf::from)
-                    .map_err(|error| TuffError::new(error.to_string()))?,
+                    .map_err(|error| {
+                        TuffError::of(crate::error::ErrorKind::Io, error.to_string())
+                    })?,
             );
         }
     }

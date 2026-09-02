@@ -18,20 +18,18 @@ pub fn cmd_create(
 ) -> Result<()> {
     let id = raw_id.trim();
     if id.is_empty() {
-        return Err(TuffError::new("capability name must not be empty"));
+        return Err(TuffError::usage("capability name must not be empty"));
     }
 
     let target_ids = resolve_agent_selection(repo_root, target_ids, false)?;
     let mut adapters = Vec::new();
     for target in &target_ids {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-            TuffError::new(format!(
-                "unknown agent '{}'; use 'tuff agent list' to see available agents",
-                target
-            ))
+            TuffError::usage(format!("unknown agent '{}'", target,))
+                .with_hint("run 'tuff agent list' to see available agents")
         })?;
         if !adapter.supports(kind) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "{} does not yet support {} capabilities",
                 adapter.display_name(),
                 kind
@@ -52,10 +50,10 @@ pub fn cmd_create(
         }
     };
     if tuff_lock.capabilities.contains_key(id) {
-        return Err(TuffError::new(format!(
-            "capability '{}' is already tracked; choose another id",
-            id
-        )));
+        return Err(
+            TuffError::refused(format!("capability '{}' is already tracked", id))
+                .with_hint("choose another id"),
+        );
     }
 
     let mut plans = Vec::new();
@@ -66,7 +64,7 @@ pub fn cmd_create(
             .join(relative_dir)
             .join(id);
         if root.exists() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "refusing to overwrite existing capability scaffold: {}",
                 lockfile::relative_or_absolute_fs(&root, repo_root)
             )));
@@ -230,7 +228,7 @@ fn create_scaffold_files(
                 })
                 .and_then(|bytes| {
                     String::from_utf8(bytes).map_err(|e| {
-                        TuffError::new(format!("hook content is not valid UTF-8: {e}"))
+                        TuffError::corrupt(format!("hook content is not valid UTF-8: {e}"))
                     })
                 })?;
             vec![(file, content)]
@@ -242,10 +240,12 @@ fn create_scaffold_files(
             ),
         )],
         CapabilityType::Policy => {
-            return Err(TuffError::new("policy capabilities are not scaffolded yet"));
+            return Err(TuffError::unsupported(
+                "policy capabilities are not scaffolded yet",
+            ));
         }
         CapabilityType::McpServer => {
-            return Err(TuffError::new(
+            return Err(TuffError::unsupported(
                 "mcp-server capabilities are not scaffolded; use `tuff add mcp <catalog-id|path|git-url>` instead",
             ));
         }

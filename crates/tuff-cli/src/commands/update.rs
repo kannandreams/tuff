@@ -22,23 +22,24 @@ fn update_local_baseline(
     force: bool,
 ) -> Result<()> {
     if force {
-        return Err(TuffError::new(
-            "--force is only valid for git-sourced capabilities; local updates accept the current files as the new baseline",
-        ));
+        return Err(
+            TuffError::usage("--force is only valid for git-sourced capabilities")
+                .with_hint("local updates accept the current files as the new baseline"),
+        );
     }
 
     let lf = lockfile::require_scoped_lockfile(scope_root, scope)?;
     let entry = lf
         .capabilities
         .get(id)
-        .ok_or_else(|| TuffError::new(format!("'{}' is not installed", id)))?;
+        .ok_or_else(|| TuffError::not_found(format!("'{}' is not installed", id)))?;
 
     let mut updates = Vec::new();
     let mut changed_files = 0usize;
 
     for target_id in target_ids {
         let target_entry = entry.targets.get(target_id).ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::not_found(format!(
                 "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
@@ -53,7 +54,7 @@ fn update_local_baseline(
             updates.push((target_id.clone(), current_hash));
             continue;
         }
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "lock entry for '{id}' and target '{target_id}' has no installed path"
         )));
     }
@@ -74,10 +75,10 @@ fn update_local_baseline(
     let installed = lf
         .capabilities
         .get_mut(id)
-        .ok_or_else(|| TuffError::new(format!("'{}' is not installed", id)))?;
+        .ok_or_else(|| TuffError::not_found(format!("'{}' is not installed", id)))?;
     for (target_id, update) in updates {
         let target_entry = installed.targets.get_mut(&target_id).ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::not_found(format!(
                 "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
@@ -127,7 +128,7 @@ fn update_local_from_source(
     let manifest = load_manifest(&source_dir)?;
     let capability = resolve_capability(&manifest)?;
     if capability.id != id {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "sourcePath for '{}' points at capability '{}'",
             id, capability.id
         )));
@@ -136,10 +137,8 @@ fn update_local_from_source(
     let mut adapters = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
-            TuffError::new(format!(
-                "unknown agent '{}'; run 'tuff agent list' to see available agents",
-                tid
-            ))
+            TuffError::usage(format!("unknown agent '{}'", tid,))
+                .with_hint("run 'tuff agent list' to see available agents")
         })?;
         adapters.push(adapter);
     }
@@ -149,7 +148,7 @@ fn update_local_from_source(
     for adapter in &adapters {
         let planned_files = adapter.plan(&capability, scope_root)?;
         let target_entry = entry.targets.get(adapter.id()).ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::not_found(format!(
                 "'{}' is not installed for agent '{}'",
                 id,
                 adapter.id()
@@ -190,10 +189,11 @@ fn update_local_from_source(
     }
 
     if has_local_drift && !force {
-        return Err(TuffError::new(format!(
-            "'{}' has local changes; run 'tuff diff {}' first or use --force to reload from source",
-            id, id
-        )));
+        return Err(
+            TuffError::drift(format!("'{id}' has local changes")).with_hint(format!(
+                "run 'tuff diff {id}' first, or use --force to reload from source"
+            )),
+        );
     }
 
     install_capability(
@@ -225,11 +225,11 @@ fn update_from_catalog(
         unreachable!("catalog source checked by caller");
     };
     let Some(manifest) = crate::catalog::lookup(&source.id)? else {
-        return Err(TuffError::new(format!(
-            "'{}' is no longer in the built-in catalog (installed from catalog {}); \
-             delete it or reinstall from a path",
+        return Err(TuffError::not_found(format!(
+            "'{}' is no longer in the built-in catalog (installed from catalog {})",
             source.id, entry.version
-        )));
+        ))
+        .with_hint("delete it, or reinstall it from a path"));
     };
     let latest = manifest.version.clone();
 
@@ -255,7 +255,7 @@ fn update_from_catalog(
     let mut all_clean = true;
     for target_id in target_ids {
         let target_entry = entry.targets.get(target_id).ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::not_found(format!(
                 "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
@@ -288,9 +288,11 @@ fn update_from_catalog(
     }
 
     if (!all_clean || entry_drifted) && !force {
-        return Err(TuffError::new(format!(
-            "'{id}' has local changes; run 'tuff diff {id}' first or use --force to reload from the catalog"
-        )));
+        return Err(
+            TuffError::drift(format!("'{id}' has local changes")).with_hint(format!(
+                "run 'tuff diff {id}' first, or use --force to reload from the catalog"
+            )),
+        );
     }
 
     let capability = resolve_capability(&manifest)?;
@@ -330,14 +332,14 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
     } = options;
     let (scope, entry, scope_root) = if let Some(s) = scope_str {
         let scope = resolver::Scope::parse(s)
-            .ok_or_else(|| TuffError::new(format!("invalid scope '{}'", s)))?;
+            .ok_or_else(|| TuffError::usage(format!("invalid scope '{}'", s)))?;
         let root = match scope {
             Scope::Project => repo_root.to_path_buf(),
             Scope::Global => home_dir()?,
         };
         let lf = lockfile::require_scoped_lockfile(&root, scope)?;
         let entry = lf.capabilities.get(id).ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::not_found(format!(
                 "'{}' is not installed in {} scope",
                 id,
                 scope.as_str()
@@ -354,7 +356,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
                 (s, e, root)
             }
             None => {
-                return Err(TuffError::new(format!("'{}' is not installed", id)));
+                return Err(TuffError::not_found(format!("'{}' is not installed", id)));
             }
         }
     };
@@ -362,7 +364,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
     if matches!(entry.source, CapabilitySource::Pack(_)) {
         // Pack members move with their pack; see `cmd_update_pack`.
         if scope == Scope::Global {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "'{id}' is a pack member; packs are installed in project scope only"
             )));
         }
@@ -377,7 +379,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         });
     }
     if pack_artifact.is_some() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "--pack only applies to a capability installed from a pack; '{id}' was not"
         )));
     }
@@ -440,7 +442,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
     let mut all_clean = true;
     for target_id in &target_ids {
         let target_entry = entry.targets.get(target_id).ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::not_found(format!(
                 "'{}' is not installed for agent '{}'",
                 id, target_id
             ))
@@ -466,9 +468,11 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
     }
 
     if !all_clean {
-        return Err(TuffError::new(format!(
-            "'{id}' has local changes; run 'tuff diff {id}' first or use --force to reload from source"
-        )));
+        return Err(
+            TuffError::drift(format!("'{id}' has local changes")).with_hint(format!(
+                "run 'tuff diff {id}' first, or use --force to reload from source"
+            )),
+        );
     }
 
     let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;

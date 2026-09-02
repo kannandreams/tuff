@@ -97,10 +97,13 @@ pub async fn push_pack(
 ) -> Result<OciPushResult> {
     let reference = parse_push_reference(reference)?;
     let artifact_bytes = fs::read(artifact_path).map_err(|error| {
-        TuffError::new(format!(
-            "could not read pack artifact {}: {error}",
-            artifact_path.display()
-        ))
+        TuffError::of(
+            crate::error::ErrorKind::Io,
+            format!(
+                "could not read pack artifact {}: {error}",
+                artifact_path.display()
+            ),
+        )
     })?;
     let artifact = pack::read_artifact_bytes(&artifact_bytes)?;
     let artifact_digest = format!("sha256:{}", artifact.digest);
@@ -131,9 +134,10 @@ pub async fn push_pack(
     if let Some(existing) = existing
         && !force
     {
-        return Err(TuffError::new(format!(
-            "refusing to move existing OCI tag '{tag_reference}' from {existing} to {expected_manifest_digest}; pass --force to replace it or publish a new tag"
-        )));
+        return Err(TuffError::refused(format!(
+            "refusing to move existing OCI tag '{tag_reference}' from {existing} to {expected_manifest_digest}"
+        ))
+        .with_hint("pass --force to replace it, or publish a new tag"));
     }
 
     client
@@ -157,7 +161,7 @@ pub async fn push_pack(
         .await
         .map_err(|error| oci_error("read back published OCI manifest", error))?;
     if published_digest != expected_manifest_digest {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::source_failed(format!(
             "published OCI manifest digest mismatch: expected {expected_manifest_digest}, registry returned {published_digest}"
         )));
     }
@@ -277,12 +281,12 @@ async fn fetch_pack_manifest(
         .await
         .map_err(|error| oci_error("pull OCI pack manifest", error))?;
     if pulled_digest != manifest_digest {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::source_failed(format!(
             "pulled OCI manifest digest mismatch: resolved {manifest_digest}, received {pulled_digest}"
         )));
     }
     let manifest: OciImageManifest = serde_json::from_slice(&manifest_bytes)
-        .map_err(|error| TuffError::new(format!("invalid OCI pack manifest JSON: {error}")))?;
+        .map_err(|error| TuffError::corrupt(format!("invalid OCI pack manifest JSON: {error}")))?;
     validate_pack_manifest(&manifest)?;
     Ok((pinned, manifest))
 }
@@ -299,7 +303,7 @@ pub async fn pull_pack(
     options: &OciTransferOptions,
 ) -> Result<OciPullResult> {
     if output.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "refusing to overwrite existing pack artifact: {}",
             output.display()
         )));
@@ -328,7 +332,7 @@ pub async fn pull_pack(
         .map_err(|error| oci_error("pull OCI pack layer", error))?;
     let downloaded_size = temporary.as_file().metadata()?.len();
     if downloaded_size != layer.size as u64 {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::source_failed(format!(
             "pulled OCI pack layer size mismatch: expected {}, received {downloaded_size}",
             layer.size
         )));
@@ -337,18 +341,21 @@ pub async fn pull_pack(
     let artifact = pack::read_artifact_bytes(&artifact_bytes)?;
     let artifact_digest = format!("sha256:{}", artifact.digest);
     if layer.digest != artifact_digest {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "OCI layer digest {} does not match Tuff artifact digest {artifact_digest}",
             layer.digest
         )));
     }
     validate_pack_annotations(&manifest, &artifact)?;
     temporary.persist_noclobber(output).map_err(|error| {
-        TuffError::new(format!(
-            "could not persist pulled pack artifact {}: {}",
-            output.display(),
-            error.error
-        ))
+        TuffError::of(
+            crate::error::ErrorKind::Io,
+            format!(
+                "could not persist pulled pack artifact {}: {}",
+                output.display(),
+                error.error
+            ),
+        )
     })?;
     let reference = digest_reference(&pinned, &manifest_digest);
 
@@ -365,7 +372,7 @@ pub async fn pull_pack(
 
 fn parse_push_reference(raw: &str) -> Result<Reference> {
     if raw.contains('@') || !has_explicit_tag(raw) {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "OCI push reference must contain an explicit tag, for example ghcr.io/acme/engineering:1.2.0",
         ));
     }
@@ -374,7 +381,7 @@ fn parse_push_reference(raw: &str) -> Result<Reference> {
 
 fn parse_pull_reference(raw: &str) -> Result<Reference> {
     if !raw.contains('@') && !has_explicit_tag(raw) {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "OCI pull reference must contain an explicit tag or digest; implicit 'latest' is not allowed",
         ));
     }
@@ -383,12 +390,12 @@ fn parse_pull_reference(raw: &str) -> Result<Reference> {
 
 fn parse_reference(raw: &str) -> Result<Reference> {
     if raw.trim() != raw || raw.contains("://") {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "invalid OCI reference '{raw}'; use registry/repository:tag or registry/repository@sha256:digest without a URL scheme"
         )));
     }
     raw.parse::<Reference>()
-        .map_err(|error| TuffError::new(format!("invalid OCI reference '{raw}': {error}")))
+        .map_err(|error| TuffError::usage(format!("invalid OCI reference '{raw}': {error}")))
 }
 
 fn has_explicit_tag(raw: &str) -> bool {
@@ -404,7 +411,7 @@ fn pack_manifest(
     artifact_size: usize,
 ) -> Result<OciImageManifest> {
     let artifact_size = i64::try_from(artifact_size)
-        .map_err(|_| TuffError::new("pack artifact is too large for an OCI descriptor"))?;
+        .map_err(|_| TuffError::usage("pack artifact is too large for an OCI descriptor"))?;
     let mut annotations = BTreeMap::new();
     annotations.insert(
         OCI_TITLE_ANNOTATION.to_string(),
@@ -447,17 +454,17 @@ fn descriptor(media_type: &str, digest: &str, size: i64) -> OciDescriptor {
 fn validate_pack_manifest(manifest: &OciImageManifest) -> Result<()> {
     if manifest.schema_version != 2 || manifest.media_type.as_deref() != Some(OCI_IMAGE_MEDIA_TYPE)
     {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "OCI object is not an OCI image manifest schema version 2",
         ));
     }
     if manifest.artifact_type.as_deref() != Some(PACK_ARTIFACT_MEDIA_TYPE) {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "OCI object is not a Tuff pack: expected artifact type {PACK_ARTIFACT_MEDIA_TYPE}"
         )));
     }
     if manifest.subject.is_some() {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "OCI Tuff pack manifest must not declare a subject",
         ));
     }
@@ -465,25 +472,25 @@ fn validate_pack_manifest(manifest: &OciImageManifest) -> Result<()> {
         || manifest.config.digest != OCI_EMPTY_DIGEST
         || manifest.config.size != 2
     {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "OCI Tuff pack manifest has an invalid empty configuration descriptor",
         ));
     }
     if manifest.layers.len() != 1 {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "OCI Tuff pack manifest must contain exactly one layer, found {}",
             manifest.layers.len()
         )));
     }
     let layer = &manifest.layers[0];
     if layer.media_type != PACK_LAYER_MEDIA_TYPE {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::unsupported(format!(
             "unsupported OCI Tuff pack layer media type: {}",
             layer.media_type
         )));
     }
     if layer.size < 0 || !valid_sha256_digest(&layer.digest) {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "OCI Tuff pack layer has an invalid size or SHA-256 digest",
         ));
     }
@@ -497,7 +504,7 @@ fn validate_pack_annotations(
     let annotations = manifest
         .annotations
         .as_ref()
-        .ok_or_else(|| TuffError::new("OCI Tuff pack manifest is missing annotations"))?;
+        .ok_or_else(|| TuffError::corrupt("OCI Tuff pack manifest is missing annotations"))?;
     for (key, expected) in [
         (OCI_TITLE_ANNOTATION, artifact.metadata.name.as_str()),
         (OCI_VERSION_ANNOTATION, artifact.metadata.version.as_str()),
@@ -507,7 +514,7 @@ fn validate_pack_annotations(
         ),
     ] {
         if annotations.get(key).map(String::as_str) != Some(expected) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::corrupt(format!(
                 "OCI manifest annotation '{key}' does not match the Tuff pack metadata"
             )));
         }
@@ -519,10 +526,13 @@ fn registry_client(options: &OciTransferOptions) -> Result<Client> {
     let mut certificates = Vec::with_capacity(options.ca_files.len());
     for path in &options.ca_files {
         let data = fs::read(path).map_err(|error| {
-            TuffError::new(format!(
-                "could not read OCI certificate authority {}: {error}",
-                path.display()
-            ))
+            TuffError::of(
+                crate::error::ErrorKind::Io,
+                format!(
+                    "could not read OCI certificate authority {}: {error}",
+                    path.display()
+                ),
+            )
         })?;
         certificates.push(Certificate {
             encoding: CertificateEncoding::Pem,
@@ -596,8 +606,11 @@ fn credential_error(source: &str, error: CredentialRetrievalError) -> TuffError 
             "the credential configuration could not be read".to_string()
         }
     };
-    TuffError::new(format!(
-        "could not load {source} registry credentials: {detail}; run `{}` login for the registry and try again",
+    TuffError::source_failed(format!(
+        "could not load {source} registry credentials: {detail}"
+    ))
+    .with_hint(format!(
+        "run `{} login` for the registry and try again",
         source.to_ascii_lowercase()
     ))
 }
@@ -669,7 +682,7 @@ fn manifest_is_missing(error: &OciDistributionError) -> bool {
 }
 
 fn oci_error(action: &str, error: OciDistributionError) -> TuffError {
-    TuffError::new(format!("could not {action}: {error}"))
+    TuffError::source_failed(format!("could not {action}: {error}"))
 }
 
 fn digest_reference(reference: &Reference, digest: &str) -> String {

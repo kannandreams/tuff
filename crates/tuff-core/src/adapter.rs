@@ -150,32 +150,32 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
             CapabilityType::Skill => CapabilityKind::Skill,
             CapabilityType::Tool => CapabilityKind::Tool {
                 parameters: manifest.parameters.clone().ok_or_else(|| {
-                    TuffError::new("tool capability requires [parameters] section")
+                    TuffError::usage("tool capability requires [parameters] section")
                 })?,
                 implementation: manifest.implementation.clone().ok_or_else(|| {
-                    TuffError::new("tool capability requires [implementation] section")
+                    TuffError::usage("tool capability requires [implementation] section")
                 })?,
             },
             CapabilityType::Hook => {
                 CapabilityKind::Hook {
                     hook: HookDefinition::Command(manifest.hook.clone().ok_or_else(|| {
-                        TuffError::new("hook capability requires [hook] section")
+                        TuffError::usage("hook capability requires [hook] section")
                     })?),
                 }
             }
             CapabilityType::Workflow => CapabilityKind::Workflow {
                 workflow: manifest.workflow.clone().ok_or_else(|| {
-                    TuffError::new("workflow capability requires [workflow] section")
+                    TuffError::usage("workflow capability requires [workflow] section")
                 })?,
             },
             CapabilityType::Policy => {
-                return Err(TuffError::new(
+                return Err(TuffError::unsupported(
                     "policy capabilities are not installable yet",
                 ));
             }
             CapabilityType::McpServer => CapabilityKind::McpServer {
                 server: manifest.server.clone().ok_or_else(|| {
-                    TuffError::new("mcp-server capability requires [server] section")
+                    TuffError::usage("mcp-server capability requires [server] section")
                 })?,
             },
         };
@@ -206,7 +206,7 @@ pub trait AgentAdapter {
     fn render_standard_hook(&self, context: HookRenderContext<'_>) -> Result<HookRenderPlan> {
         let matrix = self.hook_compatibility();
         let Some(entry) = matrix.find_event(&context.hook.event) else {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "{} does not support hook event '{}'. Supported events: {}",
                 self.display_name(),
                 context.hook.event,
@@ -218,7 +218,7 @@ pub trait AgentAdapter {
                 .caveat
                 .map(|caveat| format!(": {caveat}"))
                 .unwrap_or_default();
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "{} does not support hook event '{}'{}",
                 self.display_name(),
                 context.hook.event,
@@ -330,7 +330,7 @@ pub trait AgentAdapter {
     fn native_hook_event(&self, raw_event: &str) -> Result<&'static str> {
         let matrix = self.hook_compatibility();
         let Some(entry) = matrix.find_event(raw_event) else {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "{} does not support hook event '{}'. Supported events: {}",
                 self.display_name(),
                 raw_event,
@@ -342,7 +342,7 @@ pub trait AgentAdapter {
                 .caveat
                 .map(|caveat| format!(": {caveat}"))
                 .unwrap_or_default();
-            TuffError::new(format!(
+            TuffError::unsupported(format!(
                 "{} does not support hook event '{}'{}",
                 self.display_name(),
                 raw_event,
@@ -354,7 +354,7 @@ pub trait AgentAdapter {
     fn canonical_hook_event(&self, raw_event: &str) -> Result<&'static str> {
         let matrix = self.hook_compatibility();
         let Some(entry) = matrix.find_event(raw_event) else {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "{} does not support hook event '{}'",
                 self.display_name(),
                 raw_event
@@ -369,7 +369,7 @@ pub trait AgentAdapter {
                     .caveat
                     .map(|caveat| format!(": {caveat}"))
                     .unwrap_or_default();
-                TuffError::new(format!(
+                TuffError::unsupported(format!(
                     "{} does not support hook event '{}'{}",
                     self.display_name(),
                     raw_event,
@@ -428,7 +428,7 @@ pub trait AgentAdapter {
             CapabilityType::Hook => self.plan_hook(capability, repo_root),
             CapabilityType::Workflow => self.plan_workflow(capability, repo_root),
             CapabilityType::McpServer => self.plan_mcp_server(capability, repo_root),
-            CapabilityType::Policy => Err(TuffError::new(
+            CapabilityType::Policy => Err(TuffError::unsupported(
                 "policy capabilities are not installable yet",
             )),
             CapabilityType::Skill => self.plan_skill(capability, repo_root),
@@ -458,7 +458,7 @@ pub trait AgentAdapter {
         repo_root: &Path,
     ) -> Result<Vec<PlannedFile>> {
         if capability.source_files.is_empty() {
-            return Err(TuffError::new("no source files to emit"));
+            return Err(TuffError::usage("no source files to emit"));
         }
 
         let mut files = Vec::new();
@@ -689,7 +689,7 @@ fn render_hook_script(hook_cfg: &HookConfig) -> Result<Vec<u8>> {
 
 fn shell_single_quote(value: &str) -> Result<String> {
     if value.contains('\0') {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "hook working directory and command cannot contain NUL bytes",
         ));
     }
