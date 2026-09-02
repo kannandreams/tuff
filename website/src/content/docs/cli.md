@@ -519,6 +519,34 @@ tuff update <member-id> --plain-http --ca-file ./registry-ca.pem
 
 A pack update applies to every agent the pack is installed for; a narrower `--agent` selection is refused rather than leaving one agent on the old release. Local edits to any member block the update unless `--force` is given. Only semver tags are compared when resolving the registry, matching `tuff outdated`; when nothing parses, pass `--pack` with the artifact you mean.
 
+## Exit codes and errors
+
+Every command uses the same exit codes, so a script can branch without reading the message:
+
+| Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | The operation failed: something was not found, was refused, had local changes, or a source was unreachable |
+| `2` | The command was called wrongly: a bad flag or argument value |
+| `70` | A bug in Tuff. Worth reporting |
+
+`tuff check` and `tuff mcp doctor` exit `1` when they find a problem, which is what makes them usable as CI gates.
+
+Failures print the message on one line and, when there is a clear next step, a hint on a second:
+
+```text
+error: 'rust-implement' has local modifications for agent 'claude'
+hint: use --force to delete them
+```
+
+When the invocation includes `--json`, the failure is reported as one JSON line on stderr instead, so machine-readable output stays machine-readable:
+
+```json
+{"error":{"kind":"drift","message":"'rust-implement' has local modifications for agent 'claude'","hint":"use --force to delete them"}}
+```
+
+The `kind` is one of `usage`, `not_found`, `refused`, `drift`, `source`, `corrupt`, `unsupported`, `io`, or `internal`.
+
 ## Validate in CI
 
 ### `tuff check`

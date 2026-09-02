@@ -260,13 +260,13 @@ pub fn cmd_outdated(
     let mut rows: Vec<OutdatedRow> = Vec::new();
     let mut cache = PackCheckCache::default();
 
-    if let Ok(lf) = lockfile::require_lockfile(repo_root) {
+    if let Some(lf) = lockfile::read_optional_lockfile(&lockfile::project_lockfile(repo_root))? {
         collect_rows(&lf, &oci_options, &mut cache, &mut rows);
     }
 
     if let Some(home) = home_dir_opt() {
         let lock_path = crate::paths::global_lockfile(&home);
-        if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
+        if let Some(lf) = lockfile::read_optional_lockfile(&lock_path)? {
             collect_rows(&lf, &oci_options, &mut cache, &mut rows);
         }
     }

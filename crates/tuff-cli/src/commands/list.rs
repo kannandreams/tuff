@@ -40,7 +40,9 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
 
     let mut inventory: Vec<InventoryRow> = Vec::new();
 
-    if show_project && let Ok(lf) = lockfile::require_lockfile(repo_root) {
+    if show_project
+        && let Some(lf) = lockfile::read_optional_lockfile(&lockfile::project_lockfile(repo_root))?
+    {
         inventory.extend(collect_lockfile_inventory(
             repo_root, &lf, "project", None, kind_type,
         ));
@@ -48,7 +50,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
 
     if show_global && let Some(home) = home_dir_opt() {
         let lock_path = crate::paths::global_lockfile(&home);
-        if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
+        if let Some(lf) = lockfile::read_optional_lockfile(&lock_path)? {
             inventory.extend(collect_lockfile_inventory(
                 &home,
                 &lf,

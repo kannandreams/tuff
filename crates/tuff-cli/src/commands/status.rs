@@ -10,7 +10,7 @@ use super::home_dir_opt;
 pub fn cmd_status(repo_root: &Path) -> Result<()> {
     let mut found_any = false;
 
-    if let Ok(lf) = lockfile::require_lockfile(repo_root) {
+    if let Some(lf) = lockfile::read_optional_lockfile(&lockfile::project_lockfile(repo_root))? {
         for (id, entry) in &lf.capabilities {
             let mut flags = Vec::new();
             for target_entry in entry.targets.values() {
@@ -113,7 +113,7 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
 
     if let Some(home) = home_dir_opt() {
         let lock_path = crate::paths::global_lockfile(&home);
-        if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
+        if let Some(lf) = lockfile::read_optional_lockfile(&lock_path)? {
             for (id, entry) in &lf.capabilities {
                 let mut flags = Vec::new();
                 for target_entry in entry.targets.values() {

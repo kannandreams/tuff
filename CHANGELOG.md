@@ -6,6 +6,14 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- Errors now carry a kind, and commands use it to choose an exit code: `0` success, `1` a failed operation, `2` a command called wrongly, `70` a bug in Tuff. Messages that suggested a next step now print it as a separate `hint:` line, and a `--json` invocation reports failures as one JSON line on stderr with `kind`, `message`, and `hint` fields rather than prose.
+
+### Fixed
+
+- Fixed `list`, `status`, `outdated`, and `check` reporting a corrupt or unreadable `tuff.lock` as though nothing were installed. They now fail and say the lockfile could not be read. A global lockfile that simply does not exist is still not an error.
+
 ## [0.2.0] - 2026-09-02
 
 ### Changed
