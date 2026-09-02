@@ -227,7 +227,7 @@ fn version_outputs_current_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("tuff 0.1.8"));
+        .stdout(predicate::str::contains("tuff 0.2.0"));
 }
 
 #[test]
@@ -5940,7 +5940,7 @@ fn lockfile_v1_fixture() -> std::path::PathBuf {
 
 #[test]
 fn lock_migrate_rewrites_a_version_1_lockfile_to_the_golden_version_2() {
-    // The fixture was written by tuff 0.1.8 and covers every row shape:
+    // The fixture was written by tuff 0.2.0 and covers every row shape:
     // local, git, catalog, pack with a registry, an adopted (imported)
     // capability, a hook with managed settings, an MCP-native tool, and
     // the generated index. The golden file is what migration must produce,

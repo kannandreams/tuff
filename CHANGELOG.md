@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-02
+
 ### Changed
 
 - **Lockfile schema version 2.** A capability's origin is now one `[capabilities.source]` table with a `kind` of `local`, `git`, `catalog`, or `pack`, replacing the `source`, `repository`, `source_path`, and `resolved_ref` columns and the optional `pack` table. Every row gains `version_scheme` (`declared`, `sha`, or `semver`), reserved so release-tag resolution can land later without another schema change. `emittedFiles` and `scope`, which were never persisted, are removed. Version 1 files written by 0.1.x are read transparently by every command; read-only commands never rewrite them, the first mutating command writes version 2, and `tuff lock migrate` does only the rewrite. A lockfile from a newer Tuff is refused by version number rather than failing as a parse error. Version 1 stays readable throughout 0.2.x.
@@ -13,7 +15,6 @@ The historical entries below were reconstructed from release tags, merged pull r
 ### Added
 
 - Added `tuff lock migrate`, which rewrites `tuff.lock` in the current schema and changes nothing else.
-
 - Added pack updates: `tuff update <member>` on a capability installed by `tuff add pack` now moves the whole pack forward. With a registry on record it resolves the newest semver tag, pulls it, and applies it; `--pack <artifact>` applies a pulled file instead, for offline use or a pack installed without `--reference`. Members the new release drops are removed, new members are installed, shared hook and MCP registrations follow, and `--check` previews all of it. Local edits block the update unless `--force` is given. `tuff update` gained `--plain-http` and `--ca-file`, matching `tuff outdated`.
 - Added detection of a pack tag silently repointed to different content. `tuff outdated` now resolves each installed pack's tag and compares its digest with the one recorded at install; a mismatch reads `repointed` and a deleted tag reads `tag missing`, both taking precedence over `outdated`. `tuff update` on such a pack refuses to report it as up to date and explains that `--force` replaces the installed release with what the tag serves now. One manifest fetch per pack per run, no artifact download; registry lookups are also no longer repeated for every member and harness of the same pack.
 
@@ -24,6 +25,9 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Improved
 
+- The documentation site now renders `CHANGELOG.md` as a changelog page, generated at build time so there is one copy that cannot drift, and the release checklist lives in CONTRIBUTING.md.
+- Rewrote the MCP Servers reference page: explained that the built-in catalog is a list of launch declarations embedded in the binary rather than server code, and replaced the manifest example's archived npm package with the catalog's verified Docker entry.
+- Updated the documentation site's build dependencies for four advisories published against `fast-uri`; nothing in Tuff itself uses the package.
 - Added a blog to the documentation site at `/blog/`, linked from the landing page and the docs header, with a first post walking through the MCP server capability end to end on the catalog's `everything` server. Landing-page navigation links now highlight as a dark panel on hover.
 
 ## [0.1.8] - 2026-09-01
@@ -159,7 +163,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kannandreams/tuff/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/kannandreams/tuff/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kannandreams/tuff/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kannandreams/tuff/compare/v0.1.5...v0.1.6
