@@ -150,7 +150,7 @@ pub struct PackArtifact {
 pub fn load_pack(path: &Path) -> Result<LoadedPack> {
     let (root, manifest) = load_manifest(path)?;
     if manifest.project.is_some() {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "project-backed pack manifests must be built from an initialized Tuff project",
         ));
     }
@@ -167,31 +167,34 @@ pub fn load_pack(path: &Path) -> Result<LoadedPack> {
 pub fn load_manifest(path: &Path) -> Result<(PathBuf, PackManifest)> {
     let root = if path.is_file() {
         if path.file_name().and_then(|name| name.to_str()) != Some(PACK_MANIFEST_FILE) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "pack source file must be named {PACK_MANIFEST_FILE}"
             )));
         }
         path.parent()
-            .ok_or_else(|| TuffError::new("pack manifest has no parent directory"))?
+            .ok_or_else(|| TuffError::usage("pack manifest has no parent directory"))?
             .to_path_buf()
     } else {
         path.to_path_buf()
     };
     let root = root.canonicalize().map_err(|error| {
-        TuffError::new(format!(
-            "could not resolve pack root {}: {error}",
-            root.display()
-        ))
+        TuffError::of(
+            crate::error::ErrorKind::Io,
+            format!("could not resolve pack root {}: {error}", root.display()),
+        )
     })?;
     let manifest_path = root.join(PACK_MANIFEST_FILE);
     let manifest: PackManifest =
         toml::from_str(&fs::read_to_string(&manifest_path).map_err(|error| {
-            TuffError::new(format!(
-                "could not read pack manifest {}: {error}",
-                manifest_path.display()
-            ))
+            TuffError::of(
+                crate::error::ErrorKind::Io,
+                format!(
+                    "could not read pack manifest {}: {error}",
+                    manifest_path.display()
+                ),
+            )
         })?)
-        .map_err(|error| TuffError::new(format!("invalid pack manifest TOML: {error}")))?;
+        .map_err(|error| TuffError::corrupt(format!("invalid pack manifest TOML: {error}")))?;
 
     validate_pack_manifest(&manifest)?;
     Ok((root, manifest))
@@ -205,20 +208,23 @@ fn load_path_pack(root: PathBuf, manifest: PackManifest) -> Result<LoadedPack> {
         let member_dir = root.join(&relative);
         reject_symlink_path(&root, &relative)?;
         let canonical = member_dir.canonicalize().map_err(|error| {
-            TuffError::new(format!(
-                "could not resolve pack capability {}: {error}",
-                member_dir.display()
-            ))
+            TuffError::of(
+                crate::error::ErrorKind::Io,
+                format!(
+                    "could not resolve pack capability {}: {error}",
+                    member_dir.display()
+                ),
+            )
         })?;
         if !canonical.starts_with(&root) || !canonical.is_dir() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "pack capability path must be a directory inside the pack root: {}",
                 member.path
             )));
         }
         let capability = manifest::load_manifest(&canonical)?;
         if !ids.insert(capability.id.clone()) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "duplicate capability id '{}' in pack",
                 capability.id
             )));
@@ -266,7 +272,9 @@ pub fn source_contents(pack: &LoadedPack) -> Result<Vec<PackArtifactContent>> {
         for source_file in member.manifest.source_files()? {
             let relative = source_file
                 .strip_prefix(&member.manifest.root)
-                .map_err(|_| TuffError::new("capability source file escaped its manifest root"))?;
+                .map_err(|_| {
+                    TuffError::refused("capability source file escaped its manifest root")
+                })?;
             let relative = validate_relative_path(relative)?;
             insert_content(
                 &mut contents,
@@ -293,7 +301,7 @@ pub fn write_artifact(
     contents: Vec<PackArtifactContent>,
 ) -> Result<String> {
     if output.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "refusing to overwrite existing pack artifact: {}",
             output.display()
         )));
@@ -305,7 +313,7 @@ pub fn write_artifact(
             .insert(content.path.clone(), content.bytes)
             .is_some()
         {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "duplicate pack artifact path: {}",
                 content.path
             )));
@@ -321,7 +329,7 @@ pub fn write_artifact(
         .collect();
     let metadata_bytes = serde_json::to_vec(&metadata)?;
     if metadata_bytes.len() > MAX_METADATA_BYTES {
-        return Err(TuffError::new("pack artifact metadata is too large"));
+        return Err(TuffError::usage("pack artifact metadata is too large"));
     }
 
     let mut artifact = Vec::with_capacity(
@@ -347,7 +355,7 @@ pub fn write_artifact(
     temporary.flush()?;
     temporary
         .persist(output)
-        .map_err(|error| TuffError::new(error.error.to_string()))?;
+        .map_err(|error| TuffError::of(crate::error::ErrorKind::Io, error.error.to_string()))?;
     Ok(digest)
 }
 
@@ -359,10 +367,10 @@ pub fn write_artifact(
 /// trailing data, invalid hashes, or inconsistent member and target metadata.
 pub fn read_artifact(path: &Path) -> Result<PackArtifact> {
     let artifact = fs::read(path).map_err(|error| {
-        TuffError::new(format!(
-            "could not read pack artifact {}: {error}",
-            path.display()
-        ))
+        TuffError::of(
+            crate::error::ErrorKind::Io,
+            format!("could not read pack artifact {}: {error}", path.display()),
+        )
     })?;
     read_artifact_bytes(&artifact)
 }
@@ -376,21 +384,21 @@ pub fn read_artifact(path: &Path) -> Result<PackArtifact> {
 pub fn read_artifact_bytes(artifact: &[u8]) -> Result<PackArtifact> {
     let header_len = ARTIFACT_MAGIC.len() + 8;
     if artifact.len() < header_len || &artifact[..ARTIFACT_MAGIC.len()] != ARTIFACT_MAGIC {
-        return Err(TuffError::new("invalid pack artifact header"));
+        return Err(TuffError::corrupt("invalid pack artifact header"));
     }
     let length_bytes: [u8; 8] = artifact[ARTIFACT_MAGIC.len()..header_len]
         .try_into()
-        .map_err(|_| TuffError::new("invalid pack artifact metadata length"))?;
+        .map_err(|_| TuffError::corrupt("invalid pack artifact metadata length"))?;
     let metadata_len = usize::try_from(u64::from_be_bytes(length_bytes))
-        .map_err(|_| TuffError::new("pack artifact metadata length is too large"))?;
+        .map_err(|_| TuffError::corrupt("pack artifact metadata length is too large"))?;
     if metadata_len > MAX_METADATA_BYTES || header_len + metadata_len > artifact.len() {
-        return Err(TuffError::new("invalid pack artifact metadata length"));
+        return Err(TuffError::corrupt("invalid pack artifact metadata length"));
     }
     let metadata: PackArtifactMetadata =
         serde_json::from_slice(&artifact[header_len..header_len + metadata_len])?;
     validate_artifact_metadata(&metadata)?;
     if serde_json::to_vec(&metadata)? != artifact[header_len..header_len + metadata_len] {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "pack artifact metadata is not canonically encoded",
         ));
     }
@@ -399,16 +407,16 @@ pub fn read_artifact_bytes(artifact: &[u8]) -> Result<PackArtifact> {
     let mut contents = Vec::with_capacity(metadata.files.len());
     for file in &metadata.files {
         let size = usize::try_from(file.size)
-            .map_err(|_| TuffError::new("pack artifact file is too large"))?;
+            .map_err(|_| TuffError::corrupt("pack artifact file is too large"))?;
         let end = cursor
             .checked_add(size)
             .filter(|end| *end <= artifact.len())
             .ok_or_else(|| {
-                TuffError::new(format!("truncated pack artifact file: {}", file.path))
+                TuffError::corrupt(format!("truncated pack artifact file: {}", file.path))
             })?;
         let bytes = artifact[cursor..end].to_vec();
         if sha256(&bytes) != file.sha256 {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::corrupt(format!(
                 "pack artifact hash mismatch for {}",
                 file.path
             )));
@@ -420,7 +428,7 @@ pub fn read_artifact_bytes(artifact: &[u8]) -> Result<PackArtifact> {
         cursor = end;
     }
     if cursor != artifact.len() {
-        return Err(TuffError::new("pack artifact contains trailing data"));
+        return Err(TuffError::corrupt("pack artifact contains trailing data"));
     }
 
     Ok(PackArtifact {
@@ -451,12 +459,12 @@ pub fn extract_prefix(artifact: &PackArtifact, prefix: &str, output: &Path) -> R
         })
         .collect::<Vec<_>>();
     if selected.is_empty() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::not_found(format!(
             "pack artifact contains no files under {prefix}"
         )));
     }
     if output.exists() && (!output.is_dir() || fs::read_dir(output)?.next().is_some()) {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "pack extraction output must be missing or empty: {}",
             output.display()
         )));
@@ -488,7 +496,7 @@ pub fn extract_prefix(artifact: &PackArtifact, prefix: &str, output: &Path) -> R
 /// Returns an error for empty, absolute, parent, current-directory, or prefixed paths.
 pub fn validate_relative_path(path: &Path) -> Result<PathBuf> {
     if path.as_os_str().is_empty() || path.is_absolute() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "path must be a non-empty relative path: {}",
             path.display()
         )));
@@ -498,7 +506,7 @@ pub fn validate_relative_path(path: &Path) -> Result<PathBuf> {
         match component {
             Component::Normal(value) => clean.push(value),
             _ => {
-                return Err(TuffError::new(format!(
+                return Err(TuffError::refused(format!(
                     "path traversal is not allowed: {}",
                     path.display()
                 )));
@@ -510,7 +518,7 @@ pub fn validate_relative_path(path: &Path) -> Result<PathBuf> {
 
 fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
     if manifest.schema != PACK_SCHEMA_VERSION {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::unsupported(format!(
             "unsupported pack schema version: {}",
             manifest.schema
         )));
@@ -519,19 +527,23 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
     validate_non_empty("version", &manifest.version)?;
     validate_non_empty("description", &manifest.description)?;
     if manifest.name.chars().any(char::is_whitespace) {
-        return Err(TuffError::new("pack name must not contain whitespace"));
+        return Err(TuffError::usage("pack name must not contain whitespace"));
     }
     match (&manifest.project, manifest.capabilities.is_empty()) {
-        (None, true) => return Err(TuffError::new("pack must contain at least one capability")),
+        (None, true) => {
+            return Err(TuffError::usage(
+                "pack must contain at least one capability",
+            ));
+        }
         (Some(_), false) => {
-            return Err(TuffError::new(
+            return Err(TuffError::usage(
                 "pack must use either [project] capabilities or [[capabilities]] paths, not both",
             ));
         }
         _ => {}
     }
     if manifest.build.targets.is_empty() {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "pack build must contain at least one target",
         ));
     }
@@ -539,7 +551,7 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
     for target in &manifest.build.targets {
         validate_non_empty("build.targets", target)?;
         if !targets.insert(target) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "duplicate pack build target: {target}"
             )));
         }
@@ -548,7 +560,7 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
     for member in &manifest.capabilities {
         let clean = validate_relative_path(Path::new(&member.path))?;
         if !paths.insert(clean) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "duplicate pack capability path: {}",
                 member.path
             )));
@@ -556,7 +568,7 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
     }
     if let Some(project) = &manifest.project {
         if project.capabilities.is_empty() {
-            return Err(TuffError::new(
+            return Err(TuffError::usage(
                 "project pack must contain at least one capability id",
             ));
         }
@@ -564,7 +576,7 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
         for id in &project.capabilities {
             validate_non_empty("project.capabilities", id)?;
             if !ids.insert(id) {
-                return Err(TuffError::new(format!(
+                return Err(TuffError::usage(format!(
                     "duplicate project capability id: {id}"
                 )));
             }
@@ -590,13 +602,13 @@ fn validate_workflow_closure(members: &[LoadedPackMember]) -> Result<()> {
         };
         for requirement in &workflow.requires {
             let actual = types.get(requirement.id.as_str()).ok_or_else(|| {
-                TuffError::new(format!(
+                TuffError::usage(format!(
                     "workflow '{}' requires missing capability '{}' ({})",
                     member.manifest.id, requirement.id, requirement.capability_type
                 ))
             })?;
             if *actual != requirement.capability_type {
-                return Err(TuffError::new(format!(
+                return Err(TuffError::usage(format!(
                     "workflow '{}' requires '{}' as {}, but the pack member is {}",
                     member.manifest.id, requirement.id, requirement.capability_type, actual
                 )));
@@ -622,7 +634,7 @@ fn visit_workflow<'a>(
         return Ok(());
     }
     if !visiting.insert(id) {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "workflow dependency cycle contains '{id}'"
         )));
     }
@@ -642,13 +654,13 @@ fn visit_workflow<'a>(
 
 fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
     if metadata.artifact_version != PACK_ARTIFACT_VERSION {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::unsupported(format!(
             "unsupported pack artifact version: {}",
             metadata.artifact_version
         )));
     }
     if metadata.pack_schema != PACK_SCHEMA_VERSION {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::unsupported(format!(
             "unsupported pack schema version: {}",
             metadata.pack_schema
         )));
@@ -656,12 +668,12 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
     validate_non_empty("name", &metadata.name)?;
     validate_non_empty("version", &metadata.version)?;
     if metadata.capabilities.is_empty() {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "pack artifact must contain at least one capability",
         ));
     }
     if metadata.targets.is_empty() {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "pack artifact must contain at least one target",
         ));
     }
@@ -670,7 +682,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
         .windows(2)
         .all(|window| window[0].id < window[1].id)
     {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "pack artifact capabilities are not canonically ordered",
         ));
     }
@@ -679,7 +691,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
         .windows(2)
         .all(|window| window[0].id < window[1].id)
     {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "pack artifact targets are not canonically ordered",
         ));
     }
@@ -688,7 +700,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
         validate_non_empty("capability.version", &capability.version)?;
         validate_relative_path(Path::new(&capability.source_path))?;
         if capability.capability_type == CapabilityType::Policy {
-            return Err(TuffError::new(
+            return Err(TuffError::unsupported(
                 "policy capabilities are not supported in pack artifacts",
             ));
         }
@@ -706,7 +718,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
     for capability in &metadata.capabilities {
         let manifest_path = format!("sources/{}/tuff.toml", capability.id);
         if !artifact_paths.contains(manifest_path.as_str()) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::corrupt(format!(
                 "pack artifact is missing source manifest for '{}'",
                 capability.id
             )));
@@ -719,7 +731,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
             .windows(2)
             .all(|window| window[0].id < window[1].id)
         {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::corrupt(format!(
                 "pack artifact target '{}' capabilities are not canonically ordered",
                 target.id
             )));
@@ -730,7 +742,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
             .map(|capability| capability.id.as_str())
             .collect::<Vec<_>>();
         if target_ids != capability_ids {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::corrupt(format!(
                 "pack artifact target '{}' does not describe every capability",
                 target.id
             )));
@@ -742,7 +754,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
                 validate_relative_path(Path::new(path))?;
                 let artifact_path = format!("targets/{}/{path}", target.id);
                 if !artifact_paths.contains(artifact_path.as_str()) {
-                    return Err(TuffError::new(format!(
+                    return Err(TuffError::corrupt(format!(
                         "pack artifact is missing emitted file '{}' for target '{}'",
                         path, target.id
                     )));
@@ -753,7 +765,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
                 crate::cache::validate_hash(&hook.baseline_hash)?;
                 let artifact_path = format!("targets/{}/{}", target.id, hook.settings_path);
                 if !artifact_paths.contains(artifact_path.as_str()) {
-                    return Err(TuffError::new(format!(
+                    return Err(TuffError::corrupt(format!(
                         "pack artifact is missing hook settings '{}' for target '{}'",
                         hook.settings_path, target.id
                     )));
@@ -765,14 +777,14 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
     for file in &metadata.files {
         validate_relative_path(Path::new(&file.path))?;
         if !file.path.starts_with("sources/") && !file.path.starts_with("targets/") {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::corrupt(format!(
                 "unsupported pack artifact file path: {}",
                 file.path
             )));
         }
         crate::cache::validate_hash(&file.sha256)?;
         if !paths.insert(file.path.as_str()) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::corrupt(format!(
                 "duplicate pack artifact path: {}",
                 file.path
             )));
@@ -783,7 +795,7 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
         .windows(2)
         .all(|window| window[0].path < window[1].path)
     {
-        return Err(TuffError::new(
+        return Err(TuffError::corrupt(
             "pack artifact file metadata is not canonically ordered",
         ));
     }
@@ -796,7 +808,7 @@ fn insert_content(
     bytes: Vec<u8>,
 ) -> Result<()> {
     if contents.insert(path.clone(), bytes).is_some() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "duplicate pack artifact path: {path}"
         )));
     }
@@ -806,18 +818,18 @@ fn insert_content(
 fn read_safe_member_file(pack_root: &Path, path: &Path) -> Result<Vec<u8>> {
     let relative = path
         .strip_prefix(pack_root)
-        .map_err(|_| TuffError::new("pack member source escaped the pack root"))?;
+        .map_err(|_| TuffError::refused("pack member source escaped the pack root"))?;
     reject_symlink_path(pack_root, relative)?;
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "pack member source must be a regular file: {}",
             path.display()
         )));
     }
     let canonical = path.canonicalize()?;
     if !canonical.starts_with(pack_root) {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "pack member source escaped the pack root: {}",
             path.display()
         )));
@@ -829,11 +841,11 @@ fn reject_symlink_path(root: &Path, relative: &Path) -> Result<()> {
     let mut current = root.to_path_buf();
     for component in relative.components() {
         let Component::Normal(value) = component else {
-            return Err(TuffError::new("invalid pack member path"));
+            return Err(TuffError::corrupt("invalid pack member path"));
         };
         current.push(value);
         if fs::symlink_metadata(&current)?.file_type().is_symlink() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "symbolic links are not allowed in pack member paths: {}",
                 current.display()
             )));
@@ -844,7 +856,7 @@ fn reject_symlink_path(root: &Path, relative: &Path) -> Result<()> {
 
 fn validate_non_empty(field: &str, value: &str) -> Result<()> {
     if value.trim().is_empty() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "pack manifest field '{field}' must be a non-empty string"
         )));
     }

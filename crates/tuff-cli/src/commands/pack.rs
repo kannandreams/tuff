@@ -54,13 +54,13 @@ pub fn cmd_pack_init(root: &Path, options: PackInitOptions) -> Result<()> {
         || options.version.is_some()
         || options.description.is_some()
     {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "--capability, --agent, --version, and --description require --from-project",
         ));
     }
     let manifest_path = root.join(pack::PACK_MANIFEST_FILE);
     if manifest_path.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "refusing to overwrite existing pack manifest: {}",
             manifest_path.display()
         )));
@@ -117,7 +117,7 @@ fn print_valid_pack(pack: &LoadedPack) {
 pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()> {
     if let Some(name) = options.name.as_deref() {
         if options.path.is_some() {
-            return Err(TuffError::new(
+            return Err(TuffError::usage(
                 "a source-pack path cannot be combined with --name",
             ));
         }
@@ -134,7 +134,7 @@ pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()>
         || !options.capabilities.is_empty()
         || !options.agents.is_empty()
     {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "--version, --description, --capability, and --agent require --name for a one-shot project build",
         ));
     }
@@ -157,7 +157,7 @@ pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()>
 
 fn build_loaded_pack(loaded: &LoadedPack, output: &Path) -> Result<()> {
     if output.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "refusing to overwrite existing pack artifact: {}",
             output.display()
         )));
@@ -181,7 +181,7 @@ fn build_loaded_pack(loaded: &LoadedPack, output: &Path) -> Result<()> {
 fn init_project_pack(root: &Path, options: PackInitOptions) -> Result<()> {
     let manifest_path = project_manifest_path(root, &options.name)?;
     if manifest_path.exists() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "refusing to overwrite existing pack manifest: {}",
             manifest_path.display()
         )));
@@ -193,9 +193,10 @@ fn init_project_pack(root: &Path, options: PackInitOptions) -> Result<()> {
         options.capabilities
     };
     if selected.is_empty() {
-        return Err(TuffError::new(
-            "this project has no packageable capabilities; add a capability first",
-        ));
+        return Err(
+            TuffError::usage("this project has no packageable capabilities")
+                .with_hint("add a capability first"),
+        );
     }
     let targets = resolve_project_agent_selection(root, &options.agents)?;
     let version = options.version.unwrap_or_else(|| "0.1.0".to_string());
@@ -220,7 +221,7 @@ fn init_project_pack(root: &Path, options: PackInitOptions) -> Result<()> {
     );
     let parent = manifest_path
         .parent()
-        .ok_or_else(|| TuffError::new("pack manifest path has no parent"))?;
+        .ok_or_else(|| TuffError::usage("pack manifest path has no parent"))?;
     fs::create_dir_all(parent)?;
     pack::write_manifest(&manifest_path, &saved)?;
     println!("created {}", manifest_path.display());
@@ -236,7 +237,7 @@ fn prepare_one_shot_project_pack(
     let name = options
         .name
         .as_deref()
-        .ok_or_else(|| TuffError::new("project pack name is required"))?;
+        .ok_or_else(|| TuffError::usage("project pack name is required"))?;
     let lock = lockfile::require_lockfile(repo_root)?;
     let selected = if options.capabilities.is_empty() {
         default_project_capabilities(&lock)
@@ -244,9 +245,10 @@ fn prepare_one_shot_project_pack(
         options.capabilities.clone()
     };
     if selected.is_empty() {
-        return Err(TuffError::new(
-            "this project has no packageable capabilities; add a capability first",
-        ));
+        return Err(
+            TuffError::usage("this project has no packageable capabilities")
+                .with_hint("add a capability first"),
+        );
     }
     let targets = resolve_project_agent_selection(repo_root, &options.agents)?;
     let version = options.version.as_deref().unwrap_or("0.1.0");
@@ -304,9 +306,13 @@ fn validate_project_source_baselines(prepared: &PreparedProjectPack) -> Result<(
                 continue;
             };
             if capability.sha256 != expected.sha256 {
-                return Err(TuffError::new(format!(
-                    "source for '{}' no longer reproduces its accepted '{}' baseline; run 'tuff update {}' before building the pack",
-                    capability.id, target.id, capability.id
+                return Err(TuffError::drift(format!(
+                    "source for '{}' no longer reproduces its accepted '{}' baseline",
+                    capability.id, target.id
+                ))
+                .with_hint(format!(
+                    "run 'tuff update {}' before building the pack",
+                    capability.id
                 )));
             }
         }
@@ -324,7 +330,7 @@ fn validate_pack_name(name: &str) -> Result<()> {
             .split('/')
             .any(|part| part.is_empty() || part == "." || part == "..")
     {
-        return Err(TuffError::new(
+        return Err(TuffError::usage(
             "pack name must contain safe, non-empty slash-separated components without whitespace",
         ));
     }
@@ -457,7 +463,7 @@ pub fn cmd_pack_extract(path: &Path, agent: &str, output: &Path) -> Result<()> {
         .iter()
         .any(|target| target.id == agent)
     {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::usage(format!(
             "pack '{}' has no target '{}'; available targets: {}",
             artifact.metadata.name,
             agent,
@@ -645,12 +651,11 @@ fn validate_pack_targets(loaded: &LoadedPack) -> Result<Vec<AdapterKind>> {
     let mut canonical = BTreeSet::new();
     for target in &loaded.manifest.build.targets {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-            TuffError::new(format!(
-                "unknown pack build target '{target}'; run 'tuff agent list' to see available agents"
-            ))
+            TuffError::usage(format!("unknown pack build target '{target}'"))
+                .with_hint("run 'tuff agent list' to see available agents")
         })?;
         if !canonical.insert(adapter.id()) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "pack build targets '{}' and another alias resolve to the same adapter '{}'",
                 target,
                 adapter.id()
@@ -658,7 +663,7 @@ fn validate_pack_targets(loaded: &LoadedPack) -> Result<Vec<AdapterKind>> {
         }
         for member in &loaded.members {
             if !adapter.supports(member.manifest.capability_type) {
-                return Err(TuffError::new(format!(
+                return Err(TuffError::unsupported(format!(
                     "{} does not support {} capability '{}'",
                     adapter.display_name(),
                     member.manifest.capability_type,
@@ -675,7 +680,7 @@ fn canonical_target_ids(targets: &[String]) -> Result<Vec<String>> {
     let mut canonical = BTreeSet::new();
     for target in targets {
         let adapter = AdapterKind::from_id(target)
-            .ok_or_else(|| TuffError::new(format!("unknown agent '{target}'")))?;
+            .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
         canonical.insert(adapter.id().to_string());
     }
     Ok(canonical.into_iter().collect())
@@ -699,7 +704,7 @@ fn managed_hooks_for(
                 track_managed_hooks: true,
             })?
             .managed_hooks),
-        HookDefinition::Native(_) => Err(TuffError::new(
+        HookDefinition::Native(_) => Err(TuffError::unsupported(
             "native hook fragments are not supported in pack manifests",
         )),
     }
@@ -709,7 +714,7 @@ fn write_render_plan(root: &Path, files: &[crate::adapter::PlannedFile]) -> Resu
     for file in files {
         let destination = root.join(&file.path);
         if destination.exists() && !file.allow_existing {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::usage(format!(
                 "pack members render the same target path: {}",
                 file.path
             )));
@@ -773,7 +778,7 @@ fn collect_tree_contents(
         let path = entry.path();
         let metadata = fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "symbolic links are not allowed in rendered pack output: {}",
                 path.display()
             )));
@@ -783,7 +788,7 @@ fn collect_tree_contents(
         } else if metadata.is_file() {
             let relative = path
                 .strip_prefix(root)
-                .map_err(|error| TuffError::new(error.to_string()))?
+                .map_err(|error| TuffError::of(crate::error::ErrorKind::Io, error.to_string()))?
                 .to_string_lossy()
                 .replace('\\', "/");
             output.push(PackArtifactContent {
@@ -803,10 +808,13 @@ fn preflight_pack_install(
 ) -> Result<()> {
     for capability in &artifact.metadata.capabilities {
         if lock.capabilities.contains_key(&capability.id) {
-            return Err(TuffError::new(format!(
-                "capability '{}' is already tracked; pack installation is all-or-nothing",
+            return Err(TuffError::refused(format!(
+                "capability '{}' is already tracked",
                 capability.id
-            )));
+            ))
+            .with_hint(
+                "pack installation is all-or-nothing; delete it first or choose another pack",
+            ));
         }
     }
     for target_id in target_ids {
@@ -815,10 +823,11 @@ fn preflight_pack_install(
             for path in &capability.emitted_files {
                 let destination = repo_root.join(path);
                 if destination.exists() {
-                    return Err(TuffError::new(format!(
-                        "refusing to overwrite untracked file at {}; pack installation is all-or-nothing",
+                    return Err(TuffError::refused(format!(
+                        "refusing to overwrite untracked file at {}",
                         destination.display()
-                    )));
+                    ))
+                    .with_hint("pack installation is all-or-nothing; move the file aside first"));
                 }
             }
         }
@@ -839,7 +848,7 @@ fn copy_shared_configuration(source: &Path, destination: &Path, targets: &[Strin
 
     for target in targets {
         let adapter = AdapterKind::from_id(target)
-            .ok_or_else(|| TuffError::new(format!("unknown agent '{target}'")))?;
+            .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
         for relative in [
             adapter.hook_settings_relpath(),
             adapter.mcp_config_relpath(),
@@ -865,7 +874,7 @@ fn validate_artifact_member(
         || manifest.version != expected.version
         || manifest.capability_type != expected.capability_type
     {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "artifact source metadata does not match capability '{}'",
             expected.id
         )));
@@ -882,7 +891,7 @@ fn validate_staged_target_hashes(
         for capability in &artifact_target(artifact, target)?.capabilities {
             let actual = crate::cache::hash_tree(&stage.join(&capability.installed_path))?;
             if actual != capability.sha256 {
-                return Err(TuffError::new(format!(
+                return Err(TuffError::corrupt(format!(
                     "rendered target hash mismatch for '{}' on '{}'",
                     capability.id, target
                 )));
@@ -908,7 +917,7 @@ fn collect_install_mutations(
     let mut paths = BTreeMap::<PathBuf, bool>::new();
     for target in targets {
         let adapter = AdapterKind::from_id(target)
-            .ok_or_else(|| TuffError::new(format!("unknown agent '{target}'")))?;
+            .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
         for capability in &artifact.metadata.capabilities {
             let target_entry = staged_lock
                 .capabilities
@@ -997,7 +1006,7 @@ fn collect_mutation_tree(
         let path = entry.path();
         let metadata = fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "symbolic links are not allowed in staged pack output: {}",
                 path.display()
             )));
@@ -1007,7 +1016,7 @@ fn collect_mutation_tree(
         } else if metadata.is_file() {
             let relative = path
                 .strip_prefix(stage)
-                .map_err(|error| TuffError::new(error.to_string()))?;
+                .map_err(|error| TuffError::of(crate::error::ErrorKind::Io, error.to_string()))?;
             paths.insert(relative.to_path_buf(), true);
         }
     }
@@ -1018,13 +1027,13 @@ fn commit_mutations(mutations: &[FileMutation]) -> Result<()> {
     let mut created_directories = BTreeSet::new();
     for mutation in mutations {
         if mutation.must_be_absent && mutation.path.exists() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "refusing to overwrite untracked file at {}",
                 mutation.path.display()
             )));
         }
         if mutation.path.exists() && !mutation.path.is_file() {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "pack installation target is not a regular file: {}",
                 mutation.path.display()
             )));
@@ -1053,15 +1062,21 @@ fn commit_mutations(mutations: &[FileMutation]) -> Result<()> {
     for mutation in mutations {
         if let Err(error) = atomic_write(&mutation.path, &mutation.bytes) {
             if let Err(rollback_error) = rollback_mutations(&backups, &created_directories) {
-                return Err(TuffError::new(format!(
-                    "pack installation failed while writing {}; rollback also failed: {rollback_error}",
-                    mutation.path.display()
-                )));
+                return Err(TuffError::of(
+                    crate::error::ErrorKind::Io,
+                    format!(
+                        "pack installation failed while writing {}; rollback also failed: {rollback_error}",
+                        mutation.path.display()
+                    ),
+                ));
             }
-            return Err(TuffError::new(format!(
-                "pack installation failed while writing {}: {error}",
-                mutation.path.display()
-            )));
+            return Err(TuffError::of(
+                crate::error::ErrorKind::Io,
+                format!(
+                    "pack installation failed while writing {}: {error}",
+                    mutation.path.display()
+                ),
+            ));
         }
     }
     Ok(())
@@ -1070,7 +1085,7 @@ fn commit_mutations(mutations: &[FileMutation]) -> Result<()> {
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| TuffError::new("pack output path has no parent"))?;
+        .ok_or_else(|| TuffError::usage("pack output path has no parent"))?;
     fs::create_dir_all(parent)?;
     let mut temporary = tempfile::Builder::new()
         .prefix("tuff-install-")
@@ -1079,7 +1094,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     temporary.flush()?;
     temporary
         .persist(path)
-        .map_err(|error| TuffError::new(error.error.to_string()))?;
+        .map_err(|error| TuffError::of(crate::error::ErrorKind::Io, error.error.to_string()))?;
     Ok(())
 }
 
@@ -1133,7 +1148,7 @@ fn artifact_target<'a>(artifact: &'a PackArtifact, target: &str) -> Result<&'a P
         .iter()
         .find(|item| item.id == target)
         .ok_or_else(|| {
-            TuffError::new(format!(
+            TuffError::usage(format!(
                 "pack '{}' has no target '{}'",
                 artifact.metadata.name, target
             ))
@@ -1197,12 +1212,12 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
     let entry = lock
         .capabilities
         .get(id)
-        .ok_or_else(|| TuffError::new(format!("'{id}' is not installed")))?;
+        .ok_or_else(|| TuffError::not_found(format!("'{id}' is not installed")))?;
     let provenance = entry
         .source
         .as_pack()
         .cloned()
-        .ok_or_else(|| TuffError::new(format!("'{id}' was not installed from a pack")))?;
+        .ok_or_else(|| TuffError::usage(format!("'{id}' was not installed from a pack")))?;
 
     let members = pack_members(&lock, &provenance.name);
     let target_ids = pack_update_targets(&lock, &members, requested_targets)?;
@@ -1214,12 +1229,13 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
         }
         None => {
             let Some(registry) = provenance.registry.as_deref() else {
-                return Err(TuffError::new(format!(
-                    "pack {} was installed without --reference, so there is no registry to check; \
-                     reinstall with 'tuff add pack <artifact> --reference <registry/repository:tag>' \
-                     or pass --pack <artifact> to update from a pulled file",
+                return Err(TuffError::usage(format!(
+                    "pack {} was installed without --reference, so there is no registry to check",
                     provenance.name
-                )));
+                ))
+                .with_hint(
+                    "reinstall with 'tuff add pack <artifact> --reference <registry/repository:tag>', or pass --pack <artifact> to update from a pulled file",
+                ));
             };
             let tags = block_on_oci(oci::list_pack_versions(registry, oci_options))?;
             let latest = match super::outdated::compare_pack_versions(&provenance.version, &tags) {
@@ -1246,24 +1262,27 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
                                 return Ok(());
                             }
                             if !force {
-                                return Err(TuffError::new(format!(
-                                    "pack {} {} was republished: installed sha256:{}, {registry}:{} now serves {live_digest}; inspect with 'tuff outdated', then use --force to replace the installed release with what the tag serves now",
+                                return Err(TuffError::refused(format!(
+                                    "pack {} {} was republished: installed sha256:{}, {registry}:{} now serves {live_digest}",
                                     provenance.name,
                                     provenance.version,
                                     provenance.digest,
                                     provenance.version
-                                )));
+                                ))
+                                .with_hint(
+                                    "inspect with 'tuff outdated', then use --force to replace the installed release with what the tag serves now",
+                                ));
                             }
                             provenance.version.clone()
                         }
                         super::outdated::PackTagIntegrity::Missing => {
-                            return Err(TuffError::new(format!(
+                            return Err(TuffError::not_found(format!(
                                 "pack {} {} is installed but {registry}:{} no longer exists in the registry; the installed release cannot be reproduced from there",
                                 provenance.name, provenance.version, provenance.version
                             )));
                         }
                         super::outdated::PackTagIntegrity::Unavailable(error) => {
-                            return Err(TuffError::new(format!(
+                            return Err(TuffError::source_failed(format!(
                                 "could not verify pack {} {} against {registry}: {error}",
                                 provenance.name, provenance.version
                             )));
@@ -1271,12 +1290,12 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
                     }
                 }
                 super::outdated::PackVersionStatus::Unknown => {
-                    return Err(TuffError::new(format!(
+                    return Err(TuffError::source_failed(format!(
                         "cannot tell whether pack {} {} is current: only semver tags are compared, \
-                         and {registry} publishes none that parse; pass --pack <artifact> to update \
-                         from a specific file",
+                         and {registry} publishes none that parse",
                         provenance.name, provenance.version
-                    )));
+                    ))
+                    .with_hint("pass --pack <artifact> to update from a specific file"));
                 }
                 super::outdated::PackVersionStatus::Newer(latest) => latest,
             };
@@ -1303,7 +1322,7 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
     };
 
     if artifact.metadata.name != provenance.name {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "refusing to update pack {} from an artifact for pack {}",
             provenance.name, artifact.metadata.name
         )));
@@ -1317,12 +1336,12 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
             return Ok(());
         }
         if !force {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "pack {} {} is installed from sha256:{} but the artifact with the same version \
-                 has sha256:{}; the version was republished with different content, use --force \
-                 to replace it",
+                 has sha256:{}; the version was republished with different content",
                 provenance.name, provenance.version, provenance.digest, artifact.digest
-            )));
+            ))
+            .with_hint("use --force to replace it"));
         }
     }
     for target in &target_ids {
@@ -1342,11 +1361,12 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
 
     let dirty = dirty_pack_members(repo_root, &lock, &members, &target_ids);
     if !dirty.is_empty() && !force {
-        return Err(TuffError::new(format!(
-            "pack {} has local changes in {}; run 'tuff diff <id>' first or use --force to replace them",
+        return Err(TuffError::drift(format!(
+            "pack {} has local changes in {}",
             provenance.name,
             dirty.join(", ")
-        )));
+        ))
+        .with_hint("run 'tuff diff <id>' first, or use --force to replace them"));
     }
 
     apply_pack_update(
@@ -1424,10 +1444,11 @@ fn pack_update_targets(
     let requested_set = requested.iter().collect::<BTreeSet<_>>();
     let installed_set = installed.iter().collect::<BTreeSet<_>>();
     if requested_set != installed_set {
-        return Err(TuffError::new(format!(
-            "a pack update applies to every agent the pack is installed for ({}); drop --agent",
+        return Err(TuffError::usage(format!(
+            "a pack update applies to every agent the pack is installed for ({})",
             installed.join(", ")
-        )));
+        ))
+        .with_hint("drop --agent"));
     }
     Ok(installed)
 }
@@ -1587,7 +1608,7 @@ fn apply_pack_update(
                 continue;
             };
             let adapter = AdapterKind::from_id(target)
-                .ok_or_else(|| TuffError::new(format!("unknown agent '{target}'")))?;
+                .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
             adapter.remove(member, staging.path(), &target_entry.managed_hooks)?;
         }
         staged_lock.capabilities.remove(member);
@@ -1597,7 +1618,7 @@ fn apply_pack_update(
     // Now identical to a fresh `tuff add pack` against the staged state.
     for capability in &artifact.metadata.capabilities {
         if staged_lock.capabilities.contains_key(&capability.id) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::refused(format!(
                 "capability '{}' in pack {} {} is already tracked from another source; pack update is all-or-nothing",
                 capability.id, artifact.metadata.name, artifact.metadata.version
             )));
@@ -1701,7 +1722,7 @@ fn collect_project_tree(
         } else if metadata.is_file() {
             let relative = path
                 .strip_prefix(repo_root)
-                .map_err(|error| TuffError::new(error.to_string()))?;
+                .map_err(|error| TuffError::of(crate::error::ErrorKind::Io, error.to_string()))?;
             paths.insert(relative.to_path_buf());
         }
     }

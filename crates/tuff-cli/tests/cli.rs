@@ -5715,8 +5715,9 @@ fn update_pack_rejects_another_pack_a_narrower_agent_selection_and_non_pack_use(
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "a pack update applies to every agent the pack is installed for (open-agents); drop --agent",
-        ));
+            "a pack update applies to every agent the pack is installed for (open-agents)",
+        ))
+        .stderr(predicate::str::contains("hint: drop --agent"));
 
     // Without a registry on record and without --pack there is nothing to
     // resolve against, and the message says how to proceed.
