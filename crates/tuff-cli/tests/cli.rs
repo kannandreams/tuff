@@ -6124,3 +6124,163 @@ fn make_skill_primitive_dir(root: &Path, id: &str) -> std::path::PathBuf {
     fs::write(dir.join("SKILL.md"), format!("# {id}\n")).unwrap();
     dir
 }
+
+// ── typed errors (RFC-105 D6) ────────────────────────────────────────
+
+#[test]
+fn exit_codes_distinguish_usage_from_failure() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    // Success.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("list")
+        .assert()
+        .code(0);
+
+    // A capability that is not installed is an ordinary failure.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["delete", "no-such-capability", "--scope", "project"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("is not installed"))
+        .stderr(predicate::str::contains("hint: run 'tuff list'"));
+
+    // A scope that is not a scope is the caller's mistake, not a failure
+    // of the operation, and scripts branch on that difference.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["delete", "anything", "--scope", "sideways"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("invalid scope 'sideways'"))
+        .stderr(predicate::str::contains(
+            "hint: scope is 'project' or 'global'",
+        ));
+}
+
+#[test]
+fn a_json_invocation_reports_failure_as_json_on_stderr() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+
+    // A missing lockfile: the caller asked for machine-readable output, so
+    // the failure must be machine-readable too, not prose.
+    let assert = tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["mcp", "doctor", "--json"])
+        .assert()
+        .code(1);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(stderr.trim())
+        .unwrap_or_else(|error| panic!("stderr was not one JSON line ({error}): {stderr}"));
+    assert_eq!(envelope["error"]["kind"], "not_found");
+    assert!(
+        envelope["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("tuff.lock"),
+        "{envelope}"
+    );
+    assert_eq!(envelope["error"]["hint"], "run 'tuff init' first");
+
+    // A corrupt lockfile is a different kind, and carries no hint.
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    fs::write(
+        project.path().join("tuff.lock"),
+        "version = 2\n[[capabilities]\nname = \"broken\"\n",
+    )
+    .unwrap();
+    let assert = tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["check", "--json"])
+        .assert()
+        .code(1);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(stderr.trim()).unwrap();
+    assert_eq!(envelope["error"]["kind"], "corrupt");
+    assert!(envelope["error"].get("hint").is_none(), "{envelope}");
+}
+
+#[test]
+fn a_corrupt_lockfile_is_reported_everywhere_it_used_to_read_as_empty() {
+    // list, status, outdated, and check each walked both lockfiles with a
+    // silent `if let Ok(..)`. A syntactically broken tuff.lock therefore
+    // rendered as "no capabilities installed", the most misleading possible
+    // answer for a tool whose job is knowing what is installed.
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    fs::write(
+        project.path().join("tuff.lock"),
+        "version = 2\n[[capabilities]\nname = \"broken\"\n",
+    )
+    .unwrap();
+
+    for args in [
+        vec!["list"],
+        vec!["status"],
+        vec!["outdated"],
+        vec!["check"],
+    ] {
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .args(&args)
+            .assert()
+            .code(1)
+            .stderr(predicate::str::contains("not a valid lockfile"))
+            .stdout(predicate::str::contains("no capabilities installed").not());
+    }
+}
+
+#[test]
+fn a_missing_global_lockfile_is_not_an_error() {
+    // The global lockfile legitimately does not exist until someone uses
+    // --global. Distinguishing that from a corrupt file is the whole point
+    // of the change above, so it needs its own test.
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    for args in [
+        vec!["list"],
+        vec!["status"],
+        vec!["outdated"],
+        vec!["check"],
+    ] {
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .args(&args)
+            .assert()
+            .success();
+    }
+}

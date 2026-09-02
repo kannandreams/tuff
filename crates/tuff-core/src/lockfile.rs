@@ -419,6 +419,20 @@ pub fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
     read_lockfile_at(&project_lockfile(repo_root))
 }
 
+/// Read a lockfile that may legitimately not exist.
+///
+/// `Ok(None)` means "no lockfile here", which is normal for the global
+/// scope on a machine that has never used `--global`. Anything else, in
+/// particular a corrupt or too-new file, is an error: reporting it as
+/// "nothing installed" would be a confident wrong answer.
+pub fn read_optional_lockfile(path: &Path) -> Result<Option<Lockfile>> {
+    match read_lockfile_at(path) {
+        Ok(lockfile) => Ok(Some(lockfile)),
+        Err(error) if error.kind() == crate::error::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 /// Read a lockfile of any supported schema version into the current model.
 ///
 /// The version is read before anything else is deserialised, so a file from
@@ -427,12 +441,13 @@ pub fn require_lockfile(repo_root: &Path) -> Result<Lockfile> {
 pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
     if !path.exists() {
         let parent = path.parent().unwrap_or(Path::new("."));
-        return Err(TuffError::new(format!(
-            "{} is missing; run 'tuff init' first",
+        return Err(TuffError::not_found(format!(
+            "{} is missing",
             parent
                 .join(path.file_name().unwrap_or(OsStr::new("tuff.lock")))
                 .display()
-        )));
+        ))
+        .with_hint("run 'tuff init' first"));
     }
     let raw = std::fs::read_to_string(path)?;
     let version = peek_version(&raw, path)?;
@@ -440,7 +455,7 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
         1 => read_v1_rows(&raw)?,
         2 => read_v2_rows(&raw)?,
         newer => {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::unsupported(format!(
                 "unsupported lockfile version: {newer} ({} was written by a newer tuff; this tuff {} reads versions {OLDEST_READABLE_LOCKFILE_VERSION} to {LOCKFILE_VERSION}, upgrade tuff)",
                 path.display(),
                 env!("CARGO_PKG_VERSION")
@@ -486,7 +501,7 @@ fn peek_version(raw: &str, path: &Path) -> Result<u8> {
         version: Option<u8>,
     }
     let peek: VersionOnly = toml::from_str(raw).map_err(|error| {
-        TuffError::new(format!(
+        TuffError::corrupt(format!(
             "{} is not a valid lockfile: {}",
             path.display(),
             error.message()
@@ -494,11 +509,11 @@ fn peek_version(raw: &str, path: &Path) -> Result<u8> {
     })?;
     match peek.version {
         Some(version) if version >= OLDEST_READABLE_LOCKFILE_VERSION => Ok(version),
-        Some(version) => Err(TuffError::new(format!(
+        Some(version) => Err(TuffError::unsupported(format!(
             "unsupported lockfile version: {version} ({} predates every schema this tuff reads)",
             path.display()
         ))),
-        None => Err(TuffError::new(format!(
+        None => Err(TuffError::corrupt(format!(
             "{} has no version field; it is not a Tuff lockfile or it is corrupt",
             path.display()
         ))),
@@ -508,7 +523,7 @@ fn peek_version(raw: &str, path: &Path) -> Result<u8> {
 /// Schema version 1, read for migration only (RFC-105 D5). Never written.
 fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
     let wire: WireLockfileV1 = toml::from_str(raw)
-        .map_err(|error| TuffError::new(format!("invalid version 1 lockfile: {error}")))?;
+        .map_err(|error| TuffError::corrupt(format!("invalid version 1 lockfile: {error}")))?;
     Ok(wire
         .capabilities
         .into_iter()
@@ -573,7 +588,7 @@ fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
 
 fn read_v2_rows(raw: &str) -> Result<Vec<Row>> {
     let wire: WireLockfile = toml::from_str(raw)
-        .map_err(|error| TuffError::new(format!("invalid lockfile: {error}")))?;
+        .map_err(|error| TuffError::corrupt(format!("invalid lockfile: {error}")))?;
     Ok(wire
         .capabilities
         .into_iter()

@@ -42,7 +42,34 @@ description = "Run Rust formatting and lint checks"
 run = [
   "cargo fmt --check",
   "cargo clippy --all-targets --all-features -- -D warnings",
+  { task = "lint-error-kinds" },
 ]
+
+[tasks.lint-error-kinds]
+description = "Hold the line on untyped errors (RFC-105 D6)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+# `TuffError::new` builds an Internal error: a bug in Tuff, not a message
+# for the user. Every remaining use is one that has not been classified
+# yet. The budget only ever goes down; lower it in the same commit that
+# converts a module, and delete this task when it reaches zero.
+budget=314
+count=$(grep -rn 'TuffError::new' crates/*/src --include='*.rs' | grep -vc 'crates/tuff-core/src/error.rs')
+
+if [ "$count" -gt "$budget" ]; then
+  echo "untyped TuffError::new sites: $count (budget $budget)" >&2
+  echo "Give the new error a kind: TuffError::usage/not_found/refused/drift/source_failed/corrupt/unsupported." >&2
+  exit 1
+fi
+if [ "$count" -lt "$budget" ]; then
+  echo "untyped TuffError::new sites: $count, below the budget of $budget." >&2
+  echo "Lower 'budget' in mise.toml to $count to lock the progress in." >&2
+  exit 1
+fi
+echo "untyped TuffError::new sites: $count (budget $budget)"
+"""
 
 [tasks.build-release]
 description = "Build the release CLI binary"

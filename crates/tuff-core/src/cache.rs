@@ -15,7 +15,9 @@ pub fn cache_path(home: &Path, hash: &str) -> Result<PathBuf> {
 
 pub fn validate_hash(hash: &str) -> Result<()> {
     if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(TuffError::new(format!("invalid capability hash: {hash}")));
+        return Err(TuffError::corrupt(format!(
+            "invalid capability hash: {hash}"
+        )));
     }
     Ok(())
 }
@@ -42,9 +44,10 @@ pub fn populate(home: &Path, hash: &str, source: &Path) -> Result<PathBuf> {
     let destination = cache_path(home, hash)?;
     let actual = hash_tree(source)?;
     if actual != hash {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "materialized capability hash mismatch: expected {hash}, got {actual}"
-        )));
+        ))
+        .with_hint("run 'tuff cache clear' and retry; the lockfile is the source of truth"));
     }
 
     if destination.is_dir() {
@@ -132,7 +135,7 @@ fn collect_files(root: &Path, current: &Path, output: &mut Vec<(PathBuf, Vec<u8>
         } else if path.is_file() {
             let relative = path
                 .strip_prefix(root)
-                .map_err(|error| TuffError::new(error.to_string()))?
+                .map_err(|error| TuffError::of(crate::error::ErrorKind::Io, error.to_string()))?
                 .to_path_buf();
             output.push((relative, std::fs::read(path)?));
         }

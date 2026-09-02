@@ -46,7 +46,7 @@ pub fn register_server(
         .expect("read_config validates the mcpServers object");
 
     if !allow_overwrite && servers.contains_key(server_id) {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::refused(format!(
             "refusing to overwrite untracked MCP server '{}' in {}; remove it by hand or \
              choose a different capability id",
             server_id,
@@ -103,7 +103,7 @@ fn read_config(mcp_config_path: &Path) -> Result<serde_json::Value> {
             serde_json::json!({})
         } else {
             serde_json::from_str(&raw).map_err(|error| {
-                TuffError::new(format!(
+                TuffError::corrupt(format!(
                     "invalid MCP config at {}: {error}",
                     mcp_config_path.display()
                 ))
@@ -114,7 +114,7 @@ fn read_config(mcp_config_path: &Path) -> Result<serde_json::Value> {
     };
 
     let object = config.as_object().ok_or_else(|| {
-        TuffError::new(format!(
+        TuffError::corrupt(format!(
             "invalid MCP config at {}: root must be a JSON object",
             mcp_config_path.display()
         ))
@@ -123,7 +123,7 @@ fn read_config(mcp_config_path: &Path) -> Result<serde_json::Value> {
         .get("mcpServers")
         .is_some_and(|servers| !servers.is_object())
     {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::corrupt(format!(
             "invalid MCP config at {}: field 'mcpServers' must be a JSON object",
             mcp_config_path.display()
         )));

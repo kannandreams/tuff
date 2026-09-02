@@ -8,8 +8,10 @@ use crate::resolver::{self, Scope};
 use super::{capability_index, home_dir, resolve_agent_selection};
 
 fn resolve_cleanup_scope(repo_root: &Path, scope_str: &str) -> Result<(Scope, PathBuf)> {
-    let scope = resolver::Scope::parse(scope_str)
-        .ok_or_else(|| TuffError::new(format!("invalid scope '{}'", scope_str)))?;
+    let scope = resolver::Scope::parse(scope_str).ok_or_else(|| {
+        TuffError::usage(format!("invalid scope '{}'", scope_str))
+            .with_hint("scope is 'project' or 'global'")
+    })?;
     let scope_root = match scope {
         Scope::Project => repo_root.to_path_buf(),
         Scope::Global => home_dir()?,
@@ -24,7 +26,7 @@ fn remove_target_tracking(
     target: &str,
 ) -> Result<()> {
     if entry.targets.remove(target).is_none() {
-        return Err(TuffError::new(format!(
+        return Err(TuffError::not_found(format!(
             "'{}' is not tracked for agent '{}'",
             id, target
         )));
@@ -84,23 +86,25 @@ pub fn cmd_delete(
 
     let mut lf = lockfile::require_scoped_lockfile(&scope_root, scope)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {
-        TuffError::new(format!(
+        TuffError::not_found(format!(
             "'{}' is not installed in {} scope",
             id,
             scope.as_str()
         ))
+        .with_hint("run 'tuff list' to see what is installed")
     })?;
 
     for target in &target_ids {
         let target_entry = entry.targets.get(target).ok_or_else(|| {
-            TuffError::new(format!("'{}' is not tracked for agent '{}'", id, target))
+            TuffError::not_found(format!("'{}' is not tracked for agent '{}'", id, target))
         })?;
 
         if target_entry.ownership == lockfile::TargetOwnership::Imported {
-            return Err(TuffError::new(format!(
-                "'{}' is tracked in place for agent '{}'; use 'tuff untrack {} -a {}' instead",
-                id, target, id, target
-            )));
+            return Err(TuffError::refused(format!(
+                "'{}' is tracked in place for agent '{}'",
+                id, target
+            ))
+            .with_hint(format!("use 'tuff untrack {id} -a {target}' instead")));
         }
 
         let LocalModifications {
@@ -108,10 +112,11 @@ pub fn cmd_delete(
             managed: modified_hook,
         } = local_modifications(&scope_root, id, target_entry);
         if (modified || modified_hook) && !force {
-            return Err(TuffError::new(format!(
-                "'{}' has local modifications for agent '{}'; use --force to delete",
+            return Err(TuffError::drift(format!(
+                "'{}' has local modifications for agent '{}'",
                 id, target
-            )));
+            ))
+            .with_hint("use --force to delete them"));
         }
         if modified {
             eprintln!(
@@ -152,7 +157,7 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
 
     let mut lf = lockfile::require_scoped_lockfile(&scope_root, scope)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {
-        TuffError::new(format!(
+        TuffError::not_found(format!(
             "'{}' is not installed in {} scope",
             id,
             scope.as_str()
@@ -161,7 +166,7 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
 
     for target in &target_ids {
         if !entry.targets.contains_key(target) {
-            return Err(TuffError::new(format!(
+            return Err(TuffError::not_found(format!(
                 "'{}' is not tracked for agent '{}'",
                 id, target
             )));

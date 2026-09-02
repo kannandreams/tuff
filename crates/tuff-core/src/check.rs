@@ -33,14 +33,14 @@ pub fn run_checks(repo_root: &Path, scope: CheckScope) -> Result<CheckOutcome> {
     let mut results = Vec::new();
 
     if scope == CheckScope::ProjectAndGlobal
-        && let Ok(lf) = lockfile::require_lockfile(repo_root)
+        && let Some(lf) = lockfile::read_optional_lockfile(&lockfile::project_lockfile(repo_root))?
     {
         check_lockfile(repo_root, &lf, &mut results);
     }
 
     if let Some(home) = home_dir() {
         let lock_path = crate::paths::global_lockfile(&home);
-        if let Ok(lf) = lockfile::read_lockfile_at(&lock_path) {
+        if let Some(lf) = lockfile::read_optional_lockfile(&lock_path)? {
             check_lockfile(&home, &lf, &mut results);
         }
     }

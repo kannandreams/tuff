@@ -595,8 +595,37 @@ enum HooksCommand {
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("error: {error}");
-        std::process::exit(1);
+        report_error(&error, wants_json());
+        std::process::exit(error.exit_code());
+    }
+}
+
+/// Whether the invocation asked for machine-readable output.
+///
+/// Read from the raw arguments rather than the parsed command: an error can
+/// happen before or during parsing, and a `--json` caller wants one shape
+/// on stdout and one shape on stderr, not prose on failure.
+fn wants_json() -> bool {
+    std::env::args().any(|arg| arg == "--json")
+}
+
+fn report_error(error: &TuffError, json: bool) {
+    if json {
+        let mut envelope = serde_json::json!({
+            "error": {
+                "kind": error.kind().as_str(),
+                "message": error.message(),
+            }
+        });
+        if let Some(hint) = error.hint() {
+            envelope["error"]["hint"] = serde_json::Value::String(hint.to_string());
+        }
+        eprintln!("{envelope}");
+        return;
+    }
+    eprintln!("error: {error}");
+    if let Some(hint) = error.hint() {
+        eprintln!("hint: {hint}");
     }
 }
 

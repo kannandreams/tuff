@@ -132,9 +132,9 @@ fn run_git(cmd: &mut Command, context: &str) -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if stderr.is_empty() {
-        Err(TuffError::new(context.to_string()))
+        Err(TuffError::source_failed(context.to_string()))
     } else {
-        Err(TuffError::new(format!("{context}: {stderr}")))
+        Err(TuffError::source_failed(format!("{context}: {stderr}")))
     }
 }
 
@@ -145,12 +145,12 @@ pub fn resolve_ref(repo: &Path) -> Result<String> {
         .output()?;
 
     if !output.status.success() {
-        return Err(TuffError::new("failed to resolve git ref"));
+        return Err(TuffError::source_failed("failed to resolve git ref"));
     }
 
     let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if sha.is_empty() {
-        return Err(TuffError::new("empty git ref"));
+        return Err(TuffError::source_failed("empty git ref"));
     }
     Ok(sha)
 }
@@ -214,7 +214,7 @@ pub fn discover_capability(
             } else {
                 format!("\nAvailable {dir_plural}: {}", nearby.join(", "))
             };
-            Err(TuffError::new(format!(
+            Err(TuffError::not_found(format!(
                 "{} '{}' not found in repository{hint}",
                 capability_type, name
             )))
@@ -225,7 +225,7 @@ pub fn discover_capability(
                 .iter()
                 .map(|p| p.strip_prefix(repo).unwrap_or(p).display().to_string())
                 .collect();
-            Err(TuffError::new(format!(
+            Err(TuffError::usage(format!(
                 "ambiguous capability name '{}' matches multiple paths: {}",
                 name,
                 paths.join(", ")
