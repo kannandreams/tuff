@@ -8,6 +8,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Added
 
+- Pack commands now report failures by kind: an artifact that will not parse reads as corrupt, a refused overwrite as refused, local changes as drift, an unreachable registry as a source failure, and a mistyped flag exits 2. Advice that used to be appended to a message with a semicolon now prints on its own `hint:` line.
 - Errors now carry a kind, and commands use it to choose an exit code: `0` success, `1` a failed operation, `2` a command called wrongly, `70` a bug in Tuff. Messages that suggested a next step now print it as a separate `hint:` line, and a `--json` invocation reports failures as one JSON line on stderr with `kind`, `message`, and `hint` fields rather than prose.
 
 ### Fixed

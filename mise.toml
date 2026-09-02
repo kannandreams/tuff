@@ -55,7 +55,7 @@ set -euo pipefail
 # for the user. Every remaining use is one that has not been classified
 # yet. The budget only ever goes down; lower it in the same commit that
 # converts a module, and delete this task when it reaches zero.
-budget=314
+budget=202
 count=$(grep -rn 'TuffError::new' crates/*/src --include='*.rs' | grep -vc 'crates/tuff-core/src/error.rs')
 
 if [ "$count" -gt "$budget" ]; then
