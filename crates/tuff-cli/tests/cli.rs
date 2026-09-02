@@ -2309,13 +2309,26 @@ TOKEN = "ghp_literal_secret"
         .stderr(predicate::str::contains("from_env"));
     assert!(!temp.path().join(".agents/mcp-servers/leaky").exists());
 
+    // A name that is neither a built-in id nor in the registry. The stub
+    // keeps this offline and deterministic; pointing at the real registry
+    // would make the suite depend on the network and on what is published.
+    let registry = StubRegistry::start(r#"{"servers":[]}"#);
     tuff()
         .current_dir(temp.path())
-        .args(["add", "mcp", "not-a-real-server"])
+        .args([
+            "add",
+            "mcp",
+            "not-a-real-server",
+            "--registry",
+            &registry.url(),
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "catalog ids: filesystem, memory, github,",
+            "is not a path, a git URL, a built-in catalog id, or a server in the MCP registry",
+        ))
+        .stderr(predicate::str::contains(
+            "hint: run 'tuff mcp search not-a-real-server'",
         ));
 
     tuff()
@@ -6284,4 +6297,181 @@ fn a_missing_global_lockfile_is_not_an_error() {
             .assert()
             .success();
     }
+}
+
+// ── MCP registry (stub-backed, no network) ───────────────────────────
+
+/// A one-shot HTTP server returning a canned registry response.
+///
+/// The registry paths are worth testing end to end, but a test that calls
+/// the real registry would depend on the network and on whatever third
+/// parties happen to have published that day. This serves bytes we control.
+struct StubRegistry {
+    port: u16,
+    _thread: std::thread::JoinHandle<()>,
+}
+
+impl StubRegistry {
+    fn start(body: &str) -> Self {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = body.to_string();
+        let thread = std::thread::spawn(move || {
+            // Serve every request the test makes, then fall out when the
+            // listener is dropped at the end of the test.
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut buffer = [0u8; 2048];
+                let _ = stream.read(&mut buffer);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        Self {
+            port,
+            _thread: thread,
+        }
+    }
+
+    fn url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+}
+
+fn stub_server_json(name: &str) -> String {
+    format!(
+        r#"{{"servers":[{{"server":{{"name":"{name}","description":"A stubbed server.","version":"2.1.0","packages":[{{"registryType":"npm","identifier":"stub-mcp","version":"2.1.0","transport":{{"type":"stdio"}},"environmentVariables":[{{"name":"STUB_TOKEN","isRequired":true}}]}}]}}}}]}}"#
+    )
+}
+
+#[test]
+fn add_mcp_installs_a_server_resolved_from_the_registry() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let registry = StubRegistry::start(&stub_server_json("io.github.acme/stub-mcp"));
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "mcp",
+            "io.github.acme/stub-mcp",
+            "--agent",
+            "open-agents",
+            "--yes",
+            "--registry",
+            &registry.url(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed stub-mcp from http://127.0.0.1",
+        ));
+
+    // The launch command is assembled from the package, not copied.
+    let mcp: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path().join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    assert_eq!(mcp["mcpServers"]["stub-mcp"]["command"], "npx");
+    assert_eq!(
+        mcp["mcpServers"]["stub-mcp"]["args"],
+        serde_json::json!(["-y", "stub-mcp@2.1.0"])
+    );
+    // A required variable is a reference the harness resolves, never a value.
+    assert_eq!(
+        mcp["mcpServers"]["stub-mcp"]["env"]["STUB_TOKEN"],
+        "${STUB_TOKEN}"
+    );
+
+    // The lockfile records which registry it came from, so update and
+    // outdated know to ask that registry rather than the built-in catalog.
+    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("kind = \"catalog\""), "{lock}");
+    assert!(lock.contains("id = \"io.github.acme/stub-mcp\""), "{lock}");
+    assert!(lock.contains("registry = \"http://127.0.0.1"), "{lock}");
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("check")
+        .assert()
+        .success();
+}
+
+#[test]
+fn mcp_search_reports_what_each_result_would_install() {
+    let registry = StubRegistry::start(&stub_server_json("io.github.acme/stub-mcp"));
+    tuff()
+        .args(["mcp", "search", "stub", "--registry", &registry.url()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("io.github.acme/stub-mcp"))
+        .stdout(predicate::str::contains("2.1.0"))
+        .stdout(predicate::str::contains("npx"))
+        .stdout(predicate::str::contains("tuff add mcp <NAME>"));
+
+    let assert = tuff()
+        .args([
+            "mcp",
+            "search",
+            "stub",
+            "--json",
+            "--registry",
+            &registry.url(),
+        ])
+        .assert()
+        .success();
+    let rows: serde_json::Value =
+        serde_json::from_slice(&assert.get_output().stdout.clone()).unwrap();
+    assert_eq!(rows[0]["name"], "io.github.acme/stub-mcp");
+    assert_eq!(rows[0]["id"], "stub-mcp");
+    assert_eq!(rows[0]["installable"], true);
+}
+
+#[test]
+fn an_exact_name_is_required_so_a_search_hit_never_installs_by_surprise() {
+    // The registry has no exact-name endpoint, so `add mcp <name>` searches
+    // and matches the name itself. Installing the first hit for a partial
+    // name would let a typo pull in somebody else's fork.
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let registry = StubRegistry::start(&stub_server_json("io.github.someone-else/stub-mcp"));
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "mcp",
+            "stub-mcp",
+            "--agent",
+            "open-agents",
+            "--yes",
+            "--registry",
+            &registry.url(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "is not a path, a git URL, a built-in catalog id, or a server in the MCP registry",
+        ));
+    assert!(!project.path().join(".agents/mcp-servers/stub-mcp").exists());
 }

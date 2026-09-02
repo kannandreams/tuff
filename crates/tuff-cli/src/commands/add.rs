@@ -70,6 +70,7 @@ pub fn cmd_add_mcp(
     target_ids: &[String],
     global: bool,
     yes: bool,
+    registry_url: &str,
 ) -> Result<()> {
     if sources.is_empty() {
         return Err(TuffError::usage(
@@ -92,14 +93,34 @@ pub fn cmd_add_mcp(
             continue;
         }
 
-        let Some(mut manifest) = crate::catalog::lookup(source)? else {
-            return Err(TuffError::usage(format!(
-                "'{source}' is not a path, a git URL, or a catalog entry; catalog ids: {}",
-                crate::catalog::ids().join(", ")
+        if let Some(mut manifest) = crate::catalog::lookup(source)? {
+            prompt_env_overrides(&mut manifest, yes);
+            add_catalog_server(repo_root, &manifest, source, None, target_ids, global)?;
+            continue;
+        }
+
+        // Not a path, a git URL, or a built-in id: ask the registry. A name
+        // is matched exactly, so a search hit never installs by surprise.
+        let registry = registry_url;
+        let Some(server) = super::block_on_oci(crate::registry::fetch(registry, source))? else {
+            return Err(TuffError::not_found(format!(
+                "'{source}' is not a path, a git URL, a built-in catalog id, or a server in the MCP registry"
+            ))
+            .with_hint(format!(
+                "run 'tuff mcp search {source}' to find its full registry name, or 'tuff add mcp --help' for the built-in ids"
             )));
         };
+        let id = crate::registry::default_capability_id(&server.name);
+        let mut manifest = crate::registry::to_manifest(&server, &id)?;
         prompt_env_overrides(&mut manifest, yes);
-        add_catalog_server(repo_root, &manifest, target_ids, global)?;
+        add_catalog_server(
+            repo_root,
+            &manifest,
+            &server.name,
+            Some(registry),
+            target_ids,
+            global,
+        )?;
     }
     Ok(())
 }
@@ -160,9 +181,13 @@ fn rename_env_var(server: &mut manifest::McpServerConfig, old_name: &str, new_na
     }
 }
 
+/// Install one MCP server resolved from a catalog: the one compiled into
+/// the binary when `registry` is `None`, otherwise the named MCP registry.
 fn add_catalog_server(
     repo_root: &Path,
     manifest: &manifest::CapabilityManifest,
+    catalog_id: &str,
+    registry: Option<&str>,
     target_ids: &[String],
     global: bool,
 ) -> Result<()> {
@@ -195,16 +220,23 @@ fn add_catalog_server(
         &target_ids,
         Some(lockfile::CapabilitySource::Catalog(
             lockfile::CatalogSource {
-                id: manifest.id.clone(),
+                id: catalog_id.to_string(),
                 version: manifest.version.clone(),
+                registry: registry.map(str::to_string),
             },
         )),
         true,
     )?;
-    println!(
-        "installed {} from the built-in catalog (catalog {})",
-        capability.id, manifest.version
-    );
+    match registry {
+        Some(registry) => println!(
+            "installed {} from {registry} ({} {})",
+            capability.id, catalog_id, manifest.version
+        ),
+        None => println!(
+            "installed {} from the built-in catalog (catalog {})",
+            capability.id, manifest.version
+        ),
+    }
     Ok(())
 }
 

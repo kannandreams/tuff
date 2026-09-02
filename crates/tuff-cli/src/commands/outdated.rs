@@ -190,6 +190,22 @@ fn classify(
                 "not checked".to_string(),
             );
         }
+        lockfile::CapabilitySource::Catalog(catalog) if catalog.registry.is_some() => {
+            let registry = catalog.registry.as_deref().expect("registry checked above");
+            let (latest, status) =
+                match super::block_on_oci(crate::registry::fetch(registry, &catalog.id)) {
+                    Ok(Some(server)) if server.version == entry.version => {
+                        (server.version, "up to date")
+                    }
+                    Ok(Some(server)) => (server.version, "outdated"),
+                    // Unpublished, or the registry is unreachable: either way
+                    // there is nothing current to compare against, and saying
+                    // "up to date" would be a conclusion never reached.
+                    Ok(None) => ("unpublished".to_string(), "error"),
+                    Err(_) => ("unavailable".to_string(), "error"),
+                };
+            return (entry.version.clone(), latest, status.to_string());
+        }
         lockfile::CapabilitySource::Catalog(catalog) => {
             let (latest, status) = match crate::catalog::lookup(&catalog.id) {
                 Ok(Some(manifest)) if manifest.version == entry.version => {

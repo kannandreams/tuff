@@ -519,6 +519,18 @@ tuff update <member-id> --plain-http --ca-file ./registry-ca.pem
 
 A pack update applies to every agent the pack is installed for; a narrower `--agent` selection is refused rather than leaving one agent on the old release. Local edits to any member block the update unless `--force` is given. Only semver tags are compared when resolving the registry, matching `tuff outdated`; when nothing parses, pass `--pack` with the artifact you mean.
 
+### `tuff mcp search`
+
+Search the [MCP registry](https://registry.modelcontextprotocol.io) for servers, and see which ones Tuff can install before installing one.
+
+```sh frame="terminal"
+tuff mcp search filesystem
+tuff mcp search notion --limit 5 --json
+tuff mcp search notion --registry https://registry.example.internal
+```
+
+The `INSTALL` column shows the launcher Tuff would use, or `unsupported` when the entry needs something Tuff cannot express. Install a result by its full name with `tuff add mcp <NAME>`. See [MCP Servers](/primitives/mcp-servers#the-mcp-registry).
+
 ## Exit codes and errors
 
 Every command uses the same exit codes, so a script can branch without reading the message:
