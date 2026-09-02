@@ -9,11 +9,13 @@ use crate::manifest::{self, load_manifest};
 use crate::oci::OciTransferOptions;
 use crate::resolver::{self, Scope};
 
-use super::add::{SourceMetaInput, install_capability};
+use super::add::install_capability;
 use super::{capability_index, home_dir, resolve_agent_selection};
+use crate::lockfile::{CapabilitySource, CatalogSource, GitSource};
 
 fn update_local_baseline(
     scope_root: &Path,
+    scope: Scope,
     id: &str,
     target_ids: &[String],
     check: bool,
@@ -25,7 +27,7 @@ fn update_local_baseline(
         ));
     }
 
-    let lf = lockfile::require_lockfile(scope_root)?;
+    let lf = lockfile::require_scoped_lockfile(scope_root, scope)?;
     let entry = lf
         .capabilities
         .get(id)
@@ -89,9 +91,8 @@ fn update_local_baseline(
             )?;
         }
     }
-    lockfile::write_lockfile(scope_root, &lf)?;
-    lockfile::prune_unreferenced_baseline_objects(scope_root, &lf)?;
-    capability_index::regenerate_capability_index(scope_root)?;
+    lockfile::write_scoped_lockfile(scope_root, scope, &lf)?;
+    capability_index::regenerate_capability_index(scope_root, scope)?;
 
     if changed_files == 0 {
         println!("'{}' is already up to date", id);
@@ -121,7 +122,8 @@ fn update_local_from_source(
     check: bool,
     force: bool,
 ) -> Result<()> {
-    let source_dir = lockfile::absolutize(scope_root, Path::new(&entry.source_path));
+    let source_path = entry.source.local_path().unwrap_or_default();
+    let source_dir = lockfile::absolutize(scope_root, Path::new(source_path));
     let manifest = load_manifest(&source_dir)?;
     let capability = resolve_capability(&manifest)?;
     if capability.id != id {
@@ -164,10 +166,10 @@ fn update_local_from_source(
                 changed_files += 1;
             }
         }
-        has_local_drift |= target_entry
-            .emitted_files
-            .iter()
-            .any(|emitted| lockfile::drift_status(scope_root, emitted) != "clean");
+        has_local_drift |= !target_entry.installed_path.is_empty()
+            && crate::cache::hash_tree(&scope_root.join(&target_entry.installed_path))
+                .map(|hash| hash != target_entry.sha256)
+                .unwrap_or(true);
     }
 
     if check {
@@ -181,7 +183,7 @@ fn update_local_from_source(
         } else {
             println!(
                 "'{}' has {} source file(s) to apply from {}",
-                id, changed_files, entry.source_path
+                id, changed_files, source_path
             );
         }
         return Ok(());
@@ -219,15 +221,14 @@ fn update_from_catalog(
     check: bool,
     force: bool,
 ) -> Result<()> {
-    let source = entry
-        .source
-        .as_ref()
-        .expect("catalog source checked by caller");
-    let Some(manifest) = crate::catalog::lookup(&source.skill)? else {
+    let CapabilitySource::Catalog(source) = &entry.source else {
+        unreachable!("catalog source checked by caller");
+    };
+    let Some(manifest) = crate::catalog::lookup(&source.id)? else {
         return Err(TuffError::new(format!(
             "'{}' is no longer in the built-in catalog (installed from catalog {}); \
              delete it or reinstall from a path",
-            source.skill, entry.installed_version
+            source.id, entry.version
         )));
     };
     let latest = manifest.version.clone();
@@ -246,7 +247,7 @@ fn update_from_catalog(
             })
     });
 
-    if latest == entry.installed_version && !entry_drifted {
+    if latest == entry.version && !entry_drifted {
         println!("'{}' is already up to date (catalog {latest})", id);
         return Ok(());
     }
@@ -275,7 +276,7 @@ fn update_from_catalog(
         } else if all_clean {
             println!(
                 "'{}' can be updated cleanly: catalog {} → {latest}",
-                id, entry.installed_version
+                id, entry.version
             );
         } else {
             println!(
@@ -299,12 +300,10 @@ fn update_from_catalog(
         &capability,
         &manifest,
         target_ids,
-        Some(&SourceMetaInput {
-            source_type: crate::catalog::SOURCE_TYPE.to_string(),
-            url: crate::catalog::SOURCE_URL.to_string(),
-            source_ref: latest,
-            skill: source.skill.clone(),
-        }),
+        Some(CapabilitySource::Catalog(CatalogSource {
+            id: source.id.clone(),
+            version: latest,
+        })),
         true,
     )
 }
@@ -336,7 +335,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
             Scope::Project => repo_root.to_path_buf(),
             Scope::Global => home_dir()?,
         };
-        let lf = lockfile::require_lockfile(&root)?;
+        let lf = lockfile::require_scoped_lockfile(&root, scope)?;
         let entry = lf.capabilities.get(id).ok_or_else(|| {
             TuffError::new(format!(
                 "'{}' is not installed in {} scope",
@@ -360,7 +359,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         }
     };
 
-    if entry.pack.is_some() {
+    if matches!(entry.source, CapabilitySource::Pack(_)) {
         // Pack members move with their pack; see `cmd_update_pack`.
         if scope == Scope::Global {
             return Err(TuffError::new(format!(
@@ -386,29 +385,37 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
     let target_ids =
         resolve_agent_selection(&scope_root, requested_targets, scope == Scope::Global)?;
 
-    if entry.source.is_none() && is_in_place_source_path(&entry.source_path) {
-        return update_local_baseline(&scope_root, id, &target_ids, check, force);
-    }
+    let git = match &entry.source {
+        CapabilitySource::Local(local) if is_in_place_source_path(&local.path) => {
+            return update_local_baseline(&scope_root, scope, id, &target_ids, check, force);
+        }
+        CapabilitySource::Local(_) => {
+            return update_local_from_source(
+                &scope_root,
+                scope,
+                id,
+                &entry,
+                &target_ids,
+                check,
+                force,
+            );
+        }
+        CapabilitySource::Catalog(_) => {
+            return update_from_catalog(&scope_root, scope, id, &entry, &target_ids, check, force);
+        }
+        CapabilitySource::Git(git) => git,
+        CapabilitySource::Pack(_) => unreachable!("pack members are dispatched above"),
+    };
 
-    if entry.source.is_none() {
-        return update_local_from_source(&scope_root, scope, id, &entry, &target_ids, check, force);
-    }
-
-    let source = entry.source.as_ref().expect("source checked above");
-
-    if source.source_type == crate::catalog::SOURCE_TYPE {
-        return update_from_catalog(&scope_root, scope, id, &entry, &target_ids, check, force);
-    }
-
-    let (_source_guard, cache_dir, _clean_url) = git::clone_to_temp(&source.url, None)?;
+    let (_source_guard, cache_dir, _clean_url) = git::clone_to_temp(&git.url, None)?;
     let latest_sha = git::resolve_ref(&cache_dir)?;
 
-    if latest_sha == entry.installed_version {
+    if latest_sha == entry.version {
         println!("'{}' is already up to date", id);
         return Ok(());
     }
 
-    let skill_dir = git::discover_capability(&cache_dir, &source.skill, entry.capability_type)?;
+    let skill_dir = git::discover_capability(&cache_dir, &git.path, entry.capability_type)?;
 
     if force {
         let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
@@ -419,12 +426,13 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
             &capability,
             &manifest,
             &target_ids,
-            Some(&SourceMetaInput {
-                source_type: "git".to_string(),
-                url: source.url.clone(),
-                source_ref: latest_sha,
-                skill: source.skill.clone(),
-            }),
+            Some(CapabilitySource::Git(GitSource {
+                url: git.url.clone(),
+                path: git.path.clone(),
+                git_ref: latest_sha,
+                tag: None,
+                requested: None,
+            })),
             true,
         );
     }
@@ -471,12 +479,13 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         &primitive,
         &manifest,
         &target_ids,
-        Some(&SourceMetaInput {
-            source_type: "git".to_string(),
-            url: source.url.clone(),
-            source_ref: latest_sha,
-            skill: source.skill.clone(),
-        }),
+        Some(CapabilitySource::Git(GitSource {
+            url: git.url.clone(),
+            path: git.path.clone(),
+            git_ref: latest_sha,
+            tag: None,
+            requested: None,
+        })),
         true,
     )
 }

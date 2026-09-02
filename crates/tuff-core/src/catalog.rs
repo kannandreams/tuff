@@ -19,12 +19,6 @@ use crate::manifest::{
 
 const CATALOG_TOML: &str = include_str!("../assets/mcp-catalog.toml");
 
-/// Recorded as `SourceMetadata.source_type` for catalog installs.
-pub const SOURCE_TYPE: &str = "catalog";
-/// Recorded as `SourceMetadata.url` for catalog installs — there is no
-/// remote; the catalog ships inside the binary.
-pub const SOURCE_URL: &str = "builtin";
-
 #[derive(Debug, Deserialize)]
 struct Catalog {
     #[serde(default)]

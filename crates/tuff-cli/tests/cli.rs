@@ -2092,10 +2092,10 @@ fn add_mcp_from_catalog_wires_every_selected_harness_in_its_own_dialect() {
         );
     }
 
-    // The lockfile round-trips a non-git remote source verbatim.
+    // The lockfile records the catalog as a typed source.
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("source = \"catalog\""));
-    assert!(lock.contains("repository = \"builtin\""));
+    assert!(lock.contains("kind = \"catalog\""), "{lock}");
+    assert!(lock.contains("id = \"github\""), "{lock}");
 
     tuff()
         .current_dir(temp.path())
@@ -5930,4 +5930,197 @@ fn add_pack_into_a_project_that_already_has_a_capability_index() {
         .arg("check")
         .assert()
         .success();
+}
+
+// ── lockfile schema v2 (RFC-105) ─────────────────────────────────────
+
+fn lockfile_v1_fixture() -> std::path::PathBuf {
+    test_fixture("lockfile-v1").join("tuff.lock")
+}
+
+#[test]
+fn lock_migrate_rewrites_a_version_1_lockfile_to_the_golden_version_2() {
+    // The fixture was written by tuff 0.1.8 and covers every row shape:
+    // local, git, catalog, pack with a registry, an adopted (imported)
+    // capability, a hook with managed settings, an MCP-native tool, and
+    // the generated index. The golden file is what migration must produce,
+    // byte for byte, and it must be a fixed point of the writer.
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    fs::copy(lockfile_v1_fixture(), project.path().join("tuff.lock")).unwrap();
+    let expected =
+        fs::read_to_string(test_fixture("lockfile-v1").join("expected-v2.lock")).unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["lock", "migrate"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("from schema version 1 to 2"));
+    assert_eq!(
+        fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
+        expected
+    );
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["lock", "migrate"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already schema version 2"));
+    assert_eq!(
+        fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
+        expected
+    );
+}
+
+#[test]
+fn read_only_commands_leave_a_version_1_lockfile_alone_and_a_mutating_one_upgrades_it() {
+    // `tuff check` in CI must never dirty the tree just by reading a v1
+    // file; the first command that writes the lockfile is what upgrades it.
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let v1 = fs::read_to_string(lockfile_v1_fixture()).unwrap();
+    fs::write(project.path().join("tuff.lock"), &v1).unwrap();
+    fs::write(
+        project.path().join("tuff.config.json"),
+        r#"{"agents":["open-agents"],"defaultAgent":"open-agents"}"#,
+    )
+    .unwrap();
+
+    for args in [
+        vec!["list"],
+        vec!["status"],
+        vec!["check", "--ignore-failures"],
+    ] {
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .args(&args)
+            .assert()
+            .success();
+        assert_eq!(
+            fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
+            v1,
+            "{args:?} rewrote a v1 lockfile"
+        );
+    }
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("git-skill"))
+        .stdout(predicate::str::contains("pack-skill"));
+
+    let skill = make_skill_primitive_dir(project.path(), "fresh-skill");
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    assert!(
+        lock.starts_with(
+            "# Tuff lockfile. Each entry records one capability installation target.\nversion = 2\n"
+        ),
+        "{lock}"
+    );
+    assert!(lock.contains("name = \"fresh-skill\""));
+    assert!(
+        lock.contains("kind = \"pack\""),
+        "existing rows survive the upgrade: {lock}"
+    );
+    assert!(!lock.contains("resolved_ref"));
+}
+
+#[test]
+fn a_lockfile_from_a_newer_tuff_is_refused_by_version_not_by_shape() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    fs::write(
+        project.path().join("tuff.lock"),
+        "version = 3\n\n[[capabilities]]\nname = \"x\"\nfuture_field = true\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["lock", "migrate"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported lockfile version: 3"))
+        .stderr(predicate::str::contains("upgrade tuff"))
+        .stderr(predicate::str::contains("future_field").not());
+}
+
+#[test]
+fn a_project_add_never_writes_to_the_global_lockfile_even_with_xdg_state_home() {
+    // Debt #12: the old lockfile-path helper treated the repository root as
+    // a home directory and honoured XDG_STATE_HOME unconditionally, so on a
+    // machine that had ever used --global, a project-scoped add could land
+    // in the global lockfile. The scope is explicit now.
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let state = home.path().join("state");
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .env("XDG_STATE_HOME", &state)
+        .args(["init", "--global"])
+        .assert()
+        .success();
+    let global_lock = state.join("tuff").join("tuff.lock");
+    assert!(
+        global_lock.is_file(),
+        "global init wrote {}",
+        global_lock.display()
+    );
+    let global_before = fs::read_to_string(&global_lock).unwrap();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .env("XDG_STATE_HOME", &state)
+        .arg("init")
+        .assert()
+        .success();
+    let skill = make_skill_primitive_dir(project.path(), "project-only");
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .env("XDG_STATE_HOME", &state)
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    let project_lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    assert!(
+        project_lock.contains("name = \"project-only\""),
+        "{project_lock}"
+    );
+    assert_eq!(
+        fs::read_to_string(&global_lock).unwrap(),
+        global_before,
+        "the global lockfile must be untouched by a project-scoped add"
+    );
+}
+
+/// A minimal manifest-backed skill directory outside any harness layout.
+fn make_skill_primitive_dir(root: &Path, id: &str) -> std::path::PathBuf {
+    let dir = root.join("sources").join(id);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("tuff.toml"),
+        format!(
+            "id = \"{id}\"\nversion = \"1.0.0\"\ntype = \"skill\"\ndescription = \"A local skill.\"\nfiles = [\"SKILL.md\"]\n"
+        ),
+    )
+    .unwrap();
+    fs::write(dir.join("SKILL.md"), format!("# {id}\n")).unwrap();
+    dir
 }

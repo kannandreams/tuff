@@ -1,0 +1,183 @@
+# Tuff lockfile. Each entry records one capability installation target.
+version = 1
+
+[[capabilities]]
+name = "adopted-skill"
+type = "skill"
+source = "local"
+source_path = ".agents/skills/adopted-skill"
+resolved_ref = ""
+sha256 = "fcf8641a14c9af2772b7b0f1edb8cc3b50fbabd1afbf75ce5e630dd71a05ec31"
+target = "open-agents"
+installed_path = ".agents/skills/adopted-skill"
+version = "0.1.0"
+description = "Added from existing agent assets."
+ownership = "imported"
+
+[[capabilities]]
+name = "git-skill"
+type = "skill"
+source = "git"
+repository = "file:///srv/fixtures/git-skill"
+source_path = "git-skill"
+resolved_ref = "faee135979aeebcde0742661efb157cbe1fe4b83"
+sha256 = "032564c2d060992d1b51f6a37e6ff2f228374438caf295f1e351da90038f9fa4"
+target = "open-agents"
+installed_path = ".agents/skills/git-skill"
+version = "faee135979aeebcde0742661efb157cbe1fe4b83"
+description = "A git skill."
+ownership = "generated"
+
+[[capabilities]]
+name = "local-hook"
+type = "hook"
+source = "local"
+source_path = "/srv/fixtures/sources/hook-primitive"
+resolved_ref = ""
+sha256 = "546b3c9352bddc789bb6cde58d1469bc309c6391ab10b2c7b9bdf09a29e37c70"
+target = "open-agents"
+installed_path = ".agents/hooks/local-hook"
+version = "1.0.0"
+description = "A test hook."
+ownership = "generated"
+
+[[capabilities.managed_hooks]]
+settingsPath = ".agents/hook.json"
+event = "before_finish"
+canonicalEvent = "before_finish"
+command = "sh .agents/hooks/local-hook/run.sh"
+baselineHash = "8e7645043b91290856bac7bd98d88e0063c3bcbc900995d5cd96db31642a33ae"
+
+[[capabilities]]
+name = "local-mcp-tool"
+type = "tool"
+source = "local"
+source_path = "/srv/fixtures/sources/tool-primitive"
+resolved_ref = ""
+sha256 = "9028d58826f8d3188972cb24e9678010fea7925ce5a280f2c7f0c30513017ff9"
+target = "open-agents"
+installed_path = ".agents/tools/local-mcp-tool"
+version = "1.0.0"
+description = "An MCP-native tool."
+ownership = "generated"
+
+[capabilities.managed_mcp_entry]
+configPath = ".agents/mcp.json"
+baselineHash = "fee78aceb6c795835459214c3bca851e30fcba8f20f13d894e0399903115857a"
+
+[capabilities.implementation]
+language = "bash"
+entrypoint = "run.sh"
+mcp = true
+runtime_deps = []
+
+[capabilities.parameters]
+required = ["endpoint"]
+type = "object"
+
+[capabilities.parameters.properties.endpoint]
+description = "The endpoint to scan"
+type = "string"
+
+[[capabilities]]
+name = "local-skill"
+type = "skill"
+source = "local"
+source_path = "/srv/fixtures/sources/local-skill"
+resolved_ref = ""
+sha256 = "15cf33036a543f72e83edfbf6b7377ecdaaf8da703fbb40e0b8c716e605de739"
+target = "claude"
+installed_path = ".claude/skills/local-skill"
+version = "1.0.0"
+description = "A local skill."
+ownership = "generated"
+
+[[capabilities]]
+name = "local-skill"
+type = "skill"
+source = "local"
+source_path = "/srv/fixtures/sources/local-skill"
+resolved_ref = ""
+sha256 = "15cf33036a543f72e83edfbf6b7377ecdaaf8da703fbb40e0b8c716e605de739"
+target = "open-agents"
+installed_path = ".agents/skills/local-skill"
+version = "1.0.0"
+description = "A local skill."
+ownership = "generated"
+
+[[capabilities]]
+name = "memory"
+type = "mcp-server"
+source = "catalog"
+repository = "builtin"
+source_path = "memory"
+resolved_ref = "1.0.0"
+sha256 = "c0bde4dd3d76b971b805d192ae01fd1c37b97008a0d4065e7d58e90afe1468ac"
+target = "open-agents"
+installed_path = ".agents/mcp-servers/memory"
+version = "1.0.0"
+description = "Knowledge-graph memory server for persistent notes across sessions."
+ownership = "generated"
+
+[capabilities.managed_mcp_entry]
+configPath = ".agents/mcp.json"
+baselineHash = "6dbcc13b0ece8d3788eb0a72464736a74bf543df7b2ada71fab79baece5164f3"
+
+[capabilities.server]
+transport = "stdio"
+command = "npx"
+args = [
+    "-y",
+    "@modelcontextprotocol/server-memory",
+]
+
+[capabilities.server.env]
+
+[capabilities.server.metadata]
+tools_summary = "create_entities, create_relations, add_observations, search_nodes, read_graph"
+
+[[capabilities]]
+name = "pack-skill"
+type = "skill"
+source = "local"
+source_path = ""
+resolved_ref = ""
+sha256 = "e92a52f50c2592f2931ec7b689ede79f083318f106e2fa1938a1fc25b8eaae83"
+target = "open-agents"
+installed_path = ".agents/skills/pack-skill"
+version = "1.5.0"
+description = "A packed skill."
+ownership = "generated"
+
+[capabilities.pack]
+name = "com.acme/fixture"
+version = "1.0.0"
+digest = "3214624d2341df9b7279563c3618aa710a25b6ca93fd7cfdb09e59367a862e15"
+registry = "ghcr.io/acme/fixture"
+
+[[capabilities]]
+name = "tuff-capabilities"
+type = "skill"
+source = "local"
+source_path = "<generated>"
+resolved_ref = ""
+sha256 = "00937ba1ed5a29d2436cbd640e0eae3499cbed95359a63ce4f9df2cc1ffac3f4"
+target = "open-agents"
+installed_path = ".agents/skills/tuff-capabilities"
+version = "1.0.0"
+description = "Index of project tools and workflows installed via Tuff. Consult when a task involves one of the capabilities listed below, to find the exact invocation command."
+ownership = "generated"
+
+[[capabilities]]
+name = "tuff-cli-guide"
+type = "skill"
+source = "local"
+source_path = ""
+resolved_ref = ""
+sha256 = "ad98cde54994942e68d534e33003823a111f7a70bfad4642ae294e37c4a86b20"
+target = "open-agents"
+installed_path = ".agents/skills/tuff-cli-guide"
+version = "0.1.0"
+description = "Guide for using Tuff CLI commands inside this repository."
+ownership = "generated"
+

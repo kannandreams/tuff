@@ -21,10 +21,9 @@ pub(crate) struct PreparedProjectPack {
 pub(crate) fn default_project_capabilities(lock: &Lockfile) -> Vec<String> {
     lock.capabilities
         .iter()
-        .filter(|(id, entry)| {
+        .filter(|(id, _entry)| {
             id.as_str() != TUFF_CLI_GUIDE_ID
                 && id.as_str() != super::capability_index::CAPABILITY_INDEX_ID
-                && entry.scope == "project"
         })
         .map(|(id, _)| id.clone())
         .collect()
@@ -56,11 +55,6 @@ pub(crate) fn prepare_project_pack(
                 "capability '{id}' is not tracked in this project; run 'tuff list --scope project' to see available capabilities"
             ))
         })?;
-        if entry.scope != "project" {
-            return Err(TuffError::new(format!(
-                "capability '{id}' is not tracked in project scope and cannot be included in a project pack"
-            )));
-        }
         let relative = format!("capabilities/member-{:04}", selected.len() + 1);
         let destination = staging.path().join(&relative);
         let capability = materialize_capability(repo_root, &id, entry, &destination)?;
@@ -113,29 +107,39 @@ fn materialize_capability(
     entry: &CapabilityLockEntry,
     destination: &Path,
 ) -> Result<CapabilityManifest> {
-    let capability = if let Some(source) = &entry.source {
-        if entry.capability_type != CapabilityType::Skill {
-            return Err(unsupported_source_error(id, entry));
-        }
-        let (_guard, checkout, _) =
-            git::clone_to_temp(&source.url, Some(source.source_ref.as_str()))?;
-        let source_dir = git::discover_capability(&checkout, &source.skill, entry.capability_type)?;
-        let mut capability =
-            manifest::synthetic_manifest(&source_dir, id, &entry.installed_version)?;
-        capability.description.clone_from(&entry.description);
-        capability
-    } else {
-        let source_dir = lockfile::absolutize(repo_root, Path::new(&entry.source_path));
-        if !entry.source_path.is_empty() && source_dir.join("tuff.toml").is_file() {
-            manifest::load_manifest(&source_dir)?
-        } else if entry.capability_type == CapabilityType::Skill {
-            let installed = installed_source(repo_root, id, entry)?;
-            let mut capability =
-                manifest::synthetic_manifest(&installed, id, &entry.installed_version)?;
+    let capability = match &entry.source {
+        lockfile::CapabilitySource::Git(git) => {
+            if entry.capability_type != CapabilityType::Skill {
+                return Err(unsupported_source_error(id, entry));
+            }
+            let (_guard, checkout, _) = git::clone_to_temp(&git.url, Some(git.git_ref.as_str()))?;
+            let source_dir = git::discover_capability(&checkout, &git.path, entry.capability_type)?;
+            let mut capability = manifest::synthetic_manifest(&source_dir, id, &entry.version)?;
             capability.description.clone_from(&entry.description);
             capability
-        } else {
-            return Err(unsupported_source_error(id, entry));
+        }
+        lockfile::CapabilitySource::Local(local) => {
+            let source_dir = lockfile::absolutize(repo_root, Path::new(&local.path));
+            if !local.path.is_empty() && source_dir.join("tuff.toml").is_file() {
+                manifest::load_manifest(&source_dir)?
+            } else if entry.capability_type == CapabilityType::Skill {
+                let installed = installed_source(repo_root, id, entry)?;
+                let mut capability = manifest::synthetic_manifest(&installed, id, &entry.version)?;
+                capability.description.clone_from(&entry.description);
+                capability
+            } else {
+                return Err(unsupported_source_error(id, entry));
+            }
+        }
+        lockfile::CapabilitySource::Pack(_) | lockfile::CapabilitySource::Catalog(_) => {
+            if entry.capability_type == CapabilityType::Skill {
+                let installed = installed_source(repo_root, id, entry)?;
+                let mut capability = manifest::synthetic_manifest(&installed, id, &entry.version)?;
+                capability.description.clone_from(&entry.description);
+                capability
+            } else {
+                return Err(unsupported_source_error(id, entry));
+            }
         }
     };
 
@@ -193,7 +197,7 @@ fn validate_source_identity(
 ) -> Result<()> {
     if capability.id != expected_id
         || capability.capability_type != entry.capability_type
-        || capability.version != entry.installed_version
+        || capability.version != entry.version
         || capability.description != entry.description
     {
         return Err(TuffError::new(format!(
@@ -219,11 +223,6 @@ fn validate_clean_installations<'a>(
             {
                 changed.push(target.installed_path.clone());
             }
-            for emitted in &target.emitted_files {
-                if lockfile::drift_status(repo_root, emitted) != "clean" {
-                    changed.push(emitted.path.clone());
-                }
-            }
             for hook in &target.managed_hooks {
                 if lockfile::managed_hook_status(repo_root, hook) != "clean" {
                     changed.push(format!("{}#{}", hook.settings_path, hook.event));
@@ -245,8 +244,8 @@ fn validate_clean_installations<'a>(
 
 fn unsupported_source_error(id: &str, entry: &CapabilityLockEntry) -> TuffError {
     let provenance = entry
-        .pack
-        .as_ref()
+        .source
+        .as_pack()
         .map(|pack| format!(" from pack {} {}", pack.name, pack.version))
         .unwrap_or_default();
     TuffError::new(format!(

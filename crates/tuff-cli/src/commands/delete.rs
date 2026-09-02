@@ -58,11 +58,7 @@ pub(crate) fn local_modifications(
         && crate::cache::hash_tree(&scope_root.join(&target_entry.installed_path))
             .map(|hash| hash != target_entry.sha256)
             .unwrap_or(true);
-    let files = modified_tree
-        || target_entry
-            .emitted_files
-            .iter()
-            .any(|emitted| lockfile::drift_status(scope_root, emitted) == "modified");
+    let files = modified_tree;
     let managed = target_entry
         .managed_hooks
         .iter()
@@ -86,7 +82,7 @@ pub fn cmd_delete(
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
     let target_ids = resolve_agent_selection(&scope_root, targets, scope == Scope::Global)?;
 
-    let mut lf = lockfile::require_lockfile(&scope_root)?;
+    let mut lf = lockfile::require_scoped_lockfile(&scope_root, scope)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {
         TuffError::new(format!(
             "'{}' is not installed in {} scope",
@@ -142,10 +138,9 @@ pub fn cmd_delete(
     } else {
         lf.capabilities.insert(id.to_string(), entry);
     }
-    lockfile::write_lockfile(&scope_root, &lf)?;
-    lockfile::prune_unreferenced_baseline_objects(&scope_root, &lf)?;
+    lockfile::write_scoped_lockfile(&scope_root, scope, &lf)?;
     if id != capability_index::CAPABILITY_INDEX_ID {
-        capability_index::regenerate_capability_index(&scope_root)?;
+        capability_index::regenerate_capability_index(&scope_root, scope)?;
     }
     println!("deleted '{}' from {} scope", id, scope.as_str());
     Ok(())
@@ -155,7 +150,7 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
     let (scope, scope_root) = resolve_cleanup_scope(repo_root, scope_str)?;
     let target_ids = resolve_agent_selection(&scope_root, targets, scope == Scope::Global)?;
 
-    let mut lf = lockfile::require_lockfile(&scope_root)?;
+    let mut lf = lockfile::require_scoped_lockfile(&scope_root, scope)?;
     let mut entry = lf.capabilities.get(id).cloned().ok_or_else(|| {
         TuffError::new(format!(
             "'{}' is not installed in {} scope",
@@ -182,10 +177,9 @@ pub fn cmd_untrack(repo_root: &Path, id: &str, scope_str: &str, targets: &[Strin
     } else {
         lf.capabilities.insert(id.to_string(), entry);
     }
-    lockfile::write_lockfile(&scope_root, &lf)?;
-    lockfile::prune_unreferenced_baseline_objects(&scope_root, &lf)?;
+    lockfile::write_scoped_lockfile(&scope_root, scope, &lf)?;
     if id != capability_index::CAPABILITY_INDEX_ID {
-        capability_index::regenerate_capability_index(&scope_root)?;
+        capability_index::regenerate_capability_index(&scope_root, scope)?;
     }
     println!("untracked '{}' from {} scope", id, scope.as_str());
     Ok(())

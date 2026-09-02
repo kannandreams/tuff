@@ -64,22 +64,6 @@ fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<
                 }
             }
 
-            for emitted in &target_entry.emitted_files {
-                let file_path = scope_root.join(&emitted.path);
-
-                if !file_path.exists() {
-                    failing_files.push(emitted.path.clone());
-                    continue;
-                }
-
-                if let Ok(content) = std::fs::read(&file_path) {
-                    let hash = lockfile::hash_bytes(&content);
-                    if hash != emitted.hash {
-                        failing_files.push(emitted.path.clone());
-                    }
-                }
-            }
-
             for hook in &target_entry.managed_hooks {
                 if lockfile::managed_hook_status(scope_root, hook) != "clean" {
                     failing_files.push(format!("{}#{}", hook.settings_path, hook.event));

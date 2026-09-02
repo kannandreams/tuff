@@ -178,8 +178,11 @@ fn add_catalog_server(
     let capability = resolve_capability(manifest)?;
 
     if scope == Scope::Project
-        && let Some(warning) =
-            resolver::check_collision(&capability.id, repo_root, Some(crate::catalog::SOURCE_URL))?
+        && let Some(warning) = resolver::check_collision(
+            &capability.id,
+            repo_root,
+            Some(resolver::CATALOG_SOURCE_IDENTITY),
+        )?
     {
         eprintln!("{warning}");
     }
@@ -190,12 +193,12 @@ fn add_catalog_server(
         &capability,
         manifest,
         &target_ids,
-        Some(&SourceMetaInput {
-            source_type: crate::catalog::SOURCE_TYPE.to_string(),
-            url: crate::catalog::SOURCE_URL.to_string(),
-            source_ref: manifest.version.clone(),
-            skill: manifest.id.clone(),
-        }),
+        Some(lockfile::CapabilitySource::Catalog(
+            lockfile::CatalogSource {
+                id: manifest.id.clone(),
+                version: manifest.version.clone(),
+            },
+        )),
         true,
     )?;
     println!(
@@ -300,12 +303,13 @@ fn cmd_add_git(
         &capability,
         &manifest,
         target_ids,
-        Some(&SourceMetaInput {
-            source_type: "git".to_string(),
+        Some(lockfile::CapabilitySource::Git(lockfile::GitSource {
             url: clean_url,
-            source_ref: commit_sha,
-            skill: source_skill.to_string(),
-        }),
+            path: source_skill.to_string(),
+            git_ref: commit_sha,
+            tag: None,
+            requested: None,
+        })),
         true,
     );
     drop(source_guard);
@@ -623,22 +627,12 @@ fn adopt_capability_in_place(
         }
     }
 
-    let mut lockfile = lockfile::require_lockfile(install_root)?;
+    let mut lockfile = lockfile::require_scoped_lockfile(install_root, scope)?;
     if lockfile.capabilities.contains_key(&capability.id) {
         return Err(TuffError::new(format!(
             "capability '{}' is already tracked; use 'tuff update {}' for tracked changes",
             capability.id, capability.id
         )));
-    }
-
-    let mut emitted_files = Vec::new();
-    for (rel_path, content) in &capability.source_files {
-        let file_path = capability_dir.join(rel_path);
-        emitted_files.push(adapter::EmittedFile {
-            path: relative_or_absolute_canonical(&file_path, install_root),
-            hash: lockfile::hash_bytes(&fs::read(&file_path)?),
-            baseline_hash: lockfile::write_baseline_object(install_root, content)?,
-        });
     }
 
     let mut targets = BTreeMap::new();
@@ -648,7 +642,6 @@ fn adopt_capability_in_place(
     targets.insert(
         inferred_target.to_string(),
         lockfile::TargetLockEntry {
-            emitted_files,
             managed_hooks: Vec::new(),
             managed_mcp_entry: None,
             ownership: lockfile::TargetOwnership::Imported,
@@ -661,21 +654,22 @@ fn adopt_capability_in_place(
         capability.id.clone(),
         lockfile::CapabilityLockEntry {
             capability_type: capability.capability_type,
-            installed_version: capability.version.clone(),
+            version: capability.version.clone(),
+            version_scheme: lockfile::VersionScheme::Declared,
             description: capability.description.clone(),
-            source_path: relative_or_absolute_canonical(capability_dir, install_root),
+            source: lockfile::CapabilitySource::local(relative_or_absolute_canonical(
+                capability_dir,
+                install_root,
+            )),
             targets,
-            source: None,
-            scope: scope.as_str().to_string(),
-            pack: None,
             implementation: manifest.implementation.clone(),
             parameters: manifest.parameters.clone(),
             workflow: manifest.workflow.clone(),
             server: manifest.server.clone(),
         },
     );
-    lockfile::write_lockfile(install_root, &lockfile)?;
-    capability_index::regenerate_capability_index(install_root)?;
+    lockfile::write_scoped_lockfile(install_root, scope, &lockfile)?;
+    capability_index::regenerate_capability_index(install_root, scope)?;
     println!(
         "added {} ({}, {}) -> {}",
         capability.id,
@@ -704,15 +698,8 @@ pub(crate) fn write_planned_file(
     Ok(adapter::EmittedFile {
         path: planned.path.clone(),
         hash: lockfile::hash_bytes(&planned.content),
-        baseline_hash: lockfile::write_baseline_object(install_root, &planned.content)?,
+        baseline_hash: lockfile::hash_bytes(&planned.content),
     })
-}
-
-pub(crate) struct SourceMetaInput {
-    pub source_type: String,
-    pub url: String,
-    pub source_ref: String,
-    pub skill: String,
 }
 
 pub(crate) fn install_capability(
@@ -721,11 +708,9 @@ pub(crate) fn install_capability(
     capability: &adapter::ResolvedCapability,
     manifest: &manifest::CapabilityManifest,
     target_ids: &[String],
-    source_meta: Option<&SourceMetaInput>,
+    source: Option<lockfile::CapabilitySource>,
     report: bool,
 ) -> Result<()> {
-    let is_git = source_meta.is_some();
-
     let mut adapters = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
@@ -756,7 +741,7 @@ pub(crate) fn install_capability(
         plans.push((*adapter, planned));
     }
 
-    let lockfile = lockfile::require_lockfile(install_root)?;
+    let lockfile = lockfile::require_scoped_lockfile(install_root, scope)?;
     for (adapter, planned_files) in &plans {
         let is_tracked = lockfile
             .capabilities
@@ -806,7 +791,6 @@ pub(crate) fn install_capability(
     let mut new_targets: BTreeMap<String, TargetLockEntry> = BTreeMap::new();
 
     for (adapter, planned_files) in &plans {
-        let mut emitted = Vec::new();
         let mut managed_hooks = Vec::new();
 
         if let CapabilityKind::Hook { hook } = &capability.kind {
@@ -848,14 +832,7 @@ pub(crate) fn install_capability(
 
         for planned in planned_files {
             let target_path = install_root.join(&planned.path);
-            let emitted_file = write_planned_file(install_root, planned)?;
-
-            let shared_settings = managed_hooks
-                .iter()
-                .any(|hook| hook.settings_path == planned.path);
-            if !shared_settings {
-                emitted.push(emitted_file);
-            }
+            write_planned_file(install_root, planned)?;
 
             if report && should_print_installed_file(capability, planned) {
                 println!(
@@ -876,7 +853,6 @@ pub(crate) fn install_capability(
         new_targets.insert(
             adapter.id().to_string(),
             TargetLockEntry {
-                emitted_files: emitted,
                 managed_hooks,
                 managed_mcp_entry: None,
                 ownership: target_ownership_for(capability, install_root, *adapter),
@@ -999,28 +975,22 @@ pub(crate) fn install_capability(
         merged_targets.insert(k, v);
     }
 
-    let source_path = if is_git {
-        String::new()
-    } else {
-        lockfile::relative_or_absolute_fs(&manifest.root, install_root)
-    };
+    let source = source.unwrap_or_else(|| {
+        lockfile::CapabilitySource::local(lockfile::relative_or_absolute_fs(
+            &manifest.root,
+            install_root,
+        ))
+    });
 
     lockfile.capabilities.insert(
         capability.id.clone(),
         lockfile::CapabilityLockEntry {
             capability_type: capability.capability_type,
-            installed_version: capability.version.clone(),
+            version: capability.version.clone(),
+            version_scheme: source.default_version_scheme(),
             description: capability.description.clone(),
-            source_path,
+            source,
             targets: merged_targets,
-            source: source_meta.map(|m| lockfile::SourceMetadata {
-                source_type: m.source_type.clone(),
-                url: m.url.clone(),
-                source_ref: m.source_ref.clone(),
-                skill: m.skill.clone(),
-            }),
-            scope: scope.as_str().to_string(),
-            pack: None,
             implementation: manifest.implementation.clone(),
             parameters: manifest.parameters.clone(),
             workflow: manifest.workflow.clone(),
@@ -1028,9 +998,8 @@ pub(crate) fn install_capability(
         },
     );
 
-    lockfile::write_lockfile(install_root, &lockfile)?;
-    lockfile::prune_unreferenced_baseline_objects(install_root, &lockfile)?;
-    capability_index::regenerate_capability_index(install_root)?;
+    lockfile::write_scoped_lockfile(install_root, scope, &lockfile)?;
+    capability_index::regenerate_capability_index(install_root, scope)?;
     Ok(())
 }
 

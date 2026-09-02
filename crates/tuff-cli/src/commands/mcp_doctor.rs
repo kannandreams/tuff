@@ -33,12 +33,12 @@ pub fn cmd_mcp_doctor(
     ignore_failures: bool,
     timeout_secs: u64,
 ) -> Result<()> {
-    let scope_root = if global {
-        home_dir()?
+    let (scope_root, scope) = if global {
+        (home_dir()?, crate::resolver::Scope::Global)
     } else {
-        repo_root.to_path_buf()
+        (repo_root.to_path_buf(), crate::resolver::Scope::Project)
     };
-    let lf = lockfile::require_lockfile(&scope_root)?;
+    let lf = lockfile::require_scoped_lockfile(&scope_root, scope)?;
 
     let mut candidates: Vec<(String, crate::manifest::McpServerConfig, Vec<String>)> = lf
         .capabilities

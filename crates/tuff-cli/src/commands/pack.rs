@@ -522,6 +522,7 @@ pub fn cmd_add_pack(
         version: artifact.metadata.version.clone(),
         digest: artifact.digest.clone(),
         registry: registry.clone(),
+        path: String::new(),
     };
     for capability in &artifact.metadata.capabilities {
         let entry = staged_lock
@@ -533,9 +534,11 @@ pub fn cmd_add_pack(
                     capability.id
                 ))
             })?;
-        entry.source_path.clear();
-        entry.source = None;
-        entry.pack = Some(provenance.clone());
+        entry.source = lockfile::CapabilitySource::Pack(PackProvenance {
+            path: capability.source_path.clone(),
+            ..provenance.clone()
+        });
+        entry.version_scheme = entry.source.default_version_scheme();
     }
     lockfile::write_lockfile_at(&staging.path().join("tuff.lock"), &staged_lock)?;
 
@@ -1196,8 +1199,9 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
         .get(id)
         .ok_or_else(|| TuffError::new(format!("'{id}' is not installed")))?;
     let provenance = entry
-        .pack
-        .clone()
+        .source
+        .as_pack()
+        .cloned()
         .ok_or_else(|| TuffError::new(format!("'{id}' was not installed from a pack")))?;
 
     let members = pack_members(&lock, &provenance.name);
@@ -1390,8 +1394,8 @@ fn pack_members(lock: &lockfile::Lockfile, pack_name: &str) -> Vec<String> {
         .iter()
         .filter(|(_, entry)| {
             entry
-                .pack
-                .as_ref()
+                .source
+                .as_pack()
                 .is_some_and(|pack| pack.name == pack_name)
         })
         .map(|(id, _)| id.clone())
@@ -1549,9 +1553,6 @@ fn apply_pack_update(
                     collect_project_tree(repo_root, &tree, &mut previous_paths)?;
                 }
             }
-            for emitted in &target_entry.emitted_files {
-                previous_paths.insert(PathBuf::from(&emitted.path));
-            }
             for hook in &target_entry.managed_hooks {
                 previous_paths.insert(PathBuf::from(&hook.settings_path));
             }
@@ -1572,9 +1573,6 @@ fn apply_pack_update(
             let tree = repo_root.join(&target_entry.installed_path);
             if !target_entry.installed_path.is_empty() && tree.is_dir() {
                 collect_project_tree(repo_root, &tree, &mut previous_paths)?;
-            }
-            for emitted in &target_entry.emitted_files {
-                previous_paths.insert(PathBuf::from(&emitted.path));
             }
         }
     }
@@ -1629,6 +1627,7 @@ fn apply_pack_update(
         version: artifact.metadata.version.clone(),
         digest: artifact.digest.clone(),
         registry: provenance.registry.clone(),
+        path: String::new(),
     };
     for capability in &artifact.metadata.capabilities {
         let entry = staged_lock
@@ -1640,9 +1639,11 @@ fn apply_pack_update(
                     capability.id
                 ))
             })?;
-        entry.source_path.clear();
-        entry.source = None;
-        entry.pack = Some(new_provenance.clone());
+        entry.source = lockfile::CapabilitySource::Pack(PackProvenance {
+            path: capability.source_path.clone(),
+            ..new_provenance.clone()
+        });
+        entry.version_scheme = entry.source.default_version_scheme();
     }
     lockfile::write_lockfile_at(&staged_lock_path, &staged_lock)?;
 
@@ -1681,7 +1682,6 @@ fn apply_pack_update(
         }
         remove_empty_parents(&path, repo_root);
     }
-    lockfile::prune_unreferenced_baseline_objects(repo_root, &staged_lock)?;
     Ok(())
 }
 
