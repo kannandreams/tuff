@@ -86,6 +86,8 @@ pub(crate) fn style_outdated_status(status: &str) -> String {
         "up to date" => format!("{} {}", paint("✓", "32"), paint("up to date", "32")),
         "outdated" => format!("{} {}", paint("●", "33"), paint("outdated", "33")),
         "error" => format!("{} {}", paint("✗", "31"), paint("error", "31")),
+        "repointed" => format!("{} {}", paint("✗", "31"), paint("repointed", "31")),
+        "tag missing" => format!("{} {}", paint("✗", "31"), paint("tag missing", "31")),
         other => other.to_string(),
     }
 }

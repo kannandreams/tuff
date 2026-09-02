@@ -204,6 +204,89 @@ pub async fn list_pack_versions(
     Ok(response.tags)
 }
 
+/// What a pack tag points at right now, learned from the manifest alone.
+///
+/// Resolving a tag costs one manifest fetch (a few hundred bytes of JSON)
+/// and no blob download: a Tuff pack manifest carries exactly one layer,
+/// and that layer's digest *is* the `.tuffpack` artifact digest the lockfile
+/// records. Comparing the two answers "is the tag still the bytes I
+/// installed?" without pulling the pack again.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OciResolvedTag {
+    pub manifest_digest: String,
+    /// The pack layer digest, `sha256:<hex>`, equal to the artifact digest.
+    pub artifact_digest: String,
+    /// Pack name from the manifest annotations, when present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Pack version from the manifest annotations, when present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
+/// Resolves a tag (or digest) reference to the pack it currently names.
+///
+/// Returns `Ok(None)` when the registry reports the tag as missing, which is
+/// a distinct answer from a network or authentication failure: a deleted tag
+/// is something the caller should say out loud, not fold into "error".
+///
+/// # Errors
+///
+/// Returns an error for an invalid reference, credential and TLS failures,
+/// unsupported OCI metadata, or registry protocol failures other than a
+/// missing manifest.
+pub async fn resolve_pack_tag(
+    reference: &str,
+    options: &OciTransferOptions,
+) -> Result<Option<OciResolvedTag>> {
+    let requested = parse_pull_reference(reference)?;
+    let client = registry_client(options)?;
+    let auth = registry_auth(requested.registry())?;
+    let manifest_digest = match client.fetch_manifest_digest(&requested, &auth).await {
+        Ok(digest) => digest,
+        Err(error) if manifest_is_missing(&error) => return Ok(None),
+        Err(error) => return Err(oci_error("resolve OCI pack reference", error)),
+    };
+    let (_, manifest) = fetch_pack_manifest(&client, &auth, &requested, &manifest_digest).await?;
+    let annotations = manifest.annotations.as_ref();
+    Ok(Some(OciResolvedTag {
+        manifest_digest,
+        artifact_digest: manifest.layers[0].digest.clone(),
+        name: annotations.and_then(|a| a.get(OCI_TITLE_ANNOTATION).cloned()),
+        version: annotations.and_then(|a| a.get(OCI_VERSION_ANNOTATION).cloned()),
+    }))
+}
+
+/// Pulls the manifest behind an already-resolved digest and validates its
+/// shape as a Tuff pack manifest. Shared by [`resolve_pack_tag`] and
+/// [`pull_pack`], which differ only in whether the layer is downloaded.
+async fn fetch_pack_manifest(
+    client: &Client,
+    auth: &RegistryAuth,
+    requested: &Reference,
+    manifest_digest: &str,
+) -> Result<(Reference, OciImageManifest)> {
+    let pinned = Reference::with_digest(
+        requested.registry().to_string(),
+        requested.repository().to_string(),
+        manifest_digest.to_string(),
+    );
+    let (manifest_bytes, pulled_digest) = client
+        .pull_manifest_raw(&pinned, auth, &[OCI_IMAGE_MEDIA_TYPE])
+        .await
+        .map_err(|error| oci_error("pull OCI pack manifest", error))?;
+    if pulled_digest != manifest_digest {
+        return Err(TuffError::new(format!(
+            "pulled OCI manifest digest mismatch: resolved {manifest_digest}, received {pulled_digest}"
+        )));
+    }
+    let manifest: OciImageManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| TuffError::new(format!("invalid OCI pack manifest JSON: {error}")))?;
+    validate_pack_manifest(&manifest)?;
+    Ok((pinned, manifest))
+}
+
 /// Pulls one OCI-distributed pack, verifies both OCI and Tuff integrity, and persists it atomically.
 ///
 /// # Errors
@@ -229,23 +312,8 @@ pub async fn pull_pack(
         .fetch_manifest_digest(&requested, &auth)
         .await
         .map_err(|error| oci_error("resolve OCI pack reference", error))?;
-    let pinned = Reference::with_digest(
-        requested.registry().to_string(),
-        requested.repository().to_string(),
-        manifest_digest.clone(),
-    );
-    let (manifest_bytes, pulled_digest) = client
-        .pull_manifest_raw(&pinned, &auth, &[OCI_IMAGE_MEDIA_TYPE])
-        .await
-        .map_err(|error| oci_error("pull OCI pack manifest", error))?;
-    if pulled_digest != manifest_digest {
-        return Err(TuffError::new(format!(
-            "pulled OCI manifest digest mismatch: resolved {manifest_digest}, received {pulled_digest}"
-        )));
-    }
-    let manifest: OciImageManifest = serde_json::from_slice(&manifest_bytes)
-        .map_err(|error| TuffError::new(format!("invalid OCI pack manifest JSON: {error}")))?;
-    validate_pack_manifest(&manifest)?;
+    let (pinned, manifest) =
+        fetch_pack_manifest(&client, &auth, &requested, &manifest_digest).await?;
     let layer = &manifest.layers[0];
 
     let parent = output.parent().unwrap_or_else(|| Path::new("."));

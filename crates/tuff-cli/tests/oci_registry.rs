@@ -318,3 +318,121 @@ fn update_resolves_and_installs_a_newer_pack_version_from_the_registry() {
         .assert()
         .success();
 }
+
+#[test]
+#[ignore = "requires TUFF_OCI_TEST_REGISTRY to name a disposable OCI registry"]
+fn outdated_and_update_detect_a_tag_repointed_to_different_content() {
+    let registry = std::env::var("TUFF_OCI_TEST_REGISTRY")
+        .expect("TUFF_OCI_TEST_REGISTRY must name the test registry host and port");
+    let temp = TempDir::new().unwrap();
+    let original = temp.path().join("original.tuffpack");
+    let republished = temp.path().join("republished.tuffpack");
+    make_pack(temp.path(), "1.0.0", "# As installed\n", &original);
+    // Same pack, same version, different bytes: the supply-chain case.
+    let republished_source = temp.path().join("republished-src");
+    fs::create_dir_all(&republished_source).unwrap();
+    make_pack(
+        &republished_source,
+        "1.0.0",
+        "# Quietly changed\n",
+        &republished,
+    );
+    let repository = format!("{registry}/tuff-tests/repoint-{}", std::process::id());
+    let tag = format!("{repository}:1.0.0");
+    push_json(&original, &tag, false);
+
+    let project = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .args([
+            "add",
+            "pack",
+            original.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--reference",
+            &tag,
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .args(["outdated", "--plain-http"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("up to date"))
+        .stdout(predicate::str::contains("repointed").not());
+
+    // Move the tag. --force is the only way a push does this, on purpose.
+    push_json(&republished, &tag, true);
+
+    tuff()
+        .current_dir(project.path())
+        .args(["outdated", "--plain-http"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("registry-skill"))
+        .stdout(predicate::str::contains("repointed"))
+        .stdout(predicate::str::contains("up to date").not());
+
+    // A plain update refuses: "up to date" would be a lie, and silently
+    // replacing the install would be worse.
+    tuff()
+        .current_dir(project.path())
+        .args(["update", "registry-skill", "--plain-http"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("was republished"))
+        .stderr(predicate::str::contains("--force"));
+    assert_eq!(
+        fs::read_to_string(
+            project
+                .path()
+                .join(".agents/skills/registry-skill/SKILL.md")
+        )
+        .unwrap(),
+        "# As installed\n"
+    );
+    tuff()
+        .current_dir(project.path())
+        .args(["update", "registry-skill", "--check", "--plain-http"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("was republished"));
+
+    // Forcing it accepts what the tag serves now and records that digest.
+    tuff()
+        .current_dir(project.path())
+        .args(["update", "registry-skill", "--force", "--plain-http"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "updated pack com.acme/registry-test 1.0.0 -> 1.0.0",
+        ));
+    assert_eq!(
+        fs::read_to_string(
+            project
+                .path()
+                .join(".agents/skills/registry-skill/SKILL.md")
+        )
+        .unwrap(),
+        "# Quietly changed\n"
+    );
+    tuff()
+        .current_dir(project.path())
+        .args(["outdated", "--plain-http"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("up to date"))
+        .stdout(predicate::str::contains("repointed").not());
+    tuff()
+        .current_dir(project.path())
+        .arg("check")
+        .assert()
+        .success();
+}

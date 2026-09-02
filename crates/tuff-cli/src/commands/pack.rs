@@ -1199,11 +1199,51 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
             let tags = block_on_oci(oci::list_pack_versions(registry, oci_options))?;
             let latest = match super::outdated::compare_pack_versions(&provenance.version, &tags) {
                 super::outdated::PackVersionStatus::Current => {
-                    println!(
-                        "pack {} is already up to date ({})",
-                        provenance.name, provenance.version
-                    );
-                    return Ok(());
+                    // Newest tag or not, the tag may no longer be the bytes
+                    // that were installed. Say so rather than "up to date".
+                    match super::outdated::verify_pack_tag(&provenance, registry, oci_options) {
+                        super::outdated::PackTagIntegrity::Matches => {
+                            println!(
+                                "pack {} is already up to date ({})",
+                                provenance.name, provenance.version
+                            );
+                            return Ok(());
+                        }
+                        super::outdated::PackTagIntegrity::Repointed { live_digest } => {
+                            if check {
+                                println!(
+                                    "pack {} {} was republished: installed sha256:{}, {registry}:{} now serves {live_digest}; 'tuff update {id} --force' replaces the installed release with what the tag serves now",
+                                    provenance.name,
+                                    provenance.version,
+                                    provenance.digest,
+                                    provenance.version
+                                );
+                                return Ok(());
+                            }
+                            if !force {
+                                return Err(TuffError::new(format!(
+                                    "pack {} {} was republished: installed sha256:{}, {registry}:{} now serves {live_digest}; inspect with 'tuff outdated', then use --force to replace the installed release with what the tag serves now",
+                                    provenance.name,
+                                    provenance.version,
+                                    provenance.digest,
+                                    provenance.version
+                                )));
+                            }
+                            provenance.version.clone()
+                        }
+                        super::outdated::PackTagIntegrity::Missing => {
+                            return Err(TuffError::new(format!(
+                                "pack {} {} is installed but {registry}:{} no longer exists in the registry; the installed release cannot be reproduced from there",
+                                provenance.name, provenance.version, provenance.version
+                            )));
+                        }
+                        super::outdated::PackTagIntegrity::Unavailable(error) => {
+                            return Err(TuffError::new(format!(
+                                "could not verify pack {} {} against {registry}: {error}",
+                                provenance.name, provenance.version
+                            )));
+                        }
+                    }
                 }
                 super::outdated::PackVersionStatus::Unknown => {
                     return Err(TuffError::new(format!(
