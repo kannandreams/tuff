@@ -7,7 +7,7 @@ use tempfile::TempDir;
 use crate::adapter::{AdapterKind, AgentAdapter, resolve_capability};
 use crate::error::{Result, TuffError};
 use crate::git;
-use crate::lockfile;
+use crate::lockfile::{self, CapabilitySource};
 use crate::manifest::{self, load_manifest};
 use crate::resolver::{self, Scope};
 use crate::tree_diff::{self, FileChange};
@@ -132,13 +132,12 @@ pub(crate) fn materialize_baseline(
     let materialized = materialize_source(scope_root, id, entry, target, true)?;
     let actual = crate::cache::hash_tree(&materialized.path)?;
     if actual != *expected {
-        if entry.source.is_none()
-            && !Path::new(&entry.source_path).is_absolute()
-            && !scope_root.join(&entry.source_path).exists()
+        if let Some(source_path) = entry.source.local_path()
+            && !Path::new(source_path).is_absolute()
+            && !scope_root.join(source_path).exists()
         {
             return Err(TuffError::new(format!(
-                "The recorded baseline for \"{id}\" is not cached, and its local source \"{}\" is no longer available.\n\nRestore the source, reinstall the capability, or run the appropriate Tuff command to accept the current content as a new baseline.",
-                entry.source_path
+                "The recorded baseline for \"{id}\" is not cached, and its local source \"{source_path}\" is no longer available.\n\nRestore the source, reinstall the capability, or run the appropriate Tuff command to accept the current content as a new baseline."
             )));
         }
         return Err(TuffError::new(format!(
@@ -159,17 +158,17 @@ fn materialize_upstream(
     target: &str,
 ) -> Result<MaterializedTree> {
     match &entry.source {
-        None => {
+        CapabilitySource::Local(_) | CapabilitySource::Pack(_) => {
             return Err(TuffError::new(
                 "upstream diff only available for git-sourced capabilities",
             ));
         }
-        Some(source) if source.source_type == crate::catalog::SOURCE_TYPE => {
+        CapabilitySource::Catalog(_) => {
             return Err(TuffError::new(
                 "upstream diff is not available for catalog capabilities; run `tuff outdated` to compare against the built-in catalog",
             ));
         }
-        Some(_) => {}
+        CapabilitySource::Git(_) => {}
     }
     materialize_source(scope_root, id, entry, target, false)
 }
@@ -183,21 +182,30 @@ fn materialize_source(
 ) -> Result<MaterializedTree> {
     let adapter = AdapterKind::from_id(target)
         .ok_or_else(|| TuffError::new(format!("unknown target '{target}'")))?;
-    let source = entry.source.as_ref();
+    let missing_local = |source_path: &str| {
+        TuffError::new(format!(
+            "The recorded baseline for \"{id}\" is not cached, and its local source \"{source_path}\" is no longer available.\n\nRestore the source, reinstall the capability, or run the appropriate Tuff command to accept the current content as a new baseline."
+        ))
+    };
 
-    if source.is_none() && is_in_place_source_path(&entry.source_path) {
+    // An adopted capability, or a pack member, has no source tree apart
+    // from the installed one.
+    let in_place = match &entry.source {
+        CapabilitySource::Local(local) => is_in_place_source_path(&local.path),
+        CapabilitySource::Pack(_) => true,
+        CapabilitySource::Git(_) | CapabilitySource::Catalog(_) => false,
+    };
+    if in_place {
+        let fallback = entry.source.local_path().unwrap_or_default();
         let path = entry
             .targets
             .get(target)
             .map(|target_entry| target_entry.installed_path.as_str())
             .filter(|path| !path.is_empty())
             .map(|path| scope_root.join(path))
-            .unwrap_or_else(|| scope_root.join(&entry.source_path));
+            .unwrap_or_else(|| scope_root.join(fallback));
         if !path.is_dir() {
-            return Err(TuffError::new(format!(
-                "The recorded baseline for \"{id}\" is not cached, and its local source \"{}\" is no longer available.\n\nRestore the source, reinstall the capability, or run the appropriate Tuff command to accept the current content as a new baseline.",
-                entry.source_path
-            )));
+            return Err(missing_local(fallback));
         }
         return Ok(MaterializedTree {
             _sources: Vec::new(),
@@ -205,37 +213,30 @@ fn materialize_source(
         });
     }
 
-    if let Some(source) = source
-        && source.source_type == crate::catalog::SOURCE_TYPE
-    {
-        let manifest = crate::catalog::lookup(&source.skill)?.ok_or_else(|| {
-            TuffError::new(format!(
-                "The recorded baseline for \"{id}\" is not cached, and '{}' is no longer in the built-in catalog.",
-                source.skill
-            ))
-        })?;
-        return plan_into_temp(adapter, &manifest, entry, id, None);
-    }
-
-    let (source_guard, source_dir) = if let Some(source) = source {
-        let reference = pinned.then_some(source.source_ref.as_str());
-        let (guard, path, _) = git::clone_to_temp(&source.url, reference)?;
-        (Some(guard), path)
-    } else {
-        let source_dir = lockfile::absolutize(scope_root, Path::new(&entry.source_path));
-        if !source_dir.is_dir() {
-            return Err(TuffError::new(format!(
-                "The recorded baseline for \"{id}\" is not cached, and its local source \"{}\" is no longer available.\n\nRestore the source, reinstall the capability, or run the appropriate Tuff command to accept the current content as a new baseline.",
-                entry.source_path
-            )));
+    let (source_guard, capability_dir) = match &entry.source {
+        CapabilitySource::Catalog(catalog) => {
+            let manifest = crate::catalog::lookup(&catalog.id)?.ok_or_else(|| {
+                TuffError::new(format!(
+                    "The recorded baseline for \"{id}\" is not cached, and '{}' is no longer in the built-in catalog.",
+                    catalog.id
+                ))
+            })?;
+            return plan_into_temp(adapter, &manifest, entry, id, None);
         }
-        (None, source_dir)
-    };
-
-    let capability_dir = if let Some(source) = source {
-        git::discover_capability(&source_dir, &source.skill, entry.capability_type)?
-    } else {
-        lockfile::absolutize(scope_root, Path::new(&entry.source_path))
+        CapabilitySource::Git(git) => {
+            let reference = pinned.then_some(git.git_ref.as_str());
+            let (guard, checkout, _) = git::clone_to_temp(&git.url, reference)?;
+            let dir = git::discover_capability(&checkout, &git.path, entry.capability_type)?;
+            (Some(guard), dir)
+        }
+        CapabilitySource::Local(local) => {
+            let dir = lockfile::absolutize(scope_root, Path::new(&local.path));
+            if !dir.is_dir() {
+                return Err(missing_local(&local.path));
+            }
+            (None, dir)
+        }
+        CapabilitySource::Pack(_) => unreachable!("pack members are materialized in place"),
     };
     let manifest = if capability_dir.join("tuff.toml").is_file() {
         load_manifest(&capability_dir)?

@@ -172,47 +172,54 @@ fn classify(
     oci_options: &OciTransferOptions,
     cache: &mut PackCheckCache,
 ) -> (String, String, String) {
-    if let Some(pack) = &entry.pack
-        && let Some(registry) = &pack.registry
-    {
-        return classify_pack(pack, registry, oci_options, cache);
-    }
-
-    let Some(src) = &entry.source else {
-        return (
-            entry.installed_version.clone(),
-            "—".to_string(),
-            "not checked".to_string(),
-        );
+    let (src_url, src_path) = match &entry.source {
+        lockfile::CapabilitySource::Pack(pack) => {
+            return match &pack.registry {
+                Some(registry) => classify_pack(pack, registry, oci_options, cache),
+                None => (
+                    entry.version.clone(),
+                    "—".to_string(),
+                    "not checked".to_string(),
+                ),
+            };
+        }
+        lockfile::CapabilitySource::Local(_) => {
+            return (
+                entry.version.clone(),
+                "—".to_string(),
+                "not checked".to_string(),
+            );
+        }
+        lockfile::CapabilitySource::Catalog(catalog) => {
+            let (latest, status) = match crate::catalog::lookup(&catalog.id) {
+                Ok(Some(manifest)) if manifest.version == entry.version => {
+                    (manifest.version, "up to date")
+                }
+                Ok(Some(manifest)) => (manifest.version, "outdated"),
+                // Removed from the catalog, or the catalog itself is broken:
+                // either way there is nothing current to compare against.
+                _ => ("unavailable".to_string(), "error"),
+            };
+            return (entry.version.clone(), latest, status.to_string());
+        }
+        lockfile::CapabilitySource::Git(git) => (&git.url, &git.path),
     };
+    let _ = src_path;
 
-    if src.source_type == crate::catalog::SOURCE_TYPE {
-        let (latest, status) = match crate::catalog::lookup(&src.skill) {
-            Ok(Some(manifest)) if manifest.version == entry.installed_version => {
-                (manifest.version, "up to date")
-            }
-            Ok(Some(manifest)) => (manifest.version, "outdated"),
-            // Removed from the catalog, or the catalog itself is broken:
-            // either way there is nothing current to compare against.
-            _ => ("unavailable".to_string(), "error"),
-        };
-        return (entry.installed_version.clone(), latest, status.to_string());
-    }
-
-    match git::clone_to_temp(&src.url, None).and_then(|(_guard, d, _)| git::resolve_ref(&d)) {
+    match git::clone_to_temp(src_url, None).and_then(|(_guard, d, _)| git::resolve_ref(&d)) {
         Err(_) => (
-            short_sha(&entry.installed_version).to_string(),
+            short_sha(&entry.version).to_string(),
             "unavailable".to_string(),
             "error".to_string(),
         ),
         Ok(latest_sha) => {
-            let status = if latest_sha == entry.installed_version {
+            let status = if latest_sha == entry.version {
                 "up to date"
             } else {
                 "outdated"
             };
             (
-                short_sha(&entry.installed_version).to_string(),
+                short_sha(&entry.version).to_string(),
                 short_sha(&latest_sha).to_string(),
                 status.to_string(),
             )
@@ -302,16 +309,14 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn entry(source: Option<lockfile::SourceMetadata>) -> lockfile::CapabilityLockEntry {
+    fn entry(source: lockfile::CapabilitySource) -> lockfile::CapabilityLockEntry {
         lockfile::CapabilityLockEntry {
             capability_type: CapabilityType::Skill,
-            installed_version: "1.0.0".to_string(),
+            version: "1.0.0".to_string(),
+            version_scheme: lockfile::VersionScheme::Declared,
             description: String::new(),
-            source_path: "agent-capabilities/example".to_string(),
-            targets: BTreeMap::new(),
             source,
-            scope: "project".to_string(),
-            pack: None,
+            targets: BTreeMap::new(),
             implementation: None,
             parameters: None,
             workflow: None,
@@ -326,7 +331,9 @@ mod tests {
         // "up to date" here states a conclusion that was never reached: the
         // row would claim the capability is current while LATEST is unknown.
         let (current, latest, status) = classify(
-            &entry(None),
+            &entry(lockfile::CapabilitySource::local(
+                "agent-capabilities/example",
+            )),
             &OciTransferOptions::default(),
             &mut PackCheckCache::default(),
         );

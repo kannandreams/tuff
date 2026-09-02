@@ -120,59 +120,33 @@ pub(crate) fn collect_lockfile_inventory(
                 }))
                 .find(|status| *status != "clean")
                 .unwrap_or("clean");
-            if target_entry.emitted_files.is_empty() {
-                let installed_path = target_entry.installed_path.clone();
-                let status = if installed_path.is_empty() {
-                    "error"
+            let installed_path = target_entry.installed_path.clone();
+            let status = if installed_path.is_empty() {
+                "error"
+            } else {
+                match crate::cache::hash_tree(&root.join(&installed_path)) {
+                    Ok(hash) if hash == target_entry.sha256 => "clean",
+                    Ok(_) | Err(_) => "modified",
+                }
+            };
+            rows.push(InventoryRow {
+                id: id.clone(),
+                capability_type: entry.capability_type,
+                version: short_sha(&entry.version).to_string(),
+                scope: scope.to_string(),
+                target: target_id.clone(),
+                status: if managed_status == "clean" {
+                    status.to_string()
                 } else {
-                    match crate::cache::hash_tree(&root.join(&installed_path)) {
-                        Ok(hash) if hash == target_entry.sha256 => "clean",
-                        Ok(_) | Err(_) => "modified",
-                    }
-                };
-                rows.push(InventoryRow {
-                    id: id.clone(),
-                    capability_type: entry.capability_type,
-                    version: short_sha(&entry.installed_version).to_string(),
-                    scope: scope.to_string(),
-                    target: target_id.clone(),
-                    status: if managed_status == "clean" {
-                        status.to_string()
-                    } else {
-                        managed_status.to_string()
-                    },
-                    path: match path_prefix {
-                        Some(prefix) => format!("{prefix}{installed_path}"),
-                        None => installed_path,
-                    },
-                    description: description.clone(),
-                    source_type: source_type.clone(),
-                });
-                continue;
-            }
-            for emitted in &target_entry.emitted_files {
-                let file_status = lockfile::drift_status(root, emitted);
-                let status = if managed_status != "clean" {
-                    managed_status
-                } else {
-                    file_status
-                };
-                let path = match path_prefix {
-                    Some(prefix) => format!("{prefix}{}", emitted.path),
-                    None => emitted.path.clone(),
-                };
-                rows.push(InventoryRow {
-                    id: id.clone(),
-                    capability_type: entry.capability_type,
-                    version: short_sha(&entry.installed_version).to_string(),
-                    scope: scope.to_string(),
-                    target: target_id.clone(),
-                    status: status.to_string(),
-                    path,
-                    description: description.clone(),
-                    source_type: source_type.clone(),
-                });
-            }
+                    managed_status.to_string()
+                },
+                path: match path_prefix {
+                    Some(prefix) => format!("{prefix}{installed_path}"),
+                    None => installed_path,
+                },
+                description: description.clone(),
+                source_type: source_type.clone(),
+            });
         }
     }
 
@@ -184,11 +158,15 @@ fn capability_description(root: &Path, entry: &lockfile::CapabilityLockEntry) ->
         return entry.description.clone();
     }
 
-    if entry.source_path.trim().is_empty() {
+    let Some(source_path) = entry
+        .source
+        .local_path()
+        .filter(|path| !path.trim().is_empty())
+    else {
         return String::new();
-    }
+    };
 
-    let source_path = Path::new(&entry.source_path);
+    let source_path = Path::new(source_path);
     let capability_dir = if source_path.is_absolute() {
         source_path.to_path_buf()
     } else {
@@ -201,10 +179,7 @@ fn capability_description(root: &Path, entry: &lockfile::CapabilityLockEntry) ->
 }
 
 fn capability_source_type(entry: &lockfile::CapabilityLockEntry) -> String {
-    match &entry.source {
-        Some(source) if !source.source_type.is_empty() => source.source_type.clone(),
-        _ => "local".to_string(),
-    }
+    entry.source.kind().to_string()
 }
 
 pub(crate) fn project_inventory(

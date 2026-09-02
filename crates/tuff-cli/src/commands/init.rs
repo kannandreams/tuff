@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use crate::adapter;
 use crate::config;
 use crate::display;
 use crate::error::Result;
@@ -72,11 +71,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             std::fs::create_dir_all(&guide_path)?;
             std::fs::write(guide_path.join("SKILL.md"), TUFF_GUIDE_CONTENT)?;
 
-            let hash = lockfile::hash_bytes(TUFF_GUIDE_CONTENT.as_bytes());
             let baseline_tree_hash = crate::cache::hash_tree(&guide_path)?;
             crate::cache::populate(&home_dir()?, &baseline_tree_hash, &guide_path)?;
-            let baseline_hash =
-                lockfile::write_baseline_object(repo_root, TUFF_GUIDE_CONTENT.as_bytes())?;
             let mut lf = lockfile::require_lockfile(repo_root).unwrap_or(lockfile::Lockfile {
                 version: lockfile::LOCKFILE_VERSION,
                 capabilities: BTreeMap::new(),
@@ -86,11 +82,6 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             targets.insert(
                 "open-agents".to_string(),
                 lockfile::TargetLockEntry {
-                    emitted_files: vec![adapter::EmittedFile {
-                        path: ".agents/skills/tuff-cli-guide/SKILL.md".into(),
-                        hash,
-                        baseline_hash,
-                    }],
                     managed_hooks: Vec::new(),
                     managed_mcp_entry: None,
                     ownership: lockfile::TargetOwnership::Generated,
@@ -103,13 +94,11 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                 "tuff-cli-guide".into(),
                 lockfile::CapabilityLockEntry {
                     capability_type: CapabilityType::Skill,
-                    installed_version: "0.1.0".into(),
+                    version: "0.1.0".into(),
+                    version_scheme: lockfile::VersionScheme::Declared,
                     description: "Guide for using Tuff CLI commands inside this repository.".into(),
-                    source_path: String::new(),
+                    source: lockfile::CapabilitySource::local(""),
                     targets,
-                    source: None,
-                    scope: "project".into(),
-                    pack: None,
                     implementation: None,
                     parameters: None,
                     workflow: None,

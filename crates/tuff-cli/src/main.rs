@@ -17,8 +17,8 @@ use commands::{
     PackBuildOptions, PackInitOptions, cmd_add, cmd_add_mcp, cmd_add_pack, cmd_agent_add,
     cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check,
     cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
-    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_mcp_doctor,
-    cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init,
+    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_lock_migrate,
+    cmd_mcp_doctor, cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init,
     cmd_pack_inspect, cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status, cmd_untrack,
     cmd_update,
 };
@@ -226,6 +226,12 @@ enum Command {
         action: CacheCommand,
     },
 
+    /// Inspect and migrate the project lockfile.
+    Lock {
+        #[command(subcommand)]
+        action: LockCommand,
+    },
+
     /// Diagnose installed MCP server capabilities.
     Mcp {
         #[command(subcommand)]
@@ -260,6 +266,12 @@ enum McpCommand {
 enum CacheCommand {
     /// Delete all disposable cached materialized trees and source clones.
     Clear,
+}
+
+#[derive(Subcommand)]
+enum LockCommand {
+    /// Rewrite tuff.lock in the current schema version, changing nothing else.
+    Migrate,
 }
 
 #[derive(Subcommand)]
@@ -865,6 +877,9 @@ fn run() -> Result<()> {
         Some(Command::Cache {
             action: CacheCommand::Clear,
         }) => cmd_cache_clear(),
+        Some(Command::Lock {
+            action: LockCommand::Migrate,
+        }) => cmd_lock_migrate(&repo_root),
         Some(Command::Mcp { action }) => match action {
             McpCommand::Doctor {
                 agent,

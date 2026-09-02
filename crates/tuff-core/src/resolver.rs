@@ -76,6 +76,10 @@ pub fn overrides_global(id: &str, repo_root: &Path) -> Result<bool> {
     Ok(project_exists && global_exists)
 }
 
+/// The identity `check_collision` uses for a catalog install: there is no
+/// URL, and one catalog entry installed twice is the same source.
+pub const CATALOG_SOURCE_IDENTITY: &str = "catalog";
+
 pub fn check_collision(
     id: &str,
     _repo_root: &Path,
@@ -89,7 +93,11 @@ pub fn check_collision(
         return Ok(None);
     };
 
-    let global_source = global_entry.source.as_ref().map(|s| s.url.as_str());
+    let global_source = match &global_entry.source {
+        lockfile::CapabilitySource::Git(git) => Some(git.url.as_str()),
+        lockfile::CapabilitySource::Catalog(_) => Some(CATALOG_SOURCE_IDENTITY),
+        lockfile::CapabilitySource::Local(_) | lockfile::CapabilitySource::Pack(_) => None,
+    };
 
     match (new_source_url, global_source) {
         (Some(new_url), Some(global_url)) if new_url != global_url => Ok(Some(format!(
@@ -141,13 +149,13 @@ mod tests {
                 id.to_string(),
                 lockfile::CapabilityLockEntry {
                     capability_type: ct,
-                    installed_version: version.to_string(),
+                    version: version.to_string(),
+                    version_scheme: lockfile::VersionScheme::Declared,
                     description: String::new(),
-                    source_path: "".into(),
+                    source: lockfile::CapabilitySource::local(""),
                     targets: std::collections::BTreeMap::from([(
                         "open-agents".to_string(),
                         lockfile::TargetLockEntry {
-                            emitted_files: Vec::new(),
                             managed_hooks: Vec::new(),
                             managed_mcp_entry: None,
                             ownership: lockfile::TargetOwnership::Generated,
@@ -155,9 +163,6 @@ mod tests {
                             installed_path: String::new(),
                         },
                     )]),
-                    source: None,
-                    scope: "project".into(),
-                    pack: None,
                     implementation: None,
                     parameters: None,
                     workflow: None,
@@ -192,7 +197,7 @@ mod tests {
         let result = read_lockfile(Scope::Project, Some(tmp.path())).unwrap();
         assert!(result.is_some());
         let lf = result.unwrap();
-        assert_eq!(lf.capabilities["test"].installed_version, "1.0-project");
+        assert_eq!(lf.capabilities["test"].version, "1.0-project");
     }
 
     #[test]

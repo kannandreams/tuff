@@ -6,13 +6,20 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Changed
+
+- **Lockfile schema version 2.** A capability's origin is now one `[capabilities.source]` table with a `kind` of `local`, `git`, `catalog`, or `pack`, replacing the `source`, `repository`, `source_path`, and `resolved_ref` columns and the optional `pack` table. Every row gains `version_scheme` (`declared`, `sha`, or `semver`), reserved so release-tag resolution can land later without another schema change. `emittedFiles` and `scope`, which were never persisted, are removed. Version 1 files written by 0.1.x are read transparently by every command; read-only commands never rewrite them, the first mutating command writes version 2, and `tuff lock migrate` does only the rewrite. A lockfile from a newer Tuff is refused by version number rather than failing as a parse error. Version 1 stays readable throughout 0.2.x.
+
 ### Added
+
+- Added `tuff lock migrate`, which rewrites `tuff.lock` in the current schema and changes nothing else.
 
 - Added pack updates: `tuff update <member>` on a capability installed by `tuff add pack` now moves the whole pack forward. With a registry on record it resolves the newest semver tag, pulls it, and applies it; `--pack <artifact>` applies a pulled file instead, for offline use or a pack installed without `--reference`. Members the new release drops are removed, new members are installed, shared hook and MCP registrations follow, and `--check` previews all of it. Local edits block the update unless `--force` is given. `tuff update` gained `--plain-http` and `--ca-file`, matching `tuff outdated`.
 - Added detection of a pack tag silently repointed to different content. `tuff outdated` now resolves each installed pack's tag and compares its digest with the one recorded at install; a mismatch reads `repointed` and a deleted tag reads `tag missing`, both taking precedence over `outdated`. `tuff update` on such a pack refuses to report it as up to date and explains that `--force` replaces the installed release with what the tag serves now. One manifest fetch per pack per run, no artifact download; registry lookups are also no longer repeated for every member and harness of the same pack.
 
 ### Fixed
 
+- Fixed a project-scoped install landing in the global lockfile when `XDG_STATE_HOME` was set on a machine that had used `--global`. The lockfile path was inferred from the directory and treated the project root as a home directory; the scope is now passed explicitly everywhere.
 - Fixed `tuff add pack` refusing to install into any project that already had a tool, workflow, or MCP server. The generated capability index those give a project is tracked, but the pack install treated the staged copy of it as an untracked file it must not overwrite.
 
 ### Improved

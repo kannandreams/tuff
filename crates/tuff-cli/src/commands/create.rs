@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use crate::adapter::{self, AdapterKind, AgentAdapter};
+use crate::adapter::{AdapterKind, AgentAdapter};
 use crate::config;
 use crate::error::{Result, TuffError};
 use crate::lockfile::{self, TargetLockEntry};
@@ -42,7 +42,7 @@ pub fn cmd_create(
         }
     }
 
-    let lock_path = lockfile::lockfile_path(repo_root);
+    let lock_path = lockfile::project_lockfile(repo_root);
     let mut tuff_lock = if lock_path.exists() {
         lockfile::read_lockfile_at(&lock_path)?
     } else {
@@ -99,17 +99,7 @@ pub fn cmd_create(
         let baseline_hash = crate::cache::hash_tree(root)?;
         crate::cache::populate(&super::home_dir()?, &baseline_hash, root)?;
 
-        let mut emitted_files = Vec::new();
         let mut managed_hooks = Vec::new();
-        for (name, content) in files {
-            let target_path = root.join(name);
-            let baseline_hash = lockfile::write_baseline_object(repo_root, content.as_bytes())?;
-            emitted_files.push(adapter::EmittedFile {
-                path: lockfile::relative_or_absolute_fs(&target_path, repo_root),
-                hash: lockfile::hash_bytes(content.as_bytes()),
-                baseline_hash,
-            });
-        }
 
         if kind == CapabilityType::Hook {
             let settings_relpath = adapter.hook_settings_relpath();
@@ -147,7 +137,6 @@ pub fn cmd_create(
         target_entries.insert(
             adapter.id().to_string(),
             TargetLockEntry {
-                emitted_files,
                 managed_hooks,
                 managed_mcp_entry: None,
                 ownership: lockfile::TargetOwnership::Generated,
@@ -174,13 +163,11 @@ pub fn cmd_create(
         id.to_string(),
         lockfile::CapabilityLockEntry {
             capability_type: kind,
-            installed_version: "0.1.0".to_string(),
+            version: "0.1.0".to_string(),
+            version_scheme: lockfile::VersionScheme::Declared,
             description: default_capability_description(kind).to_string(),
-            source_path,
+            source: lockfile::CapabilitySource::local(source_path),
             targets: target_entries,
-            source: None,
-            scope: "project".to_string(),
-            pack: None,
             implementation: None,
             parameters: None,
             workflow: None,

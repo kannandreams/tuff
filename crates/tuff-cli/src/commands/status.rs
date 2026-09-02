@@ -21,12 +21,6 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
                         Ok(_) | Err(_) => flags.push("modified"),
                     }
                 }
-                for emitted in &target_entry.emitted_files {
-                    let s = lockfile::drift_status(repo_root, emitted);
-                    if s != "clean" {
-                        flags.push(s);
-                    }
-                }
                 for hook in &target_entry.managed_hooks {
                     let s = lockfile::managed_hook_status(repo_root, hook);
                     if s != "clean" {
@@ -51,9 +45,11 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
 
             if entry.capability_type == CapabilityType::Workflow && !entry.targets.is_empty() {
                 let (_, target_entry) = entry.targets.iter().next().unwrap();
-                if let Some(emitted) = target_entry.emitted_files.first()
-                    && let Ok(content) = std::fs::read_to_string(repo_root.join(&emitted.path))
-                {
+                if let Ok(content) = std::fs::read_to_string(
+                    repo_root
+                        .join(&target_entry.installed_path)
+                        .join("workflow.toml"),
+                ) {
                     let mut requires = Vec::new();
                     let mut current_id = String::new();
                     for line in content.lines() {
@@ -85,11 +81,14 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
                             if let Some(child_entry) = lf.capabilities.get(req_id) {
                                 let mut child_drift = Vec::new();
                                 for ct_entry in child_entry.targets.values() {
-                                    for e in &ct_entry.emitted_files {
-                                        let s = lockfile::drift_status(repo_root, e);
-                                        if s != "clean" {
-                                            child_drift.push(s);
-                                        }
+                                    if ct_entry.installed_path.is_empty()
+                                        || crate::cache::hash_tree(
+                                            &repo_root.join(&ct_entry.installed_path),
+                                        )
+                                        .map(|hash| hash != ct_entry.sha256)
+                                        .unwrap_or(true)
+                                    {
+                                        child_drift.push("modified");
                                     }
                                 }
                                 if child_drift.is_empty() {
@@ -123,12 +122,6 @@ pub fn cmd_status(repo_root: &Path) -> Result<()> {
                         match crate::cache::hash_tree(&path) {
                             Ok(hash) if hash == target_entry.sha256 => {}
                             Ok(_) | Err(_) => flags.push("modified"),
-                        }
-                    }
-                    for emitted in &target_entry.emitted_files {
-                        let s = lockfile::drift_status(&home, emitted);
-                        if s != "clean" {
-                            flags.push(s);
                         }
                     }
                     for hook in &target_entry.managed_hooks {

@@ -21,6 +21,7 @@ use crate::adapter::{self, AgentAdapter};
 use crate::error::Result;
 use crate::lockfile::{self, CapabilityLockEntry, TargetLockEntry};
 use crate::manifest::CapabilityType;
+use crate::resolver::Scope;
 
 use super::add::write_planned_file;
 use super::hooks::registered_adapters;
@@ -34,8 +35,8 @@ const INDEX_DESCRIPTION: &str = "Index of project tools and workflows installed 
 /// the index entirely from the lockfile, so calling it when nothing
 /// relevant changed is a cheap no-op (the render is compared against the
 /// last-known content hash before anything is written).
-pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
-    let mut lockfile = lockfile::require_lockfile(repo_root)?;
+pub(crate) fn regenerate_capability_index(repo_root: &Path, scope: Scope) -> Result<()> {
+    let mut lockfile = lockfile::require_scoped_lockfile(repo_root, scope)?;
     let adapters = registered_adapters(repo_root)?;
 
     let mut new_targets: BTreeMap<String, TargetLockEntry> = BTreeMap::new();
@@ -68,10 +69,10 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
             .capabilities
             .get(CAPABILITY_INDEX_ID)
             .and_then(|entry| entry.targets.get(adapter.id()));
-        let unchanged = skill_path.exists()
-            && existing_target
-                .and_then(|target| target.emitted_files.first())
-                .is_some_and(|file| file.hash == content_hash);
+        let unchanged = existing_target.is_some()
+            && std::fs::read(&skill_path)
+                .map(|bytes| lockfile::hash_bytes(&bytes) == content_hash)
+                .unwrap_or(false);
         if unchanged {
             new_targets.insert(adapter.id().to_string(), existing_target.unwrap().clone());
             continue;
@@ -103,7 +104,6 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
         new_targets.insert(
             adapter.id().to_string(),
             TargetLockEntry {
-                emitted_files: emitted,
                 managed_hooks: Vec::new(),
                 managed_mcp_entry: None,
                 ownership: lockfile::TargetOwnership::Generated,
@@ -115,7 +115,7 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
 
     if new_targets.is_empty() {
         if lockfile.capabilities.remove(CAPABILITY_INDEX_ID).is_some() {
-            lockfile::write_lockfile(repo_root, &lockfile)?;
+            lockfile::write_scoped_lockfile(repo_root, scope, &lockfile)?;
         }
         return Ok(());
     }
@@ -124,20 +124,18 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path) -> Result<()> {
         CAPABILITY_INDEX_ID.to_string(),
         CapabilityLockEntry {
             capability_type: CapabilityType::Skill,
-            installed_version: "1.0.0".to_string(),
+            version: "1.0.0".to_string(),
+            version_scheme: lockfile::VersionScheme::Declared,
             description: INDEX_DESCRIPTION.to_string(),
-            source_path: "<generated>".to_string(),
+            source: lockfile::CapabilitySource::local(""),
             targets: new_targets,
-            source: None,
-            scope: "project".to_string(),
-            pack: None,
             implementation: None,
             parameters: None,
             workflow: None,
             server: None,
         },
     );
-    lockfile::write_lockfile(repo_root, &lockfile)
+    lockfile::write_scoped_lockfile(repo_root, scope, &lockfile)
 }
 
 fn indexable<'a>(
@@ -357,7 +355,6 @@ mod tests {
         targets.insert(
             target.to_string(),
             TargetLockEntry {
-                emitted_files: Vec::new(),
                 managed_hooks: Vec::new(),
                 managed_mcp_entry: None,
                 ownership: TargetOwnership::Generated,
@@ -367,13 +364,11 @@ mod tests {
         );
         CapabilityLockEntry {
             capability_type: CapabilityType::Tool,
-            installed_version: "1.0.0".into(),
+            version: "1.0.0".into(),
+            version_scheme: lockfile::VersionScheme::Declared,
             description: description.into(),
-            source_path: String::new(),
             targets,
-            source: None,
-            scope: "project".into(),
-            pack: None,
+            source: lockfile::CapabilitySource::local(""),
             implementation: Some(ImplementationConfig {
                 language: language.into(),
                 entrypoint: entrypoint.into(),

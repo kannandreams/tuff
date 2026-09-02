@@ -636,6 +636,14 @@ tuff untrack my-skill -a open-agents --scope global
 capability files, source directories, and MCP configuration.
 The lockfile itself remains in place, even when it contains no capabilities.
 
+### `tuff lock migrate`
+
+Rewrite `tuff.lock` in the current schema version, changing nothing else. Tuff reads older versions transparently, so this is only needed to land the migration as its own commit; on a current file it is a no-op. See the [lockfile reference](/concepts/lockfile#migrating-from-version-1).
+
+```sh frame="terminal"
+tuff lock migrate
+```
+
 ### `tuff cache clear`
 
 Delete Tuff's disposable machine-local cache of materialized trees and source
