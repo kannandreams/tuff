@@ -5858,3 +5858,76 @@ fn update_pack_replaces_shared_hook_and_mcp_registrations() {
         .assert()
         .success();
 }
+
+#[test]
+fn add_pack_into_a_project_that_already_has_a_capability_index() {
+    // Any installed tool, workflow, or MCP server gives the project a
+    // tracked capability index. A pack install regenerates that index in
+    // staging and must be allowed to replace the tracked copy; refusing it
+    // as an "untracked file" made pack installs impossible for exactly the
+    // projects most likely to want them.
+    let author = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let pack = make_pack(author.path());
+    let artifact = author.path().join("pack.tuffpack");
+    tuff()
+        .current_dir(author.path())
+        .args([
+            "pack",
+            "build",
+            pack.to_str().unwrap(),
+            "--output",
+            artifact.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+    let tool = make_tool_primitive(project.path(), "existing-tool");
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+    let index = project
+        .path()
+        .join(".agents/skills/tuff-capabilities/SKILL.md");
+    assert!(index.is_file(), "the tool install produced an index");
+    assert!(
+        fs::read_to_string(&index)
+            .unwrap()
+            .contains("existing-tool")
+    );
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "pack",
+            artifact.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed pack com.acme/engineering 1.2.0",
+        ));
+
+    let rendered = fs::read_to_string(&index).unwrap();
+    assert!(rendered.contains("existing-tool"), "{rendered}");
+    assert!(rendered.contains("pack-workflow"), "{rendered}");
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("check")
+        .assert()
+        .success();
+}

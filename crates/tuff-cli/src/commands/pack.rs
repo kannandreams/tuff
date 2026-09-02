@@ -935,6 +935,27 @@ fn collect_install_mutations(
             && let Some(target_entry) = index_entry.targets.get(adapter.id())
         {
             collect_mutation_tree(stage, &stage.join(&target_entry.installed_path), &mut paths)?;
+            // A project that already has a tool, workflow, or MCP server
+            // already has an index on disk, and it is tracked. The pack's
+            // regenerated index replaces it; refusing to overwrite it would
+            // make every such project unable to install a pack at all.
+            let index_tracked_here = lockfile::require_lockfile(repo_root)
+                .ok()
+                .and_then(|current| {
+                    current
+                        .capabilities
+                        .get(capability_index::CAPABILITY_INDEX_ID)
+                        .map(|entry| entry.targets.contains_key(adapter.id()))
+                })
+                .unwrap_or(false);
+            if index_tracked_here {
+                let index_root = PathBuf::from(&target_entry.installed_path);
+                for (path, must_be_absent) in paths.iter_mut() {
+                    if path.starts_with(&index_root) {
+                        *must_be_absent = false;
+                    }
+                }
+            }
         }
 
         let mcp_path = PathBuf::from(adapter.mcp_config_relpath());
