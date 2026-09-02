@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- Added `tuff mcp search <query>`, which searches the official MCP registry, and taught `tuff add mcp <name>` to install from it when the name is not a built-in catalog id. The catalog's twelve curated entries stay the shortcut; the registry's thousands are now reachable by name. Tuff assembles the launch command from the entry's package type (`npm` under `npx`, `pypi` under `uvx`, `oci` under `docker`, `nuget` under `dnx`), pins the version the registry lists, and records environment variables as references, never values. An entry it cannot express exactly is refused with the reason rather than installed approximately. `tuff outdated` and `tuff update` re-resolve a registry install against its registry, and `--registry` points any of it at a self-hosted one.
+
 ## [0.3.0] - 2026-09-02
 
 ### Added

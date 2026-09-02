@@ -208,6 +208,80 @@ fn update_local_from_source(
     Ok(())
 }
 
+/// Re-resolve an MCP server that was installed from a registry.
+///
+/// The registry is the upstream here, so unlike a built-in catalog entry the
+/// answer can change without Tuff being upgraded. The comparison is the
+/// entry's published version; the drift rules are the catalog's, because the
+/// installed artifact is the same shape either way.
+#[allow(clippy::too_many_arguments)]
+fn update_from_registry(
+    scope_root: &Path,
+    scope: Scope,
+    id: &str,
+    entry: &lockfile::CapabilityLockEntry,
+    registry: &str,
+    source: &CatalogSource,
+    target_ids: &[String],
+    check: bool,
+    force: bool,
+) -> Result<()> {
+    let Some(server) = super::block_on_oci(crate::registry::fetch(registry, &source.id))? else {
+        return Err(TuffError::not_found(format!(
+            "'{}' is no longer published in {registry} (installed at {})",
+            source.id, entry.version
+        ))
+        .with_hint("delete it, or reinstall it from a path"));
+    };
+    let manifest = crate::registry::to_manifest(&server, id)?;
+    let latest = manifest.version.clone();
+
+    let entry_drifted = target_ids.iter().any(|target_id| {
+        entry
+            .targets
+            .get(target_id)
+            .and_then(|target| target.managed_mcp_entry.as_ref())
+            .is_some_and(|managed| {
+                lockfile::managed_mcp_entry_status(scope_root, id, managed) != "clean"
+            })
+    });
+    if latest == entry.version && !entry_drifted {
+        println!("'{id}' is already up to date ({registry} {latest})");
+        return Ok(());
+    }
+    if check {
+        if entry_drifted {
+            println!(
+                "'{id}' has a hand-edited MCP config entry; update --force would restore the canonical entry"
+            );
+        } else {
+            println!("'{id}' can be updated: {} → {latest}", entry.version);
+        }
+        return Ok(());
+    }
+    if entry_drifted && !force {
+        return Err(
+            TuffError::drift(format!("'{id}' has local changes")).with_hint(format!(
+                "run 'tuff diff {id}' first, or use --force to reload from {registry}"
+            )),
+        );
+    }
+    let capability = resolve_capability(&manifest)?;
+    install_capability(
+        scope_root,
+        scope,
+        &capability,
+        &manifest,
+        target_ids,
+        Some(CapabilitySource::Catalog(CatalogSource {
+            id: source.id.clone(),
+            version: latest,
+            registry: Some(registry.to_string()),
+        })),
+        true,
+    )
+}
+
 /// Re-resolve a catalog-installed MCP server against the catalog compiled
 /// into this binary. Each entry's own version is the "upstream ref": a
 /// newer Tuff can carry a newer version of that one entry, and that is the
@@ -224,6 +298,11 @@ fn update_from_catalog(
     let CapabilitySource::Catalog(source) = &entry.source else {
         unreachable!("catalog source checked by caller");
     };
+    if let Some(registry) = source.registry.as_deref() {
+        return update_from_registry(
+            scope_root, scope, id, entry, registry, source, target_ids, check, force,
+        );
+    }
     let Some(manifest) = crate::catalog::lookup(&source.id)? else {
         return Err(TuffError::not_found(format!(
             "'{}' is no longer in the built-in catalog (installed from catalog {})",
@@ -305,6 +384,7 @@ fn update_from_catalog(
         Some(CapabilitySource::Catalog(CatalogSource {
             id: source.id.clone(),
             version: latest,
+            registry: source.registry.clone(),
         })),
         true,
     )

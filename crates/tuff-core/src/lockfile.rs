@@ -158,10 +158,19 @@ pub struct GitSource {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CatalogSource {
-    /// The built-in catalog entry id.
+    /// The catalog entry id: a built-in id, or the server's full registry
+    /// name when `registry` is set.
     pub id: String,
     /// That entry's version at install time.
     pub version: String,
+    /// The MCP registry this entry came from, when it did not come from the
+    /// catalog compiled into the binary.
+    ///
+    /// Optional so a built-in install writes exactly what it always wrote:
+    /// an older Tuff reading a newer lockfile ignores the field rather than
+    /// failing to parse the row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<String>,
 }
 
 /// Immutable pack release that delivered a capability entry.
@@ -548,9 +557,12 @@ fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
                         tag: None,
                         requested: None,
                     }),
+                    // A v1 lockfile predates registry installs, so every
+                    // catalog row in one came from the built-in catalog.
                     "catalog" => CapabilitySource::Catalog(CatalogSource {
                         id: item.source_path,
                         version: item.resolved_ref,
+                        registry: None,
                     }),
                     // The generated capability index wrote a sentinel path
                     // in v1; it has no source tree and v2 says so plainly.
@@ -959,6 +971,7 @@ version = "1.0.0"
             CapabilitySource::Catalog(CatalogSource {
                 id: "memory".into(),
                 version: "1.0.0".into(),
+                registry: None,
             })
         );
         assert_eq!(

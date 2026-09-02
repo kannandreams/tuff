@@ -5,8 +5,8 @@ mod display;
 mod mcp_client;
 
 pub use tuff_core::{
-    cache, catalog, check, config, error, git, lockfile, manifest, oci, pack, paths, resolver,
-    tool, tree_diff,
+    cache, catalog, check, config, error, git, lockfile, manifest, oci, pack, paths, registry,
+    resolver, tool, tree_diff,
 };
 
 use std::path::PathBuf;
@@ -18,9 +18,9 @@ use commands::{
     cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check,
     cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
     cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_lock_migrate,
-    cmd_mcp_doctor, cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init,
-    cmd_pack_inspect, cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status, cmd_untrack,
-    cmd_update,
+    cmd_mcp_doctor, cmd_mcp_search, cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract,
+    cmd_pack_init, cmd_pack_inspect, cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status,
+    cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -260,6 +260,21 @@ enum McpCommand {
         #[arg(long = "timeout", default_value_t = 10)]
         timeout_secs: u64,
     },
+
+    /// Search the MCP registry for servers to install.
+    Search {
+        /// What to search for: part of a name, or a word from a description.
+        query: String,
+        /// Maximum results to show.
+        #[arg(long = "limit", default_value_t = 20)]
+        limit: usize,
+        /// Registry to search instead of the official one.
+        #[arg(long = "registry", default_value = tuff_core::registry::DEFAULT_REGISTRY)]
+        registry: String,
+        /// Output results as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -398,11 +413,13 @@ enum AddCommand {
         #[arg(long = "reference")]
         reference: Option<String>,
     },
-    /// Install external MCP servers from the built-in catalog, a local path,
-    /// or a git URL — and wire each into every selected harness's MCP config.
+    /// Install external MCP servers from the built-in catalog, the MCP
+    /// registry, a local path, or a git URL, wiring each into every selected
+    /// harness's MCP config.
     Mcp {
-        /// Catalog ids (see `tuff add mcp --help`), paths to a directory
-        /// with a tuff.toml, or git URLs. Several may be given at once.
+        /// Built-in catalog ids, MCP registry names (see `tuff mcp
+        /// search`), paths to a directory with a tuff.toml, or git URLs.
+        /// Several may be given at once.
         #[arg(required = true)]
         sources: Vec<String>,
         /// Agent harness to emit for (repeatable).
@@ -416,6 +433,9 @@ enum AddCommand {
         /// stdin isn't a terminal (scripts, CI).
         #[arg(short = 'y', long = "yes")]
         yes: bool,
+        /// Registry to resolve a name that is not a built-in catalog id.
+        #[arg(long = "registry", default_value = tuff_core::registry::DEFAULT_REGISTRY)]
+        registry: String,
     },
 }
 
@@ -759,9 +779,17 @@ fn run() -> Result<()> {
                 agent: typed_agent,
                 global: typed_global,
                 yes,
+                registry,
             }) => {
                 reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
-                cmd_add_mcp(&repo_root, &sources, &typed_agent, typed_global, yes)
+                cmd_add_mcp(
+                    &repo_root,
+                    &sources,
+                    &typed_agent,
+                    typed_global,
+                    yes,
+                    &registry,
+                )
             }
         },
         Some(Command::Pack { action }) => match action {
@@ -924,6 +952,12 @@ fn run() -> Result<()> {
                 ignore_failures,
                 timeout_secs,
             ),
+            McpCommand::Search {
+                query,
+                limit,
+                registry,
+                json,
+            } => cmd_mcp_search(&query, limit, &registry, json),
         },
     }
 }

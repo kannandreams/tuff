@@ -116,6 +116,34 @@ catalog arrives with a newer Tuff release.
 yet (`http` transport here is a bare `url`, no `headers`). That is a real
 extension, not built speculatively for zero other current consumers.
 
+### The MCP registry
+
+The catalog is twelve entries chosen for correctness. The official [MCP registry](https://registry.modelcontextprotocol.io) holds thousands, published by the server authors themselves, and `tuff add mcp` falls through to it for any name it does not recognise.
+
+```sh frame="terminal"
+tuff mcp search notion
+tuff add mcp com.notion/mcp -a claude
+```
+
+```text
+│ NAME                        │ VERSION │ INSTALL     │ DESCRIPTION                        │
+│ ai.smithery/smithery-notion │ 1.0.0   │ unsupported │ A Notion workspace is a collabor…  │
+│ com.mcparmory/notion        │ 1.0.2   │ uvx         │ Create, update, and manage pages…  │
+│ com.notion/mcp              │ 1.0.1   │ http        │ Official Notion MCP server         │
+```
+
+The `INSTALL` column is the launcher Tuff would use, or `unsupported` with the reason when it cannot express the entry. Knowing that before you install beats finding out after.
+
+A registry entry describes a package and its arguments rather than a command line, so Tuff assembles one: the launcher comes from the entry's `runtimeHint` or its package type (`npm` runs under `npx`, `pypi` under `uvx`, `oci` under `docker`, `nuget` under `dnx`), and the package is pinned to the version the registry lists. Environment variables contribute their names only, as `{ from_env = "NAME" }` references, exactly as a catalog entry does. A registry entry can carry a default *value* for a variable; Tuff never copies one into a manifest, because a manifest is committed.
+
+Names are matched exactly, so a search hit never installs by surprise, and only the current release of each server is offered. The capability id is the last part of the name, unless that only names the protocol: `com.notion/mcp` installs as `notion-mcp` rather than the useless `mcp`.
+
+`tuff outdated` re-resolves a registry install against its registry, so unlike a built-in entry it can go out of date without upgrading Tuff. `tuff update` moves it forward.
+
+**Refused rather than approximated.** An entry Tuff cannot express exactly is refused with the reason, because a wrong launch command wastes more time than a clear no. That covers entries needing a value substituted into a `{placeholder}`, which Tuff has nowhere to ask for; HTTP servers authenticating with a header, the same gap described below; and package kinds with no launcher, such as `mcpb` bundles.
+
+Both `tuff mcp search` and `tuff add mcp` take `--registry`, so a team running its own registry can point at it instead.
+
 ### Choosing your own variable name
 
 At a real terminal, installing from the catalog asks, once per required
@@ -226,7 +254,7 @@ wire into CI alongside `tuff check`.
 
 ## Current limits
 
-- Catalog-installed servers cannot be included in a project pack yet.
+- Catalog- and registry-installed servers cannot be included in a project pack yet.
 - `doctor` only probes `stdio`-transport servers. `http` transport exists in
   the schema but isn't dialed yet. The real Streamable HTTP spec (SSE or
   JSON responses, session ids) is meaningfully more work than stdio, and no
