@@ -76,6 +76,7 @@ export default defineConfig({
           items: [
             { label: 'When to Use Tuff', slug: 'usage-scenarios' },
             { label: 'OCI Registries & Container Images', slug: 'guides/oci-registries-and-container-images' },
+            { label: 'Claude Code Plugin', slug: 'guides/claude-code-plugin' },
             { label: 'Use Cases Overview', slug: 'concepts/development-lifecycle' },
             { label: 'Lifecycle & Drift Detection', slug: 'concepts/lifecycle' },
             { label: 'Diffing & Updates', slug: 'concepts/diff-update' },

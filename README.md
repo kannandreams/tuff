@@ -129,12 +129,24 @@ brew install tuff
 
 The package is named `tuffcli`; every installation method provides the `tuff` command.
 
+### Claude Code plugin
+
+Install the plugin to drive Tuff from a Claude Code session:
+
+```sh
+claude plugin marketplace add kannandreams/tuff
+claude plugin install tuff@tuff
+```
+
+It ships the Tuff command reference as a skill and expects the `tuff` command on your PATH. See the [plugin guide](https://tuffcli.dev/guides/claude-code-plugin/).
+
 ## Documentation
 
 - [Getting started](https://tuffcli.dev/getting-started/)
 - [When to use Tuff](https://tuffcli.dev/usage-scenarios/)
 - [CLI reference](https://tuffcli.dev/cli/)
 - [Lifecycle and drift detection](https://tuffcli.dev/concepts/lifecycle/)
+- [Claude Code plugin](https://tuffcli.dev/guides/claude-code-plugin/)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing

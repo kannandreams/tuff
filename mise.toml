@@ -81,6 +81,14 @@ run = "cargo build -p tuffcli --release"
 description = "Validate tracked Tuff capabilities"
 run = "cargo run -p tuffcli -- check --json"
 
+[tasks.plugin-sync]
+description = "Regenerate the Claude Code plugin's generated files"
+run = "./scripts/check-plugin.sh --sync"
+
+[tasks.plugin-check]
+description = "Validate the Claude Code plugin and marketplace manifests"
+run = "./scripts/check-plugin.sh"
+
 [tasks.security-audit]
 description = "Reject known npm dependency vulnerabilities"
 run = "npm --prefix website audit --audit-level=low"
@@ -168,4 +176,5 @@ run = [
   { task = "docs-check" },
   { task = "docs-build" },
   { task = "capabilities-check" },
+  { task = "plugin-check" },
 ]

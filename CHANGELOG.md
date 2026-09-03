@@ -6,6 +6,14 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- Tuff is now installable as a Claude Code plugin, so an agent session can drive it without the project having run `tuff init` first. `claude plugin marketplace add kannandreams/tuff` followed by `claude plugin install tuff@tuff` installs the `tuff-cli-guide` skill machine-wide, and `--scope project` records it for everyone working in the repository. The plugin carries no binary; it teaches the agent to use a `tuff` on PATH and how to install one when the command is missing. Cursor and Codex have no comparable plugin surface yet, and `tuff init` still installs the same guide into `.agents/skills/` for every harness.
+
+### Changed
+
+- The `tuff-cli-guide` skill no longer opens by asserting that Tuff is installed in the current project, which was untrue wherever the guide arrived before `tuff init` did. It now names the install commands, says to run `tuff init` when there is no `tuff.lock`, and states that emitted harness files and `tuff.lock` are not to be hand-edited.
+
 ## [0.4.0] - 2026-09-03
 
 ### Added
