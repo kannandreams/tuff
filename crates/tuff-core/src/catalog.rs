@@ -78,6 +78,7 @@ pub fn lookup(id: &str) -> Result<Option<CapabilityManifest>> {
         args: server.args,
         url: server.url,
         env,
+        headers: BTreeMap::new(),
         metadata: server.tools_summary.map(|tools_summary| McpServerMetadata {
             tools_summary: Some(tools_summary),
         }),
@@ -102,12 +103,19 @@ pub fn lookup(id: &str) -> Result<Option<CapabilityManifest>> {
 }
 
 /// Environment variables a server declaration expects the developer to
-/// export, in a stable order. Used to print a post-install reminder.
+/// export, in a stable order, across both `[server.env]` and
+/// `[server.headers]`. Used to print a post-install reminder.
 pub fn required_env(server: &McpServerConfig) -> Vec<String> {
     server
         .env
         .values()
         .map(|reference| reference.from_env.clone())
+        .chain(
+            server
+                .headers
+                .values()
+                .map(|reference| reference.from_env.clone()),
+        )
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect()

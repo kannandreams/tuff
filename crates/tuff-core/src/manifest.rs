@@ -91,8 +91,9 @@ pub struct CapabilityManifest {
 /// Declaration of an external MCP server (`type = "mcp-server"`).
 ///
 /// Secrets never appear here: every `[server.env]` value must be an
-/// [`EnvRef`] naming the variable to read on the developer's machine, so a
-/// manifest can be committed and shared without leaking anything.
+/// [`EnvRef`], and every `[server.headers]` value a [`HeaderRef`], naming
+/// the variable to read on the developer's machine, so a manifest can be
+/// committed and shared without leaking anything.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
     #[serde(default)]
@@ -105,6 +106,11 @@ pub struct McpServerConfig {
     pub url: Option<String>,
     #[serde(default)]
     pub env: std::collections::BTreeMap<String, EnvRef>,
+    /// HTTP request headers, keyed by header name. Skipped when empty so a
+    /// server that declares none serializes byte-for-byte as it did before
+    /// headers existed, and no installed record drifts on upgrade.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub headers: std::collections::BTreeMap<String, HeaderRef>,
     #[serde(default)]
     pub metadata: Option<McpServerMetadata>,
 }
@@ -134,6 +140,36 @@ impl McpTransport {
 pub struct EnvRef {
     pub from_env: String,
 }
+
+/// A reference to the environment variable holding one HTTP header's value.
+///
+/// Headers carry secrets at least as often as environment variables do, so
+/// they take the same reference-only shape: a literal string is rejected at
+/// parse time. `format` wraps the value, with `{}` standing for it, which
+/// is what `Authorization = "Bearer <token>"` needs; it defaults to the
+/// bare value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HeaderRef {
+    pub from_env: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+}
+
+impl HeaderRef {
+    /// The header value to emit, given how this harness spells a reference
+    /// to the variable. The reference is substituted into `format`, so the
+    /// harness expands the variable and Tuff never sees the secret.
+    pub fn render(&self, value_reference: &str) -> String {
+        match &self.format {
+            Some(format) => format.replacen(FORMAT_PLACEHOLDER, value_reference, 1),
+            None => value_reference.to_string(),
+        }
+    }
+}
+
+/// The one substitution `format` understands.
+pub const FORMAT_PLACEHOLDER: &str = "{}";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct McpServerMetadata {
@@ -403,6 +439,45 @@ pub fn validate_mcp_server(server: &McpServerConfig) -> Result<()> {
             )));
         }
     }
+    validate_mcp_headers(server)?;
+    Ok(())
+}
+
+/// Headers belong to the request a harness makes, so they are meaningful
+/// only over HTTP; on a stdio server they would be silently dropped, which
+/// is exactly the quiet-success failure RFC-106 exists to remove.
+fn validate_mcp_headers(server: &McpServerConfig) -> Result<()> {
+    if !server.headers.is_empty() && server.transport != McpTransport::Http {
+        return Err(TuffError::usage(
+            "[server.headers] applies to transport = \"http\"; a stdio server passes \
+             secrets through [server.env]",
+        ));
+    }
+    for (name, reference) in &server.headers {
+        if name.trim().is_empty() {
+            return Err(TuffError::usage("[server.headers] keys must be non-empty"));
+        }
+        if reference.from_env.trim().is_empty() {
+            return Err(TuffError::usage(format!(
+                "[server.headers] {name} must reference a variable: \
+                 {name} = {{ from_env = \"VAR\" }}"
+            )));
+        }
+        if let Some(format) = &reference.format {
+            let placeholders = format.matches(FORMAT_PLACEHOLDER).count();
+            if placeholders != 1 {
+                let problem = if placeholders == 0 {
+                    "would discard the value"
+                } else {
+                    "would repeat the value"
+                };
+                return Err(TuffError::usage(format!(
+                    "[server.headers] {name}: format \"{format}\" {problem}"
+                ))
+                .with_hint("format must contain exactly one {} placeholder, as in \"Bearer {}\""));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -412,13 +487,27 @@ pub fn validate_mcp_server(server: &McpServerConfig) -> Result<()> {
 fn parse_manifest(raw: &str, manifest_path: &Path) -> Result<CapabilityManifest> {
     toml::from_str(raw).map_err(|error: toml::de::Error| {
         let message = error.to_string();
-        let literal_env = raw.contains("[server.env]")
-            && (message.contains("invalid type: string") || message.contains("expected a table"));
-        if literal_env {
+        let looks_literal =
+            message.contains("invalid type: string") || message.contains("expected a table");
+        let literal_table = looks_literal
+            .then(|| {
+                ["[server.env]", "[server.headers]"]
+                    .into_iter()
+                    .find(|table| raw.contains(table))
+            })
+            .flatten();
+        if let Some(table) = literal_table {
+            let example = if table == "[server.headers]" {
+                "Authorization = { from_env = \"TOKEN\", format = \"Bearer {}\" }"
+            } else {
+                "NAME = { from_env = \"NAME\" }"
+            };
             TuffError::usage(format!(
-                "invalid manifest at {}: [server.env] values must be references, never \
-                 literals — write NAME = {{ from_env = \"NAME\" }} ({})",
+                "invalid manifest at {}: {} values must be references, never \
+                 literals — write {} ({})",
                 manifest_path.display(),
+                table,
+                example,
                 message.trim()
             ))
         } else {
@@ -689,6 +778,78 @@ files = ["SKILL.md"]
         ))
         .unwrap();
         assert_eq!(ok.server.unwrap().env["TOKEN"].from_env, "MY_TOKEN");
+    }
+
+    #[test]
+    fn mcp_server_headers_must_be_references_not_literals() {
+        let error = load_mcp(&format!(
+            "{MCP_HEAD}[server]\ntransport = \"http\"\nurl = \"https://example.test/mcp\"\n\
+             [server.headers]\nAuthorization = \"Bearer secret\"\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("[server.headers]"), "{error}");
+        assert!(error.contains("from_env"), "{error}");
+    }
+
+    #[test]
+    fn mcp_server_header_reference_carries_an_optional_format() {
+        let server = load_mcp(&format!(
+            "{MCP_HEAD}[server]\ntransport = \"http\"\nurl = \"https://example.test/mcp\"\n\
+             [server.headers]\n\
+             Authorization = {{ from_env = \"NOTION_TOKEN\", format = \"Bearer {{}}\" }}\n\
+             X-Api-Key = {{ from_env = \"API_KEY\" }}\n"
+        ))
+        .unwrap()
+        .server
+        .unwrap();
+        assert_eq!(server.headers["Authorization"].from_env, "NOTION_TOKEN");
+        assert_eq!(
+            server.headers["Authorization"].render("${NOTION_TOKEN}"),
+            "Bearer ${NOTION_TOKEN}"
+        );
+        assert_eq!(server.headers["X-Api-Key"].format, None);
+        assert_eq!(
+            server.headers["X-Api-Key"].render("${API_KEY}"),
+            "${API_KEY}"
+        );
+    }
+
+    #[test]
+    fn mcp_server_header_format_needs_exactly_one_placeholder() {
+        for format in ["Bearer", "Bearer {} {}"] {
+            let error = load_mcp(&format!(
+                "{MCP_HEAD}[server]\ntransport = \"http\"\nurl = \"https://example.test/mcp\"\n\
+                 [server.headers]\n\
+                 Authorization = {{ from_env = \"TOKEN\", format = \"{format}\" }}\n"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("Authorization"), "{format}: {error}");
+        }
+    }
+
+    #[test]
+    fn mcp_server_headers_are_refused_on_stdio() {
+        let error = load_mcp(&format!(
+            "{MCP_HEAD}[server]\ncommand = \"npx\"\n\
+             [server.headers]\nAuthorization = {{ from_env = \"TOKEN\" }}\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("http"), "{error}");
+    }
+
+    /// A server without headers has to serialize exactly as it did before
+    /// the field existed, or every installed record drifts on upgrade.
+    #[test]
+    fn a_server_without_headers_serializes_without_the_table() {
+        let server = load_mcp(&format!("{MCP_HEAD}[server]\ncommand = \"npx\"\n"))
+            .unwrap()
+            .server
+            .unwrap();
+        let wire = toml::to_string_pretty(&server).unwrap();
+        assert!(!wire.contains("headers"), "{wire}");
     }
 
     #[test]

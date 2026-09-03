@@ -125,13 +125,14 @@ pub fn cmd_add_mcp(
     Ok(())
 }
 
-/// Ask, per `[server.env]` entry, whether to use a different variable name
-/// than the catalog's default — never the secret's value, only which
+/// Ask, per variable a server declaration reads, whether to use a different
+/// name than the catalog's default — never the secret's value, only which
 /// variable holds it, matching the "secrets are references, never values"
-/// rule. Only meaningful for catalog installs (a local/git manifest is
-/// already fully under the user's own control). Skipped — silently keeping
-/// the catalog defaults — with `--yes` or when stdin isn't a real terminal,
-/// so this never hangs a script or CI run.
+/// rule. Header references (RFC-106 D1) join this one flow rather than
+/// introducing a second. Only meaningful for catalog installs (a local/git
+/// manifest is already fully under the user's own control). Skipped —
+/// silently keeping the catalog defaults — with `--yes` or when stdin isn't
+/// a real terminal, so this never hangs a script or CI run.
 fn prompt_env_overrides(manifest: &mut manifest::CapabilityManifest, yes: bool) {
     if yes || !std::io::stdin().is_terminal() {
         return;
@@ -139,8 +140,7 @@ fn prompt_env_overrides(manifest: &mut manifest::CapabilityManifest, yes: bool) 
     let Some(server) = manifest.server.as_mut() else {
         return;
     };
-    let defaults: Vec<String> = server.env.keys().cloned().collect();
-    for default in defaults {
+    for default in referenced_variables(server) {
         eprint!(
             "{}: reads {default} from your environment. Press enter to keep it, or type a different variable name: ",
             manifest.id
@@ -167,9 +167,34 @@ fn resolve_prompt_answer(default: &str, line: &str) -> Option<String> {
     }
 }
 
-/// The map key and `from_env` value are always identical today (an entry
-/// only ever declares a variable by name, with no separate purpose label),
-/// so renaming replaces both.
+/// Every variable the server reads, `[server.env]` first and then
+/// `[server.headers]`, each name asked about once however many places
+/// reference it.
+fn referenced_variables(server: &manifest::McpServerConfig) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let referenced = server
+        .env
+        .values()
+        .map(|reference| reference.from_env.clone())
+        .chain(
+            server
+                .headers
+                .values()
+                .map(|reference| reference.from_env.clone()),
+        );
+    for name in referenced {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// In `[server.env]` the map key and `from_env` value are always identical
+/// today (an entry only ever declares a variable by name, with no separate
+/// purpose label), so renaming replaces both. A header is keyed by the
+/// header name instead, so only its reference moves, and its `format` is
+/// carried across untouched.
 fn rename_env_var(server: &mut manifest::McpServerConfig, old_name: &str, new_name: &str) {
     if server.env.remove(old_name).is_some() {
         server.env.insert(
@@ -178,6 +203,11 @@ fn rename_env_var(server: &mut manifest::McpServerConfig, old_name: &str, new_na
                 from_env: new_name.to_string(),
             },
         );
+    }
+    for reference in server.headers.values_mut() {
+        if reference.from_env == old_name {
+            reference.from_env = new_name.to_string();
+        }
     }
 }
 
@@ -1111,6 +1141,7 @@ mod tests {
                     from_env: "GITHUB_TOKEN".to_string(),
                 },
             )]),
+            headers: std::collections::BTreeMap::new(),
             metadata: None,
         };
         rename_env_var(&mut server, "GITHUB_TOKEN", "GH_TOKEN");
@@ -1126,6 +1157,7 @@ mod tests {
             args: Vec::new(),
             url: None,
             env: std::collections::BTreeMap::new(),
+            headers: std::collections::BTreeMap::new(),
             metadata: None,
         };
         rename_env_var(&mut server, "NOT_PRESENT", "OTHER");

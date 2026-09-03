@@ -328,6 +328,51 @@ impl AgentAdapter for Claude {
 mod tests {
     use super::*;
 
+    /// RFC-106 D2: Claude Code keeps `"type": "http"` and expands `${VAR}`.
+    #[test]
+    fn a_remote_server_entry_declares_type_and_renders_headers() {
+        let server = tuff_core::manifest::McpServerConfig {
+            transport: tuff_core::manifest::McpTransport::Http,
+            command: None,
+            args: Vec::new(),
+            url: Some("https://mcp.example.test/mcp".to_string()),
+            env: Default::default(),
+            headers: [
+                (
+                    "Authorization".to_string(),
+                    tuff_core::manifest::HeaderRef {
+                        from_env: "EXAMPLE_TOKEN".to_string(),
+                        format: Some("Bearer {}".to_string()),
+                    },
+                ),
+                (
+                    "X-Api-Key".to_string(),
+                    tuff_core::manifest::HeaderRef {
+                        from_env: "EXAMPLE_KEY".to_string(),
+                        format: None,
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            metadata: None,
+        };
+
+        let entry = Claude.mcp_server_entry(&server);
+
+        assert_eq!(
+            entry,
+            serde_json::json!({
+                "type": "http",
+                "url": "https://mcp.example.test/mcp",
+                "headers": {
+                    "Authorization": "Bearer ${EXAMPLE_TOKEN}",
+                    "X-Api-Key": "${EXAMPLE_KEY}",
+                },
+            })
+        );
+    }
+
     #[test]
     fn constants_are_not_empty() {
         assert!(!ID.is_empty());

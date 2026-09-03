@@ -369,6 +369,9 @@ fn stdio_config(server: &RegistryServer, package: &RegistryPackage) -> Result<Mc
         args,
         url: None,
         env,
+        // Registry entries that authenticate with a header are refused in
+        // `remote_config` until RFC-106 milestone 3 maps them.
+        headers: BTreeMap::new(),
         metadata: Some(McpServerMetadata {
             tools_summary: None,
         }),
@@ -395,6 +398,7 @@ fn remote_config(server: &RegistryServer, remote: &RegistryRemote) -> Result<Mcp
         args: Vec::new(),
         url: Some(remote.url.clone()),
         env: BTreeMap::new(),
+        headers: BTreeMap::new(),
         metadata: Some(McpServerMetadata {
             tools_summary: None,
         }),

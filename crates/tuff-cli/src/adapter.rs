@@ -77,6 +77,10 @@ impl AgentAdapter for AdapterKind {
         self.implementation().mcp_server_entry(server)
     }
 
+    fn mcp_http_declares_type(&self) -> bool {
+        self.implementation().mcp_http_declares_type()
+    }
+
     fn supported_agents(&self) -> &[&'static str] {
         self.implementation().supported_agents()
     }

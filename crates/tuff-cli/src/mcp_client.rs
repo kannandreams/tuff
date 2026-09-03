@@ -252,6 +252,7 @@ mod tests {
                     )
                 })
                 .collect::<BTreeMap<_, _>>(),
+            headers: BTreeMap::new(),
             metadata: None,
         }
     }

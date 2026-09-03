@@ -245,6 +245,13 @@ impl AgentAdapter for Cursor {
         format!("${{env:{var}}}")
     }
 
+    /// Cursor's remote-server entry is `{ "url": …, "headers": … }` with no
+    /// `type` key; it distinguishes stdio from remote by the presence of
+    /// `command` versus `url`.
+    fn mcp_http_declares_type(&self) -> bool {
+        false
+    }
+
     fn supported_agents(&self) -> &[&'static str] {
         SUPPORTED_AGENTS
     }
@@ -297,6 +304,39 @@ impl AgentAdapter for Cursor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RFC-106 D2: Cursor's remote entry has no `type` key and spells a
+    /// variable `${env:VAR}`, unlike every other harness Tuff targets.
+    #[test]
+    fn a_remote_server_entry_omits_type_and_uses_cursor_variable_syntax() {
+        let server = tuff_core::manifest::McpServerConfig {
+            transport: tuff_core::manifest::McpTransport::Http,
+            command: None,
+            args: Vec::new(),
+            url: Some("https://mcp.example.test/mcp".to_string()),
+            env: Default::default(),
+            headers: [(
+                "Authorization".to_string(),
+                tuff_core::manifest::HeaderRef {
+                    from_env: "EXAMPLE_TOKEN".to_string(),
+                    format: Some("Bearer {}".to_string()),
+                },
+            )]
+            .into_iter()
+            .collect(),
+            metadata: None,
+        };
+
+        let entry = Cursor.mcp_server_entry(&server);
+
+        assert_eq!(
+            entry,
+            serde_json::json!({
+                "url": "https://mcp.example.test/mcp",
+                "headers": {"Authorization": "Bearer ${env:EXAMPLE_TOKEN}"},
+            })
+        );
+    }
 
     #[test]
     fn id_and_display_name_are_not_empty() {
