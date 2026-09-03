@@ -1,14 +1,21 @@
 {
   "name": "tuff",
   "displayName": "Tuff",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Drive the Tuff capability lifecycle manager from a Claude Code session: install, version, diff, and validate the skills, tools, hooks, workflows, and MCP servers a repository gives its agents. Requires the tuff CLI on PATH.",
   "author": {
     "name": "Kannan Kalidasan",
     "url": "https://github.com/kannandreams"
   },
-  "homepage": "https://tuffcli.dev",
+  "homepage": "https://tuffcli.dev/guides/claude-code-plugin/",
   "repository": "https://github.com/kannandreams/tuff",
   "license": "MIT",
-  "keywords": ["skills", "mcp", "capabilities", "lifecycle", "drift", "packaging"]
+  "keywords": [
+    "skills",
+    "mcp",
+    "capabilities",
+    "lifecycle",
+    "drift",
+    "packaging"
+  ]
 }
