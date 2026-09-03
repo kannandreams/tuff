@@ -317,6 +317,42 @@ impl AgentAdapter for OpenAgents {
 mod tests {
     use super::*;
 
+    /// RFC-106 D2: Open Agents shares Claude Code's remote-server shape, `type`
+    /// and `${VAR}` both. Pinned per adapter rather than inferred from the
+    /// shared default, because assuming harnesses agree is what produced
+    /// debt item #1.
+    #[test]
+    fn a_remote_server_entry_declares_type_and_renders_headers() {
+        let server = tuff_core::manifest::McpServerConfig {
+            transport: tuff_core::manifest::McpTransport::Http,
+            command: None,
+            args: Vec::new(),
+            url: Some("https://mcp.example.test/mcp".to_string()),
+            env: Default::default(),
+            headers: [(
+                "Authorization".to_string(),
+                tuff_core::manifest::HeaderRef {
+                    from_env: "EXAMPLE_TOKEN".to_string(),
+                    format: Some("Bearer {}".to_string()),
+                },
+            )]
+            .into_iter()
+            .collect(),
+            metadata: None,
+        };
+
+        let entry = OpenAgents.mcp_server_entry(&server);
+
+        assert_eq!(
+            entry,
+            serde_json::json!({
+                "type": "http",
+                "url": "https://mcp.example.test/mcp",
+                "headers": {"Authorization": "Bearer ${EXAMPLE_TOKEN}"},
+            })
+        );
+    }
+
     #[test]
     fn id_and_display_name_are_not_empty() {
         assert!(!ID.is_empty());

@@ -2002,6 +2002,165 @@ fn add_mcp_from_local_path_emits_record_and_entry_and_delete_removes_both() {
 }
 
 #[test]
+fn add_mcp_http_headers_install_in_every_harness_dialect_and_check_catches_edits() {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("http-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("tuff.toml"),
+        r#"id = "remote-example"
+version = "1.0.0"
+type = "mcp-server"
+description = "A test remote MCP server."
+
+[server]
+transport = "http"
+url = "https://mcp.example.test/mcp"
+
+[server.headers]
+Authorization = { from_env = "EXAMPLE_TOKEN", format = "Bearer {}" }
+X-Api-Key = { from_env = "EXAMPLE_KEY" }
+"#,
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    for agent in ["claude", "cursor"] {
+        tuff()
+            .current_dir(temp.path())
+            .args(["agent", "add", agent])
+            .assert()
+            .success();
+    }
+
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "mcp",
+            primitive.to_str().unwrap(),
+            "-a",
+            "claude",
+            "-a",
+            "cursor",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        // Both variables are named, whichever table references them.
+        .stderr(predicate::str::contains(
+            "export EXAMPLE_KEY, EXAMPLE_TOKEN",
+        ));
+
+    // Claude Code and Open Agents: `"type": "http"` and `${VAR}`.
+    for path in [".mcp.json", ".agents/mcp.json"] {
+        let config: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(temp.path().join(path)).unwrap()).unwrap();
+        let entry = &config["mcpServers"]["remote-example"];
+        assert_eq!(entry["type"], "http", "{path}");
+        assert_eq!(entry["url"], "https://mcp.example.test/mcp", "{path}");
+        assert_eq!(
+            entry["headers"]["Authorization"], "Bearer ${EXAMPLE_TOKEN}",
+            "{path}"
+        );
+        assert_eq!(entry["headers"]["X-Api-Key"], "${EXAMPLE_KEY}", "{path}");
+    }
+
+    // Cursor: no `type` for a remote server, and `${env:VAR}`.
+    let cursor: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".cursor/mcp.json")).unwrap())
+            .unwrap();
+    let entry = &cursor["mcpServers"]["remote-example"];
+    assert!(entry["type"].is_null(), "{entry}");
+    assert_eq!(
+        entry["headers"]["Authorization"],
+        "Bearer ${env:EXAMPLE_TOKEN}"
+    );
+    assert_eq!(entry["headers"]["X-Api-Key"], "${env:EXAMPLE_KEY}");
+
+    // The record keeps the declaration, references and all, never a value.
+    let record = fs::read_to_string(
+        temp.path()
+            .join(".claude/mcp-servers/remote-example/server.toml"),
+    )
+    .unwrap();
+    assert!(
+        record.contains("[server.headers.Authorization]"),
+        "{record}"
+    );
+    assert!(record.contains("format = \"Bearer {}\""), "{record}");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success();
+
+    // A hand-edited header is drift, exactly as a hand-edited command is.
+    let path = temp.path().join(".mcp.json");
+    let mut config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    config["mcpServers"]["remote-example"]["headers"]["Authorization"] =
+        serde_json::Value::String("Bearer leaked-literal-token".to_string());
+    fs::write(&path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("remote-example"))
+        .stdout(predicate::str::contains("modified"));
+}
+
+#[test]
+fn a_literal_mcp_header_value_is_refused_at_parse_time() {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("literal-header");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("tuff.toml"),
+        r#"id = "literal-header"
+version = "1.0.0"
+type = "mcp-server"
+description = "A server declaring a secret inline."
+
+[server]
+transport = "http"
+url = "https://mcp.example.test/mcp"
+
+[server.headers]
+Authorization = "Bearer sk-live-not-a-real-token"
+"#,
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "mcp",
+            primitive.to_str().unwrap(),
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("[server.headers]"))
+        .stderr(predicate::str::contains("from_env"));
+}
+
+#[test]
 fn add_mcp_from_catalog_never_prompts_or_hangs_non_interactively() {
     let temp = TempDir::new().unwrap();
     tuff()

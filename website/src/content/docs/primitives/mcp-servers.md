@@ -54,15 +54,53 @@ tools_summary = "create_issue, create_pull_request, list_issues, search_code"
 | `server.command` / `server.args` | Process to launch for `stdio` | `command` for stdio |
 | `server.url` | Endpoint for `http` | For http |
 | `server.env` | Environment the harness passes to the server, as **references** | No |
+| `server.headers` | HTTP request headers, as **references**; `http` transport only | No |
 | `server.metadata.tools_summary` | One-line list of what the server exposes; surfaces in the generated capability index | No |
 
 ### Secrets are references, never values
 
-Every `[server.env]` value must be `{ from_env = "NAME" }`. There is no field a
-literal secret can legally occupy, so the manifest can be committed and shared.
-A bare string is rejected at install time with an error that names the
-`from_env` form. After install, Tuff prints which variables you still need to
-export.
+Every `[server.env]` and `[server.headers]` value must be
+`{ from_env = "NAME" }`. There is no field a literal secret can legally occupy,
+so the manifest can be committed and shared. A bare string is rejected at
+install time with an error that names the `from_env` form. After install, Tuff
+prints which variables you still need to export.
+
+### Remote servers and auth headers
+
+A remote server is a `url` plus, usually, one static header carrying a token.
+Declare it the same way you declare environment: by naming the variable that
+holds the value, never the value.
+
+```toml
+id = "notion"
+version = "1.0.1"
+type = "mcp-server"
+description = "Official Notion MCP server."
+
+[server]
+transport = "http"
+url = "https://mcp.notion.com/mcp"
+
+[server.headers]
+Authorization = { from_env = "NOTION_TOKEN", format = "Bearer {}" }
+```
+
+`format` wraps the value, with `{}` standing for it, which is what
+`Authorization: Bearer <token>` needs. It defaults to the bare value, so an
+`X-Api-Key = { from_env = "API_KEY" }` header needs nothing extra. A `format`
+with no `{}` would discard the secret and one with two would repeat it, so both
+are rejected at parse time.
+
+Each harness gets its own dialect, and Tuff writes the reference, never the
+token, so the secret stays in your environment:
+
+| Harness | Entry |
+|---|---|
+| Claude Code, Codex, Open Agents | `{"type": "http", "url": …, "headers": {"Authorization": "Bearer ${NOTION_TOKEN}"}}` |
+| Cursor | `{"url": …, "headers": {"Authorization": "Bearer ${env:NOTION_TOKEN}"}}` (no `type` for remote servers) |
+
+`tuff check` hashes the whole entry, so a header edited by hand in any of those
+files shows as `modified` like any other drift.
 
 ## Installing
 
@@ -111,10 +149,10 @@ catalog arrives with a newer Tuff release.
 | `playwright` | none | browser automation |
 | `sentry` | `SENTRY_ACCESS_TOKEN` | issue/event search; a few AI-search tools need an additional LLM key |
 
-**Not yet supported:** `linear` and `context7` both authenticate via a custom
-`Authorization` header on an HTTP endpoint, which this schema doesn't express
-yet (`http` transport here is a bare `url`, no `headers`). That is a real
-extension, not built speculatively for zero other current consumers.
+`linear` and `context7` both authenticate with an `Authorization` header on an
+HTTP endpoint. The manifest expresses that now (see [Remote servers and auth
+headers](#remote-servers-and-auth-headers)); the catalog entries themselves
+still need updating, and `tuff mcp doctor` cannot yet probe an HTTP server.
 
 ### The MCP registry
 
@@ -255,9 +293,12 @@ wire into CI alongside `tuff check`.
 ## Current limits
 
 - Catalog- and registry-installed servers cannot be included in a project pack yet.
-- `doctor` only probes `stdio`-transport servers. `http` transport exists in
-  the schema but isn't dialed yet. The real Streamable HTTP spec (SSE or
-  JSON responses, session ids) is meaningfully more work than stdio, and no
-  catalog or example entry currently uses it.
+- `doctor` only probes `stdio`-transport servers. HTTP servers install and
+  wire correctly, headers included, but report `unsupported transport`
+  instead of being dialed. The real Streamable HTTP spec (SSE or JSON
+  responses, session ids) is meaningfully more work than stdio and is the
+  next piece of this work.
+- Registry entries that authenticate with a header are still refused by
+  `tuff add mcp`, even though the manifest can now express them.
 - `doctor` covers `mcp-server` capabilities only, not MCP-native tools
   (`type = "tool"` with `mcp = true`). A natural follow-up, not yet done.

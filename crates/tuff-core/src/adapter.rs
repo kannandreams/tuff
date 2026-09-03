@@ -415,11 +415,37 @@ pub trait AgentAdapter {
                 }
                 entry
             }
-            McpTransport::Http => serde_json::json!({
-                "type": "http",
-                "url": server.url.clone().unwrap_or_default(),
-            }),
+            McpTransport::Http => {
+                let mut entry = serde_json::Map::new();
+                if self.mcp_http_declares_type() {
+                    entry.insert("type".into(), serde_json::Value::String("http".into()));
+                }
+                entry.insert(
+                    "url".into(),
+                    serde_json::Value::String(server.url.clone().unwrap_or_default()),
+                );
+                if !server.headers.is_empty() {
+                    let headers: serde_json::Map<String, serde_json::Value> = server
+                        .headers
+                        .iter()
+                        .map(|(name, reference)| {
+                            let value =
+                                reference.render(&self.mcp_env_reference(&reference.from_env));
+                            (name.clone(), serde_json::Value::String(value))
+                        })
+                        .collect();
+                    entry.insert("headers".into(), serde_json::Value::Object(headers));
+                }
+                serde_json::Value::Object(entry)
+            }
         }
+    }
+
+    /// Whether this harness wants an explicit `"type": "http"` on a remote
+    /// server entry. Claude Code and Codex do; Cursor infers the transport
+    /// from `url` and has no `type` key for remote servers.
+    fn mcp_http_declares_type(&self) -> bool {
+        true
     }
 
     fn plan(&self, capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
