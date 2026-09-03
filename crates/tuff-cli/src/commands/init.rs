@@ -1,15 +1,34 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use crate::adapter::{AdapterKind, AgentAdapter};
 use crate::config;
 use crate::display;
 use crate::error::Result;
 use crate::lockfile;
 use crate::manifest::CapabilityType;
+use crate::resolver::Scope;
 
+use super::add::add_targets_from_installed_dir;
 use super::home_dir;
 
 const TUFF_GUIDE_CONTENT: &str = include_str!("../../assets/tuff-cli-guide.md");
+
+/// Harnesses whose own layout is present in the project.
+///
+/// Codex is deliberately absent. Its output root is `.agents/`, the same one
+/// `open-agents` writes, so recording it would add a second lockfile target
+/// pointing at a file that is already emitted, and its detector matches the
+/// directory this command creates.
+fn detected_harnesses(repo_root: &Path) -> Vec<AdapterKind> {
+    AdapterKind::all()
+        .into_iter()
+        .filter(|adapter| {
+            !matches!(adapter, AdapterKind::OpenAgents | AdapterKind::Codex)
+                && adapter.detect(repo_root)
+        })
+        .collect()
+}
 
 pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
     if global {
@@ -21,11 +40,22 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
         println!("initialized global Tuff state");
     } else {
         display::print_init_banner();
+
+        // Detected before anything is scaffolded: the Codex detector matches on
+        // `.agents/`, which this command creates, so detection after scaffolding
+        // would report every project as a Codex project.
+        let detected = detected_harnesses(repo_root);
+
         let lock_path = lockfile::init_lockfile(repo_root)?;
         let had_config = crate::paths::project_config(repo_root).exists();
         let mut config = config::read_config(repo_root)?;
         if !config.agents.iter().any(|agent| agent == "open-agents") {
             config.agents.push("open-agents".to_string());
+        }
+        for adapter in &detected {
+            if !config.agents.iter().any(|agent| agent == adapter.id()) {
+                config.agents.push(adapter.id().to_string());
+            }
         }
 
         // Project adapter registration is reconstructed from tuff.lock so a
@@ -107,6 +137,25 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
             );
 
             lockfile::write_lockfile(repo_root, &lf)?;
+
+            // The guide teaches an agent to drive Tuff, so it has to reach the
+            // harness the developer actually runs. `.agents/` is not read by
+            // Claude Code or Cursor, and a project that has never been told
+            // which harness it uses is exactly the one whose agent needs the
+            // guide most.
+            let extra: Vec<String> = detected
+                .iter()
+                .map(|adapter| adapter.id().to_string())
+                .collect();
+            if !extra.is_empty() {
+                add_targets_from_installed_dir(
+                    repo_root,
+                    Scope::Project,
+                    &guide_path,
+                    &extra,
+                    true,
+                )?;
+            }
         }
     }
     Ok(())

@@ -30,6 +30,16 @@ Legacy aliases are also accepted:
 
 The same capability can be emitted differently depending on the agent.
 
+## Adding a harness later
+
+A capability that is already installed can be emitted for a harness it was not installed for. Point `tuff add` at the directory it already occupies and name the new agent:
+
+```sh
+tuff add .agents/skills/release-checklist --agent claude
+```
+
+This records a new target and emits the capability into that harness's layout. The recorded source, version, and description are left alone, because adding a harness says nothing about where the capability came from. A target that is already recorded is not re-emitted; use `tuff update` for that.
+
 ## Skills
 
 | Agent | Emitted path |
