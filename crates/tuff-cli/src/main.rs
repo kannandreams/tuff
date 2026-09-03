@@ -3,6 +3,7 @@ mod adapters;
 mod commands;
 mod display;
 mod mcp_client;
+mod mcp_http;
 
 pub use tuff_core::{
     cache, catalog, check, config, error, git, lockfile, manifest, oci, pack, paths, registry,

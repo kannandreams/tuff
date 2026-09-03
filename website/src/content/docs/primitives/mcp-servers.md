@@ -151,8 +151,8 @@ catalog arrives with a newer Tuff release.
 
 `linear` and `context7` both authenticate with an `Authorization` header on an
 HTTP endpoint. The manifest expresses that now (see [Remote servers and auth
-headers](#remote-servers-and-auth-headers)); the catalog entries themselves
-still need updating, and `tuff mcp doctor` cannot yet probe an HTTP server.
+headers](#remote-servers-and-auth-headers)) and `tuff mcp doctor` probes it;
+the catalog entries themselves still need updating.
 
 ### The MCP registry
 
@@ -275,14 +275,33 @@ One row per server, not per harness. The underlying process is the same
 regardless of which harness's dialect wired it in, so doctor probes it once
 and lists every harness it's registered for in the `HARNESSES` column.
 
-| Status | Meaning |
-|---|---|
-| `ok` | Handshake and `tools/list` both succeeded |
-| `missing env` | A required `[server.env]` variable isn't set in your shell, so the server was never spawned |
-| `spawn failed` | The `command` couldn't be launched (not on `PATH`, permission denied, …) |
-| `timeout` | No valid response within `--timeout` seconds (default 10) |
-| `protocol error` | The server responded, but not with a valid MCP handshake |
-| `unsupported transport` | `http`-transport servers aren't probed yet; see below |
+| Status | Meaning | Transport |
+|---|---|---|
+| `ok` | Handshake and `tools/list` both succeeded | both |
+| `missing env` | A variable `[server.env]` or `[server.headers]` references isn't set in your shell. Reported before anything is spawned or sent | both |
+| `timeout` | No valid response within `--timeout` seconds (default 10) | both |
+| `protocol error` | It responded, but not with a valid MCP handshake | both |
+| `spawn failed` | The `command` couldn't be launched (not on `PATH`, permission denied, …) | stdio |
+| `unauthorized` | The server answered `401` or `403`: the token is wrong, expired, or lacks scope | http |
+| `unreachable` | DNS, TLS, or connection failure — nothing answered | http |
+
+`unauthorized` is its own status rather than a kind of `protocol error`
+because it's the most likely failure for a remote server and the fix is
+entirely different: check the token, not the config.
+
+### How an HTTP server is probed
+
+The same three steps as stdio — `initialize`, `notifications/initialized`,
+`tools/list` — over the Streamable HTTP transport. Doctor accepts either
+response shape a server may choose (a plain JSON body or an SSE stream),
+carries the `Mcp-Session-Id` the server issues on initialize, and echoes the
+protocol version the server negotiated.
+
+Headers are sent with their real values, read from your environment at the
+moment of the request, so doctor checks exactly what the harness will send.
+There is no `--header` flag: a one-off token on the command line would put a
+credential in your shell history and would check something other than what
+the harness uses. Export the variable instead.
 
 Flags: `--agent <id>` (repeatable, only check servers wired into a given
 harness), `--global`, `--json`, `--timeout <seconds>`, and
@@ -293,12 +312,12 @@ wire into CI alongside `tuff check`.
 ## Current limits
 
 - Catalog- and registry-installed servers cannot be included in a project pack yet.
-- `doctor` only probes `stdio`-transport servers. HTTP servers install and
-  wire correctly, headers included, but report `unsupported transport`
-  instead of being dialed. The real Streamable HTTP spec (SSE or JSON
-  responses, session ids) is meaningfully more work than stdio and is the
-  next piece of this work.
 - Registry entries that authenticate with a header are still refused by
-  `tuff add mcp`, even though the manifest can now express them.
+  `tuff add mcp`, even though the manifest can express them and doctor can
+  probe them. That is the next piece of this work.
+- OAuth is out of scope. Several remote servers support OAuth 2.1 with
+  PKCE, and the harnesses implement that browser flow themselves. A server
+  that requires OAuth and offers no static header stays refused, with that
+  reason.
 - `doctor` covers `mcp-server` capabilities only, not MCP-native tools
   (`type = "tool"` with `mcp = true`). A natural follow-up, not yet done.

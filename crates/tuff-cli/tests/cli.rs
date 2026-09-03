@@ -6458,6 +6458,323 @@ fn a_missing_global_lockfile_is_not_an_error() {
     }
 }
 
+// ── MCP over HTTP (stub-backed, no network) ──────────────────────────
+
+/// How the stub answers, so one server covers every branch the probe has.
+#[derive(Clone, Copy, PartialEq)]
+enum StubMode {
+    /// `application/json` responses, the simpler of the two legal shapes.
+    Json,
+    /// `text/event-stream` responses, with an unrelated notification ahead
+    /// of the answer so the probe has to skip it.
+    EventStream,
+    /// Refuses everything, as a server with a bad token would.
+    Unauthorized,
+}
+
+/// A stub Streamable HTTP MCP server.
+///
+/// Real remote servers need credentials nobody should put in a test, and a
+/// test that dialled one would depend on someone else's uptime. This speaks
+/// enough of the transport to exercise the probe: both response shapes, the
+/// session id, and a 401.
+struct StubMcpServer {
+    port: u16,
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    _thread: std::thread::JoinHandle<()>,
+}
+
+impl StubMcpServer {
+    fn start(mode: StubMode) -> Self {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = std::sync::Arc::clone(&seen);
+
+        let thread = std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut raw = Vec::new();
+                let mut buffer = [0u8; 1024];
+                // Read headers, then exactly as much body as Content-Length
+                // promises: the client keeps the socket open for the reply,
+                // so reading to EOF would hang.
+                let request = loop {
+                    let Ok(read) = stream.read(&mut buffer) else {
+                        break None;
+                    };
+                    if read == 0 {
+                        break None;
+                    }
+                    raw.extend_from_slice(&buffer[..read]);
+                    let text = String::from_utf8_lossy(&raw).to_string();
+                    let Some(head_end) = text.find("\r\n\r\n") else {
+                        continue;
+                    };
+                    let head = &text[..head_end];
+                    let length: usize = head
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse().ok())?
+                        })
+                        .unwrap_or(0);
+                    if text.len() >= head_end + 4 + length {
+                        break Some(text);
+                    }
+                };
+                let Some(request) = request else { continue };
+                recorded.lock().unwrap().push(request.clone());
+
+                let response = stub_response(mode, &request);
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+
+        Self {
+            port,
+            seen,
+            _thread: thread,
+        }
+    }
+
+    fn url(&self) -> String {
+        format!("http://127.0.0.1:{}/mcp", self.port)
+    }
+
+    fn requests(&self) -> Vec<String> {
+        self.seen.lock().unwrap().clone()
+    }
+}
+
+fn stub_response(mode: StubMode, request: &str) -> String {
+    if mode == StubMode::Unauthorized {
+        return http_response(
+            "401 Unauthorized",
+            "application/json",
+            "{\"error\":\"invalid token\"}",
+            &["WWW-Authenticate: Bearer realm=\"stub\""],
+        );
+    }
+
+    // A notification has no id and expects no body, only an acknowledgement.
+    if request.contains("notifications/initialized") {
+        return "HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            .to_string();
+    }
+
+    let (payload, extra): (String, Vec<String>) = if request.contains("\"initialize\"") {
+        (
+            r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"stub","version":"1.0.0"}}}"#
+                .to_string(),
+            vec!["Mcp-Session-Id: stub-session-42".to_string()],
+        )
+    } else {
+        (
+            r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"},{"name":"create_page"}]}}"#
+                .to_string(),
+            Vec::new(),
+        )
+    };
+
+    let extra: Vec<&str> = extra.iter().map(String::as_str).collect();
+    match mode {
+        StubMode::Json => http_response("200 OK", "application/json", &payload, &extra),
+        StubMode::EventStream => {
+            // A notification the probe has to skip, then the answer.
+            let body = format!(
+                "event: message\ndata: {{\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}}\n\nevent: message\ndata: {payload}\n\n"
+            );
+            http_response("200 OK", "text/event-stream", &body, &extra)
+        }
+        StubMode::Unauthorized => unreachable!("handled above"),
+    }
+}
+
+fn http_response(status: &str, content_type: &str, body: &str, extra: &[&str]) -> String {
+    let mut head = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n",
+        body.len()
+    );
+    for header in extra {
+        head.push_str(header);
+        head.push_str("\r\n");
+    }
+    format!("{head}\r\n{body}")
+}
+
+/// Install one remote server declaring a `Bearer` auth header, pointed at
+/// `url`, and return the project directory.
+fn project_with_remote_server(url: &str) -> TempDir {
+    let temp = TempDir::new().unwrap();
+    let primitive = temp.path().join("remote-primitive");
+    fs::create_dir_all(&primitive).unwrap();
+    fs::write(
+        primitive.join("tuff.toml"),
+        format!(
+            r#"id = "remote-stub"
+version = "1.0.0"
+type = "mcp-server"
+description = "A stubbed remote MCP server."
+
+[server]
+transport = "http"
+url = "{url}"
+
+[server.headers]
+Authorization = {{ from_env = "STUB_HTTP_TOKEN", format = "Bearer {{}}" }}
+"#
+        ),
+    )
+    .unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "mcp",
+            primitive.to_str().unwrap(),
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+    temp
+}
+
+#[test]
+fn mcp_doctor_probes_an_http_server_answering_with_json() {
+    let stub = StubMcpServer::start(StubMode::Json);
+    let project = project_with_remote_server(&stub.url());
+
+    tuff()
+        .current_dir(project.path())
+        .env("STUB_HTTP_TOKEN", "secret-token")
+        .args(["mcp", "doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("remote-stub"))
+        .stdout(predicate::str::contains("http"))
+        .stdout(predicate::str::contains("ok"))
+        .stdout(predicate::str::contains("2 tool(s)"));
+
+    let requests = stub.requests();
+    assert_eq!(requests.len(), 3, "initialize, notification, tools/list");
+    // The declared header reaches the server with the real value assembled
+    // through `format`, never the `${VAR}` reference a config file carries.
+    // Header names arrive lowercased, so match them that way throughout.
+    let requests: Vec<String> = requests.iter().map(|r| r.to_lowercase()).collect();
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.contains("authorization: bearer secret-token")),
+        "{requests:?}"
+    );
+    // The session id the server issued on initialize is echoed afterwards,
+    // and cannot have been sent before the server issued it.
+    assert!(!requests[0].contains("mcp-session-id"), "{}", requests[0]);
+    assert!(
+        requests[2].contains("mcp-session-id: stub-session-42"),
+        "{}",
+        requests[2]
+    );
+    // As is the version the server negotiated.
+    assert!(
+        requests[2].contains("mcp-protocol-version: 2024-11-05"),
+        "{}",
+        requests[2]
+    );
+}
+
+#[test]
+fn mcp_doctor_probes_an_http_server_answering_with_an_event_stream() {
+    let stub = StubMcpServer::start(StubMode::EventStream);
+    let project = project_with_remote_server(&stub.url());
+
+    tuff()
+        .current_dir(project.path())
+        .env("STUB_HTTP_TOKEN", "secret-token")
+        .args(["mcp", "doctor", "--json"])
+        .assert()
+        .success();
+
+    let output = tuff()
+        .current_dir(project.path())
+        .env("STUB_HTTP_TOKEN", "secret-token")
+        .args(["mcp", "doctor", "--json"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(rows[0]["status"], "ok");
+    assert_eq!(rows[0]["transport"], "http");
+    assert_eq!(
+        rows[0]["tools"],
+        serde_json::json!(["search", "create_page"])
+    );
+}
+
+#[test]
+fn mcp_doctor_reports_a_refused_token_as_unauthorized() {
+    let stub = StubMcpServer::start(StubMode::Unauthorized);
+    let project = project_with_remote_server(&stub.url());
+
+    tuff()
+        .current_dir(project.path())
+        .env("STUB_HTTP_TOKEN", "wrong-token")
+        .args(["mcp", "doctor"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unauthorized"))
+        // The challenge names what the server wanted, which is the useful
+        // part for someone whose token was refused.
+        .stdout(predicate::str::contains("Bearer realm"));
+}
+
+#[test]
+fn mcp_doctor_reports_a_host_that_is_not_listening_as_unreachable() {
+    // Bind and drop, so the port is real, free, and refusing connections.
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let project = project_with_remote_server(&format!("http://127.0.0.1:{port}/mcp"));
+
+    tuff()
+        .current_dir(project.path())
+        .env("STUB_HTTP_TOKEN", "secret-token")
+        .args(["mcp", "doctor"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unreachable"));
+}
+
+#[test]
+fn mcp_doctor_reports_an_unexported_header_variable_without_making_a_request() {
+    let stub = StubMcpServer::start(StubMode::Json);
+    let project = project_with_remote_server(&stub.url());
+
+    tuff()
+        .current_dir(project.path())
+        .env_remove("STUB_HTTP_TOKEN")
+        .args(["mcp", "doctor"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("missing env"))
+        .stdout(predicate::str::contains("export STUB_HTTP_TOKEN"));
+
+    // The point of checking first: no credential-less request is made, so
+    // nothing about this project reaches the server.
+    assert!(stub.requests().is_empty());
+}
+
 // ── MCP registry (stub-backed, no network) ───────────────────────────
 
 /// A one-shot HTTP server returning a canned registry response.

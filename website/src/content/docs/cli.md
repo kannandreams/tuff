@@ -596,8 +596,8 @@ tuff mcp doctor --ignore-failures  # report failures but exit 0
 ```
 
 Statuses: `ok`, `missing env` (a required variable isn't exported — the
-server is never spawned), `spawn failed`, `timeout`, `protocol error`, and
-`unsupported transport` (`http` transport isn't probed yet). Exits non-zero
+server is never contacted), `spawn failed`, `timeout`, `protocol error`,
+and, for `http` servers, `unauthorized` and `unreachable`. Exits non-zero
 if any server is unhealthy, so it composes with `tuff check` in CI. See
 [MCP Servers](/primitives/mcp-servers) for the full status table.
 
