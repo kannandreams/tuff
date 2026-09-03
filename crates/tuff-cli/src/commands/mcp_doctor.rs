@@ -1,7 +1,8 @@
-//! `tuff mcp doctor` (RFC-102 stage d) — spawn each installed `mcp-server`
-//! capability's real server, complete the MCP handshake, and report whether
-//! it's actually reachable, not just configured. See `crate::mcp_client`
-//! for the protocol probe itself.
+//! `tuff mcp doctor` (RFC-102 stage d, extended by RFC-106 milestone 2) —
+//! reach each installed `mcp-server` capability's real server, complete the
+//! MCP handshake, and report whether it's actually working, not just
+//! configured. Stdio servers are spawned, HTTP servers are dialed. See
+//! `crate::mcp_client` for the probe itself.
 
 use std::path::Path;
 use std::time::Duration;
@@ -121,12 +122,8 @@ pub fn cmd_mcp_doctor(
 fn style_doctor_status(status: &str) -> String {
     match status {
         "ok" => format!("{} {}", paint("✓", "32"), paint("ok", "32")),
+        // Nothing was wrong with the server; it was never asked.
         "missing env" => format!("{} {}", paint("?", "33"), paint("missing env", "33")),
-        "unsupported transport" => format!(
-            "{} {}",
-            paint("?", "2"),
-            paint("unsupported transport", "2")
-        ),
         other => format!("{} {}", paint("✗", "31"), paint(other, "31")),
     }
 }

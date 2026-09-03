@@ -2262,7 +2262,9 @@ version = "0.3.0"
 dependencies = [
  "assert_cmd",
  "clap",
+ "futures-util",
  "predicates",
+ "reqwest",
  "semver",
  "serde",
  "serde_json",

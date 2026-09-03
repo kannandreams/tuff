@@ -8,9 +8,9 @@
 //! change, which would have made doctor pass against the repo's own
 //! example while failing against every real server.
 //!
-//! HTTP transport is out of scope for this stage: the real Streamable-HTTP
-//! spec (SSE-or-JSON responses, session ids) is real complexity with zero
-//! current users (no catalog or example entry uses it).
+//! HTTP servers are probed too, by [`crate::mcp_http`], which speaks the
+//! Streamable HTTP transport. This module owns the stdio half and the
+//! dispatch between them.
 
 use std::process::Stdio;
 use std::time::Duration;
@@ -28,13 +28,22 @@ pub struct ProbeReport {
 }
 
 /// Environment variables the server declares that aren't set in this
-/// process's environment, in a stable order.
+/// process's environment, in a stable order. Covers `[server.headers]` as
+/// well as `[server.env]`, so a remote server whose token is not exported
+/// is reported before a request leaves the machine rather than after the
+/// server refuses it.
 pub fn unset_env_vars(server: &McpServerConfig) -> Vec<String> {
     let mut missing: Vec<String> = server
         .env
         .values()
-        .filter(|reference| std::env::var(&reference.from_env).is_err())
         .map(|reference| reference.from_env.clone())
+        .chain(
+            server
+                .headers
+                .values()
+                .map(|reference| reference.from_env.clone()),
+        )
+        .filter(|name| std::env::var(name).is_err())
         .collect();
     missing.sort();
     missing.dedup();
@@ -42,14 +51,8 @@ pub fn unset_env_vars(server: &McpServerConfig) -> Vec<String> {
 }
 
 pub async fn probe(server: &McpServerConfig, timeout: Duration) -> ProbeReport {
-    if server.transport == McpTransport::Http {
-        return ProbeReport {
-            status: "unsupported transport",
-            detail: "http transport doctor checks are not implemented yet".to_string(),
-            tools: Vec::new(),
-        };
-    }
-
+    // Checked first, and for both transports, so a server Tuff cannot
+    // authenticate is reported without anything leaving the machine.
     let missing = unset_env_vars(server);
     if !missing.is_empty() {
         return ProbeReport {
@@ -57,6 +60,10 @@ pub async fn probe(server: &McpServerConfig, timeout: Duration) -> ProbeReport {
             detail: format!("export {}", missing.join(", ")),
             tools: Vec::new(),
         };
+    }
+
+    if server.transport == McpTransport::Http {
+        return probe_http(server, timeout).await;
     }
 
     let Some(command) = server.command.as_deref().filter(|c| !c.trim().is_empty()) else {
@@ -104,6 +111,29 @@ pub async fn probe(server: &McpServerConfig, timeout: Duration) -> ProbeReport {
         Ok(Err(error)) => ProbeReport {
             status: "protocol error",
             detail: error.to_string(),
+            tools: Vec::new(),
+        },
+        Err(_) => ProbeReport {
+            status: "timeout",
+            detail: format!("no response within {timeout:?}"),
+            tools: Vec::new(),
+        },
+    }
+}
+
+/// The whole HTTP probe under one deadline, so a server that answers each
+/// step slowly still ends rather than multiplying the timeout by the number
+/// of steps.
+async fn probe_http(server: &McpServerConfig, timeout: Duration) -> ProbeReport {
+    match tokio::time::timeout(timeout, crate::mcp_http::handshake(server, timeout)).await {
+        Ok(Ok(tools)) => ProbeReport {
+            status: "ok",
+            detail: format!("{} tool(s)", tools.len()),
+            tools,
+        },
+        Ok(Err(failure)) => ProbeReport {
+            status: failure.status(),
+            detail: failure.detail(),
             tools: Vec::new(),
         },
         Err(_) => ProbeReport {
