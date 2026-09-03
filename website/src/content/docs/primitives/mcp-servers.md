@@ -152,7 +152,8 @@ catalog arrives with a newer Tuff release.
 `linear` and `context7` both authenticate with an `Authorization` header on an
 HTTP endpoint. The manifest expresses that now (see [Remote servers and auth
 headers](#remote-servers-and-auth-headers)) and `tuff mcp doctor` probes it;
-the catalog entries themselves still need updating.
+these two catalog entries still need their headers filled in, though the same
+servers install correctly through the registry.
 
 ### The MCP registry
 
@@ -165,7 +166,7 @@ tuff add mcp com.notion/mcp -a claude
 
 ```text
 │ NAME                        │ VERSION │ INSTALL     │ DESCRIPTION                        │
-│ ai.smithery/smithery-notion │ 1.0.0   │ unsupported │ A Notion workspace is a collabor…  │
+│ ai.smithery/smithery-notion │ 1.0.0   │ http        │ A Notion workspace is a collabor…  │
 │ com.mcparmory/notion        │ 1.0.2   │ uvx         │ Create, update, and manage pages…  │
 │ com.notion/mcp              │ 1.0.1   │ http        │ Official Notion MCP server         │
 ```
@@ -178,7 +179,25 @@ Names are matched exactly, so a search hit never installs by surprise, and only 
 
 `tuff outdated` re-resolves a registry install against its registry, so unlike a built-in entry it can go out of date without upgrading Tuff. `tuff update` moves it forward.
 
-**Refused rather than approximated.** An entry Tuff cannot express exactly is refused with the reason, because a wrong launch command wastes more time than a clear no. That covers entries needing a value substituted into a `{placeholder}`, which Tuff has nowhere to ask for; HTTP servers authenticating with a header, the same gap described below; and package kinds with no launcher, such as `mcpb` bundles.
+#### Remote entries and their headers
+
+A remote entry's **required** headers become `[server.headers]` references. How depends on what the publisher wrote down:
+
+| The entry says | Tuff writes |
+|---|---|
+| `Authorization` with a value of `Bearer {vendor_api_key}` | `Authorization = { from_env = "VENDOR_API_KEY", format = "Bearer {}" }` |
+| `Authorization`, and nothing about its value | `Authorization = { from_env = "<ID>_AUTHORIZATION" }` |
+| `Accept` with a value of `application/json` | Refused: a manifest has no field a literal value can occupy |
+
+The second row is the common case by a wide margin, and the variable holds the *entire* header value, prefix included. Tuff does not add a `Bearer ` that nobody wrote down: guessing would be right often and wrong silently, and a wrong guess produces a config that looks correct and fails inside the agent.
+
+A placeholder name that says nothing about whose key it is, such as `{api_key}`, is qualified with the capability id, so two servers do not quietly share one variable.
+
+**Optional headers are left out**, and named at install time so you can add them by hand. Requiring a variable the server does not require would report a working server as `missing env`.
+
+Entries that publish both the `streamable-http` and the superseded `sse` transport install the former. An entry offering only `sse` is refused: it is a different handshake, and installing one as the other would write a config no harness could use.
+
+**Refused rather than approximated.** An entry Tuff cannot express exactly is refused with the reason, because a wrong launch command wastes more time than a clear no. That covers entries needing a value substituted into a `{placeholder}`, which Tuff has nowhere to ask for; literal header values; `sse`-only remotes; and package kinds with no launcher, such as `mcpb` bundles. OAuth-only servers stay refused too: the harnesses implement that browser flow themselves, and a capability manager's job is writing the configuration the harness reads.
 
 Both `tuff mcp search` and `tuff add mcp` take `--registry`, so a team running its own registry can point at it instead.
 
@@ -312,9 +331,8 @@ wire into CI alongside `tuff check`.
 ## Current limits
 
 - Catalog- and registry-installed servers cannot be included in a project pack yet.
-- Registry entries that authenticate with a header are still refused by
-  `tuff add mcp`, even though the manifest can express them and doctor can
-  probe them. That is the next piece of this work.
+- The catalog's own `linear` and `context7` entries still need their headers
+  filled in; the registry path already handles equivalents.
 - OAuth is out of scope. Several remote servers support OAuth 2.1 with
   PKCE, and the harnesses implement that browser flow themselves. A server
   that requires OAuth and offers no static header stays refused, with that
