@@ -14,7 +14,7 @@ resolver = "2"
 # `cargo update -w` to refresh the lockfile, then tag. release.yml publishes
 # all seven crates to crates.io in dependency order on every `v*` tag.
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 authors = ["Kannan Kalidasan"]
@@ -23,9 +23,9 @@ documentation = "https://tuffcli.dev"
 repository = "https://github.com/kannandreams/tuff"
 
 [workspace.dependencies]
-tuff-hooks-spec = { path = "crates/tuff-hooks-spec", version = "0.4.0" }
-tuff-core = { path = "crates/tuff-core", version = "0.4.0" }
-tuff-adapter-open-agents = { path = "crates/tuff-adapter-open-agents", version = "0.4.0" }
-tuff-adapter-claude = { path = "crates/tuff-adapter-claude", version = "0.4.0" }
-tuff-adapter-codex = { path = "crates/tuff-adapter-codex", version = "0.4.0" }
-tuff-adapter-cursor = { path = "crates/tuff-adapter-cursor", version = "0.4.0" }
+tuff-hooks-spec = { path = "crates/tuff-hooks-spec", version = "0.5.0" }
+tuff-core = { path = "crates/tuff-core", version = "0.5.0" }
+tuff-adapter-open-agents = { path = "crates/tuff-adapter-open-agents", version = "0.5.0" }
+tuff-adapter-claude = { path = "crates/tuff-adapter-claude", version = "0.5.0" }
+tuff-adapter-codex = { path = "crates/tuff-adapter-codex", version = "0.5.0" }
+tuff-adapter-cursor = { path = "crates/tuff-adapter-cursor", version = "0.5.0" }
