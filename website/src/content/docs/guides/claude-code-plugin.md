@@ -41,7 +41,7 @@ The agent runs the real commands. The results land in `tuff.lock` and in the har
 
 ## Other harnesses
 
-Cursor and Codex have no equivalent plugin surface yet. Until they do, `tuff init` installs the same guide into `.agents/skills/`, which every harness Tuff supports reads. The plugin is an additional distribution channel for Claude Code, not a different capability set.
+Cursor and Codex have no equivalent plugin surface yet. For them, and for Claude Code too, `tuff init` now emits the same guide into the layout of each harness it detects in the project. The plugin is an additional distribution channel for Claude Code, not a different capability set, and it still covers the case `tuff init` cannot: a project that has not run it yet.
 
 ## For maintainers
 

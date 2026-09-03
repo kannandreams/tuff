@@ -432,6 +432,28 @@ fn cmd_add_local(
     }
 
     if is_target_layout_path(install_root, &capability_dir) {
+        // A capability that already lives in a harness layout and is already
+        // tracked can still be wanted by a second harness. Emitting it there is
+        // an addition to the recorded targets, not a re-adoption, so it does not
+        // go through the in-place path and does not disturb the recorded source.
+        let tracked = lockfile::require_scoped_lockfile(install_root, scope)?
+            .capabilities
+            .contains_key(&resolved.id);
+        if tracked {
+            let added =
+                add_missing_targets(install_root, scope, &manifest, &resolved, target_ids, true)?;
+            if added == 0 {
+                return Err(TuffError::refused(format!(
+                    "capability '{}' is already tracked",
+                    resolved.id
+                ))
+                .with_hint(format!(
+                    "use 'tuff update {}' for tracked changes",
+                    resolved.id
+                )));
+            }
+            return Ok(());
+        }
         return adopt_capability_in_place(
             install_root,
             scope,
@@ -784,6 +806,87 @@ pub(crate) fn write_planned_file(
         hash: lockfile::hash_bytes(&planned.content),
         baseline_hash: lockfile::hash_bytes(&planned.content),
     })
+}
+
+/// Emits an already-tracked capability into harnesses it is not yet recorded
+/// for, and records those targets. Returns how many targets were added.
+///
+/// The recorded source, version, and description belong to the original
+/// install, so they are restored afterwards: adding a harness says nothing new
+/// about where the capability came from. A target that is already recorded is
+/// skipped rather than re-emitted, which keeps the call idempotent.
+pub(crate) fn add_missing_targets(
+    install_root: &Path,
+    scope: Scope,
+    manifest: &manifest::CapabilityManifest,
+    capability: &adapter::ResolvedCapability,
+    target_ids: &[String],
+    report: bool,
+) -> Result<usize> {
+    let lockfile = lockfile::require_scoped_lockfile(install_root, scope)?;
+    let existing = lockfile
+        .capabilities
+        .get(&capability.id)
+        .ok_or_else(|| {
+            TuffError::not_found(format!("capability '{}' is not tracked", capability.id))
+        })?
+        .clone();
+
+    let missing: Vec<String> = target_ids
+        .iter()
+        .filter(|target_id| !existing.targets.contains_key(*target_id))
+        .cloned()
+        .collect();
+    if missing.is_empty() {
+        return Ok(0);
+    }
+
+    install_capability(
+        install_root,
+        scope,
+        capability,
+        manifest,
+        &missing,
+        Some(existing.source.clone()),
+        report,
+    )?;
+
+    let mut lockfile = lockfile::require_scoped_lockfile(install_root, scope)?;
+    if let Some(entry) = lockfile.capabilities.get_mut(&capability.id) {
+        entry.version = existing.version;
+        entry.version_scheme = existing.version_scheme;
+        entry.description = existing.description;
+        entry.implementation = existing.implementation;
+        entry.parameters = existing.parameters;
+        entry.workflow = existing.workflow;
+        entry.server = existing.server;
+    }
+    lockfile::write_scoped_lockfile(install_root, scope, &lockfile)?;
+
+    Ok(missing.len())
+}
+
+/// Emits a tracked capability, read from the directory it is installed in, into
+/// additional harnesses. Used by `tuff init` to give a detected harness the CLI
+/// guide it would otherwise never see.
+pub(crate) fn add_targets_from_installed_dir(
+    install_root: &Path,
+    scope: Scope,
+    capability_dir: &Path,
+    target_ids: &[String],
+    report: bool,
+) -> Result<usize> {
+    let inferred = infer_from_path(capability_dir);
+    let manifest = load_or_synthetic_manifest(capability_dir, Some(inferred.0))?;
+    let resolved = resolve_capability(&manifest)?;
+    add_missing_targets(
+        install_root,
+        scope,
+        &manifest,
+        &resolved,
+        target_ids,
+        report,
+    )
 }
 
 pub(crate) fn install_capability(

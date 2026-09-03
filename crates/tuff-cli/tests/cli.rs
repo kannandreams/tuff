@@ -4619,6 +4619,178 @@ fn import_command_is_removed() {
 }
 
 #[test]
+fn init_emits_the_guide_for_a_detected_harness() {
+    let temp = TempDir::new().unwrap();
+    fs::write(temp.path().join("CLAUDE.md"), "# Project\n").unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed tuff-cli-guide (claude) -> .claude/skills/tuff-cli-guide/SKILL.md",
+        ));
+
+    assert!(
+        temp.path()
+            .join(".claude/skills/tuff-cli-guide/SKILL.md")
+            .is_file()
+    );
+    assert!(
+        temp.path()
+            .join(".agents/skills/tuff-cli-guide/SKILL.md")
+            .is_file()
+    );
+
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let targets = &lock.capabilities["tuff-cli-guide"].targets;
+    assert!(targets.contains_key("claude"));
+    assert!(targets.contains_key("open-agents"));
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success();
+}
+
+#[test]
+fn init_detects_cursor_from_its_directory() {
+    let temp = TempDir::new().unwrap();
+    fs::create_dir_all(temp.path().join(".cursor")).unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    assert!(
+        temp.path()
+            .join(".cursor/skills/tuff-cli-guide/SKILL.md")
+            .is_file()
+    );
+}
+
+#[test]
+fn init_records_only_open_agents_without_a_detected_harness() {
+    let temp = TempDir::new().unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    assert!(!temp.path().join(".claude").exists());
+    assert!(!temp.path().join(".cursor").exists());
+
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let targets = &lock.capabilities["tuff-cli-guide"].targets;
+    assert_eq!(targets.len(), 1);
+    assert!(targets.contains_key("open-agents"));
+}
+
+/// Codex writes the same `.agents/` root as open-agents, and its detector
+/// matches the directory `init` itself creates, so it must never be recorded
+/// as a second target for the same emitted file.
+#[test]
+fn init_does_not_record_codex_alongside_open_agents() {
+    let temp = TempDir::new().unwrap();
+    fs::write(temp.path().join("AGENTS.md"), "# Agents\n").unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let targets = &lock.capabilities["tuff-cli-guide"].targets;
+    assert!(!targets.contains_key("codex"));
+    assert!(targets.contains_key("open-agents"));
+}
+
+#[test]
+fn add_gives_a_tracked_capability_another_agent() {
+    let temp = TempDir::new().unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", ".agents/skills/tuff-cli-guide", "--agent", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed tuff-cli-guide (claude) -> .claude/skills/tuff-cli-guide/SKILL.md",
+        ));
+
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let targets = &lock.capabilities["tuff-cli-guide"].targets;
+    assert!(targets.contains_key("claude"));
+    assert!(targets.contains_key("open-agents"));
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("check")
+        .assert()
+        .success();
+}
+
+/// Adding a harness says nothing about where a capability came from, so the
+/// recorded git source and its resolved revision must survive the addition.
+#[test]
+fn adding_an_agent_preserves_a_git_source() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    let repo_url = format!("file://{}", repo.display());
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill",
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+
+    let before = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let before_entry = before.capabilities["test-skill"].clone();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", ".agents/skills/test-skill", "--agent", "claude"])
+        .assert()
+        .success();
+
+    let after = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let after_entry = &after.capabilities["test-skill"];
+
+    assert_eq!(after_entry.source, before_entry.source);
+    assert_eq!(after_entry.version, before_entry.version);
+    assert_eq!(after_entry.version_scheme, before_entry.version_scheme);
+    assert_eq!(after_entry.description, before_entry.description);
+    assert!(after_entry.targets.contains_key("claude"));
+    assert!(after_entry.targets.contains_key("open-agents"));
+}
+
+#[test]
 fn add_rejects_already_tracked_agent_directory() {
     let temp = TempDir::new().unwrap();
     let skill_dir = temp.path().join(".agents").join("skills").join("dup");
