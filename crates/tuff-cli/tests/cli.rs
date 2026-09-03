@@ -6825,6 +6825,112 @@ fn stub_server_json(name: &str) -> String {
     )
 }
 
+/// A remote registry entry: one required header the publisher documents as
+/// `Bearer {vendor_api_key}`, and one optional header Tuff leaves out.
+fn stub_remote_json(name: &str) -> String {
+    format!(
+        r#"{{"servers":[{{"server":{{"name":"{name}","description":"A stubbed remote server.","version":"3.0.0","remotes":[{{"type":"sse","url":"https://legacy.example.test/sse"}},{{"type":"streamable-http","url":"https://mcp.example.test/mcp","headers":[{{"name":"Authorization","isRequired":true,"isSecret":true,"value":"Bearer {{vendor_api_key}}"}},{{"name":"X-Request-Id","isRequired":false}}]}}]}}}}]}}"#
+    )
+}
+
+#[test]
+fn add_mcp_installs_a_remote_registry_entry_that_authenticates_with_a_header() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let registry = StubRegistry::start(&stub_remote_json("com.acme/remote-mcp"));
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args([
+            "add",
+            "mcp",
+            "com.acme/remote-mcp",
+            "--agent",
+            "open-agents",
+            "--yes",
+            "--registry",
+            &registry.url(),
+        ])
+        .assert()
+        .success()
+        // The variable the publisher named, not one Tuff invented.
+        .stderr(predicate::str::contains("export VENDOR_API_KEY"))
+        // What was left out is said out loud rather than dropped silently.
+        .stderr(predicate::str::contains("optional header X-Request-Id"));
+
+    let mcp: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path().join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    let entry = &mcp["mcpServers"]["remote-mcp"];
+    // `streamable-http` wins over the `sse` remote listed first.
+    assert_eq!(entry["url"], "https://mcp.example.test/mcp");
+    assert_eq!(entry["type"], "http");
+    assert_eq!(
+        entry["headers"]["Authorization"],
+        "Bearer ${VENDOR_API_KEY}"
+    );
+    assert!(entry["headers"]["X-Request-Id"].is_null());
+
+    // The record keeps the documented template, and no secret.
+    let record = fs::read_to_string(
+        project
+            .path()
+            .join(".agents/mcp-servers/remote-mcp/server.toml"),
+    )
+    .unwrap();
+    assert!(record.contains("from_env = \"VENDOR_API_KEY\""), "{record}");
+    assert!(record.contains("format = \"Bearer {}\""), "{record}");
+
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("check")
+        .assert()
+        .success();
+}
+
+#[test]
+fn mcp_search_marks_a_header_authenticated_remote_as_installable() {
+    let temp = TempDir::new().unwrap();
+    let registry = StubRegistry::start(&stub_remote_json("com.acme/remote-mcp"));
+
+    let output = tuff()
+        .current_dir(temp.path())
+        .args([
+            "mcp",
+            "search",
+            "remote",
+            "--json",
+            "--registry",
+            &registry.url(),
+        ])
+        .output()
+        .unwrap();
+    let hits: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(hits[0]["name"], "com.acme/remote-mcp");
+    assert_eq!(hits[0]["id"], "remote-mcp");
+    assert_eq!(hits[0]["installable"], true, "{hits}");
+    assert!(hits[0]["detail"].is_null(), "{hits}");
+
+    // The table is where someone actually reads this: the INSTALL column
+    // used to say `unsupported` for every header-authenticated entry.
+    tuff()
+        .current_dir(temp.path())
+        .args(["mcp", "search", "remote", "--registry", &registry.url()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("com.acme/remote-mcp"))
+        .stdout(predicate::str::contains("http"))
+        .stdout(predicate::str::contains("unsupported").not());
+}
+
 #[test]
 fn add_mcp_installs_a_server_resolved_from_the_registry() {
     let project = TempDir::new().unwrap();

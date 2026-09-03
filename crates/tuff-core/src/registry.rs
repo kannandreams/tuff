@@ -38,11 +38,24 @@
 //! - **Unresolved `{placeholders}`.** The registry lets an argument or URL
 //!   carry variables for the client to fill in. Tuff has nowhere to ask, and
 //!   guessing a value would produce a command that looks right and fails.
-//! - **HTTP servers needing headers.** Most remote entries authenticate with
-//!   an `Authorization` header, which Tuff's `http` transport cannot express
-//!   yet (it is a bare `url`). This is the same gap RFC-102 documented for
-//!   `linear` and `context7`.
+//! - **Literal header values.** A manifest has no field a literal can
+//!   occupy, by design, so a header the registry documents as a constant
+//!   (`Accept: application/json`) cannot be represented.
+//! - **The superseded `sse` transport.** A different handshake from
+//!   Streamable HTTP; installing one as the other would write a config no
+//!   harness could use.
 //! - **Package kinds with no launcher**, such as `mcpb` bundles.
+//!
+//! ## Remote servers and their headers
+//!
+//! A remote entry's required headers become `[server.headers]` references
+//! (RFC-106). Where the publisher documents the shape of the value, as
+//! `Bearer {api_key}`, that becomes the header's `format` and the
+//! placeholder's name becomes the variable. Where they document only the
+//! header, the variable holds the entire value, prefix included: Tuff does
+//! not guess a `Bearer ` that nobody wrote down. Optional headers are left
+//! out and named at install time, since requiring a variable the server
+//! does not require would report a working server as broken.
 
 use std::collections::BTreeMap;
 
@@ -50,7 +63,8 @@ use serde::Deserialize;
 
 use crate::error::{Result, TuffError};
 use crate::manifest::{
-    CapabilityManifest, CapabilityType, EnvRef, McpServerConfig, McpServerMetadata, McpTransport,
+    CapabilityManifest, CapabilityType, EnvRef, FORMAT_PLACEHOLDER, HeaderRef, McpServerConfig,
+    McpServerMetadata, McpTransport,
 };
 
 /// The official registry. Overridable so a team can point at their own.
@@ -146,6 +160,11 @@ pub struct RegistryVariable {
     pub is_required: bool,
     #[serde(default)]
     pub description: Option<String>,
+    /// On a header, the template the publisher documents, with the secret
+    /// standing in as a `{named}` placeholder — `Bearer {api_key}`. Absent
+    /// on most headers, meaning the whole value is supplied by the user.
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 /// Search the registry for the current release of each matching server.
@@ -307,7 +326,8 @@ fn server_config(server: &RegistryServer) -> Result<McpServerConfig> {
     {
         return stdio_config(server, package);
     }
-    if let Some(remote) = server.remotes.first() {
+    if !server.remotes.is_empty() {
+        let remote = preferred_remote(server)?;
         return remote_config(server, remote);
     }
     Err(TuffError::unsupported(format!(
@@ -379,30 +399,190 @@ fn stdio_config(server: &RegistryServer, package: &RegistryPackage) -> Result<Mc
 }
 
 fn remote_config(server: &RegistryServer, remote: &RegistryRemote) -> Result<McpServerConfig> {
-    if !remote.headers.is_empty() {
-        let names: Vec<&str> = remote
-            .headers
-            .iter()
-            .map(|header| header.name.as_str())
-            .collect();
-        return Err(TuffError::unsupported(format!(
-            "registry entry '{}' authenticates with the {} header, which Tuff's http transport cannot express yet",
-            server.name,
-            names.join(", ")
-        )));
-    }
     reject_placeholders(server, &remote.url)?;
+    let headers = remote_headers(server, remote)?;
     Ok(McpServerConfig {
         transport: McpTransport::Http,
         command: None,
         args: Vec::new(),
         url: Some(remote.url.clone()),
         env: BTreeMap::new(),
-        headers: BTreeMap::new(),
+        headers,
         metadata: Some(McpServerMetadata {
             tools_summary: None,
         }),
     })
+}
+
+/// The remote endpoint Tuff will connect to.
+///
+/// Entries may list several. `streamable-http` is the transport Tuff speaks
+/// and `tuff mcp doctor` probes; `sse` is the superseded 2024-11-05
+/// HTTP+SSE transport, which has a different handshake entirely. Preferring
+/// the former matters for the 303 entries that publish both, and an entry
+/// offering only `sse` is refused rather than installed as though it were
+/// Streamable HTTP, which would write a config no harness could use.
+fn preferred_remote(server: &RegistryServer) -> Result<&RegistryRemote> {
+    if let Some(remote) = server
+        .remotes
+        .iter()
+        .find(|remote| remote.transport_type != SSE_TRANSPORT)
+    {
+        return Ok(remote);
+    }
+    Err(TuffError::unsupported(format!(
+        "registry entry '{}' offers only the superseded 'sse' transport, which Tuff does not speak",
+        server.name
+    )))
+}
+
+const SSE_TRANSPORT: &str = "sse";
+
+/// Turn a remote's declared headers into `{ from_env = … }` references.
+///
+/// Measured against every current registry release on 2026-09-03, headers
+/// come in three shapes, and each gets a different answer:
+///
+/// - **No `value` (2,656 of 3,072).** The publisher documents a header but
+///   not how to build it, so the variable holds the whole header value,
+///   prefix and all. Tuff writes no `format`: inventing `Bearer ` for an
+///   `Authorization` header would be right often and wrong silently, and a
+///   wrong guess produces a config that looks correct and fails inside the
+///   agent.
+/// - **A `value` with exactly one `{placeholder}` (403).** The publisher
+///   said how to build it, so that becomes the `format` and the
+///   placeholder's own name becomes the variable.
+/// - **A `value` with no placeholder (13).** A literal, such as
+///   `Accept: application/json`. There is deliberately no field in a Tuff
+///   manifest a literal header value can occupy, so these are refused.
+///
+/// Optional headers are left out. Over a thousand entries declare one, and
+/// requiring a variable the server does not require would report every one
+/// of them as `missing env`. The caller names what was skipped so the
+/// choice is visible rather than silent.
+fn remote_headers(
+    server: &RegistryServer,
+    remote: &RegistryRemote,
+) -> Result<BTreeMap<String, HeaderRef>> {
+    let capability_id = default_capability_id(&server.name);
+    let mut headers = BTreeMap::new();
+
+    for header in remote.headers.iter().filter(|header| header.is_required) {
+        let name = header.name.trim();
+        if name.is_empty() {
+            return Err(TuffError::unsupported(format!(
+                "registry entry '{}' declares a header with no name",
+                server.name
+            )));
+        }
+
+        let reference = match header.value.as_deref() {
+            Some(value) => header_from_template(server, name, value, &capability_id)?,
+            None => HeaderRef {
+                from_env: sanitized_env_name(&format!("{capability_id}_{name}")),
+                format: None,
+            },
+        };
+        headers.insert(name.to_string(), reference);
+    }
+
+    Ok(headers)
+}
+
+/// Split a documented template such as `Bearer {api_key}` into the format
+/// Tuff records and the variable that fills it.
+fn header_from_template(
+    server: &RegistryServer,
+    header: &str,
+    value: &str,
+    capability_id: &str,
+) -> Result<HeaderRef> {
+    let placeholders = placeholder_names(value);
+    let [placeholder] = placeholders.as_slice() else {
+        let reason = if placeholders.is_empty() {
+            "a literal value, and a Tuff manifest has no field a literal header value can occupy"
+        } else {
+            "a value built from more than one variable, which Tuff cannot express"
+        };
+        return Err(TuffError::unsupported(format!(
+            "registry entry '{}' declares the {header} header with {reason}",
+            server.name
+        )));
+    };
+
+    // A publisher-chosen name like `smithery_api_key` already says which
+    // service it belongs to. A generic one does not, and two servers both
+    // wanting `API_KEY` would quietly share a variable.
+    let qualified = if GENERIC_VARIABLE_NAMES.contains(&placeholder.to_ascii_lowercase().as_str()) {
+        format!("{capability_id}_{placeholder}")
+    } else {
+        placeholder.clone()
+    };
+
+    Ok(HeaderRef {
+        from_env: sanitized_env_name(&qualified),
+        format: Some(value.replacen(&format!("{{{placeholder}}}"), FORMAT_PLACEHOLDER, 1)),
+    })
+}
+
+/// Placeholder names in a header template, in order of appearance.
+fn placeholder_names(value: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut rest = value;
+    while let Some(open) = rest.find('{') {
+        let Some(close) = rest[open..].find('}') else {
+            break;
+        };
+        names.push(rest[open + 1..open + close].to_string());
+        rest = &rest[open + close + 1..];
+    }
+    names
+}
+
+/// Placeholder names that say nothing about which service they belong to.
+const GENERIC_VARIABLE_NAMES: &[&str] = &["api_key", "apikey", "token", "key", "secret", "auth"];
+
+/// A name legal in a shell environment: upper case, underscores only, no
+/// leading digit.
+fn sanitized_env_name(raw: &str) -> String {
+    let mut name = String::with_capacity(raw.len());
+    for character in raw.chars() {
+        if character.is_ascii_alphanumeric() {
+            name.push(character.to_ascii_uppercase());
+        } else if !name.ends_with('_') {
+            name.push('_');
+        }
+    }
+    let name = name.trim_matches('_').to_string();
+    if name.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("_{name}")
+    } else {
+        name
+    }
+}
+
+/// Headers a registry entry declares but Tuff leaves out of the manifest,
+/// because the server does not require them. Named at install time so the
+/// omission is visible and can be added by hand.
+pub fn skipped_optional_headers(server: &RegistryServer) -> Vec<String> {
+    // A package always wins over a remote, so an entry shipping one never
+    // reaches the header path at all.
+    if !server.packages.is_empty() {
+        return Vec::new();
+    }
+    let Ok(remote) = preferred_remote(server) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = remote
+        .headers
+        .iter()
+        .filter(|header| !header.is_required)
+        .map(|header| header.name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
 }
 
 /// `npx`/`uvx`/`docker`/`dnx`, from the entry's hint or its package kind.
@@ -578,6 +758,7 @@ mod tests {
             name: "API_TOKEN".into(),
             is_required: true,
             description: None,
+            value: None,
         }];
         let config = config_of(&server("a/thing", vec![package]));
         assert_eq!(config.command.as_deref(), Some("docker"));
@@ -601,6 +782,7 @@ mod tests {
             name: "API_TOKEN".into(),
             is_required: true,
             description: Some("A token.".into()),
+            value: None,
         }];
         let config = config_of(&server("a/thing", vec![package]));
         assert_eq!(config.env["API_TOKEN"].from_env, "API_TOKEN");
@@ -654,20 +836,136 @@ mod tests {
         assert!(error.hint().is_some());
     }
 
-    #[test]
-    fn a_remote_needing_an_auth_header_is_refused_with_the_header_named() {
-        let mut entry = server("a/thing", Vec::new());
+    fn header(name: &str, is_required: bool, value: Option<&str>) -> RegistryVariable {
+        RegistryVariable {
+            name: name.into(),
+            is_required,
+            description: None,
+            value: value.map(str::to_string),
+        }
+    }
+
+    fn remote_entry(name: &str, headers: Vec<RegistryVariable>) -> RegistryServer {
+        let mut entry = server(name, Vec::new());
         entry.remotes = vec![RegistryRemote {
             transport_type: "streamable-http".into(),
             url: "https://mcp.example.com/v1".into(),
-            headers: vec![RegistryVariable {
-                name: "Authorization".into(),
-                is_required: true,
-                description: None,
-            }],
+            headers,
         }];
-        let error = to_manifest(&entry, "test").unwrap_err();
-        assert!(error.to_string().contains("Authorization"), "{error}");
+        entry
+    }
+
+    /// The common shape by a wide margin: the publisher names the header
+    /// and says nothing about how to build its value.
+    #[test]
+    fn a_header_without_a_documented_value_takes_the_whole_value_from_one_variable() {
+        let entry = remote_entry("a/thing", vec![header("Authorization", true, None)]);
+        let config = to_manifest(&entry, "thing").unwrap().server.unwrap();
+
+        let reference = &config.headers["Authorization"];
+        assert_eq!(reference.from_env, "THING_AUTHORIZATION");
+        // No invented `Bearer `. The variable holds the entire header
+        // value, prefix included, because nobody wrote down which prefix.
+        assert_eq!(reference.format, None);
+    }
+
+    #[test]
+    fn a_documented_template_becomes_the_format_and_names_the_variable() {
+        let entry = remote_entry(
+            "ai.smithery/notion",
+            vec![header(
+                "Authorization",
+                true,
+                Some("Bearer {smithery_api_key}"),
+            )],
+        );
+        let config = to_manifest(&entry, "notion").unwrap().server.unwrap();
+
+        let reference = &config.headers["Authorization"];
+        assert_eq!(reference.from_env, "SMITHERY_API_KEY");
+        assert_eq!(reference.format.as_deref(), Some("Bearer {}"));
+        assert_eq!(reference.render("secret"), "Bearer secret");
+    }
+
+    /// `{api_key}` says nothing about whose key it is, so two servers would
+    /// quietly share one variable.
+    #[test]
+    fn a_generic_placeholder_name_is_qualified_by_the_capability() {
+        let entry = remote_entry(
+            "ai.bowmark/bowmark",
+            vec![header("Authorization", true, Some("Bearer {api_key}"))],
+        );
+        let config = to_manifest(&entry, "bowmark").unwrap().server.unwrap();
+        assert_eq!(config.headers["Authorization"].from_env, "BOWMARK_API_KEY");
+    }
+
+    #[test]
+    fn a_literal_header_value_is_refused_rather_than_smuggled_into_the_manifest() {
+        let entry = remote_entry(
+            "a/thing",
+            vec![header("Accept", true, Some("application/json"))],
+        );
+        let error = to_manifest(&entry, "thing").unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Unsupported);
+        assert!(error.to_string().contains("Accept"), "{error}");
+        assert!(error.to_string().contains("literal"), "{error}");
+    }
+
+    #[test]
+    fn a_header_built_from_two_variables_is_refused() {
+        let entry = remote_entry(
+            "a/thing",
+            vec![header("Authorization", true, Some("{scheme} {token}"))],
+        );
+        let error = to_manifest(&entry, "thing").unwrap_err();
+        assert!(error.to_string().contains("more than one"), "{error}");
+    }
+
+    /// Over a thousand entries declare an optional header. Requiring one
+    /// would report a working server as `missing env`.
+    #[test]
+    fn optional_headers_are_left_out_and_named_instead() {
+        let entry = remote_entry(
+            "a/thing",
+            vec![
+                header("Authorization", true, None),
+                header("X-Request-Id", false, None),
+            ],
+        );
+        let config = to_manifest(&entry, "thing").unwrap().server.unwrap();
+
+        assert!(config.headers.contains_key("Authorization"));
+        assert!(!config.headers.contains_key("X-Request-Id"));
+        assert_eq!(skipped_optional_headers(&entry), vec!["X-Request-Id"]);
+    }
+
+    /// `sse` is the superseded transport with a different handshake, not a
+    /// dialect of Streamable HTTP.
+    #[test]
+    fn streamable_http_is_preferred_and_an_sse_only_entry_is_refused() {
+        let mut entry = remote_entry("a/thing", Vec::new());
+        entry.remotes.insert(
+            0,
+            RegistryRemote {
+                transport_type: "sse".into(),
+                url: "https://mcp.example.com/sse".into(),
+                headers: Vec::new(),
+            },
+        );
+        let config = to_manifest(&entry, "thing").unwrap().server.unwrap();
+        assert_eq!(config.url.as_deref(), Some("https://mcp.example.com/v1"));
+
+        entry.remotes.truncate(1);
+        let error = to_manifest(&entry, "thing").unwrap_err();
+        assert!(error.to_string().contains("sse"), "{error}");
+    }
+
+    #[test]
+    fn a_variable_name_is_made_legal_for_a_shell() {
+        assert_eq!(sanitized_env_name("smithery-api.key"), "SMITHERY_API_KEY");
+        assert_eq!(sanitized_env_name("thing_X-Api-Key"), "THING_X_API_KEY");
+        assert_eq!(sanitized_env_name("_leading_"), "LEADING");
+        assert_eq!(sanitized_env_name("2fa token"), "_2FA_TOKEN");
     }
 
     #[test]

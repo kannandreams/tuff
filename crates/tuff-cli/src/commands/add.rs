@@ -121,6 +121,24 @@ pub fn cmd_add_mcp(
             target_ids,
             global,
         )?;
+        // Left out of the manifest because the server does not require
+        // them; said out loud so the omission is a choice the user can see
+        // and reverse, not a silent one.
+        let skipped = crate::registry::skipped_optional_headers(&server);
+        if !skipped.is_empty() {
+            eprintln!(
+                "note: '{}' also documents the optional {} {}; add {} to [server.headers] by hand if you need {}",
+                id,
+                if skipped.len() == 1 {
+                    "header"
+                } else {
+                    "headers"
+                },
+                skipped.join(", "),
+                if skipped.len() == 1 { "it" } else { "them" },
+                if skipped.len() == 1 { "it" } else { "them" },
+            );
+        }
     }
     Ok(())
 }
