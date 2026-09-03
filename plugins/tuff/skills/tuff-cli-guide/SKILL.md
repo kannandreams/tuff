@@ -9,14 +9,15 @@ Tuff is a capability lifecycle manager. It installs, versions, diffs, and valida
 
 ## Before You Start
 
-Run `tuff --version` if you are not sure Tuff is installed. If the command is missing, install it with one of:
+Run `tuff --version`. If the command is missing, ask the user before installing anything. When they agree:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/kannandreams/tuff/main/install.sh | sh
-brew tap kannandreams/homebrew-tuff && brew install tuff
-cargo install tuffcli
 uv tool install tuffcli
 ```
+
+If `uv` is not available, use `brew tap kannandreams/homebrew-tuff && brew install tuff` on macOS, or `cargo install tuffcli` where Rust is present. Avoid bare `pip install`: most systems refuse it as an externally-managed environment, and a virtual environment install is not on PATH afterwards.
+
+Confirm with `tuff --version` before continuing. If the command is still not found, the install directory is not on PATH; `~/.local/bin` is the usual one.
 
 If the project has no `tuff.lock`, run `tuff init` before anything else. Never hand-edit `tuff.lock` or the files Tuff emits under a harness directory; edit the source under `.agents/` and let Tuff re-emit.
 

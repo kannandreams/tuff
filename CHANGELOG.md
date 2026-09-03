@@ -12,7 +12,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Changed
 
-- The `tuff-cli-guide` skill no longer opens by asserting that Tuff is installed in the current project, which was untrue wherever the guide arrived before `tuff init` did. It now names the install commands, says to run `tuff init` when there is no `tuff.lock`, and states that emitted harness files and `tuff.lock` are not to be hand-edited.
+- The `tuff-cli-guide` skill no longer opens by asserting that Tuff is installed in the current project, which was untrue wherever the guide arrived before `tuff init` did. It now tells the agent to check `tuff --version`, to ask before installing anything, and to install with `uv tool install tuffcli`, naming Homebrew and Cargo as the fallbacks. The curl installer is deliberately absent from the agent-facing guide: it targets `/usr/local/bin` and escalates with `sudo`, which stalls an agent waiting on a password nobody is there to type. Bare `pip install` is named only as a thing to avoid, since most systems refuse it as an externally-managed environment and a virtual environment install is not on PATH afterwards. The section also says to confirm the install took effect, to run `tuff init` when there is no `tuff.lock`, and that emitted harness files and `tuff.lock` are not to be hand-edited.
 
 ## [0.4.0] - 2026-09-03
 
