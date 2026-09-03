@@ -90,6 +90,7 @@ export default defineConfig({
           items: [
             { label: 'Development', slug: 'development' },
             { label: 'Credits', slug: 'credits' },
+            { label: 'Privacy', slug: 'privacy' },
           ],
         },
       ],
