@@ -1232,7 +1232,7 @@ dialog[aria-label='Search'] {
   font-weight: 600;
 }
 
-/* MCP catalog listing (/catalog/). Panels reuse the landing page's tokens:
+/* MCP catalog listing (/mcp-catalog/). Panels reuse the landing page's tokens:
    #1b1e1b cards on #242824 insets, #343934 hairlines, green #83b477 for a
    clean state, orange only on hover. No per-item colour coding. */
 .tuff-catalog { margin: 1.5rem 0 0; }

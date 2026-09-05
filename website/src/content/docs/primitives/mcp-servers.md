@@ -134,7 +134,7 @@ catalog is part of the binary, `tuff outdated` compares an installed entry
 against that entry's version in the catalog your `tuff` carries, and a newer
 catalog arrives with a newer Tuff release.
 
-The full list, with what each entry runs, the variables it needs, and the tools it answers with, is on the [MCP Catalog](/catalog/) page. That page is generated from the catalog file itself on every build, so it never drifts from what your `tuff` can install.
+The full list, with what each entry runs, the variables it needs, and the tools it answers with, is on the [MCP Catalog](/mcp-catalog/) page. That page is generated from the catalog file itself on every build, so it never drifts from what your `tuff` can install.
 
 Two of the entries, `linear` and `context7`, are remote servers: a `url` plus an `Authorization` header built from the named variable, exactly as a manifest declares it (see [Remote servers and auth headers](#remote-servers-and-auth-headers)). Linear also offers an interactive OAuth flow; the catalog entry uses the API key path because a config file can carry a variable reference and cannot carry a login. Context7 calls its key recommended rather than required, but the catalog has no notion of an optional header, so the entry asks for one; the keyless stdio form is a registry install away as `io.github.upstash/context7`.
 

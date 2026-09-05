@@ -40,5 +40,5 @@ service-account*.json
 website/src/content/docs/changelog.md
 
 # Generated from crates/tuff-core/assets/mcp-catalog.toml by
-# website/scripts/sync-catalog.mjs
+# website/scripts/sync-mcp-catalog.mjs
 website/src/data/mcp-catalog.json
