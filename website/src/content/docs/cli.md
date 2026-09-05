@@ -527,9 +527,14 @@ tuff diff <id> -a claude
 
 # Machine-readable: one object per agent listing changed files
 tuff diff <id> --json
+
+# Preview what a different release requirement would change
+tuff diff <id>@^2 --upstream
 ```
 
 `--json` is the same as `--format json`; pass one or the other.
+
+For a capability installed at a release (see [Install a release](#install-a-release)), `--upstream` compares against the newest release the recorded requirement allows, never the latest commit: the same content `tuff update` would install. An exact pin therefore reports `no upstream changes in v1.2.0`, since nothing newer is allowed. `tuff diff <id>@<requirement> --upstream` previews a different requirement, so `@^2` shows what lifting the pin to the next major would change before `tuff update <id>@^2` does it. A note on standard error names the release compared against, and the JSON carries it as `upstream`, so the patch on standard output stays a patch. A capability pinned to a commit rather than a release still compares against the latest commit.
 
 When standard output is a terminal, diff headers are cyan, additions are green, and deletions are red, matching the usual Git diff convention. Piped or captured output is plain automatically; set `NO_COLOR=1` to disable color explicitly.
 
