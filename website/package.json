@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "sync-changelog": "node scripts/sync-changelog.mjs",
-    "predev": "npm run sync-changelog",
+    "predev": "npm run sync-changelog && npm run sync-mcp-catalog",
     "dev": "astro dev",
-    "prebuild": "npm run sync-changelog",
+    "prebuild": "npm run sync-changelog && npm run sync-mcp-catalog",
     "build": "astro build",
     "preview": "astro preview",
-    "precheck": "npm run sync-changelog",
-    "check": "astro check"
+    "precheck": "npm run sync-changelog && npm run sync-mcp-catalog",
+    "check": "astro check",
+    "sync-mcp-catalog": "node scripts/sync-mcp-catalog.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.7",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "smol-toml": "^1.8.0",
     "typescript": "^5.8.3"
   },
   "engines": {

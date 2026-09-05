@@ -8,6 +8,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Added
 
+- The documentation site lists the built-in MCP catalog at [/mcp-catalog/](https://tuffcli.dev/mcp-catalog/), with each server's install command, the variables it needs, the tools it answers with, and the command it actually runs, filterable by whether it needs a key and by transport. The page is generated from `crates/tuff-core/assets/mcp-catalog.toml` on every build, the same arrangement the changelog page uses, so it cannot promise a server the CLI does not have; the generator also fails the build on an entry that would not resolve. The hand-maintained table on the MCP Servers page is replaced by a link to it, leaving one source of truth.
 - Tuff ships a VS Code extension, in `editors/vscode`. It puts the capabilities installed in a project into the editor sidebar with their versions, the agents they were installed for, and whether they have drifted, and runs `diff`, `update`, `check`, and `mcp doctor` on a row. Like the Claude Code plugin it carries no binary and runs the `tuff` on your PATH, and it needs 0.6.0 or newer for the `--json` output that release added. Cursor installs VS Code extensions, so this covers the harnesses that have no plugin surface of their own. The extension versions independently of the CLI and keeps its own changelog.
 
 ## [0.6.0] - 2026-09-05

@@ -1,0 +1,41 @@
+---
+title: MCP Catalog
+description: Every MCP server Tuff can install by name, with what it runs, what it needs, and the command to add it.
+---
+
+import McpCatalog from '../../components/McpCatalog.astro';
+
+These are the MCP servers `tuff add mcp <id>` installs by name. Each one is a launch declaration compiled into the `tuff` binary, so installing from the catalog needs no network call and no lookup here first. This page is generated from that same file, `crates/tuff-core/assets/mcp-catalog.toml`, on every site build, so it cannot promise a server the CLI does not have.
+
+Tuff ships none of the server code. The catalog records the command a vendor documents; the server itself is fetched when your harness launches it, by `npx`, `uvx`, or `docker`, from the vendor's own package or image.
+
+<McpCatalog />
+
+## What the catalog is not
+
+It is not a registry. Nothing is submitted, hosted, or served from here, and there is no account to create. The list is a small curated set of correct launch declarations that ships inside a binary, and it grows when a Tuff release adds to it.
+
+That also means `tuff outdated` compares an installed entry against the catalog *your* `tuff` carries. A newer catalog arrives with a newer Tuff.
+
+## Beyond the catalog
+
+The official [MCP registry](https://registry.modelcontextprotocol.io) holds thousands of servers published by their own authors, and `tuff add mcp` falls through to it for any name it does not recognise:
+
+```sh frame="terminal"
+tuff mcp search notion
+tuff add mcp com.notion/mcp -a claude
+```
+
+The search results say how Tuff would launch each entry, or refuse it with a reason, before you install anything. The catalog is the shortcut for servers worth having correct by default; the registry is everything else.
+
+## How an entry gets in
+
+Every entry was verified against a primary source, the vendor's own README or the `modelcontextprotocol/servers` repository, rather than a search result or recollection. A wrong package name in something billed as curated wastes your time, so an invocation that is inferred rather than documented is left out instead of guessed at. Servers archived upstream are excluded, and the catalog file records which ones and why, so nobody has to rediscover it.
+
+Secrets are never values. An entry names the environment variables you must export, and the generated manifest references them, so a `tuff.toml` can be committed without leaking anything. Remote entries declare their auth header the same way.
+
+## Next
+
+- [MCP Servers](/primitives/mcp-servers/) explains the capability type, the per-harness config each entry produces, and how drift on those files is detected.
+- [`tuff add mcp`](/cli/#install-an-mcp-server) covers the install flags, including the prompt for a different variable name.
+- [`tuff mcp doctor`](/cli/#tuff-mcp-doctor) spawns each installed server and reports the tools it actually answers with.
