@@ -7,7 +7,7 @@ mod mcp_http;
 
 pub use tuff_core::{
     cache, catalog, check, config, error, git, lockfile, manifest, oci, pack, paths, registry,
-    resolver, tool, tree_diff,
+    release, resolver, tool, tree_diff,
 };
 
 use std::path::PathBuf;

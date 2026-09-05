@@ -14,6 +14,7 @@ pub mod oci;
 pub mod pack;
 pub mod paths;
 pub mod registry;
+pub mod release;
 pub mod resolver;
 pub mod tool;
 pub mod tree_diff;

@@ -124,6 +124,46 @@ pub fn clone_to_temp(
     Ok((temp, checkout, clean_url))
 }
 
+/// Clone a repository at one tag, shallowly. The caller reads the commit
+/// the tag names with [`resolve_ref`]; the lockfile pins that, not the tag.
+pub fn clone_tag_to_temp(raw_url: &str, tag: &str) -> Result<(TempDir, PathBuf, String)> {
+    let (clean_url, _) = clean_git_url(raw_url);
+    let temp = TempDir::new()?;
+    let checkout = temp.path().join("source");
+    run_git(
+        Command::new("git")
+            .args(["clone", "--quiet", "--depth", "1", "--branch", tag])
+            .arg(&clean_url)
+            .arg(&checkout),
+        &format!("git clone failed for {clean_url} at tag {tag}; is the repo accessible?"),
+    )?;
+    Ok((temp, checkout, clean_url))
+}
+
+/// The tags a repository publishes, without cloning it. `--refs` leaves out
+/// the peeled `^{}` rows an annotated tag would otherwise add.
+pub fn list_remote_tags(raw_url: &str) -> Result<Vec<String>> {
+    let (clean_url, _) = clean_git_url(raw_url);
+    let output = Command::new("git")
+        .args(["ls-remote", "--tags", "--refs", &clean_url])
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let context = format!("git ls-remote failed for {clean_url}; is the repo accessible?");
+        return Err(TuffError::source_failed(if stderr.is_empty() {
+            context
+        } else {
+            format!("{context}: {stderr}")
+        }));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.split('\t').nth(1))
+        .filter_map(|reference| reference.strip_prefix("refs/tags/"))
+        .map(str::to_string)
+        .collect())
+}
+
 fn run_git(cmd: &mut Command, context: &str) -> Result<()> {
     let output = cmd.output()?;
     if output.status.success() {

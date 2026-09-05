@@ -7423,3 +7423,325 @@ fn add_mcp_linear_from_catalog_wires_the_bearer_header_in_every_dialect() {
     assert_eq!(row["status"], "up to date");
     assert_eq!(row["latest"], "1.0.0");
 }
+
+fn git_ok(repo: &Path, args: &[&str]) {
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .status()
+        .unwrap();
+    assert!(status.success(), "git {args:?} failed");
+}
+
+/// Change the fixture skill, commit, and tag the commit as a release.
+/// Returns the commit the tag names.
+fn commit_skill_release(repo: &Path, content: &str, tag: &str) -> String {
+    fs::write(repo.join("skills/test-skill/SKILL.md"), content).unwrap();
+    git_ok(repo, &["commit", "-qam", tag]);
+    git_ok(repo, &["tag", "-a", tag, "-m", tag]);
+    let output = Command::new("git")
+        .args(["rev-list", "-n", "1", tag])
+        .current_dir(repo)
+        .output()
+        .unwrap();
+    String::from_utf8(output.stdout).unwrap().trim().to_string()
+}
+
+#[test]
+fn add_git_skill_at_a_release_pins_tag_commit_and_semver_scheme() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    git_ok(&repo, &["tag", "v1.0.0"]);
+    let v1_2 = commit_skill_release(&repo, "# Skill 1.2\n", "v1.2.0");
+    commit_skill_release(&repo, "# Skill 1.4\n", "v1.4.0");
+    commit_skill_release(&repo, "# Skill 2.0\n", "v2.0.0");
+    git_ok(&repo, &["tag", "release-42"]);
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    // An exact request installs that release, not HEAD, and says which tag
+    // and commit it chose.
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill@1.2.0",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "resolved test-skill@1.2.0 to v1.2.0",
+        ));
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".agents/skills/test-skill/SKILL.md")).unwrap(),
+        "# Skill 1.2\n"
+    );
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("version = \"1.2.0\""), "{lock}");
+    assert!(lock.contains("version_scheme = \"semver\""), "{lock}");
+    assert!(lock.contains("tag = \"v1.2.0\""), "{lock}");
+    assert!(lock.contains("requested = \"1.2.0\""), "{lock}");
+    assert!(lock.contains(&format!("ref = \"{v1_2}\"")), "{lock}");
+    tuff()
+        .current_dir(temp.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1.2.0"));
+
+    // outdated compares against the newest release the repository has and
+    // says how big the claimed change is; the JSON keeps them apart.
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["outdated", "--json"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "test-skill")
+        .unwrap();
+    assert_eq!(row["current"], "1.2.0");
+    assert_eq!(row["latest"], "2.0.0");
+    assert_eq!(row["status"], "outdated");
+    assert_eq!(row["change"], "major");
+    tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("outdated (major)"));
+
+    // An exact pin does not move on its own.
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "already up to date (1.2.0 is the newest release matching 1.2.0)",
+        ));
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".agents/skills/test-skill/SKILL.md")).unwrap(),
+        "# Skill 1.2\n"
+    );
+
+    // A new requirement is previewed with the size of the move, then
+    // recorded and applied: within ^1 the newest release is 1.4.0, not 2.0.0.
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill@^1", "--check"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "can be updated cleanly to 1.4.0 (minor)",
+        ));
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill@^1"])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".agents/skills/test-skill/SKILL.md")).unwrap(),
+        "# Skill 1.4\n"
+    );
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("version = \"1.4.0\""), "{lock}");
+    assert!(lock.contains("tag = \"v1.4.0\""), "{lock}");
+    assert!(lock.contains("requested = \"^1\""), "{lock}");
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "1.4.0 is the newest release matching ^1",
+        ));
+
+    // Lifting the requirement to the next major is an explicit act.
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill@2"])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".agents/skills/test-skill/SKILL.md")).unwrap(),
+        "# Skill 2.0\n"
+    );
+    tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("up to date"));
+}
+
+#[test]
+fn add_git_release_errors_name_what_exists_and_how_to_tag() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    git_ok(&repo, &["tag", "v1.0.0"]);
+    commit_skill_release(&repo, "# Skill 1.4\n", "v1.4.0");
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    // Nothing satisfies the range: fail before cloning, list what exists.
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill@^3",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "no release of 'test-skill' matches ^3; available: 1.4.0, 1.0.0",
+        ));
+    assert!(!temp.path().join(".agents/skills/test-skill").exists());
+
+    // Not a version at all is a usage error.
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill@latest",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "is not a version or a version range",
+        ));
+
+    // A repository with no release tags says how to make one, and still
+    // installs at HEAD without the requirement.
+    let untagged = temp.path().join("untagged");
+    fs::create_dir_all(&untagged).unwrap();
+    let untagged_repo = make_git_skill_repo(&untagged);
+    let untagged_url = format!("file://{}", untagged_repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &untagged_url,
+            "test-skill@1",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("no release tags for 'test-skill'"))
+        .stderr(predicate::str::contains(
+            "test-skill/v1.2.0 marks a release",
+        ));
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &untagged_url,
+            "test-skill",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("version_scheme = \"sha\""), "{lock}");
+    assert!(!lock.contains("tag = "), "{lock}");
+
+    // Local sources have no releases; neither add nor update accepts '@'.
+    let local = make_primitive(temp.path(), "local-skill");
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            local.to_str().unwrap(),
+            "local-skill@1",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("applies to git sources only"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "skill", local.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "local-skill@^1"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("was not installed from git"));
+}
+
+#[test]
+fn scoped_release_tags_win_over_repo_wide_ones() {
+    // A monorepo at v9.9.9 holding a skill released as test-skill/v1.0.0:
+    // the repository's own tag must not read as a release of the skill.
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    git_ok(&repo, &["tag", "v9.9.9"]);
+    git_ok(&repo, &["tag", "test-skill/v1.0.0"]);
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill@9",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("available: 1.0.0"));
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill@^1",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("to test-skill/v1.0.0"));
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("tag = \"test-skill/v1.0.0\""), "{lock}");
+    assert!(lock.contains("version = \"1.0.0\""), "{lock}");
+}

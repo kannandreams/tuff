@@ -11,6 +11,7 @@ use crate::error::{Result, TuffError};
 use crate::git;
 use crate::lockfile::{self, TargetLockEntry};
 use crate::manifest::{self, CapabilityType, load_manifest};
+use crate::release;
 use crate::resolver::{self, Scope};
 
 use super::{capability_index, home_dir, infer_from_path, resolve_agent_selection};
@@ -46,6 +47,14 @@ pub fn cmd_add(
             repo_root,
             hook_file,
         );
+    }
+    if let Some(name) = name
+        && name.contains('@')
+    {
+        return Err(TuffError::usage(format!(
+            "'{name}' carries a version requirement, which applies to git sources only"
+        ))
+        .with_hint("a local directory has no release tags; pass the name without '@'"));
     }
     cmd_add_local(
         &install_root,
@@ -312,9 +321,57 @@ fn cmd_add_git(
     project_root: &Path,
     hook_file: Option<&Path>,
 ) -> Result<()> {
-    let (source_guard, cache_dir, clean_url) = git::clone_to_temp(url, None)?;
+    // `<name>@<requirement>` asks for a release (RFC-101). The tags are
+    // listed before anything is cloned, so a request nothing satisfies
+    // costs one round trip and names what was available.
+    let (name, request) = match name {
+        Some(spec) => {
+            let (name, request) = release::split_version_request(spec)?;
+            (
+                Some(name),
+                request.map(release::VersionRequest::parse).transpose()?,
+            )
+        }
+        None => (None, None),
+    };
     let source_path = git::source_subdirectory(url);
+    let release_name = name.or_else(|| {
+        source_path
+            .as_deref()
+            .and_then(|path| path.rsplit('/').next())
+    });
+    let release = match &request {
+        Some(request) => {
+            let release_name = release_name.ok_or_else(|| {
+                TuffError::usage(
+                    "a version requirement needs a capability name to match release tags against",
+                )
+                .with_hint(
+                    "write <name>@<version>, or use a URL that names the capability's directory",
+                )
+            })?;
+            let tags = git::list_remote_tags(url)?;
+            Some(release::resolve_release(&tags, release_name, request)?)
+        }
+        None => None,
+    };
+    let (source_guard, cache_dir, clean_url) = match &release {
+        Some(release) => git::clone_tag_to_temp(url, &release.tag)?,
+        None => git::clone_to_temp(url, None)?,
+    };
     let commit_sha = git::resolve_ref(&cache_dir)?;
+    // The lockfile pins the commit either way. A release also gives the
+    // entry a version worth the name; a plain clone has only the SHA.
+    let installed_version = release
+        .as_ref()
+        .map_or_else(|| commit_sha.clone(), |release| release.version.to_string());
+    if let (Some(release), Some(request), Some(release_name)) = (&release, &request, release_name) {
+        println!(
+            "resolved {release_name}@{request} to {} ({})",
+            release.tag,
+            super::short_sha(&commit_sha)
+        );
+    }
     let cap_type = capability_type
         .and_then(CapabilityType::parse)
         .unwrap_or(CapabilityType::Skill);
@@ -354,19 +411,19 @@ fn cmd_add_git(
         if let Some(name) = name {
             manifest.id = name.to_string();
         }
-        manifest.version = commit_sha.clone();
+        manifest.version = installed_version.clone();
         manifest
     } else {
         let name = name.ok_or_else(|| {
             TuffError::usage("--name is required when the git source has no tuff.toml")
         })?;
-        manifest::synthetic_manifest(&skill_dir, name, &commit_sha)?
+        manifest::synthetic_manifest(&skill_dir, name, &installed_version)?
     };
     let name: &str = name.unwrap_or(&manifest.id);
     let source_skill = source_path.as_deref().unwrap_or(name);
 
     let capability = if native_hook {
-        resolve_native_hook_capability(&skill_dir, Some(name), &commit_sha, hook_file)?
+        resolve_native_hook_capability(&skill_dir, Some(name), &installed_version, hook_file)?
     } else {
         resolve_capability(&manifest)?
     };
@@ -387,8 +444,8 @@ fn cmd_add_git(
             url: clean_url,
             path: source_skill.to_string(),
             git_ref: commit_sha,
-            tag: None,
-            requested: None,
+            tag: release.map(|release| release.tag),
+            requested: request.map(|request| request.to_string()),
         })),
         true,
     );

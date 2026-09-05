@@ -8,6 +8,7 @@ use crate::git;
 use crate::lockfile;
 use crate::manifest::CapabilityType;
 use crate::oci::{self, OciTransferOptions};
+use crate::release;
 
 use super::{home_dir_opt, render_table, short_sha, style_outdated_status};
 
@@ -18,6 +19,9 @@ struct OutdatedRow {
     current: String,
     latest: String,
     status: String,
+    /// `major`, `minor`, or `patch` when both sides are releases: the size
+    /// of the change the author claimed, shown beside `outdated`.
+    change: Option<String>,
 }
 
 /// The `--json` shape of an [`OutdatedRow`], with the same `type`/`target`
@@ -33,6 +37,8 @@ struct JsonOutdatedRow<'a> {
     current: &'a str,
     latest: Option<&'a str>,
     status: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    change: Option<&'a str>,
 }
 
 impl OutdatedRow {
@@ -44,6 +50,7 @@ impl OutdatedRow {
             current: &self.current,
             latest: (self.latest != UNRESOLVED).then_some(self.latest.as_str()),
             status: &self.status,
+            change: self.change.as_deref(),
         }
     }
 }
@@ -200,6 +207,7 @@ fn classify_pack(
 /// folded into `up to date`: an honest unknown sends someone to look, a
 /// confident "up to date" does not.
 fn classify(
+    id: &str,
     entry: &lockfile::CapabilityLockEntry,
     oci_options: &OciTransferOptions,
     cache: &mut PackCheckCache,
@@ -250,6 +258,9 @@ fn classify(
             };
             return (entry.version.clone(), latest, status.to_string());
         }
+        lockfile::CapabilitySource::Git(git) if git.tag.is_some() => {
+            return classify_release(id, entry, git);
+        }
         lockfile::CapabilitySource::Git(git) => (&git.url, &git.path),
     };
     let _ = src_path;
@@ -275,6 +286,60 @@ fn classify(
     }
 }
 
+/// A tag-pinned install (RFC-101) is compared against the newest release
+/// tag, whatever the recorded requirement allows: `outdated` answers "is
+/// there something newer", and `update` decides whether the requirement
+/// lets you have it. One `ls-remote` per row, no clone.
+fn classify_release(
+    id: &str,
+    entry: &lockfile::CapabilityLockEntry,
+    git: &lockfile::GitSource,
+) -> (String, String, String) {
+    let current = entry.version.clone();
+    let tags = match git::list_remote_tags(&git.url) {
+        Ok(tags) => tags,
+        Err(_) => return (current, "unavailable".to_string(), "error".to_string()),
+    };
+    let releases = release::release_tags(tags.iter().map(String::as_str), id);
+    let Some(latest) = release::latest_release(&releases) else {
+        // The tags are gone upstream. The pinned commit still installs and
+        // verifies; what is missing is anything to compare it with.
+        return (current, UNRESOLVED.to_string(), "tag missing".to_string());
+    };
+    match Version::parse(&entry.version) {
+        Ok(installed) if latest.version > installed => (
+            current,
+            latest.version.to_string(),
+            format!(
+                "outdated ({})",
+                release::change_kind(&installed, &latest.version)
+            ),
+        ),
+        Ok(_) => (
+            current,
+            latest.version.to_string(),
+            "up to date".to_string(),
+        ),
+        Err(_) => (
+            current,
+            latest.version.to_string(),
+            "not checked".to_string(),
+        ),
+    }
+}
+
+/// Take the change kind out of an `outdated (minor)` status so the status
+/// column and the JSON `status` stay one of the documented words.
+fn split_change(status: String) -> (String, Option<String>) {
+    match status
+        .strip_prefix("outdated (")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        Some(kind) => ("outdated".to_string(), Some(kind.to_string())),
+        None => (status, None),
+    }
+}
+
 fn collect_rows(
     lf: &lockfile::Lockfile,
     oci_options: &OciTransferOptions,
@@ -283,7 +348,8 @@ fn collect_rows(
 ) {
     for (id, entry) in &lf.capabilities {
         for target_id in entry.targets.keys() {
-            let (current, latest, status) = classify(entry, oci_options, cache);
+            let (current, latest, status) = classify(id, entry, oci_options, cache);
+            let (status, change) = split_change(status);
             rows.push(OutdatedRow {
                 id: id.clone(),
                 capability_type: entry.capability_type,
@@ -291,6 +357,7 @@ fn collect_rows(
                 current,
                 latest,
                 status,
+                change,
             });
         }
     }
@@ -340,7 +407,10 @@ pub fn cmd_outdated(
     let table_rows: Vec<Vec<String>> = rows
         .into_iter()
         .map(|r| {
-            let status = style_outdated_status(&r.status);
+            let status = match &r.change {
+                Some(change) => format!("{} ({change})", style_outdated_status(&r.status)),
+                None => style_outdated_status(&r.status),
+            };
             let row = OutdatedRow { status, ..r };
             vec![
                 row.id,
@@ -390,6 +460,7 @@ mod tests {
         // "up to date" here states a conclusion that was never reached: the
         // row would claim the capability is current while LATEST is unknown.
         let (current, latest, status) = classify(
+            "example",
             &entry(lockfile::CapabilitySource::local(
                 "agent-capabilities/example",
             )),
