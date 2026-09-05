@@ -7229,3 +7229,197 @@ fn an_exact_name_is_required_so_a_search_hit_never_installs_by_surprise() {
         ));
     assert!(!project.path().join(".agents/mcp-servers/stub-mcp").exists());
 }
+
+#[test]
+fn list_and_outdated_json_share_the_check_field_names() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "json-rows");
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+
+    // One object per capability per agent, keyed like `check --json`, so a
+    // script that reads one inventory command reads them all.
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["list", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "json-rows")
+        .expect("the installed skill is listed");
+    assert_eq!(row["type"], "skill");
+    assert_eq!(row["target"], "open-agents");
+    assert_eq!(row["scope"], "project");
+    assert_eq!(row["status"], "clean", "status is plain text, not styled");
+    assert_eq!(row["path"], ".agents/skills/json-rows");
+
+    // A filter that matches nothing is an empty array, not prose.
+    tuff()
+        .current_dir(temp.path())
+        .args(["list", "--json", "--type", "tool"])
+        .assert()
+        .success()
+        .stdout("[]\n");
+
+    // A local capability cannot be checked: the table shows `—`, the JSON
+    // carries null so nobody has to compare against a dash.
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["outdated", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "json-rows")
+        .expect("the installed skill has an outdated row");
+    assert_eq!(row["type"], "skill");
+    assert_eq!(row["target"], "open-agents");
+    assert_eq!(row["current"], "1.0.0");
+    assert!(row["latest"].is_null(), "{row}");
+    assert_eq!(row["status"], "not checked");
+}
+
+#[test]
+fn diff_json_flag_is_the_same_as_format_json() {
+    let temp = TempDir::new().unwrap();
+    let skill = make_primitive(temp.path(), "json-diff");
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+    fs::write(
+        temp.path().join(".agents/skills/json-diff/SKILL.md"),
+        "# edited locally\n",
+    )
+    .unwrap();
+
+    let flag = tuff()
+        .current_dir(temp.path())
+        .args(["diff", "json-diff", "--json"])
+        .output()
+        .unwrap();
+    let format = tuff()
+        .current_dir(temp.path())
+        .args(["diff", "json-diff", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(flag.status.success());
+    assert_eq!(flag.stdout, format.stdout);
+    let diffs: serde_json::Value = serde_json::from_slice(&flag.stdout).unwrap();
+    assert_eq!(diffs[0]["capability"], "json-diff");
+    assert_eq!(diffs[0]["target"], "open-agents");
+    assert!(!diffs[0]["changes"].as_array().unwrap().is_empty());
+
+    // Two spellings of the same choice must not be combined.
+    tuff()
+        .current_dir(temp.path())
+        .args(["diff", "json-diff", "--json", "--format", "unified"])
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn add_mcp_linear_from_catalog_wires_the_bearer_header_in_every_dialect() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    for agent in ["claude", "cursor"] {
+        tuff()
+            .current_dir(temp.path())
+            .args(["agent", "add", agent])
+            .assert()
+            .success();
+    }
+
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "mcp",
+            "linear",
+            "-a",
+            "claude",
+            "-a",
+            "cursor",
+            "-a",
+            "open-agents",
+            "--yes",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed linear from the built-in catalog",
+        ))
+        .stderr(predicate::str::contains("export LINEAR_API_KEY"));
+
+    // The key never leaves the environment: each harness gets its own
+    // reference dialect, and Cursor gets no `type` for a remote server.
+    let claude: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".mcp.json")).unwrap()).unwrap();
+    let entry = &claude["mcpServers"]["linear"];
+    assert_eq!(entry["type"], "http");
+    assert_eq!(entry["url"], "https://mcp.linear.app/mcp");
+    assert_eq!(
+        entry["headers"]["Authorization"],
+        "Bearer ${LINEAR_API_KEY}"
+    );
+    assert!(entry.get("command").is_none());
+
+    let cursor: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(temp.path().join(".cursor/mcp.json")).unwrap())
+            .unwrap();
+    let entry = &cursor["mcpServers"]["linear"];
+    assert!(entry.get("type").is_none(), "{entry}");
+    assert_eq!(
+        entry["headers"]["Authorization"],
+        "Bearer ${env:LINEAR_API_KEY}"
+    );
+
+    let record =
+        fs::read_to_string(temp.path().join(".agents/mcp-servers/linear/server.toml")).unwrap();
+    assert!(record.contains("from_env = \"LINEAR_API_KEY\""), "{record}");
+    assert!(record.contains("format = \"Bearer {}\""), "{record}");
+    assert!(!record.contains("Bearer sk"), "{record}");
+
+    // The catalog is the upstream, so outdated resolves it without network.
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["outdated", "--json"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "linear" && row["target"] == "cursor")
+        .unwrap();
+    assert_eq!(row["status"], "up to date");
+    assert_eq!(row["latest"], "1.0.0");
+}

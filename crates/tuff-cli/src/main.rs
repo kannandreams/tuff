@@ -84,6 +84,10 @@ enum Command {
         /// Filter by capability type: skill, tool, hook, workflow, mcp-server.
         #[arg(short = 'p', long = "type")]
         kind: Option<String>,
+
+        /// Output rows as JSON.
+        #[arg(long = "json")]
+        json: bool,
     },
 
     /// Show detailed status for installed primitives.
@@ -105,6 +109,10 @@ enum Command {
         /// checking a pack-sourced capability.
         #[arg(long = "ca-file")]
         ca_file: Vec<PathBuf>,
+
+        /// Output rows as JSON.
+        #[arg(long = "json")]
+        json: bool,
     },
 
     /// Diff an installed capability against baseline.
@@ -123,6 +131,10 @@ enum Command {
         /// Diff output format.
         #[arg(long = "format", value_enum, default_value_t = commands::DiffFormat::Unified)]
         format: commands::DiffFormat,
+
+        /// Output the diff as JSON; the same as `--format json`.
+        #[arg(long = "json", conflicts_with = "format")]
+        json: bool,
     },
 
     /// Reconcile an installed capability with its source or accept local edits.
@@ -856,7 +868,9 @@ fn run() -> Result<()> {
                 output,
             } => cmd_pack_extract(&artifact, &agent, &output),
         },
-        Some(Command::List { scope, kind }) => cmd_list(&repo_root, &scope, kind.as_deref()),
+        Some(Command::List { scope, kind, json }) => {
+            cmd_list(&repo_root, &scope, kind.as_deref(), json)
+        }
         Some(Command::Status) => cmd_status(&repo_root),
         Some(Command::Generate { artifact }) => match artifact {
             GenerateCommand::Index { agent, output } => {
@@ -869,18 +883,24 @@ fn run() -> Result<()> {
         Some(Command::Outdated {
             plain_http,
             ca_file,
-        }) => cmd_outdated(&repo_root, plain_http, &ca_file),
+            json,
+        }) => cmd_outdated(&repo_root, plain_http, &ca_file, json),
         Some(Command::Diff {
             capability_id,
             agent,
             upstream,
             format,
+            json,
         }) => cmd_diff(
             &repo_root,
             &capability_id,
             agent.as_deref(),
             upstream,
-            format,
+            if json {
+                commands::DiffFormat::Json
+            } else {
+                format
+            },
         ),
         Some(Command::Update {
             id,

@@ -14,7 +14,8 @@ use serde::Deserialize;
 
 use crate::error::{Result, TuffError};
 use crate::manifest::{
-    CapabilityManifest, CapabilityType, EnvRef, McpServerConfig, McpServerMetadata, McpTransport,
+    CapabilityManifest, CapabilityType, EnvRef, HeaderRef, McpServerConfig, McpServerMetadata,
+    McpTransport,
 };
 
 const CATALOG_TOML: &str = include_str!("../assets/mcp-catalog.toml");
@@ -45,6 +46,11 @@ struct CatalogServer {
     /// `{ from_env = "NAME" }` reference in the generated manifest.
     #[serde(default)]
     env: Vec<String>,
+    /// HTTP request headers a remote server needs, as the same reference-only
+    /// shape a manifest's `[server.headers]` takes: a variable name and an
+    /// optional `format`, never a value.
+    #[serde(default)]
+    headers: BTreeMap<String, HeaderRef>,
     #[serde(default)]
     tools_summary: Option<String>,
 }
@@ -78,7 +84,7 @@ pub fn lookup(id: &str) -> Result<Option<CapabilityManifest>> {
         args: server.args,
         url: server.url,
         env,
-        headers: BTreeMap::new(),
+        headers: server.headers,
         metadata: server.tools_summary.map(|tools_summary| McpServerMetadata {
             tools_summary: Some(tools_summary),
         }),
@@ -183,13 +189,44 @@ mod tests {
         // otherwise don't meet the sourcing bar; they should not silently
         // reappear.
         let ids = ids();
-        for excluded in [
-            "postgres", "sqlite", "slack", "gitlab", "linear", "context7",
-        ] {
+        for excluded in ["postgres", "sqlite", "slack", "gitlab"] {
             assert!(
                 !ids.contains(&excluded.to_string()),
                 "{excluded} should not be in the catalog"
             );
+        }
+    }
+
+    #[test]
+    fn remote_entries_carry_their_auth_header_as_a_reference() {
+        // linear and context7 were excluded until the schema could express
+        // an `Authorization` header. Both vendors document the same shape,
+        // `Authorization: Bearer <key>` on a Streamable HTTP url, so pin
+        // that the catalog records the variable and the format, never a
+        // value, and that the post-install reminder names the variable.
+        for (id, url, variable) in [
+            ("linear", "https://mcp.linear.app/mcp", "LINEAR_API_KEY"),
+            (
+                "context7",
+                "https://mcp.context7.com/mcp",
+                "CONTEXT7_API_KEY",
+            ),
+        ] {
+            let manifest = lookup(id).unwrap().unwrap();
+            let server = manifest.server.unwrap();
+            assert_eq!(server.transport, McpTransport::Http, "{id}");
+            assert_eq!(server.url.as_deref(), Some(url), "{id}");
+            assert!(server.command.is_none(), "{id}");
+            assert!(server.env.is_empty(), "{id}");
+            let header = &server.headers["Authorization"];
+            assert_eq!(header.from_env, variable, "{id}");
+            assert_eq!(header.format.as_deref(), Some("Bearer {}"), "{id}");
+            assert_eq!(
+                header.render("${TOKEN}"),
+                "Bearer ${TOKEN}",
+                "{id}: the harness expands the reference, Tuff never sees the key"
+            );
+            assert_eq!(required_env(&server), vec![variable.to_string()], "{id}");
         }
     }
 

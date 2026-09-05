@@ -35,7 +35,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff add <git-url> hook <name> -a <agent>` — install hook from git
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
-- `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
+- `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry, linear, context7) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
 
 ### Packs
 - `tuff pack build --name <name>` — package accepted project capabilities into `tuff-dist/<name>-0.1.0.tuffpack`
@@ -68,6 +68,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 ### CI & Validation
 - `tuff check` — validate all capabilities (exit 1 on any failure)
 - `tuff check --json` — machine-readable output for CI
+- `tuff list --json`, `tuff outdated --json`, `tuff diff <id> --json` — the same rows as JSON, with the same `type`/`target`/`status` keys as `check --json`; prefer these over parsing tables
 
 ### Manage
 - `tuff remove <id>` — remove a capability

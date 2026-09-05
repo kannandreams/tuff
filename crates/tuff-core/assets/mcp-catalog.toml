@@ -29,11 +29,15 @@
 #     global-install, not an `npx` example) *and* third-party maintenance
 #     risk. Individually any one of those might clear the bar; combined,
 #     it doesn't.
-#   - linear, context7, and hosted Sentry: all authenticate via a custom
-#     `Authorization` header on an HTTP url, which this schema doesn't
-#     support yet (http transport here is a bare `url`, no `headers`).
-#     Real, separable schema extension -- not built speculatively for zero
-#     current consumers.
+#   - Hosted Sentry over HTTP: the stdio `@sentry/mcp-server` entry below
+#     covers the same tools without a second entry for the same service.
+#
+# Remote servers declare their auth header the way a manifest does:
+# `headers = { Authorization = { from_env = "NAME", format = "Bearer {}" } }`.
+# The value is never here, only the variable name; `format` wraps it. The
+# schema has no notion of an optional header, so a header listed here is
+# one the developer must export, and the description says where the key
+# comes from.
 
 [[servers]]
 id = "filesystem"
@@ -146,3 +150,20 @@ command = "npx"
 args = ["@sentry/mcp-server"]
 env = ["SENTRY_ACCESS_TOKEN"]
 tools_summary = "find_issues, get_issue_details, search_events"
+
+[[servers]]
+id = "linear"
+version = "1.0.0"
+description = "Find, create, and update Linear issues, projects, and comments. Authenticates with a Linear API key; the interactive OAuth flow is not used."
+transport = "http"
+url = "https://mcp.linear.app/mcp"
+headers = { Authorization = { from_env = "LINEAR_API_KEY", format = "Bearer {}" } }
+
+[[servers]]
+id = "context7"
+version = "1.0.0"
+description = "Up-to-date, version-specific library documentation and code examples. Needs a free API key from context7.com/dashboard."
+transport = "http"
+url = "https://mcp.context7.com/mcp"
+headers = { Authorization = { from_env = "CONTEXT7_API_KEY", format = "Bearer {}" } }
+tools_summary = "resolve-library-id, query-docs"

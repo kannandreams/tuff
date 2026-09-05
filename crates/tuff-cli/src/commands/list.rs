@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::Path;
 
+use serde::Serialize;
+
 use crate::error::Result;
 use crate::lockfile::{self};
 use crate::manifest::{CapabilityType, load_manifest};
@@ -9,8 +11,13 @@ use crate::manifest::{CapabilityType, load_manifest};
 use super::{home_dir_opt, render_table, short_sha};
 use super::{style_capability_type, style_drift_status};
 
+/// One `tuff list` row: a capability at one target, with the files it
+/// emitted there folded into a single status. Serialized as-is for
+/// `--json`, with the same `type`/`target` keys as `tuff check --json`.
+#[derive(Serialize)]
 struct ListRow {
     id: String,
+    #[serde(rename = "type")]
     capability_type: CapabilityType,
     version: String,
     scope: String,
@@ -32,7 +39,12 @@ pub(crate) struct InventoryRow {
     pub source_type: String,
 }
 
-pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>) -> Result<()> {
+pub fn cmd_list(
+    repo_root: &Path,
+    scope_filter: &str,
+    kind_filter: Option<&str>,
+    json: bool,
+) -> Result<()> {
     let kind_type = kind_filter.and_then(CapabilityType::parse);
 
     let show_project = scope_filter == "all" || scope_filter == "project";
@@ -62,12 +74,21 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
     }
 
     if inventory.is_empty() {
-        println!("no capabilities installed");
+        if json {
+            println!("[]");
+        } else {
+            println!("no capabilities installed");
+        }
         return Ok(());
     }
 
     let mut rows = collapse_inventory_for_list(inventory);
     rows.sort_by(|a, b| a.scope.cmp(&b.scope).then_with(|| a.id.cmp(&b.id)));
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&rows)?);
+        return Ok(());
+    }
 
     let table_rows: Vec<Vec<String>> = rows
         .into_iter()
@@ -78,7 +99,7 @@ pub fn cmd_list(repo_root: &Path, scope_filter: &str, kind_filter: Option<&str>)
                 row.version,
                 row.scope,
                 row.target,
-                row.status,
+                style_drift_status(&row.status),
                 row.path,
             ]
         })
@@ -220,7 +241,7 @@ fn collapse_inventory_for_list(inventory: Vec<InventoryRow>) -> Vec<ListRow> {
                 version: first.version,
                 scope: first.scope,
                 target: first.target,
-                status: style_drift_status(status),
+                status: status.to_string(),
                 path,
             }
         })

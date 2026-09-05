@@ -148,16 +148,14 @@ catalog arrives with a newer Tuff release.
 | `notion` | `NOTION_TOKEN` | read/write Notion pages and databases |
 | `playwright` | none | browser automation |
 | `sentry` | `SENTRY_ACCESS_TOKEN` | issue/event search; a few AI-search tools need an additional LLM key |
+| `linear` | `LINEAR_API_KEY` | Linear's hosted server over HTTP: issues, projects, comments; a `Read`-only API key works for read access |
+| `context7` | `CONTEXT7_API_KEY` | version-specific library docs over HTTP; the key is free from context7.com/dashboard |
 
-`linear` and `context7` both authenticate with an `Authorization` header on an
-HTTP endpoint. The manifest expresses that now (see [Remote servers and auth
-headers](#remote-servers-and-auth-headers)) and `tuff mcp doctor` probes it;
-these two catalog entries still need their headers filled in, though the same
-servers install correctly through the registry.
+`linear` and `context7` are remote servers: the entry is a `url` plus an `Authorization` header built from the named variable, exactly as a manifest declares it (see [Remote servers and auth headers](#remote-servers-and-auth-headers)). Linear also offers an interactive OAuth flow; the catalog entry uses the API key path because a config file can carry a variable reference and cannot carry a login. Context7 calls its key recommended rather than required, but the catalog has no notion of an optional header, so the entry asks for one; the keyless stdio form is a registry install away as `io.github.upstash/context7`.
 
 ### The MCP registry
 
-The catalog is twelve entries chosen for correctness. The official [MCP registry](https://registry.modelcontextprotocol.io) holds thousands, published by the server authors themselves, and `tuff add mcp` falls through to it for any name it does not recognise.
+The catalog is fourteen entries chosen for correctness. The official [MCP registry](https://registry.modelcontextprotocol.io) holds thousands, published by the server authors themselves, and `tuff add mcp` falls through to it for any name it does not recognise.
 
 ```sh frame="terminal"
 tuff mcp search notion
