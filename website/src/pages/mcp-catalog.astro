@@ -1,0 +1,98 @@
+---
+// The MCP catalog as a standalone browse page rather than a docs page.
+//
+// A card grid is the wrong shape for the documentation template: it is
+// squeezed between two sidebars into a 58rem column, which fits two cards
+// at best. This page uses the landing page's own shell, so the grid gets
+// the full 1200px, and the shared nav keeps a way back into the docs.
+import '../styles/custom.css';
+import McpCatalog from '../components/McpCatalog.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import SiteNav from '../components/SiteNav.astro';
+import catalog from '../data/mcp-catalog.json';
+
+const count = catalog.entries.length;
+const description =
+  'Every MCP server Tuff installs by name, with what it runs, the variables it needs, and the command to add it.';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="MCP Catalog — Tuff" />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="https://tuffcli.dev/img/tuff-readme-banner.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>MCP Catalog — Tuff</title>
+  </head>
+  <body class="tuff-standalone">
+    <SiteNav current="/mcp-catalog" />
+
+    <main class="tuff-landing tuff-landing--standalone">
+      <section class="tuff-section tuff-catalog-head">
+        <div class="tuff-section-label">//mcp catalog</div>
+        <h1 class="tuff-catalog-title">{count} servers, installable by name</h1>
+        <p class="tuff-catalog-lede">
+          These are the MCP servers <code>tuff add mcp &lt;id&gt;</code> installs without a lookup or
+          a network call. Each one is a launch declaration compiled into the binary. Tuff ships none
+          of the server code: your harness fetches it from the vendor's own package or image when it
+          starts the server.
+        </p>
+        <p class="tuff-catalog-note">
+          Generated from <code>crates/tuff-core/assets/mcp-catalog.toml</code> on every build, so this
+          page cannot list a server the CLI does not have.
+        </p>
+
+        <McpCatalog />
+      </section>
+
+      <section class="tuff-section tuff-section--last">
+        <div class="tuff-section-head">
+          <div class="tuff-section-label">//the rest</div>
+          <h2>A curated few, thousands reachable</h2>
+        </div>
+        <div class="tuff-stats">
+          <div class="tuff-stat">
+            <small>//not a registry</small>
+            <strong>Nothing is hosted here</strong>
+            <p>
+              Nothing is submitted, served, or accounted for. The catalog is a small curated set that
+              ships inside a binary, so <code>tuff outdated</code> compares an installed entry against
+              the catalog your <code>tuff</code> carries. A newer catalog arrives with a newer Tuff.
+            </p>
+          </div>
+          <div class="tuff-stat">
+            <small>//the registry</small>
+            <strong>Everything else by name</strong>
+            <p>
+              The official MCP registry holds thousands, published by their own authors.
+              <code>tuff mcp search</code> finds them and says how Tuff would launch each one, or
+              refuses it with a reason, before you install anything.
+            </p>
+          </div>
+          <div class="tuff-stat">
+            <small>//the bar</small>
+            <strong>Verified, not recalled</strong>
+            <p>
+              Every entry was checked against the vendor's own README or the
+              <code>modelcontextprotocol/servers</code> repository. An invocation that is inferred
+              rather than documented is left out instead of guessed at, and secrets are never values.
+            </p>
+          </div>
+        </div>
+        <div class="tuff-catalog-links">
+          <a class="tuff-button tuff-button--primary" href="/primitives/mcp-servers"
+            >MCP server docs <span aria-hidden="true">→</span></a
+          >
+          <a class="tuff-hero-link" href="/cli/#install-an-mcp-server">CLI reference</a>
+        </div>
+      </section>
+    </main>
+
+    <SiteFooter />
+  </body>
+</html>
