@@ -134,28 +134,13 @@ catalog is part of the binary, `tuff outdated` compares an installed entry
 against that entry's version in the catalog your `tuff` carries, and a newer
 catalog arrives with a newer Tuff release.
 
-| id | what it needs | notes |
-|---|---|---|
-| `filesystem` | none | read/write/search files in the project directory |
-| `memory` | none | knowledge-graph notes persisted across sessions |
-| `github` | `GITHUB_PERSONAL_ACCESS_TOKEN`, Docker | GitHub's own server; the old npm package was archived upstream in 2025 |
-| `fetch` | none | fetch a URL, convert to Markdown |
-| `git` | none | read/search/manipulate a local Git repo |
-| `time` | none | current time, timezone conversion |
-| `sequentialthinking` | none | structured step-by-step reasoning |
-| `everything` | none | protocol reference/demo server; a good first `tuff mcp doctor` target, no API key needed |
-| `brave-search` | `BRAVE_API_KEY` | web and local search |
-| `notion` | `NOTION_TOKEN` | read/write Notion pages and databases |
-| `playwright` | none | browser automation |
-| `sentry` | `SENTRY_ACCESS_TOKEN` | issue/event search; a few AI-search tools need an additional LLM key |
-| `linear` | `LINEAR_API_KEY` | Linear's hosted server over HTTP: issues, projects, comments; a `Read`-only API key works for read access |
-| `context7` | `CONTEXT7_API_KEY` | version-specific library docs over HTTP; the key is free from context7.com/dashboard |
+The full list, with what each entry runs, the variables it needs, and the tools it answers with, is on the [MCP Catalog](/catalog/) page. That page is generated from the catalog file itself on every build, so it never drifts from what your `tuff` can install.
 
-`linear` and `context7` are remote servers: the entry is a `url` plus an `Authorization` header built from the named variable, exactly as a manifest declares it (see [Remote servers and auth headers](#remote-servers-and-auth-headers)). Linear also offers an interactive OAuth flow; the catalog entry uses the API key path because a config file can carry a variable reference and cannot carry a login. Context7 calls its key recommended rather than required, but the catalog has no notion of an optional header, so the entry asks for one; the keyless stdio form is a registry install away as `io.github.upstash/context7`.
+Two of the entries, `linear` and `context7`, are remote servers: a `url` plus an `Authorization` header built from the named variable, exactly as a manifest declares it (see [Remote servers and auth headers](#remote-servers-and-auth-headers)). Linear also offers an interactive OAuth flow; the catalog entry uses the API key path because a config file can carry a variable reference and cannot carry a login. Context7 calls its key recommended rather than required, but the catalog has no notion of an optional header, so the entry asks for one; the keyless stdio form is a registry install away as `io.github.upstash/context7`.
 
 ### The MCP registry
 
-The catalog is fourteen entries chosen for correctness. The official [MCP registry](https://registry.modelcontextprotocol.io) holds thousands, published by the server authors themselves, and `tuff add mcp` falls through to it for any name it does not recognise.
+The catalog is a small set chosen for correctness. The official [MCP registry](https://registry.modelcontextprotocol.io) holds thousands, published by the server authors themselves, and `tuff add mcp` falls through to it for any name it does not recognise.
 
 ```sh frame="terminal"
 tuff mcp search notion
