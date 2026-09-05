@@ -142,13 +142,14 @@ It ships the Tuff command reference as a skill and expects the `tuff` command on
 
 ### VS Code extension
 
-Install the extension to see installed capabilities, drift, and available updates in the editor sidebar:
+See installed capabilities, drift, and available updates in the editor sidebar. The extension lives in `editors/vscode` and is not on the Marketplace yet, so build it from source:
 
 ```sh
-code --install-extension kannandreams.tuff
+cd editors/vscode && npm install && npm run package
+code --install-extension tuff-0.1.0.vsix
 ```
 
-Cursor installs it too, and it is published to Open VSX for editors that read that registry. Like the plugin, it ships no binary and runs the `tuff` on your PATH. See the [extension guide](https://tuffcli.dev/guides/vscode-extension/).
+Cursor installs the same file. Like the plugin, it ships no binary and runs the `tuff` on your PATH. See the [extension guide](https://tuffcli.dev/guides/vscode-extension/).
 
 ## Documentation
 
