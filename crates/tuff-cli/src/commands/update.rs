@@ -5,7 +5,7 @@ use crate::adapter::{AdapterKind, AgentAdapter, resolve_capability};
 use crate::error::{Result, TuffError};
 use crate::git;
 use crate::lockfile;
-use crate::manifest::{self, load_manifest};
+use crate::manifest::load_manifest;
 use crate::oci::OciTransferOptions;
 use crate::release;
 use crate::resolver::{self, Scope};
@@ -528,16 +528,16 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         None => {
             let (guard, dir, _) = git::clone_to_temp(&git.url, None)?;
             let sha = git::resolve_ref(&dir)?;
-            if sha == entry.version {
+            if sha == git.git_ref {
                 println!("'{}' is already up to date", id);
                 return Ok(());
             }
             (guard, dir, sha, None)
         }
     };
-    let installed_version = chosen
-        .as_ref()
-        .map_or_else(|| latest_sha.clone(), |chosen| chosen.version.to_string());
+    let skill_dir = git::discover_capability(&cache_dir, &git.path, entry.capability_type)?;
+    let installed_version =
+        super::add::git_installed_version(&skill_dir, chosen.as_ref(), &latest_sha);
     let source = CapabilitySource::Git(GitSource {
         url: git.url.clone(),
         path: git.path.clone(),
@@ -558,13 +558,16 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
             )
         }
         (Some(chosen), _) => format!(" to {}", chosen.version),
-        (None, _) => String::new(),
+        // No release involved: name the declared versions when they moved.
+        (None, Ok(from)) => match semver::Version::parse(&installed_version) {
+            Ok(to) if to != from => format!(" to {to} ({})", release::change_kind(&from, &to)),
+            _ => String::new(),
+        },
+        (None, Err(_)) => String::new(),
     };
 
-    let skill_dir = git::discover_capability(&cache_dir, &git.path, entry.capability_type)?;
-
     if force {
-        let manifest = manifest::synthetic_manifest(&skill_dir, id, &installed_version)?;
+        let manifest = super::add::git_manifest(&skill_dir, Some(id), &installed_version)?;
         let capability = resolve_capability(&manifest)?;
         return install_capability(
             &scope_root,
@@ -610,7 +613,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         );
     }
 
-    let manifest = manifest::synthetic_manifest(&skill_dir, id, &installed_version)?;
+    let manifest = super::add::git_manifest(&skill_dir, Some(id), &installed_version)?;
     let primitive = resolve_capability(&manifest)?;
     install_capability(
         &scope_root,

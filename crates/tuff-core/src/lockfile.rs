@@ -120,13 +120,15 @@ impl CapabilitySource {
         }
     }
 
-    /// The version scheme a fresh install from this source records. Git
-    /// installs pin a commit until RFC-101 resolves tags; everything else
-    /// carries the version its manifest declared.
-    pub fn default_version_scheme(&self) -> VersionScheme {
+    /// What kind of string `version` is, given where it came from (RFC-101).
+    /// A git install chosen by a release tag is `semver`; one whose version
+    /// is the pinned commit itself is `sha`; anything else, including a git
+    /// install carrying the version its manifest or frontmatter declared,
+    /// is `declared`.
+    pub fn version_scheme_for(&self, version: &str) -> VersionScheme {
         match self {
             Self::Git(git) if git.tag.is_some() => VersionScheme::Semver,
-            Self::Git(_) => VersionScheme::Sha,
+            Self::Git(git) if git.git_ref == version => VersionScheme::Sha,
             _ => VersionScheme::Declared,
         }
     }
@@ -572,7 +574,7 @@ fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
                     _ => CapabilitySource::local(item.source_path),
                 },
             };
-            let version_scheme = source.default_version_scheme();
+            let version_scheme = source.version_scheme_for(&item.version);
             Row {
                 name: item.name,
                 target: item.target,

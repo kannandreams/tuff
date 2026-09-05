@@ -360,11 +360,6 @@ fn cmd_add_git(
         None => git::clone_to_temp(url, None)?,
     };
     let commit_sha = git::resolve_ref(&cache_dir)?;
-    // The lockfile pins the commit either way. A release also gives the
-    // entry a version worth the name; a plain clone has only the SHA.
-    let installed_version = release
-        .as_ref()
-        .map_or_else(|| commit_sha.clone(), |release| release.version.to_string());
     if let (Some(release), Some(request), Some(release_name)) = (&release, &request, release_name) {
         println!(
             "resolved {release_name}@{request} to {} ({})",
@@ -400,24 +395,16 @@ fn cmd_add_git(
         git::discover_capability(&cache_dir, name, cap_type)?
     };
 
+    // The lockfile pins the commit either way. The entry's version is the
+    // release when a tag chose it, else what the source declares for itself
+    // (RFC-101 tier 2), else the commit SHA, and the scheme says which.
+    let installed_version = git_installed_version(&skill_dir, release.as_ref(), &commit_sha);
+
     let native_hook = cap_type == CapabilityType::Hook && hook_file.is_some();
     let manifest = if native_hook {
         synthetic_local_manifest(&skill_dir, Some(cap_type))?
-    } else if skill_dir.join("tuff.toml").is_file() {
-        // A real manifest: honour its declared type and sections, but pin
-        // the installed version to the commit so `update` can compare refs
-        // exactly as it does for synthesized skills.
-        let mut manifest = load_manifest(&skill_dir)?;
-        if let Some(name) = name {
-            manifest.id = name.to_string();
-        }
-        manifest.version = installed_version.clone();
-        manifest
     } else {
-        let name = name.ok_or_else(|| {
-            TuffError::usage("--name is required when the git source has no tuff.toml")
-        })?;
-        manifest::synthetic_manifest(&skill_dir, name, &installed_version)?
+        git_manifest(&skill_dir, name, &installed_version)?
     };
     let name: &str = name.unwrap_or(&manifest.id);
     let source_skill = source_path.as_deref().unwrap_or(name);
@@ -451,6 +438,42 @@ fn cmd_add_git(
     );
     drop(source_guard);
     result
+}
+
+/// The version a git install records: the release when a tag chose it,
+/// else the version the source declares for itself, else the commit.
+pub(super) fn git_installed_version(
+    skill_dir: &Path,
+    release: Option<&release::ReleaseTag>,
+    commit_sha: &str,
+) -> String {
+    match release {
+        Some(release) => release.version.to_string(),
+        None => manifest::declared_version(skill_dir).unwrap_or_else(|| commit_sha.to_string()),
+    }
+}
+
+/// The manifest for a capability checked out of git: the real one when the
+/// directory has a `tuff.toml`, honouring its type and sections, else one
+/// synthesized from the skill directory. `name` overrides the id; the
+/// version is always the one the install records.
+pub(super) fn git_manifest(
+    skill_dir: &Path,
+    name: Option<&str>,
+    version: &str,
+) -> Result<manifest::CapabilityManifest> {
+    if skill_dir.join("tuff.toml").is_file() {
+        let mut manifest = load_manifest(skill_dir)?;
+        if let Some(name) = name {
+            manifest.id = name.to_string();
+        }
+        manifest.version = version.to_string();
+        return Ok(manifest);
+    }
+    let name = name.ok_or_else(|| {
+        TuffError::usage("--name is required when the git source has no tuff.toml")
+    })?;
+    manifest::synthetic_manifest(skill_dir, name, version)
 }
 
 #[expect(
@@ -592,7 +615,8 @@ fn synthetic_local_manifest(
 
     Ok(manifest::CapabilityManifest {
         id,
-        version: "0.1.0".into(),
+        // What the frontmatter declares, if anything (RFC-101 tier 2).
+        version: manifest::declared_version(capability_dir).unwrap_or_else(|| "0.1.0".into()),
         capability_type,
         description: "Added from existing agent assets.".into(),
         files,
@@ -1231,7 +1255,7 @@ pub(crate) fn install_capability(
         lockfile::CapabilityLockEntry {
             capability_type: capability.capability_type,
             version: capability.version.clone(),
-            version_scheme: source.default_version_scheme(),
+            version_scheme: source.version_scheme_for(&capability.version),
             description: capability.description.clone(),
             source,
             targets: merged_targets,

@@ -544,7 +544,7 @@ pub fn cmd_add_pack(
             path: capability.source_path.clone(),
             ..provenance.clone()
         });
-        entry.version_scheme = entry.source.default_version_scheme();
+        entry.version_scheme = entry.source.version_scheme_for(&entry.version);
     }
     lockfile::write_lockfile_at(&staging.path().join("tuff.lock"), &staged_lock)?;
 
@@ -1664,7 +1664,7 @@ fn apply_pack_update(
             path: capability.source_path.clone(),
             ..new_provenance.clone()
         });
-        entry.version_scheme = entry.source.default_version_scheme();
+        entry.version_scheme = entry.source.version_scheme_for(&entry.version);
     }
     lockfile::write_lockfile_at(&staged_lock_path, &staged_lock)?;
 

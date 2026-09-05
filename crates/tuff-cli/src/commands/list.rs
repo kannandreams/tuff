@@ -20,6 +20,10 @@ struct ListRow {
     #[serde(rename = "type")]
     capability_type: CapabilityType,
     version: String,
+    /// `semver`, `declared`, or `sha`: what `version` is (RFC-101).
+    version_scheme: lockfile::VersionScheme,
+    #[serde(skip)]
+    source_type: String,
     scope: String,
     target: String,
     status: String,
@@ -31,6 +35,7 @@ pub(crate) struct InventoryRow {
     pub id: String,
     pub capability_type: CapabilityType,
     pub version: String,
+    pub version_scheme: lockfile::VersionScheme,
     pub scope: String,
     pub target: String,
     pub status: String,
@@ -93,10 +98,19 @@ pub fn cmd_list(
     let table_rows: Vec<Vec<String>> = rows
         .into_iter()
         .map(|row| {
+            // A version the source merely declared is weaker than a
+            // release, and for a git install the table says so.
+            let version = if row.source_type == "git"
+                && row.version_scheme == lockfile::VersionScheme::Declared
+            {
+                format!("{} (declared)", row.version)
+            } else {
+                row.version
+            };
             vec![
                 row.id,
                 style_capability_type(row.capability_type),
-                row.version,
+                version,
                 row.scope,
                 row.target,
                 style_drift_status(&row.status),
@@ -156,6 +170,7 @@ pub(crate) fn collect_lockfile_inventory(
                 id: id.clone(),
                 capability_type: entry.capability_type,
                 version: short_sha(&entry.version).to_string(),
+                version_scheme: entry.version_scheme,
                 scope: scope.to_string(),
                 target: target_id.clone(),
                 status: if managed_status == "clean" {
@@ -239,6 +254,8 @@ fn collapse_inventory_for_list(inventory: Vec<InventoryRow>) -> Vec<ListRow> {
                 id: first.id,
                 capability_type: first.capability_type,
                 version: first.version,
+                version_scheme: first.version_scheme,
+                source_type: first.source_type,
                 scope: first.scope,
                 target: first.target,
                 status: status.to_string(),

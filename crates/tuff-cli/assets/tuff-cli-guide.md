@@ -34,6 +34,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff add <git-url> tool <name> -a <agent>` — install tool from git
 - `tuff add <git-url> hook <name> -a <agent>` — install hook from git
 - `tuff add skill <git-url> <name>@<version|range> -a <agent>` — install a tagged release (`1.2.0`, `^1.2`, `>=1, <2`); the lockfile records the tag, the requirement, and the commit
+- without `@`, a git install records the version the source declares (`version` in `tuff.toml`, or `version:`/`metadata.version:` in `SKILL.md` frontmatter), shown as `1.2.0 (declared)` since it is weaker than a release; a source declaring nothing records the commit SHA
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
 - `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry, linear, context7) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)

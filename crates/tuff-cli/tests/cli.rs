@@ -7745,3 +7745,263 @@ fn scoped_release_tags_win_over_repo_wide_ones() {
     assert!(lock.contains("tag = \"test-skill/v1.0.0\""), "{lock}");
     assert!(lock.contains("version = \"1.0.0\""), "{lock}");
 }
+
+/// A git repository holding the given files, committed once.
+fn make_git_repo_with(root: &Path, name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+    let repo = root.join(name);
+    for (path, content) in files {
+        let path = repo.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
+    git_ok(&repo, &["init", "-q"]);
+    git_ok(&repo, &["config", "user.email", "test@tuff.test"]);
+    git_ok(&repo, &["config", "user.name", "Tuff Test"]);
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "initial"]);
+    repo
+}
+
+fn outdated_row(temp: &Path, id: &str) -> serde_json::Value {
+    let output = tuff()
+        .current_dir(temp)
+        .args(["outdated", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    rows.as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == id)
+        .unwrap_or_else(|| panic!("no outdated row for {id}"))
+        .clone()
+}
+
+#[test]
+fn add_git_skill_records_the_version_its_frontmatter_declares() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_repo_with(
+        temp.path(),
+        "fm-repo",
+        &[(
+            "skills/fm/SKILL.md",
+            "---\nname: fm\ndescription: d\nmetadata:\n  version: \"1.2.0\"\n---\n# fm 1.2\n",
+        )],
+    );
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "skill", &repo_url, "fm", "-a", "open-agents"])
+        .assert()
+        .success();
+
+    // The commit is pinned; the version is the one the author declared,
+    // and the scheme says so. A declared version is weaker than a release,
+    // and the table says that too.
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("version = \"1.2.0\""), "{lock}");
+    assert!(lock.contains("version_scheme = \"declared\""), "{lock}");
+    assert!(lock.contains("ref = \""), "{lock}");
+    assert!(!lock.contains("tag = "), "{lock}");
+    tuff()
+        .current_dir(temp.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1.2.0 (declared)"));
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["list", "--json"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "fm")
+        .unwrap();
+    assert_eq!(row["version"], "1.2.0");
+    assert_eq!(row["version_scheme"], "declared");
+
+    let row = outdated_row(temp.path(), "fm");
+    assert_eq!(row["status"], "up to date");
+    assert_eq!(row["version_scheme"], "declared");
+
+    // Upstream bumps the declared version: outdated shows both versions
+    // and the claimed size of the change, update previews and applies it.
+    fs::write(
+        repo.join("skills/fm/SKILL.md"),
+        "---\nname: fm\nversion: 1.3.0\n---\n# fm 1.3\n",
+    )
+    .unwrap();
+    git_ok(&repo, &["commit", "-qam", "bump"]);
+    let row = outdated_row(temp.path(), "fm");
+    assert_eq!(row["current"], "1.2.0");
+    assert_eq!(row["latest"], "1.3.0");
+    assert_eq!(row["status"], "outdated");
+    assert_eq!(row["change"], "minor");
+    tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1.2.0 (declared)"))
+        .stdout(predicate::str::contains("outdated (minor)"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "fm", "--check"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "can be updated cleanly to 1.3.0 (minor)",
+        ));
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "fm"])
+        .assert()
+        .success();
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("version = \"1.3.0\""), "{lock}");
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".agents/skills/fm/SKILL.md")).unwrap(),
+        "---\nname: fm\nversion: 1.3.0\n---\n# fm 1.3\n"
+    );
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "fm"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already up to date"));
+
+    // Upstream changes the content without touching the version: still
+    // outdated, with nothing to say about the size, which is the weakness
+    // of a declared version made visible.
+    fs::write(
+        repo.join("skills/fm/SKILL.md"),
+        "---\nname: fm\nversion: 1.3.0\n---\n# fm 1.3, changed silently\n",
+    )
+    .unwrap();
+    git_ok(&repo, &["commit", "-qam", "silent"]);
+    let row = outdated_row(temp.path(), "fm");
+    assert_eq!(row["current"], "1.3.0");
+    assert_eq!(row["latest"], "1.3.0");
+    assert_eq!(row["status"], "outdated");
+    assert!(row.get("change").is_none(), "{row}");
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "fm", "--check"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "can be updated cleanly (no local changes)",
+        ));
+}
+
+#[test]
+fn add_git_capability_with_a_manifest_keeps_its_declared_version_through_update() {
+    // Before RFC-101 tier 2, a git install with a tuff.toml recorded the
+    // commit SHA over the manifest's own version, and update synthesized a
+    // skill manifest regardless of what the tuff.toml said.
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_repo_with(
+        temp.path(),
+        "manifest-repo",
+        &[
+            (
+                "tool-x/tuff.toml",
+                "id = \"tool-x\"\nversion = \"0.3.0\"\ntype = \"skill\"\ndescription = \"Declared.\"\nfiles = [\"SKILL.md\"]\n",
+            ),
+            ("tool-x/SKILL.md", "# x\n"),
+        ],
+    );
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "skill", &repo_url, "tool-x", "-a", "open-agents"])
+        .assert()
+        .success();
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("version = \"0.3.0\""), "{lock}");
+    assert!(lock.contains("version_scheme = \"declared\""), "{lock}");
+    assert!(lock.contains("description = \"Declared.\""), "{lock}");
+
+    fs::write(
+        repo.join("tool-x/tuff.toml"),
+        "id = \"tool-x\"\nversion = \"1.0.0\"\ntype = \"skill\"\ndescription = \"Declared again.\"\nfiles = [\"SKILL.md\"]\n",
+    )
+    .unwrap();
+    git_ok(&repo, &["commit", "-qam", "major"]);
+    let row = outdated_row(temp.path(), "tool-x");
+    assert_eq!(row["latest"], "1.0.0");
+    assert_eq!(row["change"], "major");
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "tool-x"])
+        .assert()
+        .success();
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("version = \"1.0.0\""), "{lock}");
+    assert!(lock.contains("version_scheme = \"declared\""), "{lock}");
+    assert!(
+        lock.contains("description = \"Declared again.\""),
+        "update honours the manifest as add does: {lock}"
+    );
+}
+
+#[test]
+fn add_local_skill_reads_the_version_its_frontmatter_declares() {
+    let temp = TempDir::new().unwrap();
+    let skill = temp.path().join("loc");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(
+        skill.join("SKILL.md"),
+        "---\nname: loc\nversion: 4.5.6\n---\n# loc\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+
+    // A local install's version is declared by definition, so the table
+    // does not label it; the JSON carries the scheme regardless.
+    tuff()
+        .current_dir(temp.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4.5.6"))
+        .stdout(predicate::str::contains("4.5.6 (declared)").not());
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["list", "--json"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "loc")
+        .unwrap();
+    assert_eq!(row["version"], "4.5.6");
+    assert_eq!(row["version_scheme"], "declared");
+}
