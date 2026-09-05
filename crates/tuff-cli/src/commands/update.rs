@@ -512,8 +512,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         // A tag-pinned entry moves to the newest release its requirement
         // allows, never to HEAD: the pin is the point.
         Some(request) => {
-            let tags = git::list_remote_tags(&git.url)?;
-            let chosen = release::resolve_release(&tags, id, request)?;
+            let chosen = super::resolve_git_release(&git.url, id, request)?;
             if new_request.is_none() && git.tag.as_deref() == Some(chosen.tag.as_str()) {
                 println!(
                     "'{id}' is already up to date ({} is the newest release matching {request})",

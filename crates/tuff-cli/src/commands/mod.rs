@@ -178,6 +178,18 @@ pub(crate) fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
 
 // ── Shared utility functions ────────────────────────────────────────────────
 
+/// The newest release of `id` in a repository that satisfies `request`,
+/// from one `ls-remote`, for the commands that move or compare a pinned
+/// entry within its requirement.
+pub(crate) fn resolve_git_release(
+    url: &str,
+    id: &str,
+    request: &crate::release::VersionRequest,
+) -> Result<crate::release::ReleaseTag> {
+    let tags = crate::git::list_remote_tags(url)?;
+    crate::release::resolve_release(&tags, id, request)
+}
+
 pub(crate) fn short_sha(v: &str) -> &str {
     if v.len() >= 7 && v.chars().all(|c| c.is_ascii_hexdigit()) {
         &v[..7]

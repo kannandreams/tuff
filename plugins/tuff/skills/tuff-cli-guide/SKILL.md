@@ -57,7 +57,8 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff list --scope global` — show global scope
 - `tuff status` — detailed status with override warnings
 - `tuff diff <id>` — show local changes against baseline
-- `tuff diff <id> --upstream` — show upstream changes (git sources only)
+- `tuff diff <id> --upstream` — show upstream changes (git sources only); for a release-pinned entry, against the newest release its requirement allows
+- `tuff diff <id>@<range> --upstream` — preview what a different requirement would change before `tuff update <id>@<range>`
 - `tuff outdated` — check all capabilities for available updates
 - `tuff mcp doctor` — spawn each installed MCP server for real and verify the handshake + tool list, not just that the config entry exists
 

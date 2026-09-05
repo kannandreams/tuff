@@ -8005,3 +8005,118 @@ fn add_local_skill_reads_the_version_its_frontmatter_declares() {
     assert_eq!(row["version"], "4.5.6");
     assert_eq!(row["version_scheme"], "declared");
 }
+
+#[test]
+fn diff_upstream_on_a_pinned_entry_compares_against_the_newest_allowed_release() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    git_ok(&repo, &["tag", "v1.0.0"]);
+    commit_skill_release(&repo, "# Skill 1.2\n", "v1.2.0");
+    commit_skill_release(&repo, "# Skill 1.4\n", "v1.4.0");
+    commit_skill_release(&repo, "# Skill 2.0\n", "v2.0.0");
+    fs::write(
+        repo.join("skills/test-skill/SKILL.md"),
+        "# HEAD, untagged\n",
+    )
+    .unwrap();
+    git_ok(&repo, &["commit", "-qam", "head"]);
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill@1.2.0",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+
+    // An exact pin allows nothing newer, so upstream is the pin itself,
+    // not HEAD: the same answer `update` gives.
+    tuff()
+        .current_dir(temp.path())
+        .args(["diff", "test-skill", "--upstream"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no upstream changes in v1.2.0"))
+        .stdout(predicate::str::contains("HEAD, untagged").not())
+        .stderr(predicate::str::contains(
+            "comparing against v1.2.0, the newest release matching 1.2.0",
+        ));
+
+    // A requirement on the command line previews a different move: ^1
+    // reaches 1.4.0 and stops short of 2.0.0 and of HEAD. The upstream
+    // side is the `-` side, as `--upstream` has always shown it.
+    tuff()
+        .current_dir(temp.path())
+        .args(["diff", "test-skill@^1", "--upstream"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("-# Skill 1.4"))
+        .stdout(predicate::str::contains("+# Skill 1.2"))
+        .stdout(predicate::str::contains("Skill 2.0").not())
+        .stdout(predicate::str::contains("HEAD, untagged").not())
+        .stderr(predicate::str::contains("comparing against v1.4.0"));
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["diff", "test-skill@2", "--upstream", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let diffs: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(diffs[0]["upstream"], "v2.0.0");
+    assert!(!diffs[0]["changes"].as_array().unwrap().is_empty());
+
+    // A requirement means nothing against the local baseline.
+    tuff()
+        .current_dir(temp.path())
+        .args(["diff", "test-skill@^1"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("only applies with --upstream"));
+
+    // An entry pinned to a commit rather than a release still compares
+    // against HEAD, and its JSON carries no upstream tag.
+    let plain_repo = make_git_repo_with(
+        temp.path(),
+        "plain-repo",
+        &[("skills/plain-skill/SKILL.md", "# plain\n")],
+    );
+    let plain_url = format!("file://{}", plain_repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &plain_url,
+            "plain-skill",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+    fs::write(plain_repo.join("skills/plain-skill/SKILL.md"), "# moved\n").unwrap();
+    git_ok(&plain_repo, &["commit", "-qam", "moved"]);
+    tuff()
+        .current_dir(temp.path())
+        .args(["diff", "plain-skill", "--upstream"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("-# moved"))
+        .stderr(predicate::str::contains("comparing against").not());
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["diff", "plain-skill", "--upstream", "--json"])
+        .output()
+        .unwrap();
+    let diffs: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(diffs[0].get("upstream").is_none(), "{diffs}");
+}

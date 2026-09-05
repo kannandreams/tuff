@@ -9,6 +9,7 @@ use crate::error::{Result, TuffError};
 use crate::git;
 use crate::lockfile::{self, CapabilitySource};
 use crate::manifest::{self, load_manifest};
+use crate::release::{self, ReleaseTag, VersionRequest};
 use crate::resolver::{self, Scope};
 use crate::tree_diff::{self, FileChange};
 
@@ -30,7 +31,21 @@ pub(crate) struct MaterializedTree {
 struct JsonDiff {
     capability: String,
     target: String,
+    /// The release tag an `--upstream` diff was taken against, when the
+    /// entry is pinned to one (RFC-101); absent for a HEAD comparison.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    upstream: Option<String>,
     changes: Vec<FileChange>,
+}
+
+/// Which commit of a git source to materialize.
+enum GitCheckout<'a> {
+    /// The commit the lockfile pinned.
+    Pinned,
+    /// The latest commit on the default branch.
+    Head,
+    /// One release tag.
+    Tag(&'a str),
 }
 
 pub fn cmd_diff(
@@ -40,6 +55,19 @@ pub fn cmd_diff(
     upstream: bool,
     format: DiffFormat,
 ) -> Result<()> {
+    // `<id>@<requirement>` previews a different requirement than the
+    // recorded one, the way `update <id>@<requirement>` would move.
+    let (capability_id, new_request) = release::split_version_request(capability_id)?;
+    if new_request.is_some() && !upstream {
+        return Err(
+            TuffError::usage("a version requirement only applies with --upstream").with_hint(
+                format!(
+                    "run 'tuff diff {capability_id}@{} --upstream'",
+                    new_request.unwrap_or_default()
+                ),
+            ),
+        );
+    }
     let (scope, entry, scope_root) = match resolver::resolve_entry(capability_id, repo_root)? {
         Some((scope, entry)) => {
             let root = match scope {
@@ -60,6 +88,19 @@ pub fn cmd_diff(
         .map(|value| vec![value.to_string()])
         .unwrap_or_default();
     let targets = resolve_agent_selection(&scope_root, &requested, scope == Scope::Global)?;
+    // A release-pinned entry is compared against the newest release its
+    // requirement allows, never HEAD: the same answer `update` would give.
+    let upstream_release = if upstream {
+        upstream_release(capability_id, &entry, new_request)?
+    } else {
+        None
+    };
+    if let Some((release, request)) = &upstream_release {
+        eprintln!(
+            "comparing against {}, the newest release matching {request}",
+            release.tag
+        );
+    }
     let mut unified = String::new();
     let mut json = Vec::new();
 
@@ -71,7 +112,11 @@ pub fn cmd_diff(
         })?;
         let live = installed_path(&scope_root, capability_id, &entry, target_entry, &target);
         let baseline = if upstream {
-            materialize_upstream(&scope_root, capability_id, &entry, &target)?
+            let checkout = match &upstream_release {
+                Some((release, _)) => GitCheckout::Tag(&release.tag),
+                None => GitCheckout::Head,
+            };
+            materialize_upstream(&scope_root, capability_id, &entry, &target, checkout)?
         } else {
             materialize_baseline(&scope_root, capability_id, &entry, &target)?
         };
@@ -85,6 +130,9 @@ pub fn cmd_diff(
             json.push(JsonDiff {
                 capability: capability_id.to_string(),
                 target,
+                upstream: upstream_release
+                    .as_ref()
+                    .map(|(release, _)| release.tag.clone()),
                 changes: comparison.changes,
             });
         } else if !comparison.patch.is_empty() {
@@ -96,13 +144,41 @@ pub fn cmd_diff(
         DiffFormat::Json => println!("{}", serde_json::to_string_pretty(&json)?),
         DiffFormat::Unified => {
             if unified.is_empty() && upstream {
-                println!("no upstream changes");
+                match &upstream_release {
+                    Some((release, _)) => println!("no upstream changes in {}", release.tag),
+                    None => println!("no upstream changes"),
+                }
             } else if !unified.is_empty() {
                 print!("{}", style_diff(&unified));
             }
         }
     }
     Ok(())
+}
+
+/// The release an `--upstream` diff compares against, with the requirement
+/// that chose it: the one given on the command line, else the recorded
+/// one. `None` for anything not pinned to a release, which compares
+/// against HEAD as always.
+fn upstream_release(
+    id: &str,
+    entry: &lockfile::CapabilityLockEntry,
+    new_request: Option<&str>,
+) -> Result<Option<(ReleaseTag, VersionRequest)>> {
+    let CapabilitySource::Git(git) = &entry.source else {
+        if new_request.is_some() {
+            return Err(TuffError::usage(format!(
+                "'{id}' was not installed from git, so a version requirement does not apply"
+            )));
+        }
+        return Ok(None);
+    };
+    let request = match new_request.or(git.requested.as_deref()) {
+        Some(text) => VersionRequest::parse(text)?,
+        None => return Ok(None),
+    };
+    let release = super::resolve_git_release(&git.url, id, &request)?;
+    Ok(Some((release, request)))
 }
 
 pub(crate) fn materialize_baseline(
@@ -128,7 +204,7 @@ pub(crate) fn materialize_baseline(
         });
     }
 
-    let materialized = materialize_source(scope_root, id, entry, target, true)?;
+    let materialized = materialize_source(scope_root, id, entry, target, GitCheckout::Pinned)?;
     let actual = crate::cache::hash_tree(&materialized.path)?;
     if actual != *expected {
         if let Some(source_path) = entry.source.local_path()
@@ -155,6 +231,7 @@ fn materialize_upstream(
     id: &str,
     entry: &lockfile::CapabilityLockEntry,
     target: &str,
+    checkout: GitCheckout<'_>,
 ) -> Result<MaterializedTree> {
     match &entry.source {
         CapabilitySource::Local(_) | CapabilitySource::Pack(_) => {
@@ -170,7 +247,7 @@ fn materialize_upstream(
         }
         CapabilitySource::Git(_) => {}
     }
-    materialize_source(scope_root, id, entry, target, false)
+    materialize_source(scope_root, id, entry, target, checkout)
 }
 
 fn materialize_source(
@@ -178,7 +255,7 @@ fn materialize_source(
     id: &str,
     entry: &lockfile::CapabilityLockEntry,
     target: &str,
-    pinned: bool,
+    checkout: GitCheckout<'_>,
 ) -> Result<MaterializedTree> {
     let adapter = AdapterKind::from_id(target)
         .ok_or_else(|| TuffError::usage(format!("unknown target '{target}'")))?;
@@ -224,8 +301,11 @@ fn materialize_source(
             return plan_into_temp(adapter, &manifest, entry, id, None);
         }
         CapabilitySource::Git(git) => {
-            let reference = pinned.then_some(git.git_ref.as_str());
-            let (guard, checkout, _) = git::clone_to_temp(&git.url, reference)?;
+            let (guard, checkout, _) = match checkout {
+                GitCheckout::Pinned => git::clone_to_temp(&git.url, Some(git.git_ref.as_str()))?,
+                GitCheckout::Head => git::clone_to_temp(&git.url, None)?,
+                GitCheckout::Tag(tag) => git::clone_tag_to_temp(&git.url, tag)?,
+            };
             let dir = git::discover_capability(&checkout, &git.path, entry.capability_type)?;
             (Some(guard), dir)
         }
