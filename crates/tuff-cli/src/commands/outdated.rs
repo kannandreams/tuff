@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use semver::Version;
+use serde::Serialize;
 
 use crate::error::Result;
 use crate::git;
@@ -18,6 +19,37 @@ struct OutdatedRow {
     latest: String,
     status: String,
 }
+
+/// The `--json` shape of an [`OutdatedRow`], with the same `type`/`target`
+/// keys as `tuff check --json`. The table prints `—` where nothing could be
+/// resolved; a script should not have to compare against a dash, so that
+/// becomes `null`.
+#[derive(Serialize)]
+struct JsonOutdatedRow<'a> {
+    id: &'a str,
+    #[serde(rename = "type")]
+    capability_type: CapabilityType,
+    target: &'a str,
+    current: &'a str,
+    latest: Option<&'a str>,
+    status: &'a str,
+}
+
+impl OutdatedRow {
+    fn as_json(&self) -> JsonOutdatedRow<'_> {
+        JsonOutdatedRow {
+            id: &self.id,
+            capability_type: self.capability_type,
+            target: &self.target,
+            current: &self.current,
+            latest: (self.latest != UNRESOLVED).then_some(self.latest.as_str()),
+            status: &self.status,
+        }
+    }
+}
+
+/// What the LATEST column shows when there is nothing to compare against.
+const UNRESOLVED: &str = "—";
 
 /// What the registry's tags say about an installed pack version.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +127,7 @@ pub(crate) fn verify_pack_tag(
 fn pick_latest_pack_version(installed: &str, tags: &[String]) -> (String, String, String) {
     let current = installed.to_string();
     match compare_pack_versions(installed, tags) {
-        PackVersionStatus::Unknown => (current, "—".to_string(), "not checked".to_string()),
+        PackVersionStatus::Unknown => (current, UNRESOLVED.to_string(), "not checked".to_string()),
         PackVersionStatus::Newer(latest) => (current, latest, "outdated".to_string()),
         PackVersionStatus::Current => (current.clone(), current, "up to date".to_string()),
     }
@@ -178,7 +210,7 @@ fn classify(
                 Some(registry) => classify_pack(pack, registry, oci_options, cache),
                 None => (
                     entry.version.clone(),
-                    "—".to_string(),
+                    UNRESOLVED.to_string(),
                     "not checked".to_string(),
                 ),
             };
@@ -186,7 +218,7 @@ fn classify(
         lockfile::CapabilitySource::Local(_) => {
             return (
                 entry.version.clone(),
-                "—".to_string(),
+                UNRESOLVED.to_string(),
                 "not checked".to_string(),
             );
         }
@@ -268,6 +300,7 @@ pub fn cmd_outdated(
     repo_root: &Path,
     plain_http: bool,
     ca_files: &[std::path::PathBuf],
+    json: bool,
 ) -> Result<()> {
     let oci_options = OciTransferOptions {
         plain_http,
@@ -288,11 +321,21 @@ pub fn cmd_outdated(
     }
 
     if rows.is_empty() {
-        println!("no capabilities installed");
+        if json {
+            println!("[]");
+        } else {
+            println!("no capabilities installed");
+        }
         return Ok(());
     }
 
     rows.sort_by(|a, b| a.id.cmp(&b.id));
+
+    if json {
+        let rows: Vec<JsonOutdatedRow<'_>> = rows.iter().map(OutdatedRow::as_json).collect();
+        println!("{}", serde_json::to_string_pretty(&rows)?);
+        return Ok(());
+    }
 
     let table_rows: Vec<Vec<String>> = rows
         .into_iter()

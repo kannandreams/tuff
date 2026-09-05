@@ -362,6 +362,14 @@ tuff list --scope global --type tool
 
 `tuff list` uses terminal colors when supported: clean is green, modified is amber, and missing is red.
 
+#### JSON
+
+`tuff list --json` prints the same rows as an array, one object per capability per agent, with the keys `id`, `type`, `version`, `scope`, `target`, `status`, and `path`. The `type`, `target`, and `status` keys are spelled the same as in `tuff check --json`, so one script can read both. An empty inventory prints `[]`.
+
+```sh frame="terminal"
+tuff list --json | jq '.[] | select(.status != "clean") | .id'
+```
+
 ### `tuff status`
 
 Show per-primitive detail including scope, drift, and override warnings:
@@ -455,6 +463,12 @@ Anything Tuff cannot check — a pack installed without `--reference`, or a
 local capability with no source at all — reports `not checked`, `—`, rather
 than a guessed `up to date`.
 
+`tuff outdated --json` prints the rows as an array with the keys `id`, `type`, `target`, `current`, `latest`, and `status`. Where the table shows `—`, `latest` is `null`, so a script tests for absence rather than for a dash. The status strings are the ones in the table above.
+
+```sh frame="terminal"
+tuff outdated --json | jq '.[] | select(.status == "outdated" or .status == "repointed")'
+```
+
 ## Diff and Update
 
 ### `tuff diff`
@@ -470,7 +484,12 @@ tuff diff <id> --upstream
 
 # Diff a specific agent
 tuff diff <id> -a claude
+
+# Machine-readable: one object per agent listing changed files
+tuff diff <id> --json
 ```
+
+`--json` is the same as `--format json`; pass one or the other.
 
 When standard output is a terminal, diff headers are cyan, additions are green, and deletions are red, matching the usual Git diff convention. Piped or captured output is plain automatically; set `NO_COLOR=1` to disable color explicitly.
 
@@ -553,7 +572,7 @@ error: 'rust-implement' has local modifications for agent 'claude'
 hint: use --force to delete them
 ```
 
-When the invocation includes `--json`, the failure is reported as one JSON line on stderr instead, so machine-readable output stays machine-readable:
+`list`, `outdated`, `diff`, `check`, `mcp doctor`, `mcp search`, and `pack inspect` all take `--json`. When the invocation includes it, a failure is reported as one JSON line on stderr instead, so machine-readable output stays machine-readable:
 
 ```json
 {"error":{"kind":"drift","message":"'rust-implement' has local modifications for agent 'claude'","hint":"use --force to delete them"}}

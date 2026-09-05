@@ -6,6 +6,11 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- `linear` and `context7` join the built-in MCP catalog. Both are remote servers that authenticate with an `Authorization: Bearer` header, which the catalog could not express until `[server.headers]` existed; each entry now declares the header as a reference to `LINEAR_API_KEY` or `CONTEXT7_API_KEY`, and `tuff add mcp linear` writes the right dialect for every selected harness with the key still in your environment. Linear's interactive OAuth flow is not used, because a config file can carry a variable reference and not a login. Context7's key is recommended rather than required by the vendor, but the catalog has no optional headers, so the entry asks for one; the keyless stdio form remains available from the registry as `io.github.upstash/context7`.
+- `tuff list --json` and `tuff outdated --json` print their rows as JSON arrays, and `tuff diff <id> --json` is a shorthand for `--format json`. The keys `type`, `target`, and `status` are spelled as in `tuff check --json`, so a script or an editor integration reads every inventory command the same way. Where the `outdated` table shows `—`, the JSON carries `null`. Status strings are emitted plain, without the terminal colouring the tables use.
+
 ## [0.5.0] - 2026-09-03
 
 ### Added
