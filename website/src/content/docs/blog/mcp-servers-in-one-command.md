@@ -47,7 +47,7 @@ The tracked record is the canonical declaration Tuff hashes, so `check` and `dif
 id = "everything"
 version = "1.0.0"
 type = "mcp-server"
-description = "Reference server exercising the full MCP surface (tools, resources, prompts)."
+description = "Reference server exercising the full MCP surface: tools, resources, and prompts. Needs no API key, which makes it a good first target for tuff mcp doctor."
 
 [server]
 transport = "stdio"

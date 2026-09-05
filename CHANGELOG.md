@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Changed
+
+- Reworded the built-in catalog's `everything` and `playwright` descriptions. Both used a double hyphen as a dash and one wrapped a command in backticks, which read as markup wherever the description is shown: the catalog page, `tuff list`, and the tracked `server.toml`. The entry versions are unchanged, so no installed server reports itself outdated over wording.
+
 ### Added
 
 - The site lists the built-in MCP catalog at [/mcp-catalog/](https://tuffcli.dev/mcp-catalog/): every server's install command, the variables it needs, the tools it answers with, and the command it actually runs, searchable and filterable by whether a key is needed and by transport. It is a standalone browse page rather than a documentation page, so the card grid gets the full page width instead of a column between two sidebars, and it carries the site navigation back into the docs. The listing is generated from `crates/tuff-core/assets/mcp-catalog.toml` on every build, the same arrangement the changelog page uses, so it cannot promise a server the CLI does not have, and the generator fails the build on an entry that would not resolve. The hand-maintained table on the MCP Servers page is replaced by a link to it, leaving one source of truth.
