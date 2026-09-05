@@ -9,11 +9,29 @@ The extension contains no binary. It runs the `tuff` you have already installed,
 
 ## Install
 
-Search for **Tuff** in the Extensions view, or install it from the command line:
+:::caution[Not published yet]
+The extension is built and in the repository, but it is not on the Visual Studio Marketplace or Open VSX yet. Until it is, build it from source with the steps below. This page will lose this notice when it is published.
+:::
+
+Once it is published, search for **Tuff** in the Extensions view, or install it from the command line:
 
 ```sh
 code --install-extension kannandreams.tuff
 ```
+
+### Build it from source
+
+Node 24 or newer, and the repository:
+
+```sh frame="terminal"
+git clone https://github.com/kannandreams/tuff.git
+cd tuff/editors/vscode
+npm install
+npm run package
+code --install-extension tuff-0.1.0.vsix
+```
+
+`npm run package` writes a `.vsix` next to the manifest; the version in the filename follows `package.json`. Cursor installs the same file, either through **Extensions: Install from VSIX** in the command palette or with `cursor --install-extension`.
 
 It requires Tuff 0.6.0 or newer, the release that made `list`, `outdated`, and `diff` machine-readable. Check what you have with `tuff --version`, and see [Installation](/installation/) if the command is missing. When `tuff` is not on the editor's `PATH`, set `tuff.path` to its full path.
 
