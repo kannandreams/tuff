@@ -150,6 +150,38 @@ tuff add skill https://github.com/owner/repo rust-implement --agent open-agents
 Use the same structure for a tool, hook, or workflow by replacing `skill` with
 the corresponding capability type.
 
+#### Install a release
+
+A repository that tags its releases can be installed at one. Append `@` and a version or a range to the name:
+
+```sh frame="terminal"
+# Exactly this release
+tuff add skill https://github.com/owner/repo rust-implement@1.2.0 --agent open-agents
+
+# The newest release in a range
+tuff add skill https://github.com/owner/repo rust-implement@^1.2 --agent open-agents
+```
+
+Tuff lists the repository's tags without cloning, picks the newest one that satisfies the requirement, and clones at that tag. A tag is a release when it reads `v1.4.0` or `1.4.0`, or, in a repository holding several capabilities, `rust-implement/v1.4.0` or `rust-implement-v1.4.0`. When any tag names the capability, only those count, so a repository-wide `v2.0.0` is never mistaken for a release of one skill inside it. Ranges use the usual operators: `^1.2`, `~1.4`, `>=1, <2`, or a bare `1` for any `1.x`. A prerelease such as `2.0.0-rc.1` is chosen only by an exact request.
+
+The lockfile still pins the commit. Beside it, the entry records the tag that chose the commit and the requirement you asked for, and its version becomes the tag's:
+
+```toml
+[capabilities.rust-implement]
+version = "1.4.0"
+version_scheme = "semver"
+
+[capabilities.rust-implement.source]
+kind = "git"
+url = "https://github.com/owner/repo"
+path = "rust-implement"
+ref = "9b9c499…"
+tag = "v1.4.0"
+requested = "^1.2"
+```
+
+A requirement nothing satisfies fails before anything is cloned and lists the releases that exist. A repository with no release tags fails the same way, with a hint on how to tag one. Without `@`, a git install takes the latest commit exactly as before, recording the commit SHA as the version with `version_scheme = "sha"`.
+
 #### Install a pack
 
 Install every member of a verified local pack artifact into project scope:
@@ -436,12 +468,14 @@ Example output:
 ```text
 find-skills               skill      open-agents  2adcfe5    def5678    outdated
 security-review           tool       claude       abc1234    2adcfe5    outdated
-rust-implement            skill      open-agents  1.2.0      1.4.0      outdated
+rust-implement            skill      open-agents  1.2.0      1.4.0      outdated (minor)
 csv-workbench             skill      open-agents  1.0.0      —          not checked
 crm-skill                 skill      open-agents  1.0.0      1.0.0      repointed
 ```
 
-For git-sourced capabilities, `CURRENT` and `LATEST` show the 7-character commit SHA.
+For a git-sourced capability installed without a release, `CURRENT` and `LATEST` show the 7-character commit SHA.
+
+For a capability installed at a release, `CURRENT` and `LATEST` are release versions, and `outdated` carries the size of the change the version numbers claim: `major`, `minor`, or `patch`. That is what the author claimed, not what the content shows; `tuff diff <id> --upstream` shows the content. `LATEST` is the newest release the repository has, whether or not the recorded requirement allows it, so an exact pin can read `outdated` while `tuff update` reports it up to date; `tuff update <id>@<requirement>` lifts the pin. If the release tags are gone upstream the row reads `tag missing`, and the pinned commit still installs. In `--json` the status stays `outdated` and the size is a separate `change` key.
 
 For a pack-sourced capability installed with `add pack --reference`,
 `CURRENT` and `LATEST` compare the *pack's* published versions, the numbers
@@ -515,7 +549,12 @@ tuff update <id> --force
 
 # Explicit scope
 tuff update <id> --scope global
+
+# Change the release requirement of a tag-pinned capability, then move
+tuff update <id>@^2
 ```
+
+A capability installed at a release (see [Install a release](#install-a-release)) never moves to the latest commit. `tuff update <id>` resolves the newest release the recorded requirement allows and stops there, saying so when that release is already installed. `tuff update <id>@<requirement>` records a new requirement and moves to the newest release it allows, which is how an exact pin such as `1.2.0` is lifted. With `--check`, the preview names the release and the size of the change the version numbers claim, as in `to 1.4.0 (minor)`, before anything is written.
 
 #### Update a pack
 

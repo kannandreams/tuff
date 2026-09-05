@@ -33,6 +33,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff add <git-url> skill <name> -a <agent>` — install skill from git
 - `tuff add <git-url> tool <name> -a <agent>` — install tool from git
 - `tuff add <git-url> hook <name> -a <agent>` — install hook from git
+- `tuff add skill <git-url> <name>@<version|range> -a <agent>` — install a tagged release (`1.2.0`, `^1.2`, `>=1, <2`); the lockfile records the tag, the requirement, and the commit
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
 - `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry, linear, context7) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
@@ -64,6 +65,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff update <id>` — accept local edits or reconcile with upstream
 - `tuff update <id> -a <agent>` — update one recorded agent
 - `tuff update <id> --force` — overwrite local changes with source output
+- `tuff update <id>@<range>` — change a tag-pinned capability's requirement and move to the newest release it allows; a bare `update` never leaves the recorded range
 
 ### CI & Validation
 - `tuff check` — validate all capabilities (exit 1 on any failure)

@@ -7,6 +7,7 @@ use crate::git;
 use crate::lockfile;
 use crate::manifest::{self, load_manifest};
 use crate::oci::OciTransferOptions;
+use crate::release;
 use crate::resolver::{self, Scope};
 
 use super::add::install_capability;
@@ -402,6 +403,9 @@ pub struct UpdateOptions<'a> {
 }
 
 pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Result<()> {
+    // `<id>@<requirement>` changes what releases the entry may move to
+    // (RFC-101); a bare id keeps the recorded requirement.
+    let (id, new_request) = release::split_version_request(id)?;
     let UpdateOptions {
         scope: scope_str,
         requested_targets,
@@ -440,6 +444,13 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
             }
         }
     };
+
+    if new_request.is_some() && !matches!(entry.source, CapabilitySource::Git(_)) {
+        return Err(TuffError::usage(format!(
+            "'{id}' was not installed from git, so a version requirement does not apply"
+        ))
+        .with_hint(format!("run 'tuff update {id}' without the '@'")));
+    }
 
     if matches!(entry.source, CapabilitySource::Pack(_)) {
         // Pack members move with their pack; see `cmd_update_pack`.
@@ -489,18 +500,71 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         CapabilitySource::Pack(_) => unreachable!("pack members are dispatched above"),
     };
 
-    let (_source_guard, cache_dir, _clean_url) = git::clone_to_temp(&git.url, None)?;
-    let latest_sha = git::resolve_ref(&cache_dir)?;
-
-    if latest_sha == entry.version {
-        println!("'{}' is already up to date", id);
-        return Ok(());
-    }
+    let request = match new_request {
+        Some(text) => Some(release::VersionRequest::parse(text)?),
+        None => git
+            .requested
+            .as_deref()
+            .map(release::VersionRequest::parse)
+            .transpose()?,
+    };
+    let (_source_guard, cache_dir, latest_sha, chosen) = match &request {
+        // A tag-pinned entry moves to the newest release its requirement
+        // allows, never to HEAD: the pin is the point.
+        Some(request) => {
+            let tags = git::list_remote_tags(&git.url)?;
+            let chosen = release::resolve_release(&tags, id, request)?;
+            if new_request.is_none() && git.tag.as_deref() == Some(chosen.tag.as_str()) {
+                println!(
+                    "'{id}' is already up to date ({} is the newest release matching {request})",
+                    chosen.version
+                );
+                return Ok(());
+            }
+            let (guard, dir, _) = git::clone_tag_to_temp(&git.url, &chosen.tag)?;
+            let sha = git::resolve_ref(&dir)?;
+            (guard, dir, sha, Some(chosen))
+        }
+        None => {
+            let (guard, dir, _) = git::clone_to_temp(&git.url, None)?;
+            let sha = git::resolve_ref(&dir)?;
+            if sha == entry.version {
+                println!("'{}' is already up to date", id);
+                return Ok(());
+            }
+            (guard, dir, sha, None)
+        }
+    };
+    let installed_version = chosen
+        .as_ref()
+        .map_or_else(|| latest_sha.clone(), |chosen| chosen.version.to_string());
+    let source = CapabilitySource::Git(GitSource {
+        url: git.url.clone(),
+        path: git.path.clone(),
+        git_ref: latest_sha,
+        tag: chosen.as_ref().map(|chosen| chosen.tag.clone()),
+        requested: request.as_ref().map(|request| request.to_string()),
+    });
+    let movement = match (&chosen, semver::Version::parse(&entry.version)) {
+        (Some(chosen), Ok(from)) if chosen.version != from => format!(
+            " to {} ({})",
+            chosen.version,
+            release::change_kind(&from, &chosen.version)
+        ),
+        (Some(chosen), _) if git.tag.as_deref() == Some(chosen.tag.as_str()) => {
+            format!(
+                " (staying at {}, recording the new requirement)",
+                chosen.version
+            )
+        }
+        (Some(chosen), _) => format!(" to {}", chosen.version),
+        (None, _) => String::new(),
+    };
 
     let skill_dir = git::discover_capability(&cache_dir, &git.path, entry.capability_type)?;
 
     if force {
-        let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
+        let manifest = manifest::synthetic_manifest(&skill_dir, id, &installed_version)?;
         let capability = resolve_capability(&manifest)?;
         return install_capability(
             &scope_root,
@@ -508,13 +572,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
             &capability,
             &manifest,
             &target_ids,
-            Some(CapabilitySource::Git(GitSource {
-                url: git.url.clone(),
-                path: git.path.clone(),
-                git_ref: latest_sha,
-                tag: None,
-                requested: None,
-            })),
+            Some(source),
             true,
         );
     }
@@ -535,14 +593,11 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
 
     if check {
         if all_clean {
-            println!("'{}' can be updated cleanly (no local changes)", id);
-        } else if !all_clean {
-            println!(
-                "'{}' has local changes — update would replace the materialized tree",
-                id
-            );
+            println!("'{id}' can be updated cleanly{movement} (no local changes)");
         } else {
-            println!("'{}' is up to date", id);
+            println!(
+                "'{id}' has local changes — update{movement} would replace the materialized tree"
+            );
         }
         return Ok(());
     }
@@ -555,7 +610,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         );
     }
 
-    let manifest = manifest::synthetic_manifest(&skill_dir, id, &latest_sha)?;
+    let manifest = manifest::synthetic_manifest(&skill_dir, id, &installed_version)?;
     let primitive = resolve_capability(&manifest)?;
     install_capability(
         &scope_root,
@@ -563,13 +618,7 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         &primitive,
         &manifest,
         &target_ids,
-        Some(CapabilitySource::Git(GitSource {
-            url: git.url.clone(),
-            path: git.path.clone(),
-            git_ref: latest_sha,
-            tag: None,
-            requested: None,
-        })),
+        Some(source),
         true,
     )
 }

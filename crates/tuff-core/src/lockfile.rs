@@ -62,7 +62,8 @@ pub struct CapabilityLockEntry {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum VersionScheme {
-    /// A release chosen by semver tag resolution (RFC-101; not written yet).
+    /// A release chosen by tag resolution (RFC-101): `version` is the tag's
+    /// semver and `source.tag` names the tag.
     Semver,
     /// The version the manifest declares. Says nothing about releases.
     #[default]
@@ -124,6 +125,7 @@ impl CapabilitySource {
     /// carries the version its manifest declared.
     pub fn default_version_scheme(&self) -> VersionScheme {
         match self {
+            Self::Git(git) if git.tag.is_some() => VersionScheme::Semver,
             Self::Git(_) => VersionScheme::Sha,
             _ => VersionScheme::Declared,
         }
