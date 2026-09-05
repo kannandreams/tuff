@@ -350,8 +350,7 @@ fn cmd_add_git(
                     "write <name>@<version>, or use a URL that names the capability's directory",
                 )
             })?;
-            let tags = git::list_remote_tags(url)?;
-            Some(release::resolve_release(&tags, release_name, request)?)
+            Some(super::resolve_git_release(url, release_name, request)?)
         }
         None => None,
     };

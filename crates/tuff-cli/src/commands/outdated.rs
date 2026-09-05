@@ -335,10 +335,33 @@ fn classify_release(
         Ok(tags) => tags,
         Err(_) => return (current, "unavailable".to_string(), "error".to_string()),
     };
-    let releases = release::release_tags(tags.iter().map(String::as_str), id);
+    let releases = release::release_tags(tags.iter().map(|tag| tag.name.as_str()), id);
+    let latest = release::latest_release(&releases).map(|latest| latest.version.to_string());
+    // The tag is mutable; the commit is what was installed. A tag that
+    // moved, or is gone, changes what LATEST means and wins over the
+    // version verdict, while LATEST still shows the way forward.
+    let integrity = git
+        .tag
+        .as_deref()
+        .map(|tag| release::tag_integrity(tag, &git.git_ref, &tags));
+    match integrity {
+        Some(release::TagIntegrity::Repointed { .. }) => {
+            return (
+                current,
+                latest.unwrap_or_else(|| UNRESOLVED.to_string()),
+                "repointed".to_string(),
+            );
+        }
+        Some(release::TagIntegrity::Missing) => {
+            return (
+                current,
+                latest.unwrap_or_else(|| UNRESOLVED.to_string()),
+                "tag missing".to_string(),
+            );
+        }
+        Some(release::TagIntegrity::Matches) | None => {}
+    }
     let Some(latest) = release::latest_release(&releases) else {
-        // The tags are gone upstream. The pinned commit still installs and
-        // verifies; what is missing is anything to compare it with.
         return (current, UNRESOLVED.to_string(), "tag missing".to_string());
     };
     match Version::parse(&entry.version) {
