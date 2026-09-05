@@ -1232,44 +1232,58 @@ dialog[aria-label='Search'] {
   font-weight: 600;
 }
 
-/* MCP catalog listing (/mcp-catalog/). Panels reuse the landing page's tokens:
-   #1b1e1b cards on #242824 insets, #343934 hairlines, green #83b477 for a
-   clean state, orange only on hover. No per-item colour coding. */
-.tuff-catalog { margin: 1.5rem 0 0; }
-.tuff-catalog-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--sl-color-hairline-light); }
-.tuff-catalog-search { display: flex; min-width: 15rem; flex: 1 1 18rem; flex-direction: column; gap: .3rem; }
-.tuff-catalog-search-label { color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; }
-.tuff-catalog-search input { width: 100%; padding: .5rem .65rem; border: 1px solid #343934; border-radius: .25rem; background: #1b1e1b; color: #eeeae2; font-family: inherit; font-size: .85rem; }
-.tuff-catalog-search input::placeholder { color: #6f746c; }
-.tuff-catalog-search input:focus-visible { border-color: #9a4c30; outline: none; }
-.tuff-catalog-filters { display: flex; flex-wrap: wrap; gap: .4rem; }
-.tuff-catalog-filters button { padding: .4rem .7rem; border: 1px solid #343934; border-radius: .25rem; background: #1b1e1b; color: #aeb1aa; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: .68rem; }
-.tuff-catalog-filters button:hover { border-color: #9a4c30; color: #eeeae2; }
-.tuff-catalog-filters button[aria-pressed='true'] { border-color: #9a4c30; background: #242824; color: #f18453; }
-.tuff-catalog-count { margin: .9rem 0 0; color: #989d94; font-size: .78rem; }
-.tuff-catalog-grid { display: grid; margin: 1rem 0 0; padding: 0; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); list-style: none; }
-.tuff-catalog-grid > li { margin: 0; }
-.tuff-catalog-card { display: flex; flex-direction: column; gap: .7rem; padding: 1.1rem 1.15rem; border: 1px solid #343934; border-radius: .35rem; background: #1b1e1b; }
+/* MCP catalog (/mcp-catalog/). A cream page with a dark card grid, the
+   same pairing the capability grid and pack showcase already use. Light
+   tokens come from .tuff-landing, with fallbacks so the listing survives
+   being dropped somewhere else. */
+.tuff-catalog-head { padding-bottom: 3rem !important; }
+.tuff-catalog-title { max-width: 34rem; margin: 0; color: var(--tuff-text, #1a1918); font-family: 'JetBrains Mono', monospace; font-size: 1.9rem; font-weight: 600; letter-spacing: -.04em; line-height: 1.15; }
+.tuff-catalog-lede { max-width: 46rem; margin-top: .9rem !important; color: var(--tuff-dim, #6d6861); font-size: .93rem; line-height: 1.7; }
+.tuff-catalog-note { max-width: 46rem; margin-top: .5rem !important; color: var(--tuff-muted, #9b958b); font-size: .8rem; line-height: 1.6; }
+.tuff-catalog-lede code, .tuff-catalog-note code { color: var(--tuff-text, #1a1918); font-family: 'JetBrains Mono', monospace; font-size: .84em; }
+
+.tuff-catalog { margin: 2rem 0 0; }
+.tuff-catalog-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .7rem 1.1rem; }
+.tuff-catalog-search { display: flex; min-width: 14rem; flex: 1 1 16rem; flex-direction: column; gap: .3rem; }
+.tuff-catalog-search-label { color: var(--tuff-muted, #9b958b); font-family: 'JetBrains Mono', monospace; font-size: .6rem; letter-spacing: .06em; text-transform: uppercase; }
+.tuff-catalog-search input { width: 100%; padding: .5rem .65rem; border: 1px solid var(--tuff-border, #e1ddd5); border-radius: .25rem; background: var(--tuff-panel, #fff); color: var(--tuff-text, #1a1918); font-family: inherit; font-size: .85rem; }
+.tuff-catalog-search input::placeholder { color: var(--tuff-muted, #9b958b); }
+.tuff-catalog-search input:focus-visible { border-color: var(--tuff-accent, #c35a35); outline: none; }
+.tuff-catalog-filters { display: flex; flex-wrap: wrap; gap: .35rem; }
+.tuff-catalog-filters button { padding: .42rem .7rem; border: 1px solid var(--tuff-border, #e1ddd5); border-radius: .25rem; background: var(--tuff-panel, #fff); color: var(--tuff-dim, #6d6861); cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: .68rem; }
+.tuff-catalog-filters button:hover { border-color: var(--tuff-accent, #c35a35); color: var(--tuff-text, #1a1918); }
+.tuff-catalog-filters button[aria-pressed='true'] { border-color: var(--tuff-accent, #c35a35); background: var(--tuff-accent, #c35a35); color: #fff; }
+.tuff-catalog-count { margin: .85rem 0 0 !important; color: var(--tuff-muted, #9b958b); font-family: 'JetBrains Mono', monospace; font-size: .7rem; }
+
+.tuff-catalog-grid { display: grid; margin: .9rem 0 0; padding: 0; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); list-style: none; }
+.tuff-catalog-card { display: flex; flex-direction: column; gap: .55rem; padding: .95rem 1rem; border: 1px solid #343934; border-radius: .35rem; background: #1b1e1b; }
+/* The `hidden` attribute cannot win against `display: flex` on its own, so
+   filtering needs this rule to actually remove a card from the grid. */
+.tuff-catalog-card[hidden] { display: none; }
 .tuff-catalog-card:hover { border-color: #9a4c30; }
-.tuff-catalog-card-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
-.tuff-catalog-card-head strong { display: flex; align-items: center; gap: .45rem; color: #eeeae2; font-family: 'JetBrains Mono', monospace; font-size: .88rem; font-weight: 600; }
-.tuff-catalog-card-head strong::before { content: ''; width: .45rem; height: .45rem; border-radius: .1rem; background: #83b477; }
-.tuff-catalog-launcher { padding: .16rem .45rem; border: 1px solid #343934; border-radius: .2rem; color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .6rem; letter-spacing: .04em; }
-.tuff-catalog-description { margin: 0; color: #aeb1aa; font-size: .82rem; line-height: 1.6; }
-.tuff-catalog-command { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .45rem .55rem; border: 1px solid #343934; border-radius: .25rem; background: #242824; }
-.tuff-catalog-command code { border: 0; background: none; color: #eeeae2; font-size: .74rem; }
-.tuff-catalog-command button { flex-shrink: 0; padding: .2rem .5rem; border: 1px solid #343934; border-radius: .2rem; background: #1b1e1b; color: #989d94; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: .6rem; }
+.tuff-catalog-card-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.tuff-catalog-card-head strong { display: flex; align-items: center; gap: .4rem; color: #eeeae2; font-family: 'JetBrains Mono', monospace; font-size: .82rem; font-weight: 600; }
+.tuff-catalog-card-head strong::before { content: ''; flex-shrink: 0; width: .4rem; height: .4rem; border-radius: .1rem; background: #83b477; }
+.tuff-catalog-launcher { flex-shrink: 0; padding: .12rem .4rem; border: 1px solid #343934; border-radius: .2rem; color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .56rem; letter-spacing: .04em; }
+.tuff-catalog-description { margin: 0; color: #aeb1aa; font-size: .78rem; line-height: 1.55; }
+.tuff-catalog-command { display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .38rem .5rem; border: 1px solid #343934; border-radius: .22rem; background: #242824; }
+.tuff-catalog-command code { min-width: 0; border: 0; background: none; color: #eeeae2; font-family: 'JetBrains Mono', monospace; font-size: .7rem; overflow-wrap: anywhere; }
+.tuff-catalog-command button { flex-shrink: 0; padding: .18rem .45rem; border: 1px solid #343934; border-radius: .2rem; background: #1b1e1b; color: #989d94; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: .58rem; }
 .tuff-catalog-command button:hover { border-color: #9a4c30; color: #f18453; }
-.tuff-catalog-meta { display: grid; margin: 0; gap: .45rem; }
-.tuff-catalog-meta > div { display: grid; align-items: baseline; gap: .5rem; grid-template-columns: 3.4rem minmax(0, 1fr); }
-.tuff-catalog-meta dt { color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .6rem; letter-spacing: .05em; text-transform: uppercase; }
-.tuff-catalog-meta dd { display: flex; flex-wrap: wrap; margin: 0; gap: .3rem; min-width: 0; }
-.tuff-catalog-meta code { border: 0; background: #242824; color: #cfd2cb; font-size: .66rem; padding: .1rem .35rem; border-radius: .18rem; word-break: break-word; }
-.tuff-catalog-run { font-size: .64rem !important; color: #989d94 !important; }
-.tuff-catalog-ok { color: #83b477; font-size: .72rem; }
-.tuff-catalog-empty { margin: 1.25rem 0 0; padding: 1rem 1.15rem; border: 1px dashed #343934; border-radius: .35rem; color: #aeb1aa; font-size: .82rem; }
+.tuff-catalog-meta { display: grid; margin: 0; gap: .35rem; }
+.tuff-catalog-meta > div { display: grid; align-items: baseline; gap: .45rem; grid-template-columns: 2.9rem minmax(0, 1fr); }
+.tuff-catalog-meta dt { color: #7d827a; font-family: 'JetBrains Mono', monospace; font-size: .55rem; letter-spacing: .05em; text-transform: uppercase; }
+.tuff-catalog-meta dd { display: flex; min-width: 0; flex-wrap: wrap; margin: 0; gap: .25rem; }
+.tuff-catalog-meta code { padding: .08rem .3rem; border: 0; border-radius: .16rem; background: #242824; color: #cfd2cb; font-family: 'JetBrains Mono', monospace; font-size: .62rem; overflow-wrap: anywhere; }
+.tuff-catalog-run { background: none !important; padding: 0 !important; color: #7d827a !important; font-size: .6rem !important; }
+.tuff-catalog-ok { color: #83b477; font-family: 'JetBrains Mono', monospace; font-size: .62rem; }
+.tuff-catalog-empty { margin: 1.1rem 0 0; padding: .9rem 1rem; border: 1px dashed var(--tuff-border, #e1ddd5); border-radius: .35rem; color: var(--tuff-dim, #6d6861); font-size: .82rem; }
+.tuff-catalog-empty[hidden] { display: none; }
+.tuff-catalog-empty code { color: var(--tuff-text, #1a1918); font-family: 'JetBrains Mono', monospace; font-size: .8rem; }
+.tuff-catalog-links { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; margin-top: 2rem; }
 
 @media (max-width: 50rem) {
   .tuff-catalog-toolbar { align-items: stretch; }
-  .tuff-catalog-meta > div { grid-template-columns: 1fr; gap: .2rem; }
+  .tuff-catalog-meta > div { grid-template-columns: 1fr; gap: .15rem; }
+  .tuff-catalog-title { font-size: 1.55rem; }
 }
