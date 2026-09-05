@@ -106,7 +106,7 @@ tools_summary = "sequentialthinking"
 [[servers]]
 id = "everything"
 version = "1.0.0"
-description = "Reference server exercising the full MCP surface (tools, resources, prompts). No API key needed -- a good first target for `tuff mcp doctor`."
+description = "Reference server exercising the full MCP surface: tools, resources, and prompts. Needs no API key, which makes it a good first target for tuff mcp doctor."
 transport = "stdio"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-everything"]
@@ -135,7 +135,7 @@ tools_summary = "search, fetch, create-pages, update-page, create-database"
 [[servers]]
 id = "playwright"
 version = "1.0.0"
-description = "Browser automation via Playwright -- navigate, click, fill forms, take screenshots."
+description = "Browser automation via Playwright: navigate, click, fill forms, take screenshots."
 transport = "stdio"
 command = "npx"
 args = ["@playwright/mcp@latest"]
