@@ -8120,3 +8120,121 @@ fn diff_upstream_on_a_pinned_entry_compares_against_the_newest_allowed_release()
     let diffs: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(diffs[0].get("upstream").is_none(), "{diffs}");
 }
+
+#[test]
+fn a_repointed_or_deleted_release_tag_is_reported_not_trusted() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    git_ok(&repo, &["tag", "v1.0.0"]);
+    let v1_2 = commit_skill_release(&repo, "# Skill 1.2\n", "v1.2.0");
+    commit_skill_release(&repo, "# Skill 1.4\n", "v1.4.0");
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill@1.2.0",
+            "-a",
+            "open-agents",
+        ])
+        .assert()
+        .success();
+    let row = outdated_row(temp.path(), "test-skill");
+    assert_eq!(row["status"], "outdated");
+    assert_eq!(row["change"], "minor");
+
+    // Someone republishes different content under the same tag. The
+    // lockfile still pins the commit that was installed, so nothing here
+    // changed; what changed is what the version claims to be.
+    fs::write(
+        repo.join("skills/test-skill/SKILL.md"),
+        "# Skill 1.2, republished\n",
+    )
+    .unwrap();
+    git_ok(&repo, &["commit", "-qam", "republish"]);
+    git_ok(&repo, &["tag", "-f", "-a", "v1.2.0", "-m", "republished"]);
+    let row = outdated_row(temp.path(), "test-skill");
+    assert_eq!(row["status"], "repointed", "wins over outdated: {row}");
+    assert_eq!(row["current"], "1.2.0");
+    assert_eq!(row["latest"], "1.4.0", "the way forward is still shown");
+    assert!(row.get("change").is_none(), "{row}");
+    tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("repointed"));
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains(&format!("ref = \"{v1_2}\"")), "{lock}");
+
+    // update refuses to call it up to date, previews the replacement with
+    // --check, and only replaces the install with --force.
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("v1.2.0 was repointed"))
+        .stderr(predicate::str::contains("use --force"));
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".agents/skills/test-skill/SKILL.md")).unwrap(),
+        "# Skill 1.2\n"
+    );
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill", "--check"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("was repointed"))
+        .stdout(predicate::str::contains("--force"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["diff", "test-skill", "--upstream"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("-# Skill 1.2, republished"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill", "--force"])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(temp.path().join(".agents/skills/test-skill/SKILL.md")).unwrap(),
+        "# Skill 1.2, republished\n"
+    );
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(!lock.contains(&format!("ref = \"{v1_2}\"")), "{lock}");
+    assert!(lock.contains("tag = \"v1.2.0\""), "{lock}");
+    let row = outdated_row(temp.path(), "test-skill");
+    assert_eq!(row["status"], "outdated");
+
+    // The tag is deleted upstream: reported as its own finding, and an
+    // exact pin on it cannot move until the requirement changes.
+    git_ok(&repo, &["tag", "-d", "v1.2.0"]);
+    let row = outdated_row(temp.path(), "test-skill");
+    assert_eq!(row["status"], "tag missing");
+    assert_eq!(row["latest"], "1.4.0");
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "no release of 'test-skill' matches 1.2.0",
+        ));
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill@^1"])
+        .assert()
+        .success();
+    let row = outdated_row(temp.path(), "test-skill");
+    assert_eq!(row["status"], "up to date");
+    assert_eq!(row["current"], "1.4.0");
+}

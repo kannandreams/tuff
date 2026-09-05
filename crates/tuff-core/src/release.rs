@@ -17,6 +17,7 @@ use std::fmt;
 use semver::{Version, VersionReq};
 
 use crate::error::{Result, TuffError};
+use crate::git::RemoteTag;
 
 /// What the user asked for after the `@` in `name@1.2.0` or `name@^1.2`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,12 +152,12 @@ pub fn select_release<'a>(
 
 /// Choose the release of `name` that satisfies `request`, from a raw tag
 /// list, with an error that says what was available when nothing does.
-pub fn resolve_release(
-    tags: &[String],
+pub fn resolve_release<'a>(
+    tags: impl IntoIterator<Item = &'a str>,
     name: &str,
     request: &VersionRequest,
 ) -> Result<ReleaseTag> {
-    let releases = release_tags(tags.iter().map(String::as_str), name);
+    let releases = release_tags(tags, name);
     if releases.is_empty() {
         return Err(TuffError::not_found(format!(
             "no release tags for '{name}' in the repository"
@@ -182,6 +183,35 @@ pub fn resolve_release(
     }
 }
 
+/// Whether the tag an install was pinned to still names the commit that was
+/// installed. A tag is mutable by design; the lockfile pins the commit, so
+/// the install itself is unaffected, but a tag that now names different
+/// content means the version you have may not be what you think it is.
+/// That is a different finding from "a newer release exists".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TagIntegrity {
+    /// The tag still names the installed commit.
+    Matches,
+    /// The tag now names a different commit.
+    Repointed { live_commit: String },
+    /// The repository no longer has the tag.
+    Missing,
+}
+
+pub fn tag_integrity(
+    recorded_tag: &str,
+    recorded_commit: &str,
+    tags: &[RemoteTag],
+) -> TagIntegrity {
+    match tags.iter().find(|tag| tag.name == recorded_tag) {
+        None => TagIntegrity::Missing,
+        Some(tag) if tag.commit == recorded_commit => TagIntegrity::Matches,
+        Some(tag) => TagIntegrity::Repointed {
+            live_commit: tag.commit.clone(),
+        },
+    }
+}
+
 /// The claimed size of moving from one release to another, read from the
 /// version numbers alone. It is what the author claimed, not what the diff
 /// shows, which is why `outdated` prints it beside the versions and
@@ -202,6 +232,34 @@ mod tests {
 
     fn tags(list: &[&str]) -> Vec<String> {
         list.iter().map(|tag| tag.to_string()).collect()
+    }
+
+    fn remote(list: &[(&str, &str)]) -> Vec<RemoteTag> {
+        list.iter()
+            .map(|(name, commit)| RemoteTag {
+                name: name.to_string(),
+                commit: commit.to_string(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_tag_is_checked_against_the_commit_that_was_installed() {
+        let tags = remote(&[("v1.0.0", "aaaa"), ("v1.2.0", "bbbb")]);
+        assert_eq!(
+            tag_integrity("v1.2.0", "bbbb", &tags),
+            TagIntegrity::Matches
+        );
+        assert_eq!(
+            tag_integrity("v1.2.0", "0000", &tags),
+            TagIntegrity::Repointed {
+                live_commit: "bbbb".into()
+            }
+        );
+        assert_eq!(
+            tag_integrity("v1.4.0", "cccc", &tags),
+            TagIntegrity::Missing
+        );
     }
 
     #[test]
@@ -309,7 +367,12 @@ mod tests {
     #[test]
     fn resolve_explains_no_tags_and_no_match_differently() {
         let request = VersionRequest::parse("^2").unwrap();
-        let none = resolve_release(&tags(&["nightly"]), "foo", &request).unwrap_err();
+        let none = resolve_release(
+            tags(&["nightly"]).iter().map(String::as_str),
+            "foo",
+            &request,
+        )
+        .unwrap_err();
         assert!(
             none.to_string().contains("no release tags for 'foo'"),
             "{none}"
@@ -319,7 +382,12 @@ mod tests {
             "{none:?}"
         );
 
-        let miss = resolve_release(&tags(&["v1.2.0", "v1.4.0"]), "foo", &request).unwrap_err();
+        let miss = resolve_release(
+            tags(&["v1.2.0", "v1.4.0"]).iter().map(String::as_str),
+            "foo",
+            &request,
+        )
+        .unwrap_err();
         assert!(
             miss.to_string().contains("no release of 'foo' matches ^2"),
             "{miss}"
@@ -330,7 +398,7 @@ mod tests {
         );
 
         let hit = resolve_release(
-            &tags(&["v1.2.0", "v1.4.0"]),
+            tags(&["v1.2.0", "v1.4.0"]).iter().map(String::as_str),
             "foo",
             &VersionRequest::parse("^1").unwrap(),
         )

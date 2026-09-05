@@ -140,12 +140,20 @@ pub fn clone_tag_to_temp(raw_url: &str, tag: &str) -> Result<(TempDir, PathBuf, 
     Ok((temp, checkout, clean_url))
 }
 
-/// The tags a repository publishes, without cloning it. `--refs` leaves out
-/// the peeled `^{}` rows an annotated tag would otherwise add.
-pub fn list_remote_tags(raw_url: &str) -> Result<Vec<String>> {
+/// One tag a remote publishes and the commit it names right now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteTag {
+    pub name: String,
+    /// The commit, not the tag object: an annotated tag is peeled.
+    pub commit: String,
+}
+
+/// The tags a repository publishes, without cloning it, each with the
+/// commit it currently names. That commit is what a repointed tag changes.
+pub fn list_remote_tags(raw_url: &str) -> Result<Vec<RemoteTag>> {
     let (clean_url, _) = clean_git_url(raw_url);
     let output = Command::new("git")
-        .args(["ls-remote", "--tags", "--refs", &clean_url])
+        .args(["ls-remote", "--tags", &clean_url])
         .output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -156,12 +164,36 @@ pub fn list_remote_tags(raw_url: &str) -> Result<Vec<String>> {
             format!("{context}: {stderr}")
         }));
     }
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| line.split('\t').nth(1))
-        .filter_map(|reference| reference.strip_prefix("refs/tags/"))
-        .map(str::to_string)
-        .collect())
+    Ok(parse_ls_remote_tags(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
+}
+
+/// Read `git ls-remote --tags` output. A lightweight tag is one row naming
+/// the commit. An annotated tag is two: the tag object, then a `^{}` row
+/// naming the commit it points at, which is the one that matters.
+fn parse_ls_remote_tags(output: &str) -> Vec<RemoteTag> {
+    let mut tags: Vec<RemoteTag> = Vec::new();
+    for line in output.lines() {
+        let Some((sha, reference)) = line.split_once('\t') else {
+            continue;
+        };
+        let Some(name) = reference.strip_prefix("refs/tags/") else {
+            continue;
+        };
+        match name.strip_suffix("^{}") {
+            Some(peeled) => {
+                if let Some(tag) = tags.iter_mut().find(|tag| tag.name == peeled) {
+                    tag.commit = sha.to_string();
+                }
+            }
+            None => tags.push(RemoteTag {
+                name: name.to_string(),
+                commit: sha.to_string(),
+            }),
+        }
+    }
+    tags
 }
 
 fn run_git(cmd: &mut Command, context: &str) -> Result<()> {
@@ -298,6 +330,28 @@ fn list_nearby_capabilities(repo: &Path, capability_type: CapabilityType) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ls_remote_tags_peel_annotated_tags_to_their_commit() {
+        let output = "aaaa\trefs/tags/v1.0.0\n\
+                      bbbb\trefs/tags/v1.2.0\n\
+                      cccc\trefs/tags/v1.2.0^{}\n\
+                      dddd\trefs/heads/main\n";
+        let tags = parse_ls_remote_tags(output);
+        assert_eq!(
+            tags,
+            vec![
+                RemoteTag {
+                    name: "v1.0.0".into(),
+                    commit: "aaaa".into()
+                },
+                RemoteTag {
+                    name: "v1.2.0".into(),
+                    commit: "cccc".into()
+                },
+            ]
+        );
+    }
 
     #[test]
     fn detect_github_clean_url() {

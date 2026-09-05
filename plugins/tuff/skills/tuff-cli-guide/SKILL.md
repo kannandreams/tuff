@@ -59,7 +59,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff diff <id>` — show local changes against baseline
 - `tuff diff <id> --upstream` — show upstream changes (git sources only); for a release-pinned entry, against the newest release its requirement allows
 - `tuff diff <id>@<range> --upstream` — preview what a different requirement would change before `tuff update <id>@<range>`
-- `tuff outdated` — check all capabilities for available updates
+- `tuff outdated` — check all capabilities for available updates; `repointed` or `tag missing` on a release-pinned entry means the tag moved or vanished upstream, and `tuff update <id> --force` replaces the install with what the tag names now
 - `tuff mcp doctor` — spawn each installed MCP server for real and verify the handshake + tool list, not just that the config entry exists
 
 ### Update & Merge

@@ -512,13 +512,45 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         // A tag-pinned entry moves to the newest release its requirement
         // allows, never to HEAD: the pin is the point.
         Some(request) => {
-            let chosen = super::resolve_git_release(&git.url, id, request)?;
-            if new_request.is_none() && git.tag.as_deref() == Some(chosen.tag.as_str()) {
-                println!(
-                    "'{id}' is already up to date ({} is the newest release matching {request})",
-                    chosen.version
-                );
-                return Ok(());
+            let tags = git::list_remote_tags(&git.url)?;
+            let chosen =
+                release::resolve_release(tags.iter().map(|tag| tag.name.as_str()), id, request)?;
+            if git.tag.as_deref() == Some(chosen.tag.as_str()) {
+                // Newest allowed or not, the tag may no longer name the
+                // commit that was installed. Say so rather than "up to date".
+                match release::tag_integrity(&chosen.tag, &git.git_ref, &tags) {
+                    release::TagIntegrity::Repointed { live_commit } if check => {
+                        println!(
+                            "'{id}' {} was repointed: installed {}, the tag now names {}; 'tuff update {id} --force' replaces the install with what the tag names now",
+                            chosen.tag,
+                            super::short_sha(&git.git_ref),
+                            super::short_sha(&live_commit)
+                        );
+                        return Ok(());
+                    }
+                    release::TagIntegrity::Repointed { live_commit } if !force => {
+                        return Err(TuffError::refused(format!(
+                            "'{id}' {} was repointed: installed {}, the tag now names {}",
+                            chosen.tag,
+                            super::short_sha(&git.git_ref),
+                            super::short_sha(&live_commit)
+                        ))
+                        .with_hint(format!(
+                            "inspect with 'tuff diff {id} --upstream', then use --force to replace the install with what the tag names now"
+                        )));
+                    }
+                    release::TagIntegrity::Repointed { .. } => {}
+                    release::TagIntegrity::Matches | release::TagIntegrity::Missing
+                        if new_request.is_none() =>
+                    {
+                        println!(
+                            "'{id}' is already up to date ({} is the newest release matching {request})",
+                            chosen.version
+                        );
+                        return Ok(());
+                    }
+                    release::TagIntegrity::Matches | release::TagIntegrity::Missing => {}
+                }
             }
             let (guard, dir, _) = git::clone_tag_to_temp(&git.url, &chosen.tag)?;
             let sha = git::resolve_ref(&dir)?;

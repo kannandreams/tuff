@@ -187,7 +187,7 @@ pub(crate) fn resolve_git_release(
     request: &crate::release::VersionRequest,
 ) -> Result<crate::release::ReleaseTag> {
     let tags = crate::git::list_remote_tags(url)?;
-    crate::release::resolve_release(&tags, id, request)
+    crate::release::resolve_release(tags.iter().map(|tag| tag.name.as_str()), id, request)
 }
 
 pub(crate) fn short_sha(v: &str) -> &str {
