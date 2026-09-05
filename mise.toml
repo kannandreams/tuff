@@ -16,6 +16,7 @@ description = "Install project dependencies"
 run = [
   "cargo fetch --locked",
   "npm --prefix website ci",
+  "npm --prefix editors/vscode ci",
 ]
 
 [tasks.hooks]
@@ -88,6 +89,14 @@ run = "./scripts/check-plugin.sh --sync"
 [tasks.plugin-check]
 description = "Validate the Claude Code plugin and marketplace manifests"
 run = "./scripts/check-plugin.sh"
+
+[tasks.extension-check]
+description = "Type-check and test the VS Code extension"
+run = "npm --prefix editors/vscode test"
+
+[tasks.extension-package]
+description = "Build the VS Code extension VSIX"
+run = "npm --prefix editors/vscode run package"
 
 [tasks.security-audit]
 description = "Reject known npm dependency vulnerabilities"
@@ -177,4 +186,9 @@ run = [
   { task = "docs-build" },
   { task = "capabilities-check" },
   { task = "plugin-check" },
+  # The extension ships no runtime dependencies -- it is packaged with
+  # --no-dependencies and shells out to the installed CLI -- so it is
+  # type-checked and tested here but deliberately not in `security-audit`,
+  # which exists for what a user actually downloads.
+  { task = "extension-check" },
 ]

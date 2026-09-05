@@ -140,6 +140,16 @@ claude plugin install tuff@tuff
 
 It ships the Tuff command reference as a skill and expects the `tuff` command on your PATH. See the [plugin guide](https://tuffcli.dev/guides/claude-code-plugin/).
 
+### VS Code extension
+
+Install the extension to see installed capabilities, drift, and available updates in the editor sidebar:
+
+```sh
+code --install-extension kannandreams.tuff
+```
+
+Cursor installs it too, and it is published to Open VSX for editors that read that registry. Like the plugin, it ships no binary and runs the `tuff` on your PATH. See the [extension guide](https://tuffcli.dev/guides/vscode-extension/).
+
 ## Documentation
 
 - [Getting started](https://tuffcli.dev/getting-started/)
@@ -147,6 +157,7 @@ It ships the Tuff command reference as a skill and expects the `tuff` command on
 - [CLI reference](https://tuffcli.dev/cli/)
 - [Lifecycle and drift detection](https://tuffcli.dev/concepts/lifecycle/)
 - [Claude Code plugin](https://tuffcli.dev/guides/claude-code-plugin/)
+- [VS Code extension](https://tuffcli.dev/guides/vscode-extension/)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing

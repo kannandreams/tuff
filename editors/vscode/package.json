@@ -1,0 +1,242 @@
+{
+  "name": "tuff",
+  "displayName": "Tuff",
+  "description": "See and manage your agent capabilities: drift, versions, and updates, from the Tuff CLI.",
+  "version": "0.1.0",
+  "publisher": "kannandreams",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "tuff",
+    "agent",
+    "skills",
+    "mcp",
+    "claude"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kannandreams/tuff.git",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://tuffcli.dev",
+  "bugs": {
+    "url": "https://github.com/kannandreams/tuff/issues"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "workspaceContains:tuff.lock"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tuff",
+          "title": "Tuff",
+          "icon": "media/tuff.svg"
+        }
+      ]
+    },
+    "views": {
+      "tuff": [
+        {
+          "id": "tuff.capabilities",
+          "name": "Capabilities",
+          "icon": "media/tuff.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "tuff.capabilities",
+        "contents": "The Tuff CLI was not found.\n\nThe extension runs the `tuff` binary; it does not bundle one. Install it, or set the path in settings.\n[Installation guide](https://tuffcli.dev/installation/)\n[Open settings](command:tuff.openSettings)",
+        "when": "tuff.cliMissing"
+      },
+      {
+        "view": "tuff.capabilities",
+        "contents": "No Tuff project here yet.\n\nA project is tracked once `tuff init` has run in it and a `tuff.lock` exists.\n[Getting started](https://tuffcli.dev/getting-started/)",
+        "when": "!tuff.cliMissing && !tuff.hasProject"
+      },
+      {
+        "view": "tuff.capabilities",
+        "contents": "No capabilities installed.\n\nInstall one with `tuff add`, then refresh.\n[CLI reference](https://tuffcli.dev/cli/)",
+        "when": "!tuff.cliMissing && tuff.hasProject && tuff.empty"
+      }
+    ],
+    "commands": [
+      {
+        "command": "tuff.refresh",
+        "title": "Refresh Capabilities",
+        "category": "Tuff",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tuff.checkUpdates",
+        "title": "Check for Updates",
+        "category": "Tuff",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "tuff.runCheck",
+        "title": "Validate Capabilities",
+        "category": "Tuff",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "tuff.mcpDoctor",
+        "title": "Run MCP Doctor",
+        "category": "Tuff"
+      },
+      {
+        "command": "tuff.diff",
+        "title": "Show Local Changes",
+        "category": "Tuff",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "tuff.diffUpstream",
+        "title": "Show Upstream Changes",
+        "category": "Tuff"
+      },
+      {
+        "command": "tuff.update",
+        "title": "Update Capability",
+        "category": "Tuff",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "tuff.reveal",
+        "title": "Reveal in Explorer",
+        "category": "Tuff"
+      },
+      {
+        "command": "tuff.showOutput",
+        "title": "Show CLI Output",
+        "category": "Tuff"
+      },
+      {
+        "command": "tuff.openSettings",
+        "title": "Open Settings",
+        "category": "Tuff"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "tuff.diff",
+          "when": "false"
+        },
+        {
+          "command": "tuff.diffUpstream",
+          "when": "false"
+        },
+        {
+          "command": "tuff.update",
+          "when": "false"
+        },
+        {
+          "command": "tuff.reveal",
+          "when": "false"
+        },
+        {
+          "command": "tuff.openSettings",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "tuff.checkUpdates",
+          "when": "view == tuff.capabilities",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tuff.runCheck",
+          "when": "view == tuff.capabilities",
+          "group": "navigation@2"
+        },
+        {
+          "command": "tuff.refresh",
+          "when": "view == tuff.capabilities",
+          "group": "navigation@3"
+        },
+        {
+          "command": "tuff.mcpDoctor",
+          "when": "view == tuff.capabilities",
+          "group": "1_run"
+        },
+        {
+          "command": "tuff.showOutput",
+          "when": "view == tuff.capabilities",
+          "group": "1_run"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "tuff.diff",
+          "when": "view == tuff.capabilities && viewItem =~ /^tuff\\.(capability|installation)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "tuff.update",
+          "when": "view == tuff.capabilities && viewItem =~ /^tuff\\.(capability|installation)/",
+          "group": "inline@2"
+        },
+        {
+          "command": "tuff.diffUpstream",
+          "when": "view == tuff.capabilities && viewItem =~ /^tuff\\.(capability|installation)/",
+          "group": "1_inspect"
+        },
+        {
+          "command": "tuff.reveal",
+          "when": "view == tuff.capabilities && viewItem =~ /^tuff\\.(capability|installation)/",
+          "group": "1_inspect"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Tuff",
+      "properties": {
+        "tuff.path": {
+          "type": "string",
+          "default": "tuff",
+          "markdownDescription": "Path to the `tuff` executable. The extension shells out to the CLI and does not bundle a binary."
+        },
+        "tuff.scope": {
+          "type": "string",
+          "enum": [
+            "all",
+            "project",
+            "global"
+          ],
+          "default": "all",
+          "markdownDescription": "Which scope the view lists, matching `tuff list --scope`."
+        },
+        "tuff.checkUpdatesOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Check for updates when a workspace opens. Off by default: `tuff outdated` reaches the network and clones git sources, so it stays an explicit action."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "test": "npm run compile && node --test out/test/*.test.js",
+    "package": "vsce package --no-dependencies",
+    "publish:vsce": "vsce publish --no-dependencies",
+    "publish:ovsx": "ovsx publish --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.6.0",
+    "ovsx": "^0.10.0",
+    "typescript": "^5.9.3"
+  }
+}
