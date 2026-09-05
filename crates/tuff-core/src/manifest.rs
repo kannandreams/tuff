@@ -526,6 +526,67 @@ pub fn write_manifest(path: &Path, manifest: &CapabilityManifest) -> Result<()> 
     Ok(())
 }
 
+/// The version a capability source declares for itself, if any: `version`
+/// in `tuff.toml`, else `version:` or `metadata.version:` in the `SKILL.md`
+/// frontmatter (RFC-101 tier 2). It is what the author wrote, not what was
+/// released: it may not change when the content does, which is why a
+/// release tag outranks it and the lockfile records which one it holds.
+pub fn declared_version(dir: &Path) -> Option<String> {
+    if dir.join("tuff.toml").is_file() {
+        return load_manifest(dir).ok().map(|manifest| manifest.version);
+    }
+    let skill = std::fs::read_to_string(dir.join("SKILL.md")).ok()?;
+    frontmatter_version(&skill)
+}
+
+/// Read a version out of `SKILL.md` frontmatter without a YAML parser: a
+/// top-level `version:` line, else `version:` indented under `metadata:`,
+/// which is where the Agent Skills specification puts it. Quotes are
+/// stripped; anything else is taken as written.
+pub fn frontmatter_version(skill: &str) -> Option<String> {
+    let mut lines = skill.lines().map(|line| line.trim_end_matches('\r'));
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+    let mut in_metadata = false;
+    let mut nested = None;
+    for line in lines {
+        if line.trim() == "---" {
+            break;
+        }
+        let indented = line.starts_with([' ', '\t']);
+        if !indented {
+            in_metadata = line.trim_end() == "metadata:";
+            if let Some(value) = line.strip_prefix("version:") {
+                return frontmatter_scalar(value);
+            }
+            continue;
+        }
+        if in_metadata
+            && nested.is_none()
+            && let Some(value) = line.trim_start().strip_prefix("version:")
+        {
+            nested = frontmatter_scalar(value);
+        }
+    }
+    nested
+}
+
+fn frontmatter_scalar(value: &str) -> Option<String> {
+    let value = value.trim();
+    let value = value
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|rest| rest.strip_suffix('\''))
+        })
+        .unwrap_or(value)
+        .trim();
+    (!value.is_empty() && !value.contains(char::is_whitespace)).then(|| value.to_string())
+}
+
 pub fn synthetic_manifest(
     skill_dir: &Path,
     name: &str,
@@ -591,6 +652,72 @@ mod tests {
 
     fn write_manifest(dir: &std::path::Path, content: &str) {
         fs::write(dir.join("tuff.toml"), content).unwrap();
+    }
+
+    #[test]
+    fn frontmatter_version_reads_top_level_then_metadata() {
+        assert_eq!(
+            frontmatter_version("---\nname: x\nversion: 1.2.0\n---\n# X\n").as_deref(),
+            Some("1.2.0")
+        );
+        assert_eq!(
+            frontmatter_version("---\nname: x\nversion: \"1.2.0\"\n---\n").as_deref(),
+            Some("1.2.0")
+        );
+        // The Agent Skills specification nests it under `metadata`.
+        assert_eq!(
+            frontmatter_version(
+                "---\nname: x\nmetadata:\n  author: org\n  version: \"1.0\"\n---\n"
+            )
+            .as_deref(),
+            Some("1.0")
+        );
+        // Top level wins over nested when both are present.
+        assert_eq!(
+            frontmatter_version("---\nmetadata:\n  version: 0.9.0\nversion: 1.2.0\n---\n")
+                .as_deref(),
+            Some("1.2.0")
+        );
+        // A `version:` nested under some other key is not the skill's.
+        assert_eq!(
+            frontmatter_version("---\nname: x\nextra:\n  version: 3.0.0\n---\n"),
+            None
+        );
+        assert_eq!(
+            frontmatter_version("# no frontmatter\nversion: 1.0.0\n"),
+            None
+        );
+        assert_eq!(
+            frontmatter_version("---\nname: x\n---\nversion: 9.9.9\n"),
+            None
+        );
+        assert_eq!(frontmatter_version("---\nversion:\n---\n"), None);
+        assert_eq!(frontmatter_version("---\nversion: 1.2.0 beta\n---\n"), None);
+        assert_eq!(
+            frontmatter_version("---\r\nname: x\r\nversion: 2.0.0\r\n---\r\n").as_deref(),
+            Some("2.0.0")
+        );
+    }
+
+    #[test]
+    fn declared_version_prefers_the_manifest_over_the_frontmatter() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("SKILL.md"),
+            "---\nname: x\nversion: 2.0.0\n---\n# X\n",
+        )
+        .unwrap();
+        assert_eq!(declared_version(tmp.path()).as_deref(), Some("2.0.0"));
+        fs::write(
+            tmp.path().join("tuff.toml"),
+            "id = \"x\"\nversion = \"1.0.0\"\ntype = \"skill\"\ndescription = \"d\"\nfiles = [\"SKILL.md\"]\n",
+        )
+        .unwrap();
+        assert_eq!(declared_version(tmp.path()).as_deref(), Some("1.0.0"));
+
+        let bare = TempDir::new().unwrap();
+        fs::write(bare.path().join("SKILL.md"), "# no version\n").unwrap();
+        assert_eq!(declared_version(bare.path()), None);
     }
 
     #[test]

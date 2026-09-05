@@ -16,6 +16,12 @@ struct OutdatedRow {
     id: String,
     capability_type: CapabilityType,
     target: String,
+    /// Shown beside CURRENT for a git install whose version is only what
+    /// the source declared, and carried in the JSON for every row.
+    version_scheme: lockfile::VersionScheme,
+    /// Whether the entry came from git, where a declared version is weaker
+    /// than a release and the table says so.
+    from_git: bool,
     current: String,
     latest: String,
     status: String,
@@ -34,6 +40,7 @@ struct JsonOutdatedRow<'a> {
     #[serde(rename = "type")]
     capability_type: CapabilityType,
     target: &'a str,
+    version_scheme: lockfile::VersionScheme,
     current: &'a str,
     latest: Option<&'a str>,
     status: &'a str,
@@ -47,6 +54,7 @@ impl OutdatedRow {
             id: &self.id,
             capability_type: self.capability_type,
             target: &self.target,
+            version_scheme: self.version_scheme,
             current: &self.current,
             latest: (self.latest != UNRESOLVED).then_some(self.latest.as_str()),
             status: &self.status,
@@ -212,7 +220,7 @@ fn classify(
     oci_options: &OciTransferOptions,
     cache: &mut PackCheckCache,
 ) -> (String, String, String) {
-    let (src_url, src_path) = match &entry.source {
+    let git = match &entry.source {
         lockfile::CapabilitySource::Pack(pack) => {
             return match &pack.registry {
                 Some(registry) => classify_pack(pack, registry, oci_options, cache),
@@ -261,29 +269,56 @@ fn classify(
         lockfile::CapabilitySource::Git(git) if git.tag.is_some() => {
             return classify_release(id, entry, git);
         }
-        lockfile::CapabilitySource::Git(git) => (&git.url, &git.path),
+        lockfile::CapabilitySource::Git(git) => git,
     };
-    let _ = src_path;
+    classify_commit(entry, git)
+}
 
-    match git::clone_to_temp(src_url, None).and_then(|(_guard, d, _)| git::resolve_ref(&d)) {
-        Err(_) => (
-            short_sha(&entry.version).to_string(),
-            "unavailable".to_string(),
-            "error".to_string(),
-        ),
-        Ok(latest_sha) => {
-            let status = if latest_sha == entry.version {
-                "up to date"
-            } else {
-                "outdated"
-            };
-            (
-                short_sha(&entry.version).to_string(),
-                short_sha(&latest_sha).to_string(),
-                status.to_string(),
-            )
-        }
+/// A git install with no release pin is compared commit to commit: HEAD
+/// moved or it did not. What the columns show depends on what the version
+/// is. A `sha` entry shows short commits. A `declared` entry shows the
+/// version the source declared then and declares now, with the claimed
+/// size of the change when both parse; when HEAD moved but the declared
+/// version did not, the row still reads `outdated`, which is exactly why a
+/// declared version is weaker than a release.
+fn classify_commit(
+    entry: &lockfile::CapabilityLockEntry,
+    git: &lockfile::GitSource,
+) -> (String, String, String) {
+    let declared = entry.version_scheme == lockfile::VersionScheme::Declared;
+    let current = if declared {
+        entry.version.clone()
+    } else {
+        short_sha(&entry.version).to_string()
+    };
+    let (_guard, checkout, _) = match git::clone_to_temp(&git.url, None) {
+        Ok(clone) => clone,
+        Err(_) => return (current, "unavailable".to_string(), "error".to_string()),
+    };
+    let Ok(latest_sha) = git::resolve_ref(&checkout) else {
+        return (current, "unavailable".to_string(), "error".to_string());
+    };
+    if latest_sha == git.git_ref {
+        return (current.clone(), current, "up to date".to_string());
     }
+    if !declared {
+        return (
+            current,
+            short_sha(&latest_sha).to_string(),
+            "outdated".to_string(),
+        );
+    }
+    let latest_declared = git::discover_capability(&checkout, &git.path, entry.capability_type)
+        .ok()
+        .and_then(|dir| crate::manifest::declared_version(&dir));
+    let latest = latest_declared.unwrap_or_else(|| short_sha(&latest_sha).to_string());
+    let status = match (Version::parse(&entry.version), Version::parse(&latest)) {
+        (Ok(from), Ok(to)) if to != from => {
+            format!("outdated ({})", release::change_kind(&from, &to))
+        }
+        _ => "outdated".to_string(),
+    };
+    (current, latest, status)
 }
 
 /// A tag-pinned install (RFC-101) is compared against the newest release
@@ -354,6 +389,8 @@ fn collect_rows(
                 id: id.clone(),
                 capability_type: entry.capability_type,
                 target: target_id.clone(),
+                version_scheme: entry.version_scheme,
+                from_git: matches!(entry.source, lockfile::CapabilitySource::Git(_)),
                 current,
                 latest,
                 status,
@@ -411,7 +448,16 @@ pub fn cmd_outdated(
                 Some(change) => format!("{} ({change})", style_outdated_status(&r.status)),
                 None => style_outdated_status(&r.status),
             };
-            let row = OutdatedRow { status, ..r };
+            let current = if r.from_git && r.version_scheme == lockfile::VersionScheme::Declared {
+                format!("{} (declared)", r.current)
+            } else {
+                r.current.clone()
+            };
+            let row = OutdatedRow {
+                status,
+                current,
+                ..r
+            };
             vec![
                 row.id,
                 row.capability_type.to_string(),

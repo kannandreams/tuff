@@ -50,7 +50,7 @@ diffs are line-oriented and merge conflicts stay local.
 | `name` | Capability identifier |
 | `type` | `"skill"`, `"tool"`, `"hook"`, `"workflow"`, `"mcp-server"`, or `"policy"` |
 | `version` | The capability's own version |
-| `version_scheme` | What `version` holds: `declared` (from the manifest), `sha` (a pinned commit), or `semver` (a resolved release tag, reserved for a later feature) |
+| `version_scheme` | What `version` holds: `semver` (a release chosen by tag; `source.tag` names it), `declared` (what the manifest or `SKILL.md` frontmatter says), or `sha` (the pinned commit itself) |
 | `description` | Cached from the manifest at install time |
 | `sha256` | Hash of the materialized capability directory, bare lowercase hex |
 | `target` | Canonical adapter ID |

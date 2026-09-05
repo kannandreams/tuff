@@ -180,7 +180,13 @@ tag = "v1.4.0"
 requested = "^1.2"
 ```
 
-A requirement nothing satisfies fails before anything is cloned and lists the releases that exist. A repository with no release tags fails the same way, with a hint on how to tag one. Without `@`, a git install takes the latest commit exactly as before, recording the commit SHA as the version with `version_scheme = "sha"`.
+A requirement nothing satisfies fails before anything is cloned and lists the releases that exist. A repository with no release tags fails the same way, with a hint on how to tag one.
+
+#### Declared versions
+
+Without `@`, a git install takes the latest commit exactly as before. Its recorded version is then whatever the source declares for itself: `version` in `tuff.toml`, else `version:` or `metadata.version:` in the `SKILL.md` frontmatter, which is where the Agent Skills specification puts it. The lockfile marks that with `version_scheme = "declared"`. A source that declares nothing records the commit SHA as its version, with `version_scheme = "sha"`.
+
+A declared version is what the author wrote, not a release: it may not change when the content does. So for a git install, `tuff list` and `tuff outdated` show it as `1.2.0 (declared)`, visibly weaker than a release chosen by tag, and `tuff outdated` can report the row `outdated` while `LATEST` still reads `1.2.0`, meaning the commit moved and the version did not. A local install's version is declared by definition and is shown plain.
 
 #### Install a pack
 
@@ -396,7 +402,7 @@ tuff list --scope global --type tool
 
 #### JSON
 
-`tuff list --json` prints the same rows as an array, one object per capability per agent, with the keys `id`, `type`, `version`, `scope`, `target`, `status`, and `path`. The `type`, `target`, and `status` keys are spelled the same as in `tuff check --json`, so one script can read both. An empty inventory prints `[]`.
+`tuff list --json` prints the same rows as an array, one object per capability per agent, with the keys `id`, `type`, `version`, `version_scheme`, `scope`, `target`, `status`, and `path`. `version_scheme` is `semver` for a release chosen by tag, `declared` for a version the source wrote for itself, and `sha` for a pinned commit. The `type`, `target`, and `status` keys are spelled the same as in `tuff check --json`, so one script can read both. An empty inventory prints `[]`.
 
 ```sh frame="terminal"
 tuff list --json | jq '.[] | select(.status != "clean") | .id'
@@ -473,7 +479,7 @@ csv-workbench             skill      open-agents  1.0.0      —          not ch
 crm-skill                 skill      open-agents  1.0.0      1.0.0      repointed
 ```
 
-For a git-sourced capability installed without a release, `CURRENT` and `LATEST` show the 7-character commit SHA.
+For a git-sourced capability installed without a release, the row compares commits: HEAD moved or it did not. When the source declares no version, `CURRENT` and `LATEST` show the 7-character commit SHA. When it declares one, `CURRENT` shows it as `1.2.0 (declared)` and `LATEST` the version the source declares now, with the claimed size of the change when both parse. When the commit moved but the declared version did not, the row still reads `outdated` with `LATEST` equal to `CURRENT`. `--json` carries `version_scheme` on every row.
 
 For a capability installed at a release, `CURRENT` and `LATEST` are release versions, and `outdated` carries the size of the change the version numbers claim: `major`, `minor`, or `patch`. That is what the author claimed, not what the content shows; `tuff diff <id> --upstream` shows the content. `LATEST` is the newest release the repository has, whether or not the recorded requirement allows it, so an exact pin can read `outdated` while `tuff update` reports it up to date; `tuff update <id>@<requirement>` lifts the pin. If the release tags are gone upstream the row reads `tag missing`, and the pinned commit still installs. In `--json` the status stays `outdated` and the size is a separate `change` key.
 
@@ -497,7 +503,7 @@ Anything Tuff cannot check — a pack installed without `--reference`, or a
 local capability with no source at all — reports `not checked`, `—`, rather
 than a guessed `up to date`.
 
-`tuff outdated --json` prints the rows as an array with the keys `id`, `type`, `target`, `current`, `latest`, and `status`. Where the table shows `—`, `latest` is `null`, so a script tests for absence rather than for a dash. The status strings are the ones in the table above.
+`tuff outdated --json` prints the rows as an array with the keys `id`, `type`, `target`, `version_scheme`, `current`, `latest`, and `status`. Where the table shows `—`, `latest` is `null`, so a script tests for absence rather than for a dash. The status strings are the ones in the table above.
 
 ```sh frame="terminal"
 tuff outdated --json | jq '.[] | select(.status == "outdated" or .status == "repointed")'

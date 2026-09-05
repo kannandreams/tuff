@@ -24,6 +24,8 @@ manifest file. Tuff discovers the skill's structure automatically. For
 source-based development, a `tuff.toml` in the source directory is optional
 but not emitted into agent directories.
 
+A skill can say what version it is. Tuff reads `version` from `tuff.toml` when there is one, otherwise `version:` or `metadata.version:` from the `SKILL.md` frontmatter, which is where the [Agent Skills specification](https://agentskills.io/specification) puts it. That declared version becomes the installed version and shows in `tuff list`. For a git source it is marked `(declared)`, since a tag such as `v1.2.0` is the stronger claim; see [Install a release](/cli#install-a-release).
+
 ## Installing a skill
 
 ```sh frame="terminal"
