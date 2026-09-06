@@ -6,6 +6,8 @@ lives at https://tuffcli.dev/changelog/.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-06
+
 ### Added
 
 - **Add from Git URL**, on the view menu, in the command palette, and offered from the empty view. Paste a repository or a directory inside one — a skills.sh link, say — and Tuff installs it for the harnesses the project uses, as `tuff add <url> --name <name>` would. The name is prefilled from the URL and a `@1.2.0` suffix pins a release. A local path is turned away with a pointer to Scan, which is what handles directories already on disk.
