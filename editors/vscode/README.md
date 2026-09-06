@@ -62,6 +62,16 @@ VS Code, and editors that install VS Code extensions, including Cursor.
 Claude Code and Codex sessions running inside VS Code see the same project,
 so the tree reflects whatever those sessions install.
 
+Under Remote-SSH, WSL, or a dev container the extension runs on the remote
+side, where the files and the `tuff` binary are. It stays off in a
+Restricted Mode folder until you trust it, because `Run MCP Doctor` starts
+the project's own MCP servers, and it does not run in a virtual workspace,
+which has no files on disk for the CLI to read.
+
+New to Tuff? **Help: Welcome**, then **Get Started with Tuff**, walks
+through install, initialize, scan, and the catalog, running each command
+from the page.
+
 ## Settings
 
 | Setting | Default | What it does |

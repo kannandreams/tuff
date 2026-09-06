@@ -6,6 +6,16 @@ lives at https://tuffcli.dev/changelog/.
 
 ## [Unreleased]
 
+### Added
+
+- A **Get Started with Tuff** walkthrough on the editor's Welcome page: install the CLI, initialize, scan, add a server from the catalog, and read drift. Each step runs the command it describes and ticks itself off when that has happened. It is featured in any workspace holding a `tuff.lock` or a `.claude`, `.cursor`, or `.agents` folder.
+
+### Changed
+
+- Listed under **AI** on the Marketplace rather than Other, with a banner in the site's palette, a version badge, and a 256px icon in place of the 128px one.
+- Declared as a **workspace** extension, so under Remote-SSH, WSL, or a dev container it runs where the files and the CLI are.
+- Declared unsupported in **virtual workspaces** and **untrusted folders**, with the reason shown in place of a generic notice. It never worked in a virtual workspace, which has no files on disk for the CLI to read, but the view offered `tuff init` there and then said to open a folder. In Restricted Mode it was already disabled, correctly, since `Run MCP Doctor` spawns the project's own servers; now it says so.
+
 ## [0.2.0] - 2026-09-06
 
 ### Added

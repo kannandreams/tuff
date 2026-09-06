@@ -5,3 +5,4 @@ out/**/*.test.js
 node_modules/**
 tsconfig.json
 .gitignore
+media/*.gif

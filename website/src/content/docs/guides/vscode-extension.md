@@ -37,6 +37,10 @@ code --install-extension tuff-0.1.0.vsix
 
 `npm run package` writes a `.vsix` next to the manifest; the version in the filename follows `package.json`.
 
+## A walkthrough for the first run
+
+**Help: Welcome**, then **Get Started with Tuff**, walks through install, initialize, scan, and the catalog, running each command from the page and ticking a step off once it has run. VS Code features it in any workspace holding a `tuff.lock` or a `.claude`, `.cursor`, or `.agents` folder.
+
 ## What it shows
 
 The **Capabilities** view groups everything installed in the project by kind: skills, tools, hooks, workflows, and MCP servers. Each row carries the version recorded in the lockfile and the agents the capability was installed for. A capability installed for several harnesses is one row that expands into one child per agent.

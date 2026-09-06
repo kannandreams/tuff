@@ -190,6 +190,7 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
     const scope = vscode.workspace.getConfiguration("tuff").get<string>("scope", "all");
     try {
       const rows = await cli.list(options, scope);
+      this.cliReady(true);
       // Global-scope rows come back without a project lockfile, and they are
       // still capabilities worth showing, so anything listed also counts.
       this.apply(
@@ -200,15 +201,27 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
       );
     } catch (error) {
       if (error instanceof TuffNotFoundError) {
+        this.cliReady(false);
         this.apply([], false, true, true);
         return;
       }
       // A CLI that ran and failed says nothing about whether this folder is
       // a project, so the welcome view keeps reporting the file on disk
       // instead of blaming the project for a broken command.
+      this.cliReady(true);
       this.apply([], initialized, false, true);
       this.report(error);
     }
+  }
+
+  /**
+   * Whether the CLI has answered at all. The walkthrough's first step
+   * completes on this rather than on `!tuff.cliMissing`, because an unset
+   * context key reads as false and would have ticked the step before the
+   * extension had looked.
+   */
+  private cliReady(ready: boolean): void {
+    void vscode.commands.executeCommand("setContext", "tuff.cliReady", ready);
   }
 
   private async hasLockfile(folder: vscode.WorkspaceFolder): Promise<boolean> {
