@@ -9,19 +9,23 @@ The extension contains no binary. It runs the `tuff` you have already installed,
 
 ## Install
 
-:::caution[Not published yet]
-The extension is built and in the repository, but it is not on the Visual Studio Marketplace or Open VSX yet. Until it is, build it from source with the steps below. This page will lose this notice when it is published.
-:::
+Search for **Tuff** in the Extensions view, or install it from the command line:
 
-Once it is published, search for **Tuff** in the Extensions view, or install it from the command line:
-
-```sh
+```sh frame="terminal"
 code --install-extension kannandreams.tuff
 ```
 
+It requires Tuff 0.6.0 or newer, the release that made `list`, `outdated`, and `diff` machine-readable. Check what you have with `tuff --version`, and see [Installation](/installation/) if the command is missing. When `tuff` is not on the editor's `PATH`, set `tuff.path` to its full path.
+
+## Cursor, and other editors
+
+Cursor installs VS Code extensions, so this one works there, but Cursor searches [Open VSX](https://open-vsx.org) rather than the Visual Studio Marketplace and the extension is not on Open VSX yet. Until it is, install the `.vsix` by hand: download it from the [Marketplace page](https://marketplace.visualstudio.com/items?itemName=kannandreams.tuff) under **Download Extension**, then use **Extensions: Install from VSIX** in the command palette, or `cursor --install-extension tuff-0.1.0.vsix`. The same applies to any other editor that reads Open VSX.
+
+Claude Code and Codex sessions running inside VS Code operate on the same project directory, so anything they install appears in the tree on the next refresh.
+
 ### Build it from source
 
-Node 24 or newer, and the repository:
+Contributing, or trying an unreleased change:
 
 ```sh frame="terminal"
 git clone https://github.com/kannandreams/tuff.git
@@ -31,13 +35,7 @@ npm run package
 code --install-extension tuff-0.1.0.vsix
 ```
 
-`npm run package` writes a `.vsix` next to the manifest; the version in the filename follows `package.json`. Cursor installs the same file, either through **Extensions: Install from VSIX** in the command palette or with `cursor --install-extension`.
-
-It requires Tuff 0.6.0 or newer, the release that made `list`, `outdated`, and `diff` machine-readable. Check what you have with `tuff --version`, and see [Installation](/installation/) if the command is missing. When `tuff` is not on the editor's `PATH`, set `tuff.path` to its full path.
-
-## Works in more than VS Code
-
-Cursor installs VS Code extensions, so the same extension covers it, and it is published to [Open VSX](https://open-vsx.org) for editors that read that registry. Claude Code and Codex sessions running inside VS Code operate on the same project directory, so anything they install appears in the tree on the next refresh.
+`npm run package` writes a `.vsix` next to the manifest; the version in the filename follows `package.json`.
 
 ## What it shows
 
