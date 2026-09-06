@@ -12,7 +12,7 @@ lives at https://tuffcli.dev/changelog/.
 
 ### Changed
 
-- Listed under **AI** on the Marketplace rather than Other, with a banner in the site's palette, a version badge, and a 256px icon in place of the 128px one.
+- Listed under **AI** on the Marketplace rather than Other, with a banner in the site's palette, a version badge, and a 256px icon in place of the 128px one. The old icon's corners were opaque white, which showed as a white frame around the rounded square wherever the page behind it was not white; the new one is transparent there.
 - Declared as a **workspace** extension, so under Remote-SSH, WSL, or a dev container it runs where the files and the CLI are.
 - Declared unsupported in **virtual workspaces** and **untrusted folders**, with the reason shown in place of a generic notice. It never worked in a virtual workspace, which has no files on disk for the CLI to read, but the view offered `tuff init` there and then said to open a folder. In Restricted Mode it was already disabled, correctly, since `Run MCP Doctor` spawns the project's own servers; now it says so.
 
