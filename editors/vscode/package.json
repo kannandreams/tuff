@@ -2,7 +2,7 @@
   "name": "tuff",
   "displayName": "Tuff",
   "description": "See and manage your agent capabilities: drift, versions, and updates, from the Tuff CLI.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "kannandreams",
   "license": "MIT",
   "icon": "media/icon.png",

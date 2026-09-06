@@ -6,6 +6,8 @@ lives at https://tuffcli.dev/changelog/.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-06
+
 ### Fixed
 
 - **Add from Git URL** takes what people paste. `https://github.com/apollographql/skills rust-best-practices`, the CLI's own syntax, was read as one URL with a space in it and failed; so was a whole `npx skills add <url> --skill <name>` line from a skills.sh page. Both now yield the source and the name. And a URL for a repository itself no longer prefills the name with the repository's name — `skills` is not a skill — but asks which capability in it you want; a URL pointing inside the repository still prefills from its last segment.
