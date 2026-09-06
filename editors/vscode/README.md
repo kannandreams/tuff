@@ -31,6 +31,10 @@ the `tuff` CLI and renders what it reports.
   and reveal on disk. Clicking a capability opens its entry file.
 - **MCP doctor**, which spawns each installed server and reports what it
   actually answers.
+- **Add from a git URL.** Paste a repository, or a directory inside one
+  such as a skills.sh link, and Tuff installs it for the harnesses this
+  project uses. The name is prefilled from the URL; `name@1.2.0` pins a
+  release.
 - **The built-in MCP catalog**, browsable from the view menu: pick a curated
   server and Tuff installs it for the harnesses this project uses. An entry
   needing an API key names the variables and asks first; Tuff records the

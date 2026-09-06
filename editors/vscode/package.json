@@ -69,7 +69,8 @@
     "onView:tuff.capabilities",
     "onCommand:tuff.browseCatalog",
     "onCommand:tuff.scan",
-    "onCommand:tuff.init"
+    "onCommand:tuff.init",
+    "onCommand:tuff.addFromGit"
   ],
   "contributes": {
     "viewsContainers": {
@@ -103,7 +104,7 @@
       },
       {
         "view": "tuff.capabilities",
-        "contents": "No capabilities tracked yet.\n\nScan this project for skills it already has, or install something new.\n[Scan for Existing Capabilities](command:tuff.scan)\n[Browse MCP Catalog](command:tuff.browseCatalog)\n[CLI reference](https://tuffcli.dev/cli/)",
+        "contents": "No capabilities tracked yet.\n\nScan this project for skills it already has, or install something new.\n[Scan for Existing Capabilities](command:tuff.scan)\n[Browse MCP Catalog](command:tuff.browseCatalog)\n[Add from Git URL](command:tuff.addFromGit)\n[CLI reference](https://tuffcli.dev/cli/)",
         "when": "!tuff.cliMissing && tuff.hasProject && tuff.empty"
       }
     ],
@@ -142,6 +143,12 @@
         "title": "Browse MCP Catalog",
         "category": "Tuff",
         "icon": "$(library)"
+      },
+      {
+        "command": "tuff.addFromGit",
+        "title": "Add from Git URL",
+        "category": "Tuff",
+        "icon": "$(repo-clone)"
       },
       {
         "command": "tuff.mcpDoctor",
@@ -227,6 +234,11 @@
         },
         {
           "command": "tuff.browseCatalog",
+          "when": "view == tuff.capabilities",
+          "group": "1_run"
+        },
+        {
+          "command": "tuff.addFromGit",
           "when": "view == tuff.capabilities",
           "group": "1_run"
         },

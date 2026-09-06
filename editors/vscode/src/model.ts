@@ -587,3 +587,51 @@ export function describeScan(counts: ScanCounts): string {
   }
   return `nothing new to track: ${parts.join(", ")}`;
 }
+
+/**
+ * Whether a string is something `tuff add` would treat as a git source,
+ * by the CLI's own rule (`git::is_git_url`): a scheme it clones, or an
+ * SSH shorthand. Anything else is a local path, which this command does
+ * not take — the scan handles what is already on disk.
+ */
+export function looksLikeGitSource(source: string): boolean {
+  const trimmed = source.trim();
+  return (
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("git@") ||
+    trimmed.startsWith("file://")
+  );
+}
+
+/**
+ * The name a git source suggests for itself: its last path segment, with
+ * a `.git` suffix and a `/tree/<ref>/` prefix seen through. A skills.sh
+ * link such as `.../tree/main/skills/react-best-practices` names the skill
+ * in its last segment, which is what the developer would type anyway.
+ */
+export function suggestedName(source: string): string {
+  const trimmed = source.trim().replace(/\/+$/, "");
+  const last = trimmed.split(/[/:]/).pop() ?? "";
+  return last.replace(/\.git$/, "");
+}
+
+/**
+ * Why a name is not acceptable, or undefined when it is. Mirrors the
+ * CLI's `validate_capability_name`: one path component, nothing else.
+ * A `@requirement` suffix is allowed through, since `tuff add` reads it
+ * as a release to pin for a git source.
+ */
+export function capabilityNameProblem(name: string): string | undefined {
+  const bare = name.split("@")[0] ?? "";
+  if (bare.length === 0) {
+    return "A name is required.";
+  }
+  if (bare === "." || bare === "..") {
+    return "That is a directory reference, not a name.";
+  }
+  if (/[/\\]/.test(bare)) {
+    return "A name is a single path component, with no slashes.";
+  }
+  return undefined;
+}

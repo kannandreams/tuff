@@ -69,6 +69,7 @@ Until that has run, the view says `updates not checked` rather than showing ever
 | Browse MCP Catalog | `tuff mcp catalog --json`, then `tuff add mcp <id> --yes` |
 | Scan for Existing Capabilities | `tuff scan --json`, then `tuff scan --adopt <paths>` |
 | Initialize Project | `tuff init` |
+| Add from Git URL | `tuff add <url> --name <name>` |
 
 The four row commands appear on a capability's context menu. Acting on a capability row applies to every agent it is installed for; acting on an agent row narrows to that one, exactly as passing `--agent` does. Diffs open as a real diff document rather than as plain text.
 
@@ -85,6 +86,12 @@ The picker offers only what Tuff can actually take. A directory that shares an i
 Scanning changes nothing and works in a folder Tuff has never seen, so the empty view offers it alongside **Initialize Project**. If you scan first and pick something in a folder that has no `tuff.lock`, the extension says so and offers to run `tuff init` before tracking, since tracking is what needs the lockfile.
 
 This command needs Tuff 0.7.0 or newer, the release that added `tuff scan`.
+
+### Add from Git URL
+
+Paste a repository, or a directory inside one, and the extension runs `tuff add <url> --name <name>` for the harnesses the project is configured for. That covers a skills.sh link, which points at a directory in a repository: the name is prefilled from the URL's last segment, so the common case is one Enter. Add `@1.2.0` to the name to pin a release, exactly as on the command line.
+
+The name is asked for every time. The CLI only needs it when the source has no `tuff.toml`, but knowing that would mean cloning first, and when a manifest is present the name you give simply wins. A local path is turned away with a pointer to Scan, which is what handles a directory already on disk.
 
 ### Browse MCP Catalog
 
