@@ -25,6 +25,10 @@ the `tuff` CLI and renders what it reports.
   and reveal on disk. Clicking a capability opens its entry file.
 - **MCP doctor**, which spawns each installed server and reports what it
   actually answers.
+- **The built-in MCP catalog**, browsable from the view menu: pick a curated
+  server and Tuff installs it for the harnesses this project uses. An entry
+  needing an API key names the variables and asks first; Tuff records the
+  variable name, never the value. Needs Tuff 0.7.0 or newer.
 
 ## Requirements
 

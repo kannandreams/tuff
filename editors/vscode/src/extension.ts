@@ -15,10 +15,14 @@ import * as vscode from "vscode";
 import * as cli from "./cli";
 import { TuffCliError, TuffNotFoundError } from "./cli";
 import {
+  MINIMUM_CATALOG_VERSION,
   type Capability,
+  type CatalogEntry,
   type Installation,
   type TypeGroup,
+  atLeastVersion,
   buildCapabilities,
+  catalogDetail,
   describeUpdate,
   groupByType,
   statusBarText,
@@ -86,6 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("tuff.checkUpdates", () => provider.checkUpdates()),
     vscode.commands.registerCommand("tuff.runCheck", () => provider.runCheck()),
     vscode.commands.registerCommand("tuff.mcpDoctor", () => provider.runDoctor()),
+    vscode.commands.registerCommand("tuff.browseCatalog", () => provider.browseCatalog()),
     vscode.commands.registerCommand("tuff.diff", (node?: Node) => provider.diff(node, false)),
     vscode.commands.registerCommand("tuff.diffUpstream", (node?: Node) =>
       provider.diff(node, true),
@@ -260,6 +265,106 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
         try {
           const result = await cli.runText(["mcp", "doctor"], options);
           this.output.appendLine(result.output || "(no output)");
+        } catch (error) {
+          this.report(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Pick a server from the built-in catalog and install it.
+   *
+   * The catalog is the CLI's, read through `tuff mcp catalog --json`; the
+   * extension neither carries a copy nor parses the TOML asset. Install
+   * runs with `--yes`, which accepts the catalog's own variable names:
+   * renaming one is an interactive prompt the editor has no stdin for, and
+   * the CLI is where a developer who wants a different name should do it.
+   *
+   * No secret passes through here. A catalog entry names the variables it
+   * expects to be exported, and Tuff writes a `{ from_env = "NAME" }`
+   * reference, so the key stays in the environment.
+   */
+  async browseCatalog(): Promise<void> {
+    const options = this.options();
+    if (!options) {
+      void vscode.window.showInformationMessage("Tuff: open a folder to install into first.");
+      return;
+    }
+
+    let entries: CatalogEntry[];
+    try {
+      const installed = await cli.version(options);
+      if (!atLeastVersion(installed, MINIMUM_CATALOG_VERSION)) {
+        void vscode.window.showErrorMessage(
+          `Tuff: browsing the catalog needs ${MINIMUM_CATALOG_VERSION} or newer; ` +
+            `'${installed.trim()}' is installed.`,
+        );
+        return;
+      }
+      entries = await cli.catalog(options);
+    } catch (error) {
+      this.report(error);
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      entries.map((entry) => ({
+        label: entry.id,
+        description: `${entry.version} · ${entry.transport}${entry.needs_key ? " · key" : ""}`,
+        detail: catalogDetail(entry),
+        entry,
+      })),
+      {
+        title: "Tuff: MCP Catalog",
+        placeHolder: "Pick a server to install",
+        matchOnDescription: true,
+        matchOnDetail: true,
+      },
+    );
+    if (!picked) {
+      return;
+    }
+
+    const entry = picked.entry;
+    if (entry.needs_key) {
+      const proceed = await vscode.window.showWarningMessage(
+        `'${entry.id}' reads ${entry.variables.join(" and ")} from your environment.`,
+        {
+          modal: true,
+          detail:
+            "Tuff records the variable name, never its value, so export it in the shell that " +
+            "runs your agent. Install now?",
+        },
+        "Install",
+      );
+      if (proceed !== "Install") {
+        return;
+      }
+    }
+
+    this.output.appendLine(`$ tuff add mcp ${entry.id} --yes`);
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Tuff: installing ${entry.id}` },
+      async () => {
+        try {
+          const result = await cli.runText(["add", "mcp", entry.id, "--yes"], options);
+          this.output.appendLine(result.output || "(no output)");
+          if (result.code !== 0) {
+            void vscode.window
+              .showErrorMessage(`Tuff: could not install '${entry.id}'.`, "Show Output")
+              .then((choice) => {
+                if (choice === "Show Output") {
+                  this.output.show(true);
+                }
+              });
+            return;
+          }
+          await this.refresh();
+          const reminder = entry.needs_key
+            ? ` Export ${entry.variables.join(" and ")} before the server is used.`
+            : "";
+          void vscode.window.showInformationMessage(`Tuff: installed '${entry.id}'.${reminder}`);
         } catch (error) {
           this.report(error);
         }

@@ -136,6 +136,19 @@ catalog arrives with a newer Tuff release.
 
 The full list, with what each entry runs, the variables it needs, and the tools it answers with, is on the [MCP Catalog](/mcp-catalog/) page. That page is generated from the catalog file itself on every build, so it never drifts from what your `tuff` can install.
 
+`tuff mcp catalog` prints the same list from the binary you have, and `--json` gives a tool the whole entry: the invocation, the variables, and the advertised tools. It is what the [VS Code extension](/guides/vscode-extension/) reads to offer the catalog in the editor.
+
+```sh frame="terminal"
+tuff mcp catalog
+```
+
+```text
+│ ID           │ VERSION │ TRANSPORT │ VARIABLES                    │ DESCRIPTION                     │
+│ filesystem   │ 1.0.0   │ stdio     │ —                            │ Read, write, and search files…  │
+│ github       │ 1.0.0   │ stdio     │ GITHUB_PERSONAL_ACCESS_TOKEN │ GitHub's official MCP server:…  │
+│ linear       │ 1.0.0   │ http      │ LINEAR_API_KEY               │ Find, create, and update Linea…  │
+```
+
 Two of the entries, `linear` and `context7`, are remote servers: a `url` plus an `Authorization` header built from the named variable, exactly as a manifest declares it (see [Remote servers and auth headers](#remote-servers-and-auth-headers)). Linear also offers an interactive OAuth flow; the catalog entry uses the API key path because a config file can carry a variable reference and cannot carry a login. Context7 calls its key recommended rather than required, but the catalog has no notion of an optional header, so the entry asks for one; the keyless stdio form is a registry install away as `io.github.upstash/context7`.
 
 ### The MCP registry

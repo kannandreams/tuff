@@ -64,10 +64,21 @@ Until that has run, the view says `updates not checked` rather than showing ever
 | Show Upstream Changes | `tuff diff <id> --upstream` |
 | Update Capability | `tuff update <id>` |
 | Run MCP Doctor | `tuff mcp doctor` |
+| Browse MCP Catalog | `tuff mcp catalog --json`, then `tuff add mcp <id> --yes` |
 
 The four row commands appear on a capability's context menu. Acting on a capability row applies to every agent it is installed for; acting on an agent row narrows to that one, exactly as passing `--agent` does. Diffs open as a real diff document rather than as plain text.
 
-Installing, deleting, and packing stay in the CLI. The extension is a view with a few safe actions on top of it, not a replacement for it.
+Deleting and packing stay in the CLI. The extension is a view with a few safe actions on top of it, not a replacement for it.
+
+### Browse MCP Catalog
+
+The one install the extension does offer is from the [built-in catalog](/mcp-catalog/), because the catalog is a fixed, curated list rather than an arbitrary source. Pick a server and Tuff wires it into the harnesses this project is configured for.
+
+An entry that needs an API key asks you to confirm first, and names the variables. No key passes through the editor: Tuff records the variable name as a `{ from_env = "NAME" }` reference, so exporting it stays your job and the value never reaches the lockfile or the manifest.
+
+Install runs with `--yes`, which accepts the catalog's own variable names. Renaming one is an interactive prompt, so do that from the CLI with `tuff add mcp <id>`.
+
+This command needs Tuff 0.7.0 or newer, the release that added `tuff mcp catalog`. On an older CLI the extension says so, and the rest of the view keeps working.
 
 ## Settings
 

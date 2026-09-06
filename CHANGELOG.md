@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **`tuff mcp catalog` lists the built-in catalog.** `tuff mcp search` reaches the registry and `tuff add mcp <id>` installs by name, but until now nothing could show what the ids are, so finding one meant reading the website or the source. The command prints every entry compiled into your binary with its version, transport, and the environment variables it expects you to export, and `--json` adds the full invocation the harness would run and the tools the entry advertises. Every row is resolved through the same code path `tuff add mcp` uses, so the listing can never offer a server the installer would refuse. It reaches no network and needs no project.
+
 ### Changed
 
 - Reworded the built-in catalog's `everything` and `playwright` descriptions. Both used a double hyphen as a dash and one wrapped a command in backticks, which read as markup wherever the description is shown: the catalog page, `tuff list`, and the tracked `server.toml`. The entry versions are unchanged, so no installed server reports itself outdated over wording.
