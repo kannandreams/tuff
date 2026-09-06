@@ -30,7 +30,7 @@ import {
   describeScan,
   describeUpdate,
   groupByType,
-  looksLikeGitSource,
+  parseGitSourceInput,
   scanCounts,
   scanDetail,
   statusBarText,
@@ -590,12 +590,15 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
   /**
    * Install a capability from a git URL, the way `tuff add <url>` does.
    *
-   * Two prompts: the URL, and the name. The name is asked for every time
-   * rather than only when the source lacks a `tuff.toml`, because knowing
-   * that would mean cloning first; it is prefilled from the URL's last
-   * segment, so for a skills.sh link it is one Enter. A `@1.2.0` suffix
-   * pins a release, exactly as on the command line. The kind is left to
-   * the CLI, which reads it from the manifest and defaults to a skill.
+   * Two prompts: the source, and the name. The first takes whatever was
+   * pasted, `<url>`, `<url> <name>`, or a whole `npx skills add` line, and
+   * reads the source and any name out of it. The name is asked for every
+   * time rather than only when the source lacks a `tuff.toml`, because
+   * knowing that would mean cloning first; it is prefilled from the paste
+   * or from a URL that points inside the repository, so the common case
+   * is one Enter. A `@1.2.0` suffix pins a release, exactly as on the
+   * command line. The kind is left to the CLI, which reads it from the
+   * manifest and defaults to a skill.
    */
   async addFromGit(): Promise<void> {
     const options = this.options();
@@ -604,24 +607,28 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
       return;
     }
 
-    const source = await vscode.window.showInputBox({
+    const pasted = await vscode.window.showInputBox({
       title: "Tuff: Add from Git URL",
-      prompt: "A repository, or a directory inside one",
-      placeHolder: "https://github.com/<owner>/<repo>/tree/main/<path>",
+      prompt: "A repository, or a directory inside one. A name may follow the URL.",
+      placeHolder: "https://github.com/<owner>/<repo> <name>",
       ignoreFocusOut: true,
       validateInput: (value) =>
-        value.trim().length === 0 || looksLikeGitSource(value)
+        value.trim().length === 0 || parseGitSourceInput(value)
           ? undefined
           : "Expected https://, http://, git@, or file://. For a directory already on disk, use Scan.",
     });
-    if (!source || source.trim().length === 0) {
+    const parsed = pasted ? parseGitSourceInput(pasted) : undefined;
+    if (!parsed) {
       return;
     }
+    const { source } = parsed;
 
     const name = await vscode.window.showInputBox({
       title: "Tuff: Add from Git URL",
-      prompt: "Name to install it as. Add @1.2.0 to pin a release.",
-      value: suggestedName(source),
+      prompt: parsed.name
+        ? "Name to install it as. Add @1.2.0 to pin a release."
+        : "Which capability in this repository? Add @1.2.0 to pin a release.",
+      value: parsed.name ?? suggestedName(source),
       ignoreFocusOut: true,
       validateInput: (value) => capabilityNameProblem(value.trim()),
     });
@@ -629,7 +636,7 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
       return;
     }
 
-    const args = ["add", source.trim(), "--name", name.trim()];
+    const args = ["add", source, "--name", name.trim()];
     this.output.appendLine(`$ tuff ${args.join(" ")}`);
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Tuff: installing ${name.trim()}` },

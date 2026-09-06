@@ -89,7 +89,7 @@ This command needs Tuff 0.7.0 or newer, the release that added `tuff scan`.
 
 ### Add from Git URL
 
-Paste a repository, or a directory inside one, and the extension runs `tuff add <url> --name <name>` for the harnesses the project is configured for. That covers a skills.sh link, which points at a directory in a repository: the name is prefilled from the URL's last segment, so the common case is one Enter. Add `@1.2.0` to the name to pin a release, exactly as on the command line.
+Paste a repository, or a directory inside one, and the extension runs `tuff add <url> --name <name>` for the harnesses the project is configured for. The prompt reads what you paste: `https://github.com/apollographql/skills rust-best-practices` as the CLI takes it, or the whole `npx skills add <url> --skill <name>` line from a skills.sh page, and the name comes along. A URL that points inside a repository prefills the name from its last segment; a URL for the repository itself asks which capability you want, since a repository called `skills` holds many. Add `@1.2.0` to the name to pin a release, exactly as on the command line.
 
 The name is asked for every time. The CLI only needs it when the source has no `tuff.toml`, but knowing that would mean cloning first, and when a manifest is present the name you give simply wins. A local path is turned away with a pointer to Scan, which is what handles a directory already on disk.
 

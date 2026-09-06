@@ -605,15 +605,55 @@ export function looksLikeGitSource(source: string): boolean {
 }
 
 /**
- * The name a git source suggests for itself: its last path segment, with
- * a `.git` suffix and a `/tree/<ref>/` prefix seen through. A skills.sh
- * link such as `.../tree/main/skills/react-best-practices` names the skill
- * in its last segment, which is what the developer would type anyway.
+ * The name a git source suggests for itself, or "" when it suggests none.
+ *
+ * A URL that points inside a repository, such as a skills.sh link ending
+ * `.../tree/main/skills/react-best-practices`, names the skill in its last
+ * segment, which is what the developer would type anyway. A URL for the
+ * repository itself suggests nothing: its last segment is the repository's
+ * name, and a repository called `skills` holds many. Prefilling "skills"
+ * there would hand the CLI a name it cannot find.
  */
 export function suggestedName(source: string): string {
   const trimmed = source.trim().replace(/\/+$/, "");
-  const last = trimmed.split(/[/:]/).pop() ?? "";
-  return last.replace(/\.git$/, "");
+  // Strip the scheme, and read `git@host:owner/repo` as `host/owner/repo`.
+  const path = trimmed.replace(/^[a-z+]+:\/\//i, "").replace(/^git@([^:]+):/, "$1/");
+  const segments = path.split("/").filter((segment) => segment.length > 0);
+  // host, owner, repo: nothing inside the repository was named.
+  if (segments.length <= 3) {
+    return "";
+  }
+  return (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
+}
+
+/** What the URL prompt understood: a source, and a name if one came with it. */
+export interface GitSourceInput {
+  source: string;
+  name?: string;
+}
+
+/**
+ * Read a git source out of whatever was pasted.
+ *
+ * People paste the line they already have, not just the URL: `<url>
+ * <name>` as `tuff add` takes it, or the whole `npx skills add <url>
+ * --skill <name>` from a skills.sh page. The first token that is a git
+ * source is the source. A `--skill`, `--name`, or `-n` flag names the
+ * capability the way those tools spell it; failing that, the first bare
+ * token after the URL does. Nothing found means nothing to add.
+ */
+export function parseGitSourceInput(input: string): GitSourceInput | undefined {
+  const tokens = input.trim().split(/\s+/).filter((token) => token.length > 0);
+  const at = tokens.findIndex((token) => looksLikeGitSource(token));
+  if (at === -1) {
+    return undefined;
+  }
+  const source = tokens[at] ?? "";
+  const rest = tokens.slice(at + 1);
+  const flag = rest.findIndex((token) => token === "--skill" || token === "--name" || token === "-n");
+  const name =
+    flag !== -1 ? rest[flag + 1] : rest.find((token) => !token.startsWith("-"));
+  return name ? { source, name } : { source };
 }
 
 /**

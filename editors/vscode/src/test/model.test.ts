@@ -16,6 +16,7 @@ import {
   describeUpdate,
   groupByType,
   looksLikeGitSource,
+  parseGitSourceInput,
   scanCounts,
   scanDetail,
   statusBarText,
@@ -339,14 +340,41 @@ test("a git source is recognised by the same rule the CLI uses", () => {
   assert.equal(looksLikeGitSource("github.com/o/r"), false, "no scheme, no clone");
 });
 
-test("the suggested name is the last segment, without .git or a trailing slash", () => {
+test("a URL inside a repository suggests its last segment; a repository URL suggests nothing", () => {
   assert.equal(
     suggestedName("https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices"),
     "react-best-practices",
   );
-  assert.equal(suggestedName("https://github.com/o/repo.git"), "repo");
-  assert.equal(suggestedName("git@github.com:o/repo.git"), "repo");
-  assert.equal(suggestedName("https://github.com/o/repo/"), "repo");
+  assert.equal(suggestedName("https://github.com/o/repo/tree/main/thing.git"), "thing");
+  // The repository's own name is not a capability's name: a repository
+  // called `skills` holds many, and prefilling "skills" would hand the
+  // CLI a directory it cannot find.
+  assert.equal(suggestedName("https://github.com/apollographql/skills"), "");
+  assert.equal(suggestedName("https://github.com/o/repo.git"), "");
+  assert.equal(suggestedName("git@github.com:o/repo.git"), "");
+  assert.equal(suggestedName("https://github.com/o/repo/"), "");
+});
+
+test("the source prompt reads what people paste, not just a URL", () => {
+  // The CLI's own syntax.
+  assert.deepEqual(parseGitSourceInput("https://github.com/apollographql/skills rust-best-practices"), {
+    source: "https://github.com/apollographql/skills",
+    name: "rust-best-practices",
+  });
+  // The whole line from a skills.sh page.
+  assert.deepEqual(
+    parseGitSourceInput("npx skills add https://github.com/apollographql/skills --skill rust-best-practices"),
+    { source: "https://github.com/apollographql/skills", name: "rust-best-practices" },
+  );
+  assert.deepEqual(parseGitSourceInput("tuff add skill https://github.com/o/r --name x@1.2.0"), {
+    source: "https://github.com/o/r",
+    name: "x@1.2.0",
+  });
+  // Just the URL, with space around it.
+  assert.deepEqual(parseGitSourceInput("  https://github.com/o/r  "), { source: "https://github.com/o/r" });
+  // Nothing that is a git source.
+  assert.equal(parseGitSourceInput("rust-best-practices"), undefined);
+  assert.equal(parseGitSourceInput(".claude/skills/x"), undefined);
 });
 
 test("a name is one path component, and may carry a release requirement", () => {
