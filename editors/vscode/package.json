@@ -30,7 +30,8 @@
   },
   "main": "./out/extension.js",
   "activationEvents": [
-    "workspaceContains:tuff.lock"
+    "workspaceContains:tuff.lock",
+    "onCommand:tuff.browseCatalog"
   ],
   "contributes": {
     "viewsContainers": {
@@ -86,6 +87,12 @@
         "title": "Validate Capabilities",
         "category": "Tuff",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "tuff.browseCatalog",
+        "title": "Browse MCP Catalog",
+        "category": "Tuff",
+        "icon": "$(library)"
       },
       {
         "command": "tuff.mcpDoctor",
@@ -163,6 +170,11 @@
           "command": "tuff.refresh",
           "when": "view == tuff.capabilities",
           "group": "navigation@3"
+        },
+        {
+          "command": "tuff.browseCatalog",
+          "when": "view == tuff.capabilities",
+          "group": "1_run"
         },
         {
           "command": "tuff.mcpDoctor",

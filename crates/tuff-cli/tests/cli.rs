@@ -8238,3 +8238,111 @@ fn a_repointed_or_deleted_release_tag_is_reported_not_trusted() {
     assert_eq!(row["status"], "up to date");
     assert_eq!(row["current"], "1.4.0");
 }
+
+#[test]
+fn mcp_catalog_lists_every_built_in_entry() {
+    // The catalog is compiled in, so this needs no project and no network.
+    tuff()
+        .args(["mcp", "catalog"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github"))
+        .stdout(predicate::str::contains("GITHUB_PERSONAL_ACCESS_TOKEN"))
+        .stdout(predicate::str::contains("linear"))
+        .stdout(predicate::str::contains(
+            "install one with: tuff add mcp <ID>",
+        ));
+}
+
+#[test]
+fn mcp_catalog_json_describes_an_entry_the_way_the_website_does() {
+    let output = tuff()
+        .args(["mcp", "catalog", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let rows: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let rows = rows.as_array().unwrap();
+    assert!(rows.len() >= 14, "catalog should list every entry");
+
+    let github = rows
+        .iter()
+        .find(|row| row["id"] == "github")
+        .expect("github is in the catalog");
+    assert_eq!(github["transport"], "stdio");
+    assert_eq!(github["needs_key"], true);
+    assert_eq!(github["variables"][0], "GITHUB_PERSONAL_ACCESS_TOKEN");
+    // The command as a harness would run it, so a reader can compare the
+    // entry against the vendor's own README.
+    assert!(
+        github["command"]
+            .as_str()
+            .unwrap()
+            .contains("ghcr.io/github/github-mcp-server"),
+        "command should be the full invocation, got {}",
+        github["command"]
+    );
+    assert!(
+        github["tools"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("create_issue")),
+        "tools_summary should be split into a list"
+    );
+
+    // A remote entry carries its URL as the invocation and declares the
+    // header variable through the same `variables` key as a stdio server's
+    // environment, which is what `catalog::required_env` unifies.
+    let linear = rows
+        .iter()
+        .find(|row| row["id"] == "linear")
+        .expect("linear is in the catalog");
+    assert_eq!(linear["transport"], "http");
+    assert_eq!(linear["command"], "https://mcp.linear.app/mcp");
+    assert_eq!(linear["variables"][0], "LINEAR_API_KEY");
+
+    // An entry needing nothing exported says so, which is what an editor
+    // integration branches on before prompting.
+    let filesystem = rows
+        .iter()
+        .find(|row| row["id"] == "filesystem")
+        .expect("filesystem is in the catalog");
+    assert_eq!(filesystem["needs_key"], false);
+    assert_eq!(filesystem["variables"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn mcp_catalog_only_lists_entries_add_can_install() {
+    // Every row is resolved through the same `catalog::lookup` that `add`
+    // uses, so the listing cannot advertise a server the installer refuses.
+    let output = tuff()
+        .args(["mcp", "catalog", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let rows: serde_json::Value = serde_json::from_slice(&output).unwrap();
+
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    for row in rows.as_array().unwrap() {
+        let id = row["id"].as_str().unwrap();
+        if row["needs_key"] == true {
+            // Installing one of these would ask for variables; resolving it
+            // is the part this test cares about.
+            continue;
+        }
+        tuff()
+            .current_dir(temp.path())
+            .args(["add", "mcp", id, "-a", "open-agents", "-y"])
+            .assert()
+            .success();
+    }
+}

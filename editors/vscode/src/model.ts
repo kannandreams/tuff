@@ -424,3 +424,73 @@ export function versionExplanation(scheme: VersionScheme): string {
       return "a pinned commit; the source declares no version";
   }
 }
+
+/** One entry of `tuff mcp catalog --json`: a server the CLI can install by id. */
+export interface CatalogEntry {
+  id: string;
+  version: string;
+  description: string;
+  transport: string;
+  /** The command a harness would run, or the URL for a remote server. */
+  command: string;
+  /** Variable names the developer must export; never values. */
+  variables: string[];
+  needs_key: boolean;
+  tools: string[];
+}
+
+/**
+ * The first Tuff that can list the catalog.
+ *
+ * The extension's floor is 0.6.0, the release that made the inventory
+ * commands machine-readable. Browsing the catalog needs `tuff mcp catalog`
+ * on top of that, so it checks separately rather than raising the floor for
+ * everyone: a tree that works is better than an extension that refuses to
+ * load over one command.
+ */
+export const MINIMUM_CATALOG_VERSION = "0.7.0";
+
+/** Parse `tuff --version` output ("tuff 0.6.0") into its three numbers. */
+export function parseVersion(output: string): [number, number, number] | undefined {
+  const match = /(\d+)\.(\d+)\.(\d+)/.exec(output);
+  if (!match) {
+    return undefined;
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/**
+ * Whether the installed CLI is at least `minimum`.
+ *
+ * A version that cannot be parsed counts as new enough. Refusing on a
+ * string we failed to read would block a developer running a build of the
+ * CLI from source, and the command itself still reports a real failure.
+ */
+export function atLeastVersion(output: string, minimum: string): boolean {
+  const installed = parseVersion(output);
+  const wanted = parseVersion(minimum);
+  if (!installed || !wanted) {
+    return true;
+  }
+  const [major, minor, patch] = installed;
+  const [wantMajor, wantMinor, wantPatch] = wanted;
+  if (major !== wantMajor) {
+    return major > wantMajor;
+  }
+  if (minor !== wantMinor) {
+    return minor > wantMinor;
+  }
+  return patch >= wantPatch;
+}
+
+/** How a catalog entry reads in the picker's secondary line. */
+export function catalogDetail(entry: CatalogEntry): string {
+  const parts = [entry.command];
+  if (entry.needs_key) {
+    parts.push(`needs ${entry.variables.join(", ")}`);
+  }
+  if (entry.tools.length > 0) {
+    parts.push(`tools: ${entry.tools.slice(0, 4).join(", ")}`);
+  }
+  return parts.join(" · ");
+}

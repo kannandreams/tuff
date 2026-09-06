@@ -6,6 +6,10 @@ lives at https://tuffcli.dev/changelog/.
 
 ## [Unreleased]
 
+### Added
+
+- **Browse MCP Catalog**, on the view menu and in the command palette. It lists the servers compiled into your `tuff` binary, with what each one runs and the variables it expects, and installs the one you pick for the harnesses the project is configured for. An entry that needs an API key names its variables and asks before installing; Tuff records the variable name as a reference, so no key reaches the editor, the lockfile, or the manifest. The list comes from `tuff mcp catalog --json`, so the extension carries no copy of the catalog and cannot offer a server the CLI would refuse. Needs Tuff 0.7.0 or newer; on an older CLI the command says so and the rest of the view is unaffected.
+
 ## [0.1.0] - 2026-09-05
 
 First release.

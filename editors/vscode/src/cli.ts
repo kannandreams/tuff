@@ -8,7 +8,7 @@
 
 import { execFile } from "node:child_process";
 
-import type { CheckOutcome, ListRow, OutdatedRow } from "./model";
+import type { CatalogEntry, CheckOutcome, ListRow, OutdatedRow } from "./model";
 
 /** The `--json` failure envelope every command shares. */
 export interface CliErrorEnvelope {
@@ -179,4 +179,12 @@ export function outdated(options: CliOptions): Promise<OutdatedRow[]> {
 
 export function check(options: CliOptions): Promise<CheckOutcome> {
   return runJson<CheckOutcome>(["check", "--json"], options);
+}
+
+/**
+ * The built-in MCP catalog. Compiled into the CLI, so this reaches no
+ * network and works in a directory that is not a Tuff project yet.
+ */
+export function catalog(options: CliOptions): Promise<CatalogEntry[]> {
+  return runJson<CatalogEntry[]>(["mcp", "catalog", "--json"], options);
 }

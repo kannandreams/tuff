@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  type CatalogEntry,
   type ListRow,
   type OutdatedRow,
   aggregateDriftStatus,
+  atLeastVersion,
   buildCapabilities,
+  catalogDetail,
   describeUpdate,
   groupByType,
   statusBarText,
@@ -188,4 +191,53 @@ test("a commit version is shown as a commit", () => {
   const [released] = buildCapabilities([listRow({ version: "1.4.0", version_scheme: "semver" })]);
   assert.equal(versionLabel(pinned!), "@9b9c499");
   assert.equal(versionLabel(released!), "1.4.0");
+});
+
+function catalogEntry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
+  return {
+    id: "github",
+    version: "1.0.0",
+    description: "GitHub's official MCP server.",
+    transport: "stdio",
+    command: "docker run -i --rm ghcr.io/github/github-mcp-server",
+    variables: [],
+    needs_key: false,
+    tools: [],
+    ...overrides,
+  };
+}
+
+test("a CLI older than the catalog command is recognised as too old", () => {
+  assert.equal(atLeastVersion("tuff 0.6.0", "0.7.0"), false);
+  assert.equal(atLeastVersion("tuff 0.1.7", "0.7.0"), false);
+  assert.equal(atLeastVersion("tuff 0.7.0", "0.7.0"), true, "the minimum itself qualifies");
+  assert.equal(atLeastVersion("tuff 0.7.1", "0.7.0"), true);
+  assert.equal(atLeastVersion("tuff 1.0.0", "0.7.0"), true);
+  assert.equal(atLeastVersion("tuff 0.10.0", "0.7.0"), true, "minor is compared as a number");
+});
+
+test("an unreadable version is not treated as too old", () => {
+  // A build from source can print anything. Refusing on a string we failed
+  // to parse would block a contributor; the command still reports a real
+  // failure if it is genuinely missing.
+  assert.equal(atLeastVersion("tuff (dev)", "0.7.0"), true);
+  assert.equal(atLeastVersion("", "0.7.0"), true);
+});
+
+test("a catalog entry says what it runs and what it needs", () => {
+  assert.equal(
+    catalogDetail(catalogEntry()),
+    "docker run -i --rm ghcr.io/github/github-mcp-server",
+  );
+
+  const keyed = catalogDetail(
+    catalogEntry({ variables: ["GITHUB_PERSONAL_ACCESS_TOKEN"], needs_key: true }),
+  );
+  assert.match(keyed, /needs GITHUB_PERSONAL_ACCESS_TOKEN/);
+
+  // A long tools list is trimmed so the picker's detail line stays readable.
+  const many = catalogDetail(
+    catalogEntry({ tools: ["a", "b", "c", "d", "e", "f"] }),
+  );
+  assert.match(many, /tools: a, b, c, d$/);
 });

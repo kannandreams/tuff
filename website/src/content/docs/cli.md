@@ -592,6 +592,17 @@ tuff update <member-id> --plain-http --ca-file ./registry-ca.pem
 
 A pack update applies to every agent the pack is installed for; a narrower `--agent` selection is refused rather than leaving one agent on the old release. Local edits to any member block the update unless `--force` is given. Only semver tags are compared when resolving the registry, matching `tuff outdated`; when nothing parses, pass `--pack` with the artifact you mean.
 
+### `tuff mcp catalog`
+
+List the built-in catalog: the curated servers `tuff add mcp <ID>` installs by name, without reaching the network.
+
+```sh frame="terminal"
+tuff mcp catalog
+tuff mcp catalog --json
+```
+
+The `VARIABLES` column names the environment variables an entry expects you to export, and is empty for a server that needs none. `--json` adds the full invocation the harness would run and the tools the entry advertises, which is what the [catalog page](/mcp-catalog/) and the [VS Code extension](/guides/vscode-extension/) list. Every row is resolved through the same code path `tuff add mcp` uses, so the listing cannot offer a server the installer would refuse.
+
 ### `tuff mcp search`
 
 Search the [MCP registry](https://registry.modelcontextprotocol.io) for servers, and see which ones Tuff can install before installing one.

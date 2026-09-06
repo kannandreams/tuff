@@ -19,9 +19,9 @@ use commands::{
     cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check,
     cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
     cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_lock_migrate,
-    cmd_mcp_doctor, cmd_mcp_search, cmd_outdated, cmd_pack_build, cmd_pack_check, cmd_pack_extract,
-    cmd_pack_init, cmd_pack_inspect, cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_status,
-    cmd_untrack, cmd_update,
+    cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated, cmd_pack_build, cmd_pack_check,
+    cmd_pack_extract, cmd_pack_init, cmd_pack_inspect, cmd_pack_pull, cmd_pack_push,
+    cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -245,7 +245,7 @@ enum Command {
         action: LockCommand,
     },
 
-    /// Diagnose installed MCP server capabilities.
+    /// Browse the MCP catalog and registry, and diagnose installed servers.
     Mcp {
         #[command(subcommand)]
         action: McpCommand,
@@ -254,6 +254,13 @@ enum Command {
 
 #[derive(Subcommand)]
 enum McpCommand {
+    /// List the built-in MCP server catalog.
+    Catalog {
+        /// Output the catalog as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
+
     /// Spawn each installed mcp-server capability, complete the MCP
     /// initialize handshake, and list its tools.
     Doctor {
@@ -959,6 +966,7 @@ fn run() -> Result<()> {
             action: LockCommand::Migrate,
         }) => cmd_lock_migrate(&repo_root),
         Some(Command::Mcp { action }) => match action {
+            McpCommand::Catalog { json } => cmd_mcp_catalog(json),
             McpCommand::Doctor {
                 agent,
                 global,
