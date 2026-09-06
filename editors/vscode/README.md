@@ -7,6 +7,8 @@ Tuff manages the skills, tools, hooks, workflows, and MCP servers a coding
 agent reads from a repository. This extension is a view onto that: it runs
 the `tuff` CLI and renders what it reports.
 
+![Scanning a project for the skills it already has, adding an MCP server from the catalog, and importing a skill from GitHub](https://github.com/kannandreams/tuff/raw/main/editors/vscode/media/demo.gif)
+
 ## What it does
 
 - **Scan for what you already have.** Most projects have skills sitting in
