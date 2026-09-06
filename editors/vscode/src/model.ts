@@ -494,3 +494,96 @@ export function catalogDetail(entry: CatalogEntry): string {
   }
   return parts.join(" · ");
 }
+
+/** One row of `tuff scan --json`: a capability directory found on disk. */
+export interface ScanRow {
+  id: string;
+  type: string;
+  /** What the source declares, or null when it declares nothing. */
+  version: string | null;
+  description: string | null;
+  /** The harness whose layout the path belongs to. */
+  agent: string;
+  /** Relative to the workspace folder, with forward slashes. */
+  path: string;
+  status: string;
+  /** Why a `blocked` row cannot be tracked as it stands. */
+  reason: string | null;
+  /** Whether a lockfile exists: tracking needs one, scanning does not. */
+  initialized: boolean;
+}
+
+/**
+ * The first Tuff that can scan.
+ *
+ * Checked separately from the catalog floor for the same reason that one is
+ * checked separately from the extension's: a command this CLI does not have
+ * should disable that command, not the whole view.
+ */
+export const MINIMUM_SCAN_VERSION = "0.7.0";
+
+/** The rows `tuff scan --adopt` would take, which are the ones worth offering. */
+export function adoptable(rows: readonly ScanRow[]): ScanRow[] {
+  return rows.filter((row) => row.status === "untracked");
+}
+
+/** How a scan row reads in the picker's secondary line. */
+export function scanDetail(row: ScanRow): string {
+  return [row.path, row.description, row.reason].filter((part) => part).join(" · ");
+}
+
+export interface ScanCounts {
+  untracked: number;
+  tracked: number;
+  conflict: number;
+  blocked: number;
+  /** Statuses a newer CLI reports that this extension has not heard of. */
+  other: number;
+}
+
+export function scanCounts(rows: readonly ScanRow[]): ScanCounts {
+  const counts: ScanCounts = { untracked: 0, tracked: 0, conflict: 0, blocked: 0, other: 0 };
+  for (const row of rows) {
+    switch (row.status) {
+      case "untracked":
+        counts.untracked += 1;
+        break;
+      case "tracked":
+        counts.tracked += 1;
+        break;
+      case "conflict":
+        counts.conflict += 1;
+        break;
+      case "blocked":
+        counts.blocked += 1;
+        break;
+      default:
+        counts.other += 1;
+    }
+  }
+  return counts;
+}
+
+/**
+ * What a scan found, for the case where none of it can be tracked. It says
+ * why rather than just "nothing to do", because a conflict and a missing
+ * manifest section are both fixable once you know which one you have.
+ */
+export function describeScan(counts: ScanCounts): string {
+  const parts: string[] = [];
+  if (counts.tracked > 0) {
+    parts.push(`${counts.tracked} already tracked`);
+  }
+  if (counts.conflict > 0) {
+    parts.push(`${counts.conflict} sharing an id with another directory`);
+  }
+  if (counts.blocked > 0) {
+    parts.push(`${counts.blocked} missing what Tuff needs to track ${
+      counts.blocked === 1 ? "it" : "them"
+    }`);
+  }
+  if (parts.length === 0) {
+    return "nothing found in .claude, .cursor, or .agents";
+  }
+  return `nothing new to track: ${parts.join(", ")}`;
+}

@@ -572,6 +572,64 @@ pub fn frontmatter_version(skill: &str) -> Option<String> {
     nested
 }
 
+/// The description a capability source declares for itself, if any:
+/// `description` in `tuff.toml`, else `description:` in the `SKILL.md`
+/// frontmatter, which is where the Agent Skills specification puts it.
+///
+/// Unlike a version, a description is prose that no command depends on, so
+/// an absent one is an empty line in a report rather than an error.
+pub fn declared_description(dir: &Path) -> Option<String> {
+    if dir.join("tuff.toml").is_file() {
+        return load_manifest(dir).ok().map(|manifest| manifest.description);
+    }
+    let skill = std::fs::read_to_string(dir.join("SKILL.md")).ok()?;
+    frontmatter_description(&skill)
+}
+
+/// Read a top-level `description:` out of `SKILL.md` frontmatter.
+///
+/// Only the top level, and only a single line: a folded or block scalar is
+/// left alone rather than half-read, because a description this misses is a
+/// blank cell, while one it mangles is a wrong cell.
+pub fn frontmatter_description(skill: &str) -> Option<String> {
+    let mut lines = skill.lines().map(|line| line.trim_end_matches('\r'));
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+    for line in lines {
+        if line.trim() == "---" {
+            break;
+        }
+        if line.starts_with([' ', '\t']) {
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("description:") {
+            return frontmatter_text(value);
+        }
+    }
+    None
+}
+
+/// A frontmatter value that is allowed to contain spaces, unlike a version.
+fn frontmatter_text(value: &str) -> Option<String> {
+    let value = value.trim();
+    let value = value
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|rest| rest.strip_suffix('\''))
+        })
+        .unwrap_or(value)
+        .trim();
+    // `>` and `|` open a multi-line scalar whose body is on the next lines.
+    if value.is_empty() || value.starts_with(['>', '|']) {
+        return None;
+    }
+    Some(value.to_string())
+}
+
 fn frontmatter_scalar(value: &str) -> Option<String> {
     let value = value.trim();
     let value = value
@@ -697,6 +755,52 @@ mod tests {
             frontmatter_version("---\r\nname: x\r\nversion: 2.0.0\r\n---\r\n").as_deref(),
             Some("2.0.0")
         );
+    }
+
+    #[test]
+    fn declared_description_reads_the_frontmatter_and_prefers_the_manifest() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("SKILL.md"),
+            "---\nname: x\ndescription: Reviews a diff for security problems.\n---\n# X\n",
+        )
+        .unwrap();
+        assert_eq!(
+            declared_description(tmp.path()).as_deref(),
+            Some("Reviews a diff for security problems.")
+        );
+
+        write_manifest(
+            tmp.path(),
+            r#"id = "x"
+version = "1.0.0"
+type = "skill"
+description = "From the manifest"
+files = ["SKILL.md"]
+"#,
+        );
+        assert_eq!(
+            declared_description(tmp.path()).as_deref(),
+            Some("From the manifest")
+        );
+    }
+
+    #[test]
+    fn a_multi_line_description_is_left_alone_rather_than_half_read() {
+        // A folded scalar's text is on the following lines, so reading the
+        // marker would record ">" as the description.
+        assert_eq!(
+            frontmatter_description("---\nname: x\ndescription: >\n  Long text here.\n---\n"),
+            None
+        );
+        // An indented `description:` belongs to some nested mapping, not to
+        // the skill.
+        assert_eq!(
+            frontmatter_description("---\nmetadata:\n  description: Nested.\n---\n"),
+            None
+        );
+        // No frontmatter at all is not an error.
+        assert_eq!(frontmatter_description("# Just a heading\n"), None);
     }
 
     #[test]

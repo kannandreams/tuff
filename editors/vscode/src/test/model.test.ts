@@ -5,12 +5,17 @@ import {
   type CatalogEntry,
   type ListRow,
   type OutdatedRow,
+  type ScanRow,
+  adoptable,
   aggregateDriftStatus,
   atLeastVersion,
   buildCapabilities,
   catalogDetail,
+  describeScan,
   describeUpdate,
   groupByType,
+  scanCounts,
+  scanDetail,
   statusBarText,
   summarize,
   updateKind,
@@ -240,4 +245,83 @@ test("a catalog entry says what it runs and what it needs", () => {
     catalogEntry({ tools: ["a", "b", "c", "d", "e", "f"] }),
   );
   assert.match(many, /tools: a, b, c, d$/);
+});
+
+function scanRow(overrides: Partial<ScanRow> = {}): ScanRow {
+  return {
+    id: "find-skills",
+    type: "skill",
+    version: "1.0.0",
+    description: "Finds skills.",
+    agent: "claude",
+    path: ".claude/skills/find-skills",
+    status: "untracked",
+    reason: null,
+    initialized: true,
+    ...overrides,
+  };
+}
+
+test("only untracked rows are offered for tracking", () => {
+  const rows = [
+    scanRow({ id: "a", status: "untracked" }),
+    scanRow({ id: "b", status: "tracked" }),
+    scanRow({ id: "c", status: "conflict" }),
+    scanRow({ id: "d", status: "blocked" }),
+  ];
+  assert.deepEqual(
+    adoptable(rows).map((row) => row.id),
+    ["a"],
+    "a conflict and a blocked row are reported, not silently adopted",
+  );
+});
+
+test("scan counts keep a status this extension has not heard of", () => {
+  // A newer CLI may report something else. Folding it into `untracked`
+  // would offer to adopt a row Tuff might refuse, so it counts separately.
+  const counts = scanCounts([
+    scanRow({ status: "untracked" }),
+    scanRow({ status: "tracked" }),
+    scanRow({ status: "tracked" }),
+    scanRow({ status: "something-new" }),
+  ]);
+  assert.deepEqual(counts, {
+    untracked: 1,
+    tracked: 2,
+    conflict: 0,
+    blocked: 0,
+    other: 1,
+  });
+});
+
+test("an empty result says which kind of nothing it is", () => {
+  assert.equal(
+    describeScan(scanCounts([])),
+    "nothing found in .claude, .cursor, or .agents",
+  );
+
+  const blocked = describeScan(
+    scanCounts([scanRow({ status: "blocked" }), scanRow({ status: "conflict" })]),
+  );
+  assert.match(blocked, /sharing an id/);
+  assert.match(blocked, /missing what Tuff needs/);
+
+  const tracked = describeScan(scanCounts([scanRow({ status: "tracked" })]));
+  assert.match(tracked, /1 already tracked/);
+});
+
+test("a scan row shows its path, its description, and why it is blocked", () => {
+  assert.equal(
+    scanDetail(scanRow()),
+    ".claude/skills/find-skills · Finds skills.",
+  );
+  assert.equal(
+    scanDetail(scanRow({ description: null })),
+    ".claude/skills/find-skills",
+    "a skill with no description does not leave a dangling separator",
+  );
+  assert.match(
+    scanDetail(scanRow({ status: "blocked", reason: "is missing the [hook] section" })),
+    /is missing the \[hook\] section$/,
+  );
 });

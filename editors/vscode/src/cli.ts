@@ -8,7 +8,7 @@
 
 import { execFile } from "node:child_process";
 
-import type { CatalogEntry, CheckOutcome, ListRow, OutdatedRow } from "./model";
+import type { CatalogEntry, CheckOutcome, ListRow, OutdatedRow, ScanRow } from "./model";
 
 /** The `--json` failure envelope every command shares. */
 export interface CliErrorEnvelope {
@@ -187,4 +187,14 @@ export function check(options: CliOptions): Promise<CheckOutcome> {
  */
 export function catalog(options: CliOptions): Promise<CatalogEntry[]> {
   return runJson<CatalogEntry[]>(["mcp", "catalog", "--json"], options);
+}
+
+/**
+ * What is sitting in the harness folders that Tuff is not tracking.
+ *
+ * Read-only, and it works before `tuff init` has ever run: the rows carry
+ * `initialized` so a caller can tell "adopt this" from "initialize first".
+ */
+export function scan(options: CliOptions): Promise<ScanRow[]> {
+  return runJson<ScanRow[]>(["scan", "--json"], options);
 }

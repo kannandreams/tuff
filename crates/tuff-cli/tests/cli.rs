@@ -8346,3 +8346,232 @@ fn mcp_catalog_only_lists_entries_add_can_install() {
             .success();
     }
 }
+
+/// Write a bare skill directory the way a developer would by hand: a
+/// `SKILL.md` and nothing else, with no `tuff.toml` for Tuff to read.
+fn make_loose_skill(root: &Path, relative: &str, name: &str) {
+    let dir = root.join(relative);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("SKILL.md"),
+        format!(
+            "---\nname: {name}\nversion: 1.4.0\ndescription: Written by hand.\n---\n\n# {name}\n"
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn scan_finds_a_hand_written_skill_before_the_project_is_initialized() {
+    let temp = TempDir::new().unwrap();
+    make_loose_skill(temp.path(), ".claude/skills/hand-rolled", "hand-rolled");
+
+    // No lockfile: scanning is read-only, so it still answers, and points
+    // at the one thing standing between the developer and tracking it.
+    tuff()
+        .current_dir(temp.path())
+        .arg("scan")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(".claude/skills/hand-rolled"))
+        .stdout(predicate::str::contains("1.4.0"))
+        .stdout(predicate::str::contains("untracked"))
+        .stdout(predicate::str::contains("run 'tuff init' first"));
+}
+
+#[test]
+fn scan_adopt_without_a_lockfile_says_to_init_first() {
+    let temp = TempDir::new().unwrap();
+    make_loose_skill(temp.path(), ".claude/skills/hand-rolled", "hand-rolled");
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--adopt"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("run 'tuff init' first"));
+}
+
+#[test]
+fn scan_adopt_tracks_in_place_without_copying_anything() {
+    let temp = TempDir::new().unwrap();
+    make_loose_skill(temp.path(), ".claude/skills/hand-rolled", "hand-rolled");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--adopt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("added hand-rolled"))
+        .stdout(predicate::str::contains("no upstream source"));
+
+    // Adopted in place: the recorded path is where the developer put it,
+    // and nothing was copied into a second location.
+    let lock = tuff_core::lockfile::read_lockfile_at(&temp.path().join("tuff.lock")).unwrap();
+    let entry = &lock.capabilities["hand-rolled"];
+    assert_eq!(
+        entry.targets["claude"].installed_path, ".claude/skills/hand-rolled",
+        "adoption records the existing path"
+    );
+    assert!(
+        !temp.path().join(".agents/skills/hand-rolled").exists(),
+        "nothing is copied into another harness layout"
+    );
+
+    // A second scan sees it as tracked, so `list` and `scan` agree.
+    tuff()
+        .current_dir(temp.path())
+        .arg("scan")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("tracked"));
+    tuff()
+        .current_dir(temp.path())
+        .args(["list", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hand-rolled"));
+}
+
+#[test]
+fn scan_reports_one_id_at_two_paths_as_a_conflict_and_adopts_neither() {
+    let temp = TempDir::new().unwrap();
+    // The shape this repository grew on its own: the same skill at both a
+    // top-level path and inside a grouping directory.
+    make_loose_skill(temp.path(), ".claude/skills/review", "review");
+    make_loose_skill(temp.path(), ".claude/skills/group/review", "review");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("scan")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("conflict"))
+        .stdout(predicate::str::contains("share an id"));
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--adopt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nothing to adopt"));
+
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(
+        !lock.contains("\"review\""),
+        "a conflicting id is never adopted behind the developer's back"
+    );
+}
+
+#[test]
+fn scan_marks_a_native_hook_as_blocked_rather_than_failing_the_adopt() {
+    let temp = TempDir::new().unwrap();
+    make_loose_skill(temp.path(), ".claude/skills/fine", "fine");
+    let hook = temp.path().join(".claude/hooks/gate");
+    fs::create_dir_all(&hook).unwrap();
+    fs::write(hook.join("run.sh"), "echo gate\n").unwrap();
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(&output).unwrap();
+    let gate = rows
+        .iter()
+        .find(|row| row["id"] == "gate")
+        .expect("the hook is reported");
+    assert_eq!(gate["status"], "blocked");
+    assert!(
+        gate["reason"].as_str().unwrap().contains("[hook] section"),
+        "the report says what is missing: {}",
+        gate["reason"]
+    );
+
+    // A hook Tuff cannot resolve does not stop the skill next to it from
+    // being adopted, and does not turn the whole command into a failure.
+    tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--adopt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("added fine"));
+}
+
+#[test]
+fn scan_adopt_takes_the_paths_it_is_given_and_leaves_the_rest() {
+    let temp = TempDir::new().unwrap();
+    make_loose_skill(temp.path(), ".claude/skills/one", "one");
+    make_loose_skill(temp.path(), ".claude/skills/two", "two");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--adopt", ".claude/skills/one"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("added one"))
+        .stdout(predicate::str::contains("two").not());
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--adopt", ".claude/skills/one"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already tracked"));
+}
+
+#[test]
+fn scan_adopts_a_cursor_skill_in_place_for_cursor() {
+    let temp = TempDir::new().unwrap();
+    make_loose_skill(temp.path(), ".cursor/skills/cursor-only", "cursor-only");
+
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    // `.cursor` is a harness layout like `.claude` and `.agents`: a skill
+    // already sitting in it is adopted where it is, for Cursor, rather than
+    // copied into another harness's directory.
+    tuff()
+        .current_dir(temp.path())
+        .args(["scan", "--adopt", ".cursor/skills/cursor-only"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "added cursor-only (skill, cursor)",
+        ));
+
+    assert!(
+        !temp.path().join(".agents/skills/cursor-only").exists(),
+        "a cursor skill is not copied into the open-agents layout"
+    );
+}

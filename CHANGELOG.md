@@ -8,7 +8,12 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Added
 
+- **`tuff scan` finds capabilities Tuff is not tracking.** Every inventory command reads the lockfile, so a skill written by hand in `.claude/skills/` was invisible to `list`, `status`, and `check` no matter how long it had been there; `tuff add <path>` could adopt one in place, which made discovery, not adoption, the missing half. `tuff scan` reads `.claude`, `.cursor`, and `.agents`, and reports every capability directory in them with its id, kind, declared version, harness, and whether Tuff already tracks it. `--adopt` tracks them, either all at once or the paths you name, and each one goes through the same code path `tuff add` uses, so scanning can never track something adding would refuse. Adoption is in place: nothing is moved, copied, or rewritten. Two directories declaring the same id are reported as a conflict rather than one being adopted silently, and a directory missing something Tuff needs — a `[hook]` section, a `[server]` section — is reported with the reason instead of failing halfway through the adopt. Scanning itself changes nothing and works before `tuff init` has run; `--adopt` writes to the lockfile, so it asks you to init first. `--json` carries the same rows with the reason and an `initialized` flag.
 - **`tuff mcp catalog` lists the built-in catalog.** `tuff mcp search` reaches the registry and `tuff add mcp <id>` installs by name, but until now nothing could show what the ids are, so finding one meant reading the website or the source. The command prints every entry compiled into your binary with its version, transport, and the environment variables it expects you to export, and `--json` adds the full invocation the harness would run and the tools the entry advertises. Every row is resolved through the same code path `tuff add mcp` uses, so the listing can never offer a server the installer would refuse. It reaches no network and needs no project.
+
+### Fixed
+
+- A capability already sitting in `.cursor/` is now adopted where it is, for Cursor. `.claude` and `.agents` were recognised as harness layouts and `.cursor` was not, so `tuff add .cursor/skills/<name>` copied the files into the Open Agents layout and recorded the wrong harness. Reading the harness from the path also no longer depends on the capability being exactly one level deep, so a skill inside a grouping directory, such as `.claude/skills/security/security-review/`, is attributed to Claude rather than to Open Agents.
 
 ### Changed
 

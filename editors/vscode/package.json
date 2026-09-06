@@ -31,7 +31,10 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "workspaceContains:tuff.lock",
-    "onCommand:tuff.browseCatalog"
+    "onView:tuff.capabilities",
+    "onCommand:tuff.browseCatalog",
+    "onCommand:tuff.scan",
+    "onCommand:tuff.init"
   ],
   "contributes": {
     "viewsContainers": {
@@ -60,12 +63,12 @@
       },
       {
         "view": "tuff.capabilities",
-        "contents": "No Tuff project here yet.\n\nA project is tracked once `tuff init` has run in it and a `tuff.lock` exists.\n[Getting started](https://tuffcli.dev/getting-started/)",
+        "contents": "No Tuff project here yet.\n\nInitialize one to start tracking capabilities. If this project already has skills in `.claude`, `.cursor`, or `.agents`, a scan will find them and offer to track them where they are — nothing is moved or copied.\n[Initialize Project](command:tuff.init)\n[Scan for Existing Capabilities](command:tuff.scan)\n[Getting started](https://tuffcli.dev/getting-started/)",
         "when": "!tuff.cliMissing && !tuff.hasProject"
       },
       {
         "view": "tuff.capabilities",
-        "contents": "No capabilities installed.\n\nInstall one with `tuff add`, then refresh.\n[CLI reference](https://tuffcli.dev/cli/)",
+        "contents": "No capabilities tracked yet.\n\nScan this project for skills it already has, or install something new.\n[Scan for Existing Capabilities](command:tuff.scan)\n[Browse MCP Catalog](command:tuff.browseCatalog)\n[CLI reference](https://tuffcli.dev/cli/)",
         "when": "!tuff.cliMissing && tuff.hasProject && tuff.empty"
       }
     ],
@@ -87,6 +90,17 @@
         "title": "Validate Capabilities",
         "category": "Tuff",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "tuff.scan",
+        "title": "Scan for Existing Capabilities",
+        "category": "Tuff",
+        "icon": "$(search)"
+      },
+      {
+        "command": "tuff.init",
+        "title": "Initialize Project",
+        "category": "Tuff"
       },
       {
         "command": "tuff.browseCatalog",
@@ -172,6 +186,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "tuff.scan",
+          "when": "view == tuff.capabilities",
+          "group": "1_run"
+        },
+        {
           "command": "tuff.browseCatalog",
           "when": "view == tuff.capabilities",
           "group": "1_run"
@@ -237,6 +256,7 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p .",
     "watch": "tsc -p . --watch",
     "test": "npm run compile && node --test out/test/*.test.js",
