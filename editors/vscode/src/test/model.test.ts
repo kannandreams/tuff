@@ -10,13 +10,16 @@ import {
   aggregateDriftStatus,
   atLeastVersion,
   buildCapabilities,
+  capabilityNameProblem,
   catalogDetail,
   describeScan,
   describeUpdate,
   groupByType,
+  looksLikeGitSource,
   scanCounts,
   scanDetail,
   statusBarText,
+  suggestedName,
   summarize,
   updateKind,
   versionLabel,
@@ -324,4 +327,36 @@ test("a scan row shows its path, its description, and why it is blocked", () => 
     scanDetail(scanRow({ status: "blocked", reason: "is missing the [hook] section" })),
     /is missing the \[hook\] section$/,
   );
+});
+
+test("a git source is recognised by the same rule the CLI uses", () => {
+  assert.equal(looksLikeGitSource("https://github.com/o/r/tree/main/skills/x"), true);
+  assert.equal(looksLikeGitSource("git@github.com:o/r.git"), true);
+  assert.equal(looksLikeGitSource("file:///tmp/repo"), true);
+  assert.equal(looksLikeGitSource("  https://example.com/r  "), true, "surrounding space is fine");
+  // A local path is what Scan is for; offering to clone it would fail.
+  assert.equal(looksLikeGitSource(".claude/skills/x"), false);
+  assert.equal(looksLikeGitSource("github.com/o/r"), false, "no scheme, no clone");
+});
+
+test("the suggested name is the last segment, without .git or a trailing slash", () => {
+  assert.equal(
+    suggestedName("https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices"),
+    "react-best-practices",
+  );
+  assert.equal(suggestedName("https://github.com/o/repo.git"), "repo");
+  assert.equal(suggestedName("git@github.com:o/repo.git"), "repo");
+  assert.equal(suggestedName("https://github.com/o/repo/"), "repo");
+});
+
+test("a name is one path component, and may carry a release requirement", () => {
+  assert.equal(capabilityNameProblem("react-best-practices"), undefined);
+  assert.equal(capabilityNameProblem("react-best-practices@1.2.0"), undefined);
+  assert.equal(capabilityNameProblem("x@^1.2"), undefined);
+  assert.match(capabilityNameProblem("") ?? "", /required/);
+  assert.match(capabilityNameProblem("..") ?? "", /directory/);
+  assert.match(capabilityNameProblem("skills/x") ?? "", /slashes/);
+  assert.match(capabilityNameProblem("a\\b") ?? "", /slashes/);
+  // An empty name in front of a requirement is still no name.
+  assert.match(capabilityNameProblem("@1.0.0") ?? "", /required/);
 });

@@ -25,13 +25,16 @@ import {
   adoptable,
   atLeastVersion,
   buildCapabilities,
+  capabilityNameProblem,
   catalogDetail,
   describeScan,
   describeUpdate,
   groupByType,
+  looksLikeGitSource,
   scanCounts,
   scanDetail,
   statusBarText,
+  suggestedName,
   summarize,
   typeLabel,
   updateKind,
@@ -98,6 +101,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("tuff.mcpDoctor", () => provider.runDoctor()),
     vscode.commands.registerCommand("tuff.browseCatalog", () => provider.browseCatalog()),
     vscode.commands.registerCommand("tuff.init", () => provider.initialize()),
+    vscode.commands.registerCommand("tuff.addFromGit", () => provider.addFromGit()),
     vscode.commands.registerCommand("tuff.scan", () => provider.scan()),
     vscode.commands.registerCommand("tuff.diff", (node?: Node) => provider.diff(node, false)),
     vscode.commands.registerCommand("tuff.diffUpstream", (node?: Node) =>
@@ -576,6 +580,77 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
               paths.length === 1 ? "capability" : "capabilities"
             }. They have no upstream, so update checks cannot report on them.`,
           );
+        } catch (error) {
+          this.report(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Install a capability from a git URL, the way `tuff add <url>` does.
+   *
+   * Two prompts: the URL, and the name. The name is asked for every time
+   * rather than only when the source lacks a `tuff.toml`, because knowing
+   * that would mean cloning first; it is prefilled from the URL's last
+   * segment, so for a skills.sh link it is one Enter. A `@1.2.0` suffix
+   * pins a release, exactly as on the command line. The kind is left to
+   * the CLI, which reads it from the manifest and defaults to a skill.
+   */
+  async addFromGit(): Promise<void> {
+    const options = this.options();
+    if (!options) {
+      void vscode.window.showInformationMessage("Tuff: open a folder to install into first.");
+      return;
+    }
+
+    const source = await vscode.window.showInputBox({
+      title: "Tuff: Add from Git URL",
+      prompt: "A repository, or a directory inside one",
+      placeHolder: "https://github.com/<owner>/<repo>/tree/main/<path>",
+      ignoreFocusOut: true,
+      validateInput: (value) =>
+        value.trim().length === 0 || looksLikeGitSource(value)
+          ? undefined
+          : "Expected https://, http://, git@, or file://. For a directory already on disk, use Scan.",
+    });
+    if (!source || source.trim().length === 0) {
+      return;
+    }
+
+    const name = await vscode.window.showInputBox({
+      title: "Tuff: Add from Git URL",
+      prompt: "Name to install it as. Add @1.2.0 to pin a release.",
+      value: suggestedName(source),
+      ignoreFocusOut: true,
+      validateInput: (value) => capabilityNameProblem(value.trim()),
+    });
+    if (!name) {
+      return;
+    }
+
+    const args = ["add", source.trim(), "--name", name.trim()];
+    this.output.appendLine(`$ tuff ${args.join(" ")}`);
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Tuff: installing ${name.trim()}` },
+      async () => {
+        try {
+          const result = await cli.runText(args, options);
+          this.output.appendLine(result.output || "(no output)");
+          await this.refresh();
+          if (result.code === 0) {
+            void vscode.window.showInformationMessage(
+              `Tuff: ${result.output.split("\n").find((line) => line.startsWith("installed")) ?? `installed ${name.trim()}`}`,
+            );
+            return;
+          }
+          const choice = await vscode.window.showErrorMessage(
+            `Tuff: could not install '${name.trim()}'.`,
+            "Show Output",
+          );
+          if (choice === "Show Output") {
+            this.output.show(true);
+          }
         } catch (error) {
           this.report(error);
         }
