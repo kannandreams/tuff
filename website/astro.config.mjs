@@ -33,6 +33,11 @@ export default defineConfig({
           label: 'GitHub',
           href: 'https://github.com/kannandreams/tuff',
         },
+        {
+          icon: 'vscode',
+          label: 'VS Code Marketplace',
+          href: 'https://marketplace.visualstudio.com/items?itemName=kannandreams.tuff',
+        },
       ],
       editLink: {
         baseUrl: 'https://github.com/kannandreams/tuff/blob/main/website/',

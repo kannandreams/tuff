@@ -4,6 +4,9 @@
 //
 // `Packs` points at the landing page's anchor rather than a bare `#packs`,
 // so it works from a page that does not contain that section.
+//
+// An `external` link leaves the site, so it opens in a new tab and never
+// matches `current`.
 interface Props {
   /** Href of the current page, so its link can be marked. */
   current?: string;
@@ -18,6 +21,11 @@ const links = [
   { href: '/#packs', label: 'Packs' },
   { href: '/concepts/adapters', label: 'Adapters' },
   { href: '/blog', label: 'Blog' },
+  {
+    href: 'https://marketplace.visualstudio.com/items?itemName=kannandreams.tuff',
+    label: 'VS Code',
+    external: true,
+  },
 ];
 ---
 
@@ -27,7 +35,12 @@ const links = [
     <div class="tuff-nav-links">
       {
         links.map((link) => (
-          <a href={link.href} aria-current={link.href === current ? 'page' : undefined}>
+          <a
+            href={link.href}
+            aria-current={link.href === current ? 'page' : undefined}
+            target={link.external ? '_blank' : undefined}
+            rel={link.external ? 'noopener noreferrer' : undefined}
+          >
             {link.label}
           </a>
         ))
