@@ -9,7 +9,6 @@ The historical entries below were reconstructed from release tags, merged pull r
 ### Added
 
 - **`tuff mcp catalog` lists the built-in catalog.** `tuff mcp search` reaches the registry and `tuff add mcp <id>` installs by name, but until now nothing could show what the ids are, so finding one meant reading the website or the source. The command prints every entry compiled into your binary with its version, transport, and the environment variables it expects you to export, and `--json` adds the full invocation the harness would run and the tools the entry advertises. Every row is resolved through the same code path `tuff add mcp` uses, so the listing can never offer a server the installer would refuse. It reaches no network and needs no project.
-- The VS Code extension can install from the catalog. **Browse MCP Catalog** on the view menu lists the same entries and installs the one you pick, naming the variables and asking first when an entry needs an API key. The key itself stays in your environment; Tuff records only the variable name.
 
 ### Changed
 
