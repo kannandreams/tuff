@@ -50,6 +50,9 @@ tuff --version
 The [installation guide](https://tuffcli.dev/installation/) covers the other
 channels. Version 0.6.0 or newer is required, since the extension reads the
 `--json` output that release added to `list`, `outdated`, and `diff`.
+Scanning and the MCP catalog need 0.7.0, the release that added
+`tuff scan` and `tuff mcp catalog`; on an older CLI those two commands say
+so and the rest of the view keeps working.
 
 If `tuff` is not on the editor's `PATH`, set `tuff.path` to its full path.
 
