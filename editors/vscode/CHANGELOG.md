@@ -6,6 +6,12 @@ lives at https://tuffcli.dev/changelog/.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-06
+
+### Changed
+
+- The Marketplace page shows the extension working: a recording of scanning a project, adding an MCP server from the catalog, and importing a skill from GitHub. The recording is served from the repository rather than packed into the extension, so the download is no larger.
+
 ## [0.2.2] - 2026-09-06
 
 ### Fixed
