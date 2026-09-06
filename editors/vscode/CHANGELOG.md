@@ -6,6 +6,8 @@ lives at https://tuffcli.dev/changelog/.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-06
+
 ### Added
 
 - **Scan for Existing Capabilities**, on the view menu, in the command palette, and offered from the empty view. It reads `.claude`, `.cursor`, and `.agents` through `tuff scan --json`, lists the capabilities Tuff is not tracking, and tracks the ones you pick where they already sit: nothing is moved, copied, or rewritten. Directories Tuff cannot take — two sharing an id, or one missing a `[hook]` or `[server]` section — are reported with the reason rather than offered. Scanning works in a folder that is not a Tuff project yet; picking something there offers **Initialize Project** first, since only tracking needs a lockfile. Needs Tuff 0.7.0 or newer.
