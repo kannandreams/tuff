@@ -475,6 +475,32 @@ pub(super) fn git_manifest(
     manifest::synthetic_manifest(skill_dir, name, version)
 }
 
+/// Adopt or install one local capability directory, the way `tuff add
+/// <path>` would.
+///
+/// `tuff scan --adopt` calls this rather than writing lockfile rows of its
+/// own, so there is one implementation of what happens to a local path: the
+/// collision warning, the baseline hash, the cache population, and the
+/// `Imported` ownership that stops `delete` from removing files Tuff never
+/// wrote. Discovery is the only thing scan adds.
+pub(crate) fn cmd_add_local_path(
+    repo_root: &Path,
+    capability_dir: &Path,
+    target_id: &str,
+    capability_type: CapabilityType,
+) -> Result<()> {
+    cmd_add_local(
+        repo_root,
+        Scope::Project,
+        capability_dir,
+        &[target_id.to_string()],
+        repo_root,
+        Some(capability_type.as_str()),
+        None,
+        None,
+    )
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "CLI dispatch passes source and install context"
@@ -776,7 +802,7 @@ fn is_target_layout_path(root: &Path, capability_dir: &Path) -> bool {
         rel.components()
             .next()
             .and_then(|component| component.as_os_str().to_str()),
-        Some(".agents" | ".claude")
+        Some(".agents" | ".claude" | ".cursor")
     )
 }
 

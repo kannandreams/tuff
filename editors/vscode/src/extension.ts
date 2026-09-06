@@ -16,15 +16,21 @@ import * as cli from "./cli";
 import { TuffCliError, TuffNotFoundError } from "./cli";
 import {
   MINIMUM_CATALOG_VERSION,
+  MINIMUM_SCAN_VERSION,
   type Capability,
   type CatalogEntry,
   type Installation,
+  type ScanRow,
   type TypeGroup,
+  adoptable,
   atLeastVersion,
   buildCapabilities,
   catalogDetail,
+  describeScan,
   describeUpdate,
   groupByType,
+  scanCounts,
+  scanDetail,
   statusBarText,
   summarize,
   typeLabel,
@@ -91,6 +97,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("tuff.runCheck", () => provider.runCheck()),
     vscode.commands.registerCommand("tuff.mcpDoctor", () => provider.runDoctor()),
     vscode.commands.registerCommand("tuff.browseCatalog", () => provider.browseCatalog()),
+    vscode.commands.registerCommand("tuff.init", () => provider.initialize()),
+    vscode.commands.registerCommand("tuff.scan", () => provider.scan()),
     vscode.commands.registerCommand("tuff.diff", (node?: Node) => provider.diff(node, false)),
     vscode.commands.registerCommand("tuff.diffUpstream", (node?: Node) =>
       provider.diff(node, true),
@@ -166,26 +174,49 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
 
   async refresh(): Promise<void> {
     const options = this.options();
-    if (!options) {
+    const folder = this.folder();
+    if (!options || !folder) {
       this.apply([], false, false, false);
       return;
     }
 
+    // Whether this is a Tuff project is a question about one file, so it is
+    // answered by looking for that file. `tuff list` succeeds with an empty
+    // array in a folder that has no lockfile, so asking it instead made an
+    // uninitialized project indistinguishable from an initialized empty
+    // one, and the welcome view offering `tuff init` never appeared.
+    const initialized = await this.hasLockfile(folder);
+
     const scope = vscode.workspace.getConfiguration("tuff").get<string>("scope", "all");
     try {
       const rows = await cli.list(options, scope);
-      // Global-scope rows come back even without a project lockfile, so a
-      // project exists only when something is installed for this folder or
-      // the lockfile itself is there. `list` returning at all means the CLI
-      // ran, which is the distinction the welcome views care about.
-      this.apply(buildCapabilities(rows, []), true, false, rows.length === 0);
+      // Global-scope rows come back without a project lockfile, and they are
+      // still capabilities worth showing, so anything listed also counts.
+      this.apply(
+        buildCapabilities(rows, []),
+        initialized || rows.length > 0,
+        false,
+        rows.length === 0,
+      );
     } catch (error) {
       if (error instanceof TuffNotFoundError) {
         this.apply([], false, true, true);
         return;
       }
-      this.apply([], false, false, true);
+      // A CLI that ran and failed says nothing about whether this folder is
+      // a project, so the welcome view keeps reporting the file on disk
+      // instead of blaming the project for a broken command.
+      this.apply([], initialized, false, true);
       this.report(error);
+    }
+  }
+
+  private async hasLockfile(folder: vscode.WorkspaceFolder): Promise<boolean> {
+    try {
+      await vscode.workspace.fs.stat(vscode.Uri.joinPath(folder.uri, "tuff.lock"));
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -365,6 +396,173 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
             ? ` Export ${entry.variables.join(" and ")} before the server is used.`
             : "";
           void vscode.window.showInformationMessage(`Tuff: installed '${entry.id}'.${reminder}`);
+        } catch (error) {
+          this.report(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Run `tuff init`, then offer to scan.
+   *
+   * Initializing is the one thing a folder full of hand-written skills
+   * needs before any of them can be tracked, and it is also the least
+   * interesting half of that job, so the two are offered together.
+   */
+  async initialize(): Promise<void> {
+    const options = this.options();
+    if (!options) {
+      void vscode.window.showInformationMessage("Tuff: open a folder first.");
+      return;
+    }
+    this.output.appendLine("$ tuff init");
+    let result: cli.TextResult;
+    try {
+      result = await cli.runText(["init"], options);
+    } catch (error) {
+      this.report(error);
+      return;
+    }
+    this.output.appendLine(result.output || "(no output)");
+    if (result.code !== 0) {
+      const choice = await vscode.window.showErrorMessage(
+        "Tuff: could not initialize this folder.",
+        "Show Output",
+      );
+      if (choice === "Show Output") {
+        this.output.show(true);
+      }
+      return;
+    }
+    await this.refresh();
+    const choice = await vscode.window.showInformationMessage(
+      "Tuff: initialized. Look for capabilities already in this project?",
+      "Scan",
+    );
+    if (choice === "Scan") {
+      await this.scan();
+    }
+  }
+
+  /**
+   * Find capabilities already sitting in `.claude`, `.cursor`, or
+   * `.agents`, and offer to track the ones Tuff can take.
+   *
+   * Scanning itself changes nothing and needs no project, so it runs before
+   * asking anything. Tracking does need a lockfile, which is why an
+   * uninitialized folder is offered `tuff init` at the point it becomes the
+   * obstacle rather than being refused up front.
+   */
+  async scan(): Promise<void> {
+    const options = this.options();
+    if (!options) {
+      void vscode.window.showInformationMessage("Tuff: open a folder to scan first.");
+      return;
+    }
+
+    let rows: ScanRow[];
+    try {
+      const installed = await cli.version(options);
+      if (!atLeastVersion(installed, MINIMUM_SCAN_VERSION)) {
+        void vscode.window.showErrorMessage(
+          `Tuff: scanning needs ${MINIMUM_SCAN_VERSION} or newer; ` +
+            `'${installed.trim()}' is installed.`,
+        );
+        return;
+      }
+      rows = await cli.scan(options);
+    } catch (error) {
+      this.report(error);
+      return;
+    }
+
+    const candidates = adoptable(rows);
+    if (candidates.length === 0) {
+      // Say which kind of nothing this is. A conflict and a missing
+      // manifest section are both fixable, but not by the same edit.
+      void vscode.window.showInformationMessage(`Tuff: ${describeScan(scanCounts(rows))}.`);
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      candidates.map((row) => ({
+        label: row.id,
+        description: [row.type, row.agent, row.version].filter((part) => part).join(" · "),
+        detail: scanDetail(row),
+        picked: true,
+        row,
+      })),
+      {
+        title: "Tuff: Track Existing Capabilities",
+        placeHolder: "Pick what Tuff should track, where it already is",
+        canPickMany: true,
+        matchOnDescription: true,
+        matchOnDetail: true,
+      },
+    );
+    if (!picked || picked.length === 0) {
+      return;
+    }
+
+    // `initialized` is the CLI's own answer, taken from the same scan whose
+    // rows are being adopted, so it cannot disagree with them.
+    if (!rows.some((row) => row.initialized)) {
+      const proceed = await vscode.window.showWarningMessage(
+        "This folder is not a Tuff project yet.",
+        {
+          modal: true,
+          detail:
+            "Tracking records capabilities in a tuff.lock, so 'tuff init' has to run first. " +
+            "Nothing is moved or copied: each capability stays exactly where it is.",
+        },
+        "Initialize and Track",
+      );
+      if (proceed !== "Initialize and Track") {
+        return;
+      }
+      this.output.appendLine("$ tuff init");
+      try {
+        const init = await cli.runText(["init"], options);
+        this.output.appendLine(init.output || "(no output)");
+        if (init.code !== 0) {
+          this.output.show(true);
+          void vscode.window.showErrorMessage("Tuff: could not initialize this folder.");
+          return;
+        }
+      } catch (error) {
+        this.report(error);
+        return;
+      }
+    }
+
+    const paths = picked.map((item) => item.row.path);
+    this.output.appendLine(`$ tuff scan --adopt ${paths.join(" ")}`);
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `Tuff: tracking ${paths.length} ${paths.length === 1 ? "capability" : "capabilities"}`,
+      },
+      async () => {
+        try {
+          const result = await cli.runText(["scan", "--adopt", ...paths], options);
+          this.output.appendLine(result.output || "(no output)");
+          await this.refresh();
+          if (result.code !== 0) {
+            const choice = await vscode.window.showWarningMessage(
+              "Tuff: not everything could be tracked.",
+              "Show Output",
+            );
+            if (choice === "Show Output") {
+              this.output.show(true);
+            }
+            return;
+          }
+          void vscode.window.showInformationMessage(
+            `Tuff: now tracking ${paths.length} ${
+              paths.length === 1 ? "capability" : "capabilities"
+            }. They have no upstream, so update checks cannot report on them.`,
+          );
         } catch (error) {
           this.report(error);
         }

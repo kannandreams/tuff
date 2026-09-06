@@ -9,6 +9,12 @@ the `tuff` CLI and renders what it reports.
 
 ## What it does
 
+- **Scan for what you already have.** Most projects have skills sitting in
+  `.claude`, `.cursor`, or `.agents` that Tuff knows nothing about. Scanning
+  lists them and tracks the ones you pick, where they already are — nothing
+  is moved or copied. A folder with no `tuff.lock` is offered `tuff init`
+  first, since tracking is the half that needs one. Needs Tuff 0.7.0 or
+  newer.
 - **A capabilities tree**, grouped by kind, showing every installed skill,
   tool, hook, workflow, and MCP server, the version recorded for it, and the
   agents it was installed for.

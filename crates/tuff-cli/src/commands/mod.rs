@@ -17,6 +17,7 @@ mod outdated;
 mod pack;
 mod project_pack;
 mod report;
+mod scan;
 mod status;
 mod update;
 
@@ -37,6 +38,7 @@ pub use mcp_search::*;
 pub use outdated::*;
 pub use pack::*;
 pub use report::*;
+pub use scan::*;
 pub use status::*;
 pub use update::*;
 
@@ -253,31 +255,48 @@ pub(crate) fn resolve_agent_selection(
     Ok(selected)
 }
 
+/// The capability kind and harness a local path implies.
+///
+/// Both are read from a harness prefix found anywhere in the path, with the
+/// kind taken from the directory immediately inside it. Reading fixed
+/// positions from the end instead would misattribute a capability that sits
+/// deeper than one level, and they do: a grouping directory such as
+/// `.claude/skills/security/security-review/` is a layout harnesses accept.
+///
+/// `.agents` is the layout of both Codex and Open Agents and the two cannot
+/// be told apart from a path, so it resolves to the adapter that owns the
+/// shared layout. A path in no harness layout keeps the old reading — the
+/// parent directory names the kind — which is what `tuff add ./skills/foo`
+/// relies on.
 pub(crate) fn infer_from_path(path: &Path) -> (CapabilityType, String) {
-    let parent = path
-        .parent()
-        .and_then(|p| p.file_name())
-        .map(|n| n.to_string_lossy().to_string())
+    let components: Vec<String> = path
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().to_string())
+        .collect();
+
+    let mut target = "open-agents";
+    let mut kind_dir: Option<&str> = None;
+    for (index, component) in components.iter().enumerate() {
+        let harness = match component.as_str() {
+            ".claude" => "claude",
+            ".cursor" => "cursor",
+            ".agents" => "open-agents",
+            _ => continue,
+        };
+        target = harness;
+        kind_dir = components.get(index + 1).map(String::as_str);
+    }
+
+    let kind_dir = kind_dir
+        .or_else(|| components.iter().rev().nth(1).map(String::as_str))
         .unwrap_or_default();
 
-    let ctype = match parent.as_str() {
+    let ctype = match kind_dir {
         "tools" => CapabilityType::Tool,
         "hooks" => CapabilityType::Hook,
         "workflows" => CapabilityType::Workflow,
         "mcp-servers" => CapabilityType::McpServer,
         _ => CapabilityType::Skill,
-    };
-
-    let grandparent = path
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.file_name())
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-
-    let target = match grandparent.as_str() {
-        ".claude" => "claude",
-        _ => "open-agents",
     };
 
     (ctype, target.to_string())

@@ -63,10 +63,24 @@ Until that has run, the view says `updates not checked` rather than showing ever
 | Update Capability | `tuff update <id>` |
 | Run MCP Doctor | `tuff mcp doctor` |
 | Browse MCP Catalog | `tuff mcp catalog --json`, then `tuff add mcp <id> --yes` |
+| Scan for Existing Capabilities | `tuff scan --json`, then `tuff scan --adopt <paths>` |
+| Initialize Project | `tuff init` |
 
 The four row commands appear on a capability's context menu. Acting on a capability row applies to every agent it is installed for; acting on an agent row narrows to that one, exactly as passing `--agent` does. Diffs open as a real diff document rather than as plain text.
 
 Deleting and packing stay in the CLI. The extension is a view with a few safe actions on top of it, not a replacement for it.
+
+### Scan for Existing Capabilities
+
+Most projects that install this extension already have skills in them, written by hand or dropped in from somewhere else, and Tuff knows about none of them. **Tuff: Scan for Existing Capabilities** reads `.claude`, `.cursor`, and `.agents`, lists what it finds, and lets you pick what to track.
+
+Everything picked is tracked [where it already is](/cli/#tuff-scan). Nothing is moved, copied, or rewritten: the lockfile records the path the capability already has, and the files are left alone.
+
+The picker offers only what Tuff can actually take. A directory that shares an id with another one, or that is missing a `[hook]` or `[server]` section it needs, is reported with the reason instead — the same statuses [`tuff scan`](/cli/#tuff-scan) prints.
+
+Scanning changes nothing and works in a folder Tuff has never seen, so the empty view offers it alongside **Initialize Project**. If you scan first and pick something in a folder that has no `tuff.lock`, the extension says so and offers to run `tuff init` before tracking, since tracking is what needs the lockfile.
+
+This command needs Tuff 0.7.0 or newer, the release that added `tuff scan`.
 
 ### Browse MCP Catalog
 

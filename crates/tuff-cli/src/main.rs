@@ -21,7 +21,7 @@ use commands::{
     cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_lock_migrate,
     cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated, cmd_pack_build, cmd_pack_check,
     cmd_pack_extract, cmd_pack_init, cmd_pack_inspect, cmd_pack_pull, cmd_pack_push,
-    cmd_pack_verify, cmd_status, cmd_untrack, cmd_update,
+    cmd_pack_verify, cmd_scan, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -67,6 +67,20 @@ enum Command {
 
         #[command(subcommand)]
         kind: Option<AddCommand>,
+    },
+
+    /// Find capabilities already in a harness folder that Tuff is not tracking.
+    Scan {
+        /// Track what the scan found. Without paths, every untracked capability.
+        #[arg(long = "adopt")]
+        adopt: bool,
+
+        /// Capability directory to adopt (repeatable; requires --adopt).
+        paths: Vec<PathBuf>,
+
+        /// Output rows as JSON.
+        #[arg(long = "json")]
+        json: bool,
     },
 
     /// Build, inspect, verify, and extract capability packs.
@@ -944,6 +958,7 @@ fn run() -> Result<()> {
             agent,
             force,
         }) => cmd_delete(&repo_root, &id, &scope, &agent, force),
+        Some(Command::Scan { adopt, paths, json }) => cmd_scan(&repo_root, adopt, &paths, json),
         Some(Command::Untrack { id, scope, agent }) => cmd_untrack(&repo_root, &id, &scope, &agent),
         Some(Command::Agent { action }) => match action {
             AgentCommand::List { global } => cmd_agent_list(&repo_root, global),

@@ -13,7 +13,7 @@ complete command and flag reference.
 | Group | Commands |
 |---|---|
 | Start | [`tuff init`](#tuff-init) |
-| Create or add capabilities | [`tuff create`](#tuff-create), [`tuff add`](#tuff-add) |
+| Create or add capabilities | [`tuff create`](#tuff-create), [`tuff add`](#tuff-add), [`tuff scan`](#tuff-scan) |
 | Build and deliver packs | [`tuff pack`](#tuff-pack), [`tuff add pack`](#install-a-pack) |
 | Wire MCP servers | [`tuff add mcp`](#install-an-mcp-server), [`tuff mcp doctor`](#tuff-mcp-doctor) |
 | Inspect and generate | [`tuff list`](#tuff-list), [`tuff status`](#tuff-status), [`tuff generate`](#tuff-generate), [`tuff outdated`](#tuff-outdated) |
@@ -263,9 +263,66 @@ The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
 optional and is normally inferred from the source. For a Git source, the name
 is required so Tuff knows which capability directory to discover.
 
+### `tuff scan`
+
+Find capabilities already sitting in a harness folder that Tuff is not
+tracking. `list`, `status`, and `check` all read the lockfile, so anything
+you wrote by hand in `.claude/skills/` is invisible to them; `scan` is the
+discovery half that `tuff add` has always needed.
+
+It reads `.claude`, `.cursor`, and `.agents`, and it changes nothing:
+
+```sh frame="terminal"
+tuff scan
+```
+
+```text
+┌────────────────────────────────────┬──────────────────────┬───────┬─────────┬─────────────┬─────────────┐
+│ PATH                               │ ID                   │ TYPE  │ VERSION │ AGENT       │ STATUS      │
+├────────────────────────────────────┼──────────────────────┼───────┼─────────┼─────────────┼─────────────┤
+│ .agents/skills/rust-best-practices │ rust-best-practices  │ skill │ 1.1.0   │ open-agents │ + untracked │
+│ .claude/hooks/session-start        │ session-start        │ hook  │ —       │ claude      │ · blocked   │
+│ .claude/skills/find-skills         │ find-skills          │ skill │ —       │ claude      │ + untracked │
+└────────────────────────────────────┴──────────────────────┴───────┴─────────┴─────────────┴─────────────┘
+.claude/hooks/session-start is missing the [hook] section in tuff.toml; adopt a native hook with 'tuff add hook <path> --hook-file <fragment>'
+2 untracked; track them with 'tuff scan --adopt'
+```
+
+| Status | Meaning |
+|---|---|
+| `untracked` | Ready to track. `--adopt` takes these. |
+| `tracked` | Already in the lockfile at this path. |
+| `conflict` | Two directories declare the same id, so one lockfile key would have to hold both paths. Adopt one explicitly with `tuff add <path> --name <name>`. |
+| `blocked` | Missing something Tuff needs before it can track it at all — usually a `[hook]`, `[server]`, or `[implementation]` section in a `tuff.toml`. The reason is printed below the table. |
+
+Track what it found:
+
+```sh frame="terminal"
+tuff scan --adopt                          # every untracked capability
+tuff scan --adopt .claude/skills/find-skills  # just this one
+```
+
+Adoption is [in place](#adding-existing-agent-files): nothing is moved or
+copied, and the lockfile records the path the capability already has.
+
+Scanning works before `tuff init` has run, which is how you can look before
+you commit to anything. Tracking does not — it writes to `tuff.lock`, so
+`--adopt` asks you to run `tuff init` first.
+
+:::caution[Adopted capabilities have no upstream]
+A capability Tuff adopts was already on your disk, so there is nowhere to
+check for a newer version. `tuff outdated` will keep reporting it as
+unchecked. `diff`, `check`, and `update` still work: they compare against
+the baseline recorded at adoption.
+:::
+
+`--json` emits one object per row, with `status`, `reason`, and an
+`initialized` flag saying whether this folder has a lockfile yet.
+
 ### Adding Existing Agent Files
 
-Bring existing agent assets under Tuff management without rewriting content:
+`tuff scan` finds these for you. To bring one under Tuff management
+directly, when you already know its path:
 
 ```sh frame="terminal"
 tuff add --agent open-agents .agents/skills/python-uv
