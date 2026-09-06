@@ -17,8 +17,30 @@
     "agent",
     "skills",
     "mcp",
-    "claude"
+    "mcp server",
+    "hooks",
+    "claude",
+    "codex",
+    "cursor"
   ],
+  "galleryBanner": {
+    "color": "#111315",
+    "theme": "dark"
+  },
+  "badges": [
+    {
+      "url": "https://img.shields.io/visual-studio-marketplace/v/kannandreams.tuff",
+      "href": "https://marketplace.visualstudio.com/items?itemName=kannandreams.tuff",
+      "description": "Marketplace version"
+    },
+    {
+      "url": "https://img.shields.io/github/actions/workflow/status/kannandreams/tuff/tuff-check.yml?branch=main",
+      "href": "https://github.com/kannandreams/tuff/actions/workflows/tuff-check.yml",
+      "description": "Repository checks"
+    }
+  ],
+  "pricing": "Free",
+  "qna": "https://github.com/kannandreams/tuff/issues",
   "repository": {
     "type": "git",
     "url": "https://github.com/kannandreams/tuff.git",
@@ -27,6 +49,19 @@
   "homepage": "https://tuffcli.dev",
   "bugs": {
     "url": "https://github.com/kannandreams/tuff/issues"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Tuff runs the tuff CLI against files on disk, and a virtual workspace has none."
+    },
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Tuff runs commands the project itself defines: its MCP servers under Run MCP Doctor, and its hooks. It stays off until the folder is trusted."
+    }
   },
   "main": "./out/extension.js",
   "activationEvents": [
@@ -253,7 +288,77 @@
           "markdownDescription": "Check for updates when a workspace opens. Off by default: `tuff outdated` reaches the network and clones git sources, so it stays an explicit action."
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "tuff.getStarted",
+        "title": "Get Started with Tuff",
+        "description": "Track the skills, hooks, and MCP servers your coding agents use, from the editor.",
+        "featuredFor": [
+          "**/tuff.lock",
+          "**/.claude/skills/**",
+          "**/.cursor/**",
+          "**/.agents/**"
+        ],
+        "steps": [
+          {
+            "id": "tuff.step.install",
+            "title": "Install the Tuff CLI",
+            "description": "The extension runs the `tuff` binary already on your machine; it bundles none, so there is one Tuff and one place versions come from.\n[Installation guide](https://tuffcli.dev/installation/)\n[Set the path to tuff](command:tuff.openSettings)",
+            "media": {
+              "markdown": "media/walkthrough/install.md"
+            },
+            "completionEvents": [
+              "onContext:tuff.cliReady"
+            ]
+          },
+          {
+            "id": "tuff.step.init",
+            "title": "Initialize the project",
+            "description": "Tracking is recorded in a `tuff.lock` at the root of the project, which `tuff init` creates. Nothing else changes.\n[Initialize Project](command:tuff.init)",
+            "media": {
+              "markdown": "media/walkthrough/init.md"
+            },
+            "completionEvents": [
+              "onContext:tuff.hasProject"
+            ]
+          },
+          {
+            "id": "tuff.step.scan",
+            "title": "Track what you already have",
+            "description": "Most projects already have skills in `.claude`, `.cursor`, or `.agents` that Tuff knows nothing about. A scan finds them and tracks the ones you pick, where they are.\n[Scan for Existing Capabilities](command:tuff.scan)",
+            "media": {
+              "markdown": "media/walkthrough/scan.md"
+            },
+            "completionEvents": [
+              "onCommand:tuff.scan"
+            ]
+          },
+          {
+            "id": "tuff.step.catalog",
+            "title": "Add an MCP server",
+            "description": "Pick a server from the built-in catalog and Tuff wires it into every harness the project uses. A key never passes through the editor.\n[Browse MCP Catalog](command:tuff.browseCatalog)",
+            "media": {
+              "markdown": "media/walkthrough/catalog.md"
+            },
+            "completionEvents": [
+              "onCommand:tuff.browseCatalog"
+            ]
+          },
+          {
+            "id": "tuff.step.drift",
+            "title": "See drift and updates",
+            "description": "The Capabilities view shows what has been edited by hand since it was installed. Updates are checked when you ask, because checking reaches the network.\n[Open the Capabilities view](command:tuff.capabilities.focus)\n[Check for Updates](command:tuff.checkUpdates)",
+            "media": {
+              "markdown": "media/walkthrough/drift.md"
+            },
+            "completionEvents": [
+              "onCommand:tuff.checkUpdates"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
