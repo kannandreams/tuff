@@ -95,14 +95,17 @@ pub struct CapabilityManifest {
 /// the variable to read on the developer's machine, so a manifest can be
 /// committed and shared without leaking anything.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// The `Option` fields are skipped when absent. TOML has no null and its
+// serializer drops them anyway; JSON has one, and the lockfile is JSON, so
+// without the skip an absent `url` would be written as `"url": null`.
 pub struct McpServerConfig {
     #[serde(default)]
     pub transport: McpTransport,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     #[serde(default)]
     pub args: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     #[serde(default)]
     pub env: std::collections::BTreeMap<String, EnvRef>,
@@ -111,7 +114,7 @@ pub struct McpServerConfig {
     /// headers existed, and no installed record drifts on upgrade.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub headers: std::collections::BTreeMap<String, HeaderRef>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<McpServerMetadata>,
 }
 
@@ -173,7 +176,7 @@ pub const FORMAT_PLACEHOLDER: &str = "{}";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct McpServerMetadata {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_summary: Option<String>,
 }
 

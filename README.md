@@ -116,6 +116,16 @@ tuff update security-review
 
 Tuff supports project and global scopes. Project capabilities are designed to be committed with the repository; global capabilities are useful for personal capabilities shared across projects.
 
+### Upgrading from 0.7 or earlier
+
+`tuff.lock` is JSON from 0.8.0, so the formatters and pre-commit hooks a repository runs over its JSON files leave it unchanged. Nothing needs recreating: the new Tuff reads the old TOML file as it is, and the first command that writes the lockfile converts it. To land the conversion as its own commit, once everyone on the project is on 0.8.0 or newer:
+
+```sh
+tuff lock migrate
+```
+
+Older releases cannot read the converted file, so upgrade before migrating. The VS Code extension runs the `tuff` on your machine and needs no separate step.
+
 ## Other installation options
 
 ```sh

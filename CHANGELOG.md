@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Changed
+
+- **`tuff.lock` is JSON, lockfile schema version 3.** The file keeps its name and its rows keep their fields, names, and order; only the syntax changes, from TOML to JSON in the layout `JSON.stringify(value, null, 2)` produces: two-space indentation, one array element per line, a trailing newline. The reason is formatters. Repositories run pre-commit hooks and editor formatters over their JSON files, and a `.lock` that is not JSON was rewritten into something Tuff could not read; asking every project to exclude the file was the wrong fix. The chosen layout is the one npm's `package-lock.json` uses and the one `jq`, Python, VS Code's formatter, and Prettier's `json-stringify` parser all emit, so those leave the file byte for byte unchanged; a test proves the golden fixture is a fixed point of both the writer and a formatter. Version 1 and version 2 files are read transparently by every command; read-only commands never rewrite them, the first mutating command writes version 3, and `tuff lock migrate` does only the rewrite. A file whose syntax does not match its version, and a lockfile from a newer Tuff, are refused with a message saying so rather than a parse error. Tuff 0.7 and earlier cannot read a version 3 lockfile, so a project that migrates needs everyone on 0.8 or newer, the VS Code extension included; the extension itself reads the lockfile only through the CLI and needs no change. Absent optional fields on an MCP server entry, such as `url` for a stdio server, are omitted rather than written as `null`; the installed `server.toml` records are unchanged because TOML already omitted them.
+
 ## [0.7.0] - 2026-09-06
 
 ### Added

@@ -41,15 +41,19 @@ verified tree cache is machine-global:
 Capabilities tracked from existing project files (e.g., `scripts/deploy.sh`)
 are tracked in-place without copying. The lockfile records their source path:
 
-```jsonc
-[[capabilities]]
-name = "prod-deploy"
-type = "tool"
-source = "local"
-source_path = "scripts/deploy.sh"
-sha256 = "..."
-target = "open-agents"
-installed_path = ".agents/tools/prod-deploy"
+```json
+{
+  "name": "prod-deploy",
+  "type": "tool",
+  "target": "open-agents",
+  "installed_path": ".agents/tools/prod-deploy",
+  "sha256": "...",
+  "ownership": "imported",
+  "source": {
+    "kind": "local",
+    "path": "scripts/deploy.sh"
+  }
+}
 ```
 
 ## Where capabilities should live

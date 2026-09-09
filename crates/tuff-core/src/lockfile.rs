@@ -12,9 +12,49 @@ use crate::manifest::{CapabilityType, ImplementationConfig, McpServerConfig, Wor
 
 /// Current on-disk schema. Older readable versions are migrated in memory
 /// by `read_lockfile_at`; writers always emit this version.
-pub const LOCKFILE_VERSION: u8 = 2;
+///
+/// Versions 1 and 2 are TOML. Version 3 carries the same rows as version 2
+/// encoded as JSON, in the layout `JSON.stringify(value, null, 2)` produces:
+/// two-space indent, one array element per line, a trailing newline. That
+/// is the layout npm, jq, Python, and VS Code's JSON formatter all agree
+/// on, so a formatter that a repository runs over its JSON files leaves
+/// the lockfile byte for byte unchanged instead of rewriting it.
+pub const LOCKFILE_VERSION: u8 = 3;
 /// Oldest schema this build still reads.
 pub const OLDEST_READABLE_LOCKFILE_VERSION: u8 = 1;
+
+/// How a lockfile is encoded on disk. Decided by the file's first byte,
+/// never by its version: a lockfile that has been mangled into the wrong
+/// syntax must be reported as such, not parsed as whatever it claims.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WireFormat {
+    Toml,
+    Json,
+}
+
+impl WireFormat {
+    fn detect(raw: &str) -> Self {
+        if raw.trim_start().starts_with('{') {
+            Self::Json
+        } else {
+            Self::Toml
+        }
+    }
+
+    /// The encoding a schema version is defined in.
+    fn for_version(version: u8) -> Self {
+        if version >= 3 { Self::Json } else { Self::Toml }
+    }
+}
+
+impl std::fmt::Display for WireFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Toml => "TOML",
+            Self::Json => "JSON",
+        })
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Lockfile {
@@ -463,17 +503,26 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
         .with_hint("run 'tuff init' first"));
     }
     let raw = std::fs::read_to_string(path)?;
-    let version = peek_version(&raw, path)?;
+    let format = WireFormat::detect(&raw);
+    let version = peek_version(&raw, format, path)?;
+    if version > LOCKFILE_VERSION {
+        return Err(TuffError::unsupported(format!(
+            "unsupported lockfile version: {version} ({} was written by a newer tuff; this tuff {} reads versions {OLDEST_READABLE_LOCKFILE_VERSION} to {LOCKFILE_VERSION}, upgrade tuff)",
+            path.display(),
+            env!("CARGO_PKG_VERSION")
+        )));
+    }
+    let expected = WireFormat::for_version(version);
+    if format != expected {
+        return Err(TuffError::corrupt(format!(
+            "{} declares lockfile version {version}, which is {expected}, but the file is {format}",
+            path.display()
+        )));
+    }
     let rows: Vec<Row> = match version {
         1 => read_v1_rows(&raw)?,
         2 => read_v2_rows(&raw)?,
-        newer => {
-            return Err(TuffError::unsupported(format!(
-                "unsupported lockfile version: {newer} ({} was written by a newer tuff; this tuff {} reads versions {OLDEST_READABLE_LOCKFILE_VERSION} to {LOCKFILE_VERSION}, upgrade tuff)",
-                path.display(),
-                env!("CARGO_PKG_VERSION")
-            )));
-        }
+        _ => read_v3_rows(&raw)?,
     };
     let mut capabilities: BTreeMap<String, CapabilityLockEntry> = BTreeMap::new();
     for row in rows {
@@ -508,18 +557,25 @@ struct Row {
     entry: CapabilityLockEntry,
 }
 
-fn peek_version(raw: &str, path: &Path) -> Result<u8> {
+fn peek_version(raw: &str, format: WireFormat, path: &Path) -> Result<u8> {
     #[derive(Deserialize)]
     struct VersionOnly {
         version: Option<u8>,
     }
-    let peek: VersionOnly = toml::from_str(raw).map_err(|error| {
+    let invalid = |message: String| {
         TuffError::corrupt(format!(
-            "{} is not a valid lockfile: {}",
-            path.display(),
-            error.message()
+            "{} is not a valid lockfile: {message}",
+            path.display()
         ))
-    })?;
+    };
+    let peek: VersionOnly = match format {
+        WireFormat::Toml => {
+            toml::from_str(raw).map_err(|error| invalid(error.message().to_string()))?
+        }
+        WireFormat::Json => {
+            serde_json::from_str(raw).map_err(|error| invalid(error.to_string()))?
+        }
+    };
     match peek.version {
         Some(version) if version >= OLDEST_READABLE_LOCKFILE_VERSION => Ok(version),
         Some(version) => Err(TuffError::unsupported(format!(
@@ -602,11 +658,23 @@ fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
         .collect())
 }
 
+/// Schema version 2: the current rows, TOML-encoded. Read for migration
+/// only; never written.
 fn read_v2_rows(raw: &str) -> Result<Vec<Row>> {
     let wire: WireLockfile = toml::from_str(raw)
         .map_err(|error| TuffError::corrupt(format!("invalid lockfile: {error}")))?;
-    Ok(wire
-        .capabilities
+    Ok(rows_from_wire(wire))
+}
+
+/// Schema version 3: the current rows, JSON-encoded.
+fn read_v3_rows(raw: &str) -> Result<Vec<Row>> {
+    let wire: WireLockfile = serde_json::from_str(raw)
+        .map_err(|error| TuffError::corrupt(format!("invalid lockfile: {error}")))?;
+    Ok(rows_from_wire(wire))
+}
+
+fn rows_from_wire(wire: WireLockfile) -> Vec<Row> {
+    wire.capabilities
         .into_iter()
         .map(|item| Row {
             name: item.name,
@@ -631,7 +699,7 @@ fn read_v2_rows(raw: &str) -> Result<Vec<Row>> {
                 server: item.server,
             },
         })
-        .collect())
+        .collect()
 }
 
 pub fn write_lockfile(repo_root: &Path, lockfile: &Lockfile) -> Result<()> {
@@ -676,16 +744,20 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
         version: LOCKFILE_VERSION,
         capabilities,
     };
-    let content = format!(
-        "# Tuff lockfile. Each entry records one capability installation target.\n{}\n",
-        toml::to_string_pretty(&wire)?
-    );
+    // `to_string_pretty` is the `JSON.stringify(value, null, 2)` layout;
+    // the trailing newline is the one thing it leaves out. See
+    // `LOCKFILE_VERSION` for why this layout and no other.
+    let mut content = serde_json::to_string_pretty(&wire)?;
+    content.push('\n');
     std::fs::write(path, content)?;
     Ok(())
 }
 
-/// Schema version 2 (RFC-105 D1). Scalars first, tables after, so the TOML
-/// serializer never has to emit a value beneath a table.
+/// The current rows (RFC-105 D1): one per capability per target. Written
+/// as JSON since schema version 3; version 2 was the same rows in TOML,
+/// which is why scalars come first and tables after, so that serializer
+/// never had to emit a value beneath a table. JSON has no such constraint,
+/// but the order is the field order readers of the file expect.
 #[derive(Debug, Serialize, Deserialize)]
 struct WireLockfile {
     version: u8,
@@ -823,16 +895,48 @@ mod tests {
     }
 
     #[test]
-    fn read_lockfile_at_rejects_v4_schema() {
+    fn read_lockfile_at_rejects_a_newer_schema_in_either_encoding() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("tuff.lock");
-        fs::write(&path, "version = 4\ncapabilities = []\n").unwrap();
+        for raw in [
+            "{\n  \"version\": 4,\n  \"capabilities\": []\n}\n",
+            "version = 4\ncapabilities = []\n",
+        ] {
+            fs::write(&path, raw).unwrap();
+            let error = read_lockfile_at(&path).unwrap_err().to_string();
+            assert!(error.contains("unsupported lockfile version: 4"), "{error}");
+        }
+    }
 
-        let error = read_lockfile_at(&path).unwrap_err();
+    #[test]
+    fn a_lockfile_in_the_wrong_encoding_for_its_version_is_corrupt() {
+        // Version 3 is JSON and versions 1 and 2 are TOML; a file claiming
+        // one in the syntax of the other was rewritten by something that
+        // is not tuff, and the message says which way round it is.
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("tuff.lock");
+        fs::write(&path, "version = 3\ncapabilities = []\n").unwrap();
+        let error = read_lockfile_at(&path).unwrap_err().to_string();
         assert!(
-            error
-                .to_string()
-                .contains("unsupported lockfile version: 4")
+            error.contains("declares lockfile version 3, which is JSON, but the file is TOML"),
+            "{error}"
+        );
+        fs::write(&path, "{\"version\": 2, \"capabilities\": []}\n").unwrap();
+        let error = read_lockfile_at(&path).unwrap_err().to_string();
+        assert!(
+            error.contains("declares lockfile version 2, which is TOML, but the file is JSON"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn an_empty_lockfile_is_canonical_json() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("tuff.lock");
+        init_lockfile_at(&path).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "{\n  \"version\": 3,\n  \"capabilities\": []\n}\n"
         );
     }
 
@@ -871,6 +975,25 @@ mod tests {
         write_lockfile_at(&path, &lf).unwrap();
         let read = read_lockfile_at(&path).unwrap();
         assert_eq!(read.capabilities.len(), 1);
+        assert_eq!(read.version, LOCKFILE_VERSION);
+
+        // The layout is the one `JSON.stringify(value, null, 2)` produces:
+        // two-space indentation, nothing trailing, one newline at the end.
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(
+            written.starts_with(
+                "{\n  \"version\": 3,\n  \"capabilities\": [\n    {\n      \"name\": \"test\",\n"
+            ),
+            "{written}"
+        );
+        assert!(written.ends_with("\n  ]\n}\n"), "{written}");
+        for line in written.lines() {
+            let indent = line.len() - line.trim_start_matches(' ').len();
+            assert_eq!(indent % 2, 0, "odd indentation: {line:?}");
+            assert!(!line.contains('\t'), "tab in {line:?}");
+            assert_eq!(line, line.trim_end(), "trailing whitespace in {line:?}");
+        }
+        serde_json::from_str::<serde_json::Value>(&written).unwrap();
     }
 
     #[test]
@@ -997,16 +1120,68 @@ version = "1.0.0"
             VersionScheme::Declared
         );
 
-        // Writing produces v2, and v2 round-trips byte for byte.
+        // Writing produces v3, and v3 round-trips byte for byte.
         write_lockfile_at(&path, &lf).unwrap();
         let written = fs::read_to_string(&path).unwrap();
-        assert!(written.contains("version = 2\n"));
-        assert!(written.contains("kind = \"pack\""));
+        assert!(written.starts_with("{\n  \"version\": 3,\n"), "{written}");
+        assert!(written.contains("\"kind\": \"pack\""), "{written}");
         assert!(!written.contains("resolved_ref"));
         let again = read_lockfile_at(&path).unwrap();
-        assert_eq!(again.version, 2);
+        assert_eq!(again.version, 3);
         write_lockfile_at(&path, &again).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), written);
+    }
+
+    #[test]
+    fn a_version_2_lockfile_is_read_as_is_and_written_as_version_3() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("tuff.lock");
+        fs::write(
+            &path,
+            r#"version = 2
+
+[[capabilities]]
+name = "git-skill"
+type = "skill"
+version = "1.4.0"
+version_scheme = "semver"
+target = "open-agents"
+installed_path = ".agents/skills/git-skill"
+sha256 = "aa"
+ownership = "generated"
+
+[capabilities.source]
+kind = "git"
+url = "https://example.com/skills.git"
+path = "skills/git-skill"
+ref = "9b9c499"
+tag = "v1.4.0"
+requested = "^1.2"
+"#,
+        )
+        .unwrap();
+        let lf = read_lockfile_at(&path).unwrap();
+        assert_eq!(lf.version, 2, "the version read is reported, not rewritten");
+        let entry = &lf.capabilities["git-skill"];
+        assert_eq!(entry.version_scheme, VersionScheme::Semver);
+        assert_eq!(
+            entry.source,
+            CapabilitySource::Git(GitSource {
+                url: "https://example.com/skills.git".into(),
+                path: "skills/git-skill".into(),
+                git_ref: "9b9c499".into(),
+                tag: Some("v1.4.0".into()),
+                requested: Some("^1.2".into()),
+            })
+        );
+
+        write_lockfile_at(&path, &lf).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(written.starts_with("{\n  \"version\": 3,\n"), "{written}");
+        assert!(written.contains("\"requested\": \"^1.2\""), "{written}");
+        let again = read_lockfile_at(&path).unwrap();
+        assert_eq!(again.version, 3);
+        assert_eq!(again.capabilities["git-skill"].source, entry.source);
     }
 
     #[test]

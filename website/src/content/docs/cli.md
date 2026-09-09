@@ -166,25 +166,27 @@ Tuff lists the repository's tags without cloning, picks the newest one that sati
 
 The lockfile still pins the commit. Beside it, the entry records the tag that chose the commit and the requirement you asked for, and its version becomes the tag's:
 
-```toml
-[capabilities.rust-implement]
-version = "1.4.0"
-version_scheme = "semver"
-
-[capabilities.rust-implement.source]
-kind = "git"
-url = "https://github.com/owner/repo"
-path = "rust-implement"
-ref = "9b9c499…"
-tag = "v1.4.0"
-requested = "^1.2"
+```json
+{
+  "name": "rust-implement",
+  "version": "1.4.0",
+  "version_scheme": "semver",
+  "source": {
+    "kind": "git",
+    "url": "https://github.com/owner/repo",
+    "path": "rust-implement",
+    "ref": "9b9c499…",
+    "tag": "v1.4.0",
+    "requested": "^1.2"
+  }
+}
 ```
 
 A requirement nothing satisfies fails before anything is cloned and lists the releases that exist. A repository with no release tags fails the same way, with a hint on how to tag one.
 
 #### Declared versions
 
-Without `@`, a git install takes the latest commit exactly as before. Its recorded version is then whatever the source declares for itself: `version` in `tuff.toml`, else `version:` or `metadata.version:` in the `SKILL.md` frontmatter, which is where the Agent Skills specification puts it. The lockfile marks that with `version_scheme = "declared"`. A source that declares nothing records the commit SHA as its version, with `version_scheme = "sha"`.
+Without `@`, a git install takes the latest commit exactly as before. Its recorded version is then whatever the source declares for itself: `version` in `tuff.toml`, else `version:` or `metadata.version:` in the `SKILL.md` frontmatter, which is where the Agent Skills specification puts it. The lockfile marks that with `"version_scheme": "declared"`. A source that declares nothing records the commit SHA as its version, with `"version_scheme": "sha"`.
 
 A declared version is what the author wrote, not a release: it may not change when the content does. So for a git install, `tuff list` and `tuff outdated` show it as `1.2.0 (declared)`, visibly weaker than a release chosen by tag, and `tuff outdated` can report the row `outdated` while `LATEST` still reads `1.2.0`, meaning the commit moved and the version did not. A local install's version is declared by definition and is shown plain.
 

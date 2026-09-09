@@ -1997,7 +1997,7 @@ fn add_mcp_from_local_path_emits_record_and_entry_and_delete_removes_both() {
     assert!(
         !fs::read_to_string(temp.path().join("tuff.lock"))
             .unwrap()
-            .contains("name = \"example\"")
+            .contains("\"name\": \"example\"")
     );
 }
 
@@ -2253,8 +2253,8 @@ fn add_mcp_from_catalog_wires_every_selected_harness_in_its_own_dialect() {
 
     // The lockfile records the catalog as a typed source.
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("kind = \"catalog\""), "{lock}");
-    assert!(lock.contains("id = \"github\""), "{lock}");
+    assert!(lock.contains("\"kind\": \"catalog\""), "{lock}");
+    assert!(lock.contains("\"id\": \"github\""), "{lock}");
 
     tuff()
         .current_dir(temp.path())
@@ -2408,7 +2408,7 @@ fn add_mcp_refuses_an_untracked_entry_before_writing_anything() {
     assert!(
         !fs::read_to_string(temp.path().join("tuff.lock"))
             .unwrap()
-            .contains("name = \"memory\"")
+            .contains("\"name\": \"memory\"")
     );
 }
 
@@ -3324,9 +3324,9 @@ fn add_hook_file_adopts_assets_already_inside_harness() {
         .success();
 
     let lockfile = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lockfile.contains("name = \"session-start\""));
-    assert!(lockfile.contains("target = \"claude\""));
-    assert!(lockfile.contains("installed_path = \".claude/hooks/session-start\""));
+    assert!(lockfile.contains("\"name\": \"session-start\""));
+    assert!(lockfile.contains("\"target\": \"claude\""));
+    assert!(lockfile.contains("\"installed_path\": \".claude/hooks/session-start\""));
 }
 
 #[test]
@@ -3720,9 +3720,9 @@ fn delete_with_agent_flag_only_removes_from_specified() {
     );
 
     let lockfile = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lockfile.contains("name = \"target-test\""));
-    assert!(lockfile.contains("target = \"claude\""));
-    assert_eq!(lockfile.matches("name = \"target-test\"").count(), 1);
+    assert!(lockfile.contains("\"name\": \"target-test\""));
+    assert!(lockfile.contains("\"target\": \"claude\""));
+    assert_eq!(lockfile.matches("\"name\": \"target-test\"").count(), 1);
 }
 
 #[test]
@@ -4147,7 +4147,7 @@ fn untrack_in_place_capability_preserves_files() {
         .stdout(predicate::str::contains("untracked 'keep-me'"));
 
     assert!(skill_dir.join("SKILL.md").exists());
-    assert!(tracked_content_hash.contains("sha256 = "));
+    assert!(tracked_content_hash.contains("\"sha256\": "));
 }
 
 #[test]
@@ -4490,7 +4490,7 @@ fn update_local_rejects_force_and_missing_files_without_partial_changes() {
     assert!(
         fs::read_to_string(temp.path().join("tuff.lock"))
             .unwrap()
-            .contains("sha256 = ")
+            .contains("\"sha256\": ")
     );
 }
 
@@ -4515,8 +4515,8 @@ fn create_supports_multiple_agents_and_tracks_each_output() {
         .stdout(predicate::str::contains("(claude)"));
 
     let lockfile = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lockfile.contains("target = \"open-agents\""));
-    assert!(lockfile.contains("target = \"claude\""));
+    assert!(lockfile.contains("\"target\": \"open-agents\""));
+    assert!(lockfile.contains("\"target\": \"claude\""));
 }
 
 #[test]
@@ -5574,7 +5574,7 @@ fn add_pack_installs_all_members_and_records_provenance() {
         ));
 
     let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("name = \"com.acme/engineering\""));
+    assert!(lock.contains("\"name\": \"com.acme/engineering\""));
     assert!(
         project
             .path()
@@ -5864,14 +5864,19 @@ fn update_pack_from_artifact_moves_every_member_forward() {
         "the derived index goes with the last workflow rather than lingering untracked"
     );
 
-    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
-    assert!(!lock.contains("pack-workflow"));
-    assert!(lock.contains("name = \"pack-notes\""));
-    assert!(!lock.contains("version = \"1.0.0\"\ndigest"));
+    let lock = tuff_core::lockfile::read_lockfile_at(&project.path().join("tuff.lock")).unwrap();
+    assert!(!lock.capabilities.contains_key("pack-workflow"));
+    assert!(lock.capabilities.contains_key("pack-notes"));
+    let pack_versions: Vec<&str> = lock
+        .capabilities
+        .values()
+        .filter_map(|entry| entry.source.as_pack())
+        .map(|pack| pack.version.as_str())
+        .collect();
     assert_eq!(
-        lock.matches("version = \"1.1.0\"\ndigest").count(),
-        2,
-        "both members carry the new release's provenance: {lock}"
+        pack_versions,
+        ["1.1.0", "1.1.0"],
+        "both members carry the new release's provenance: {pack_versions:?}"
     );
 
     tuff()
@@ -6092,9 +6097,12 @@ fn update_pack_rejects_another_pack_a_narrower_agent_selection_and_non_pack_use(
             "--pack only applies to a capability installed from a pack; 'tuff-cli-guide' was not",
         ));
 
-    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+    let lock = tuff_core::lockfile::read_lockfile_at(&project.path().join("tuff.lock")).unwrap();
     assert!(
-        lock.contains("version = \"1.0.0\"\ndigest"),
+        lock.capabilities.values().any(|entry| entry
+            .source
+            .as_pack()
+            .is_some_and(|pack| pack.version == "1.0.0")),
         "nothing above changed the install"
     );
 }
@@ -6277,110 +6285,169 @@ fn add_pack_into_a_project_that_already_has_a_capability_index() {
         .success();
 }
 
-// ── lockfile schema v2 (RFC-105) ─────────────────────────────────────
+// ── lockfile schema (RFC-105; JSON since v3) ─────────────────────────
 
-fn lockfile_v1_fixture() -> std::path::PathBuf {
-    test_fixture("lockfile-v1").join("tuff.lock")
+/// The lockfiles older releases wrote: v1 by tuff 0.1.8, v2 by 0.2 to
+/// 0.7. Both cover every row shape: local, git, catalog, pack with a
+/// registry, an adopted (imported) capability, a hook with managed
+/// settings, an MCP-native tool, and the generated index.
+fn older_lockfile_fixtures() -> [(u8, std::path::PathBuf); 2] {
+    [
+        (1, test_fixture("lockfile-v1").join("tuff.lock")),
+        (2, test_fixture("lockfile-v2").join("tuff.lock")),
+    ]
+}
+
+/// What migrating either older fixture must produce, byte for byte.
+fn golden_lockfile() -> String {
+    fs::read_to_string(test_fixture("lockfile-v3").join("tuff.lock")).unwrap()
 }
 
 #[test]
-fn lock_migrate_rewrites_a_version_1_lockfile_to_the_golden_version_2() {
-    // The fixture was written by tuff 0.1.8 and covers every row shape:
-    // local, git, catalog, pack with a registry, an adopted (imported)
-    // capability, a hook with managed settings, an MCP-native tool, and
-    // the generated index. The golden file is what migration must produce,
-    // byte for byte, and it must be a fixed point of the writer.
-    let project = TempDir::new().unwrap();
-    let home = TempDir::new().unwrap();
-    fs::copy(lockfile_v1_fixture(), project.path().join("tuff.lock")).unwrap();
-    let expected =
-        fs::read_to_string(test_fixture("lockfile-v1").join("expected-v2.lock")).unwrap();
+fn lock_migrate_rewrites_every_older_lockfile_to_the_golden_version_3() {
+    let expected = golden_lockfile();
+    for (version, fixture) in older_lockfile_fixtures() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        fs::copy(&fixture, project.path().join("tuff.lock")).unwrap();
 
-    tuff()
-        .current_dir(project.path())
-        .env("HOME", home.path())
-        .args(["lock", "migrate"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("from schema version 1 to 2"));
-    assert_eq!(
-        fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
-        expected
-    );
-
-    tuff()
-        .current_dir(project.path())
-        .env("HOME", home.path())
-        .args(["lock", "migrate"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("already schema version 2"));
-    assert_eq!(
-        fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
-        expected
-    );
-}
-
-#[test]
-fn read_only_commands_leave_a_version_1_lockfile_alone_and_a_mutating_one_upgrades_it() {
-    // `tuff check` in CI must never dirty the tree just by reading a v1
-    // file; the first command that writes the lockfile is what upgrades it.
-    let project = TempDir::new().unwrap();
-    let home = TempDir::new().unwrap();
-    let v1 = fs::read_to_string(lockfile_v1_fixture()).unwrap();
-    fs::write(project.path().join("tuff.lock"), &v1).unwrap();
-    fs::write(
-        project.path().join("tuff.config.json"),
-        r#"{"agents":["open-agents"],"defaultAgent":"open-agents"}"#,
-    )
-    .unwrap();
-
-    for args in [
-        vec!["list"],
-        vec!["status"],
-        vec!["check", "--ignore-failures"],
-    ] {
         tuff()
             .current_dir(project.path())
             .env("HOME", home.path())
-            .args(&args)
+            .args(["lock", "migrate"])
             .assert()
-            .success();
+            .success()
+            .stdout(predicate::str::contains(format!(
+                "from schema version {version} to 3"
+            )));
         assert_eq!(
             fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
-            v1,
-            "{args:?} rewrote a v1 lockfile"
+            expected,
+            "migrating the v{version} fixture"
+        );
+
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .args(["lock", "migrate"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("already schema version 3"));
+        assert_eq!(
+            fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
+            expected
         );
     }
+}
+
+#[test]
+fn the_lockfile_is_a_fixed_point_of_the_writer_and_of_a_json_formatter() {
+    // The golden file must survive being read and written again, and it
+    // must survive a formatter: the layout is the one `JSON.stringify(v,
+    // null, 2)` produces, which npm, jq, Python, and VS Code's formatter
+    // all leave alone, so a hook that formats every JSON file in a
+    // repository never rewrites it. `serde_json`'s pretty printer is that
+    // layout; re-emitting the parsed value through it must change nothing
+    // but key order, which `serde_json::Value` sorts.
+    let expected = golden_lockfile();
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    fs::write(project.path().join("tuff.lock"), &expected).unwrap();
+    let lock = tuff_core::lockfile::read_lockfile_at(&project.path().join("tuff.lock")).unwrap();
+    assert_eq!(lock.version, 3);
+    tuff_core::lockfile::write_lockfile_at(&project.path().join("tuff.lock"), &lock).unwrap();
+    assert_eq!(
+        fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
+        expected
+    );
+
+    let value: serde_json::Value = serde_json::from_str(&expected).unwrap();
+    let mut reformatted = serde_json::to_string_pretty(&value).unwrap();
+    reformatted.push('\n');
+    // Sorting keys also moves which property is last in each object, so
+    // the trailing commas are dropped before the lines are compared.
+    fn sorted_lines(text: &str) -> Vec<&str> {
+        let mut lines: Vec<&str> = text
+            .lines()
+            .map(|line| line.trim_end_matches(','))
+            .collect();
+        lines.sort_unstable();
+        lines
+    }
+    assert_eq!(sorted_lines(&reformatted), sorted_lines(&expected));
+    assert!(expected.ends_with("}\n"), "one trailing newline, no more");
+    assert!(!expected.ends_with("\n\n"));
+
     tuff()
         .current_dir(project.path())
         .env("HOME", home.path())
-        .arg("list")
+        .args(["lock", "migrate"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("git-skill"))
-        .stdout(predicate::str::contains("pack-skill"));
+        .stdout(predicate::str::contains("already schema version 3"));
+}
 
-    let skill = make_skill_primitive_dir(project.path(), "fresh-skill");
-    tuff()
-        .current_dir(project.path())
-        .env("HOME", home.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
-        .assert()
-        .success();
-    let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
-    assert!(
-        lock.starts_with(
-            "# Tuff lockfile. Each entry records one capability installation target.\nversion = 2\n"
-        ),
-        "{lock}"
-    );
-    assert!(lock.contains("name = \"fresh-skill\""));
-    assert!(
-        lock.contains("kind = \"pack\""),
-        "existing rows survive the upgrade: {lock}"
-    );
-    assert!(!lock.contains("resolved_ref"));
+#[test]
+fn read_only_commands_leave_an_older_lockfile_alone_and_a_mutating_one_upgrades_it() {
+    // `tuff check` in CI must never dirty the tree just by reading an old
+    // file; the first command that writes the lockfile is what upgrades it.
+    for (version, fixture) in older_lockfile_fixtures() {
+        let project = TempDir::new().unwrap();
+        let home = TempDir::new().unwrap();
+        let before = fs::read_to_string(&fixture).unwrap();
+        fs::write(project.path().join("tuff.lock"), &before).unwrap();
+        fs::write(
+            project.path().join("tuff.config.json"),
+            r#"{"agents":["open-agents"],"defaultAgent":"open-agents"}"#,
+        )
+        .unwrap();
+
+        for args in [
+            vec!["list"],
+            vec!["status"],
+            vec!["check", "--ignore-failures"],
+        ] {
+            tuff()
+                .current_dir(project.path())
+                .env("HOME", home.path())
+                .args(&args)
+                .assert()
+                .success();
+            assert_eq!(
+                fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
+                before,
+                "{args:?} rewrote a v{version} lockfile"
+            );
+        }
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .arg("list")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("git-skill"))
+            .stdout(predicate::str::contains("pack-skill"));
+
+        let skill = make_skill_primitive_dir(project.path(), "fresh-skill");
+        tuff()
+            .current_dir(project.path())
+            .env("HOME", home.path())
+            .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+            .assert()
+            .success();
+        let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
+        assert!(
+            lock.starts_with("{\n  \"version\": 3,\n  \"capabilities\": [\n"),
+            "{lock}"
+        );
+        assert!(lock.contains("\"name\": \"fresh-skill\""));
+        assert!(
+            lock.contains("\"kind\": \"pack\""),
+            "existing rows survive the upgrade: {lock}"
+        );
+        assert!(!lock.contains("resolved_ref"));
+        assert!(!lock.contains("[[capabilities]]"));
+    }
 }
 
 #[test]
@@ -6389,7 +6456,7 @@ fn a_lockfile_from_a_newer_tuff_is_refused_by_version_not_by_shape() {
     let home = TempDir::new().unwrap();
     fs::write(
         project.path().join("tuff.lock"),
-        "version = 3\n\n[[capabilities]]\nname = \"x\"\nfuture_field = true\n",
+        "{\n  \"version\": 4,\n  \"capabilities\": [\n    {\n      \"name\": \"x\",\n      \"future_field\": true\n    }\n  ]\n}\n",
     )
     .unwrap();
     tuff()
@@ -6398,9 +6465,32 @@ fn a_lockfile_from_a_newer_tuff_is_refused_by_version_not_by_shape() {
         .args(["lock", "migrate"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unsupported lockfile version: 3"))
+        .stderr(predicate::str::contains("unsupported lockfile version: 4"))
         .stderr(predicate::str::contains("upgrade tuff"))
         .stderr(predicate::str::contains("future_field").not());
+}
+
+#[test]
+fn a_lockfile_rewritten_into_the_wrong_syntax_is_reported_as_such() {
+    // A formatter or a hand edit that turns the JSON file into something
+    // else, or an old TOML file relabelled as version 3, is named for what
+    // it is rather than failing on the first token.
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    fs::write(
+        project.path().join("tuff.lock"),
+        "version = 3\ncapabilities = []\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .arg("list")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "declares lockfile version 3, which is JSON, but the file is TOML",
+        ));
 }
 
 #[test]
@@ -6445,7 +6535,7 @@ fn a_project_add_never_writes_to_the_global_lockfile_even_with_xdg_state_home() 
 
     let project_lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
     assert!(
-        project_lock.contains("name = \"project-only\""),
+        project_lock.contains("\"name\": \"project-only\""),
         "{project_lock}"
     );
     assert_eq!(
@@ -6550,7 +6640,7 @@ fn a_json_invocation_reports_failure_as_json_on_stderr() {
         .success();
     fs::write(
         project.path().join("tuff.lock"),
-        "version = 2\n[[capabilities]\nname = \"broken\"\n",
+        "{\n  \"version\": 3,\n  \"capabilities\": [\n    {\n      \"name\": \"broken\"\n",
     )
     .unwrap();
     let assert = tuff()
@@ -6581,7 +6671,7 @@ fn a_corrupt_lockfile_is_reported_everywhere_it_used_to_read_as_empty() {
         .success();
     fs::write(
         project.path().join("tuff.lock"),
-        "version = 2\n[[capabilities]\nname = \"broken\"\n",
+        "{\n  \"version\": 3,\n  \"capabilities\": [\n    {\n      \"name\": \"broken\"\n",
     )
     .unwrap();
 
@@ -7152,9 +7242,12 @@ fn add_mcp_installs_a_server_resolved_from_the_registry() {
     // The lockfile records which registry it came from, so update and
     // outdated know to ask that registry rather than the built-in catalog.
     let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("kind = \"catalog\""), "{lock}");
-    assert!(lock.contains("id = \"io.github.acme/stub-mcp\""), "{lock}");
-    assert!(lock.contains("registry = \"http://127.0.0.1"), "{lock}");
+    assert!(lock.contains("\"kind\": \"catalog\""), "{lock}");
+    assert!(
+        lock.contains("\"id\": \"io.github.acme/stub-mcp\""),
+        "{lock}"
+    );
+    assert!(lock.contains("\"registry\": \"http://127.0.0.1"), "{lock}");
 
     tuff()
         .current_dir(project.path())
@@ -7485,11 +7578,11 @@ fn add_git_skill_at_a_release_pins_tag_commit_and_semver_scheme() {
         "# Skill 1.2\n"
     );
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("version = \"1.2.0\""), "{lock}");
-    assert!(lock.contains("version_scheme = \"semver\""), "{lock}");
-    assert!(lock.contains("tag = \"v1.2.0\""), "{lock}");
-    assert!(lock.contains("requested = \"1.2.0\""), "{lock}");
-    assert!(lock.contains(&format!("ref = \"{v1_2}\"")), "{lock}");
+    assert!(lock.contains("\"version\": \"1.2.0\""), "{lock}");
+    assert!(lock.contains("\"version_scheme\": \"semver\""), "{lock}");
+    assert!(lock.contains("\"tag\": \"v1.2.0\""), "{lock}");
+    assert!(lock.contains("\"requested\": \"1.2.0\""), "{lock}");
+    assert!(lock.contains(&format!("\"ref\": \"{v1_2}\"")), "{lock}");
     tuff()
         .current_dir(temp.path())
         .arg("list")
@@ -7556,9 +7649,9 @@ fn add_git_skill_at_a_release_pins_tag_commit_and_semver_scheme() {
         "# Skill 1.4\n"
     );
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("version = \"1.4.0\""), "{lock}");
-    assert!(lock.contains("tag = \"v1.4.0\""), "{lock}");
-    assert!(lock.contains("requested = \"^1\""), "{lock}");
+    assert!(lock.contains("\"version\": \"1.4.0\""), "{lock}");
+    assert!(lock.contains("\"tag\": \"v1.4.0\""), "{lock}");
+    assert!(lock.contains("\"requested\": \"^1\""), "{lock}");
     tuff()
         .current_dir(temp.path())
         .args(["update", "test-skill"])
@@ -7669,8 +7762,8 @@ fn add_git_release_errors_name_what_exists_and_how_to_tag() {
         .assert()
         .success();
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("version_scheme = \"sha\""), "{lock}");
-    assert!(!lock.contains("tag = "), "{lock}");
+    assert!(lock.contains("\"version_scheme\": \"sha\""), "{lock}");
+    assert!(!lock.contains("\"tag\": "), "{lock}");
 
     // Local sources have no releases; neither add nor update accepts '@'.
     let local = make_primitive(temp.path(), "local-skill");
@@ -7742,8 +7835,8 @@ fn scoped_release_tags_win_over_repo_wide_ones() {
         .success()
         .stdout(predicate::str::contains("to test-skill/v1.0.0"));
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("tag = \"test-skill/v1.0.0\""), "{lock}");
-    assert!(lock.contains("version = \"1.0.0\""), "{lock}");
+    assert!(lock.contains("\"tag\": \"test-skill/v1.0.0\""), "{lock}");
+    assert!(lock.contains("\"version\": \"1.0.0\""), "{lock}");
 }
 
 /// A git repository holding the given files, committed once.
@@ -7805,10 +7898,10 @@ fn add_git_skill_records_the_version_its_frontmatter_declares() {
     // and the scheme says so. A declared version is weaker than a release,
     // and the table says that too.
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("version = \"1.2.0\""), "{lock}");
-    assert!(lock.contains("version_scheme = \"declared\""), "{lock}");
-    assert!(lock.contains("ref = \""), "{lock}");
-    assert!(!lock.contains("tag = "), "{lock}");
+    assert!(lock.contains("\"version\": \"1.2.0\""), "{lock}");
+    assert!(lock.contains("\"version_scheme\": \"declared\""), "{lock}");
+    assert!(lock.contains("\"ref\": \""), "{lock}");
+    assert!(!lock.contains("\"tag\": "), "{lock}");
     tuff()
         .current_dir(temp.path())
         .arg("list")
@@ -7868,7 +7961,7 @@ fn add_git_skill_records_the_version_its_frontmatter_declares() {
         .assert()
         .success();
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("version = \"1.3.0\""), "{lock}");
+    assert!(lock.contains("\"version\": \"1.3.0\""), "{lock}");
     assert_eq!(
         fs::read_to_string(temp.path().join(".agents/skills/fm/SKILL.md")).unwrap(),
         "---\nname: fm\nversion: 1.3.0\n---\n# fm 1.3\n"
@@ -7933,9 +8026,9 @@ fn add_git_capability_with_a_manifest_keeps_its_declared_version_through_update(
         .assert()
         .success();
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("version = \"0.3.0\""), "{lock}");
-    assert!(lock.contains("version_scheme = \"declared\""), "{lock}");
-    assert!(lock.contains("description = \"Declared.\""), "{lock}");
+    assert!(lock.contains("\"version\": \"0.3.0\""), "{lock}");
+    assert!(lock.contains("\"version_scheme\": \"declared\""), "{lock}");
+    assert!(lock.contains("\"description\": \"Declared.\""), "{lock}");
 
     fs::write(
         repo.join("tool-x/tuff.toml"),
@@ -7952,10 +8045,10 @@ fn add_git_capability_with_a_manifest_keeps_its_declared_version_through_update(
         .assert()
         .success();
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains("version = \"1.0.0\""), "{lock}");
-    assert!(lock.contains("version_scheme = \"declared\""), "{lock}");
+    assert!(lock.contains("\"version\": \"1.0.0\""), "{lock}");
+    assert!(lock.contains("\"version_scheme\": \"declared\""), "{lock}");
     assert!(
-        lock.contains("description = \"Declared again.\""),
+        lock.contains("\"description\": \"Declared again.\""),
         "update honours the manifest as add does: {lock}"
     );
 }
@@ -8172,7 +8265,7 @@ fn a_repointed_or_deleted_release_tag_is_reported_not_trusted() {
         .success()
         .stdout(predicate::str::contains("repointed"));
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(lock.contains(&format!("ref = \"{v1_2}\"")), "{lock}");
+    assert!(lock.contains(&format!("\"ref\": \"{v1_2}\"")), "{lock}");
 
     // update refuses to call it up to date, previews the replacement with
     // --check, and only replaces the install with --force.
@@ -8210,8 +8303,8 @@ fn a_repointed_or_deleted_release_tag_is_reported_not_trusted() {
         "# Skill 1.2, republished\n"
     );
     let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
-    assert!(!lock.contains(&format!("ref = \"{v1_2}\"")), "{lock}");
-    assert!(lock.contains("tag = \"v1.2.0\""), "{lock}");
+    assert!(!lock.contains(&format!("\"ref\": \"{v1_2}\"")), "{lock}");
+    assert!(lock.contains("\"tag\": \"v1.2.0\""), "{lock}");
     let row = outdated_row(temp.path(), "test-skill");
     assert_eq!(row["status"], "outdated");
 
