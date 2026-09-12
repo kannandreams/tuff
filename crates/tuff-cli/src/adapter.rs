@@ -2,8 +2,8 @@ use std::path::Path;
 
 pub use tuff_core::adapter::replace_hook_dir_placeholder;
 pub use tuff_core::adapter::{
-    AgentAdapter, CapabilityKind, EmittedFile, HookDefinition, HookRenderContext, NativeHookConfig,
-    PlannedFile, ResolvedCapability, resolve_capability,
+    AgentAdapter, CapabilityKind, EmittedFile, HookDefinition, HookRenderContext,
+    HookSettingsShape, NativeHookConfig, PlannedFile, ResolvedCapability, resolve_capability,
 };
 use tuff_core::error::Result;
 use tuff_core::manifest::{CapabilityType, HookConfig};
@@ -52,87 +52,40 @@ impl AdapterKind {
     }
 }
 
-impl AgentAdapter for AdapterKind {
-    fn id(&self) -> &'static str {
-        self.implementation().id()
-    }
+/// `AdapterKind` is an adapter by forwarding every declared method to the
+/// harness's singleton. Only the declarations are listed: the trait's
+/// default methods (planning, hook rendering, removal) run on `AdapterKind`
+/// itself and reach the singleton through these.
+macro_rules! forward_to_implementation {
+    ($( fn $name:ident(&self $(, $arg:ident : $ty:ty)* ) $(-> $ret:ty)? ; )*) => {
+        impl AgentAdapter for AdapterKind {
+            $(
+                fn $name(&self $(, $arg: $ty)*) $(-> $ret)? {
+                    self.implementation().$name($($arg),*)
+                }
+            )*
+        }
+    };
+}
 
-    fn display_name(&self) -> &'static str {
-        self.implementation().display_name()
-    }
-
-    fn dir_prefix(&self) -> &'static str {
-        self.implementation().dir_prefix()
-    }
-
-    fn mcp_config_relpath(&self) -> &'static str {
-        self.implementation().mcp_config_relpath()
-    }
-
-    fn mcp_env_reference(&self, var: &str) -> String {
-        self.implementation().mcp_env_reference(var)
-    }
-
-    fn mcp_server_entry(&self, server: &tuff_core::manifest::McpServerConfig) -> serde_json::Value {
-        self.implementation().mcp_server_entry(server)
-    }
-
-    fn mcp_http_declares_type(&self) -> bool {
-        self.implementation().mcp_http_declares_type()
-    }
-
-    fn supported_agents(&self) -> &[&'static str] {
-        self.implementation().supported_agents()
-    }
-
-    fn hook_compatibility(&self) -> &'static CompatibilityMatrix {
-        self.implementation().hook_compatibility()
-    }
-
-    fn hook_settings_relpath(&self) -> &'static str {
-        self.implementation().hook_settings_relpath()
-    }
-
-    fn scaffold_hook_event(&self) -> &'static str {
-        self.implementation().scaffold_hook_event()
-    }
-
-    fn hook_filename(&self) -> &'static str {
-        self.implementation().hook_filename()
-    }
-
-    fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>> {
-        self.implementation().hook_file_content(hook_cfg)
-    }
-
-    fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value {
-        self.implementation()
-            .command_hook_fragment(native_event, command)
-    }
-
-    fn merge_hook_fragment(
-        &self,
-        existing: Option<&[u8]>,
-        fragment: &serde_json::Value,
-    ) -> Result<Vec<u8>> {
-        self.implementation()
-            .merge_hook_fragment(existing, fragment)
-    }
-
-    fn remove_hook_settings(
-        &self,
-        repo_root: &Path,
-        managed_hooks: &[tuff_core::lockfile::ManagedHook],
-    ) -> Result<()> {
-        self.implementation()
-            .remove_hook_settings(repo_root, managed_hooks)
-    }
-
-    fn detect(&self, repo_root: &Path) -> bool {
-        self.implementation().detect(repo_root)
-    }
-
-    fn kinds_supported(&self) -> &[CapabilityType] {
-        self.implementation().kinds_supported()
-    }
+forward_to_implementation! {
+    fn id(&self) -> &'static str;
+    fn display_name(&self) -> &'static str;
+    fn dir_prefix(&self) -> &'static str;
+    fn mcp_config_relpath(&self) -> &'static str;
+    fn mcp_env_reference(&self, var: &str) -> String;
+    fn mcp_server_entry(&self, server: &tuff_core::manifest::McpServerConfig) -> serde_json::Value;
+    fn mcp_http_declares_type(&self) -> bool;
+    fn supported_agents(&self) -> &[&'static str];
+    fn hook_compatibility(&self) -> &'static CompatibilityMatrix;
+    fn hook_settings_relpath(&self) -> &'static str;
+    fn hook_settings_shape(&self) -> HookSettingsShape;
+    fn scaffold_hook_event(&self) -> &'static str;
+    fn hook_filename(&self) -> &'static str;
+    fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>>;
+    fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value;
+    fn merge_hook_fragment(&self, existing: Option<&[u8]>, fragment: &serde_json::Value) -> Result<Vec<u8>>;
+    fn remove_hook_settings(&self, repo_root: &Path, managed_hooks: &[tuff_core::lockfile::ManagedHook]) -> Result<()>;
+    fn detect(&self, repo_root: &Path) -> bool;
+    fn kinds_supported(&self) -> &[CapabilityType];
 }
