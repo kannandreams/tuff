@@ -90,6 +90,14 @@ run = "./scripts/check-plugin.sh --sync"
 description = "Validate the Claude Code plugin and marketplace manifests"
 run = "./scripts/check-plugin.sh"
 
+[tasks.spec-sync]
+description = "Regenerate the published hooks specification from the crates"
+run = "./scripts/check-spec.sh --sync"
+
+[tasks.spec-check]
+description = "Verify the published hooks specification matches the crates"
+run = "./scripts/check-spec.sh"
+
 [tasks.extension-check]
 description = "Type-check and test the VS Code extension"
 run = "npm --prefix editors/vscode test"
@@ -186,6 +194,7 @@ run = [
   { task = "docs-build" },
   { task = "capabilities-check" },
   { task = "plugin-check" },
+  { task = "spec-check" },
   # The extension ships no runtime dependencies -- it is packaged with
   # --no-dependencies and shells out to the installed CLI -- so it is
   # type-checked and tested here but deliberately not in `security-audit`,

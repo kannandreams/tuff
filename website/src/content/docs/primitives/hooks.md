@@ -134,62 +134,23 @@ in `tuff.lock`.
 
 ## Hook event reference
 
-Manifest-style Tuff-standard hooks can use canonical event names. Tuff maps aliases such as
-`pre_tool_execution` to the canonical `pre_tool_use` event where supported.
+Manifest-style Tuff-standard hooks use canonical event names: `session_start`, `session_end`, `pre_tool_use`, `post_tool_use`, `before_finish`, `after_save`, and `stop`. Tuff maps aliases such as `pre_tool_execution` to the canonical `pre_tool_use` event where a harness supports it, and each harness declares how faithfully it can honour every event: fully, partially with a stated caveat, or not at all, in which case the install is refused with the list of events that harness does support.
 
-| Canonical event | Description |
-|---|---|
-| `before_finish` | Before the agent completes a session or task |
-| `after_save` | After a file has been saved |
-| `pre_tool_use` | Before a tool call is executed |
-| `post_tool_use` | After a tool call completes |
-| `session_start` | When a session starts |
-| `session_end` | When a session ends |
-| `stop` | When a harness reaches a stop/continuation point |
+The full vocabulary, what each event may block, and every harness's compatibility matrix are published in the [Hooks Specification](/spec/hooks/). Those tables are generated from the code Tuff runs, so they cannot drift from what `tuff add` does. The short version:
 
-### Open Agents (`open-agents`)
-
-| Event | Description |
-|---|---|
-| `before_finish` | Before the agent completes a session or task |
-| `after_save` | After a file has been saved |
-| `pre_tool_execution` | Native rendering for canonical `pre_tool_use` |
-| `post_tool_execution` | Native rendering for canonical `post_tool_use` |
-
-### Codex (`codex`)
-
-Codex has a dedicated adapter and compatibility matrix even though it uses the `.agents/` output
-family. Its local function-tool coverage is reported separately from the generic Open Agents
-adapter.
-
-### Cursor (`cursor`)
-
-Cursor hooks are rendered into `.cursor/hooks.json` using native event names such as `sessionStart`,
-`preToolUse`, `postToolUse`, and `stop`. Cursor hook groups contain a direct `command` field rather
-than the nested `hooks` array used by Claude and Open Agents.
-
-### Claude (`claude`)
-
-Tuff-standard Claude hooks use Claude Code's case-sensitive native event names:
-
-| Canonical event | Claude event | Coverage |
-|---|---|---|
-| `session_start` | `SessionStart` | Full |
-| `session_end` | `SessionEnd` | Full |
-| `pre_tool_use` | `PreToolUse` | Full |
-| `post_tool_use` | `PostToolUse` | Full |
-| `before_finish` | `Stop` | Partial |
-| `stop` | `Stop` | Full |
-| `after_save` | — | Unsupported |
-
-The `before_finish` mapping is partial because Claude's `Stop` event runs after the main agent finishes responding and can request continuation. Claude's `FileChanged` hook requires watched filenames or paths, which Tuff's standard `after_save` model cannot currently express. For native hook fragments, Tuff reads the event names from the fragment and merges them into the adapter's settings file.
+- **Open Agents** and **Codex** render into `.agents/hook.json` with events such as `before_finish`, `after_save`, `pre_tool_execution`, and `post_tool_execution`.
+- **Claude** renders into `.claude/settings.json` with Claude Code's case-sensitive names: `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, and `Stop`. `before_finish` is partial through `Stop`, and `after_save` is unsupported because Claude's `FileChanged` needs watched paths the standard hook cannot express.
+- **Cursor** renders into `.cursor/hooks.json` with `sessionStart`, `sessionEnd`, `preToolUse`, `postToolUse`, and `stop`, where a hook group carries a direct `command` field rather than the nested `hooks` array the others use.
 
 Use the compatibility commands to inspect what Tuff-standard hook events can render where:
 
 ```sh frame="terminal"
 tuff hooks matrix
 tuff hooks check-portability pre-commit-lint --target claude
+tuff hooks spec
 ```
+
+`tuff hooks matrix` covers the agents registered in the project; `tuff hooks spec` prints the whole specification your binary implements, every harness included, and `--json` prints the document the published specification is generated from.
 
 Portability checks are scoped to registered adapters. Tuff-standard hooks retain both their
 canonical event and emitted native event in the lockfile, so the target adapter is checked using the

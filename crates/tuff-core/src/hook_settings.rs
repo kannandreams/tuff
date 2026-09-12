@@ -10,11 +10,14 @@
 
 use std::path::Path;
 
+use serde::Serialize;
+
 use crate::error::{Result, TuffError};
 use crate::lockfile::{self, ManagedHook};
 
 /// How a harness lays out the hook registrations in its settings file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum HookSettingsShape {
     /// Claude Code's shape, shared by Open Agents and Codex: every event
     /// holds groups, and every group holds typed hook entries.

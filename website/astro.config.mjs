@@ -72,6 +72,7 @@ export default defineConfig({
             { label: 'Tools', slug: 'primitives/tools' },
             { label: 'MCP Servers', slug: 'primitives/mcp-servers' },
             { label: 'Hooks', slug: 'primitives/hooks' },
+            { label: 'Hooks Specification', slug: 'spec/hooks' },
             { label: 'Policies', slug: 'primitives/policies' },
             { label: 'Workflows', slug: 'primitives/workflows' },
             { label: 'Capability Packs', slug: 'concepts/packs' },

@@ -1,0 +1,587 @@
+{
+  "spec_version": "0.1.0",
+  "events": [
+    {
+      "event": "session_start",
+      "canonical_name": "session_start",
+      "blocking": "not_blocking",
+      "since_spec_version": "0.1.0",
+      "payload_schema": {
+        "fields": [
+          {
+            "name": "session_id",
+            "value_type": "string",
+            "required": false,
+            "description": "Harness session identifier, when available."
+          },
+          {
+            "name": "cwd",
+            "value_type": "string",
+            "required": false,
+            "description": "Working directory for the hook invocation."
+          }
+        ]
+      }
+    },
+    {
+      "event": "session_end",
+      "canonical_name": "session_end",
+      "blocking": "not_blocking",
+      "since_spec_version": "0.1.0",
+      "payload_schema": {
+        "fields": [
+          {
+            "name": "session_id",
+            "value_type": "string",
+            "required": false,
+            "description": "Harness session identifier, when available."
+          },
+          {
+            "name": "cwd",
+            "value_type": "string",
+            "required": false,
+            "description": "Working directory for the hook invocation."
+          }
+        ]
+      }
+    },
+    {
+      "event": "pre_tool_use",
+      "canonical_name": "pre_tool_use",
+      "blocking": "blocks_action",
+      "since_spec_version": "0.1.0",
+      "payload_schema": {
+        "fields": [
+          {
+            "name": "session_id",
+            "value_type": "string",
+            "required": false,
+            "description": "Harness session identifier, when available."
+          },
+          {
+            "name": "cwd",
+            "value_type": "string",
+            "required": false,
+            "description": "Working directory for the hook invocation."
+          }
+        ]
+      }
+    },
+    {
+      "event": "post_tool_use",
+      "canonical_name": "post_tool_use",
+      "blocking": "blocks_continuation",
+      "since_spec_version": "0.1.0",
+      "payload_schema": {
+        "fields": [
+          {
+            "name": "session_id",
+            "value_type": "string",
+            "required": false,
+            "description": "Harness session identifier, when available."
+          },
+          {
+            "name": "cwd",
+            "value_type": "string",
+            "required": false,
+            "description": "Working directory for the hook invocation."
+          }
+        ]
+      }
+    },
+    {
+      "event": "before_finish",
+      "canonical_name": "before_finish",
+      "blocking": "blocks_continuation",
+      "since_spec_version": "0.1.0",
+      "payload_schema": {
+        "fields": [
+          {
+            "name": "session_id",
+            "value_type": "string",
+            "required": false,
+            "description": "Harness session identifier, when available."
+          },
+          {
+            "name": "cwd",
+            "value_type": "string",
+            "required": false,
+            "description": "Working directory for the hook invocation."
+          }
+        ]
+      }
+    },
+    {
+      "event": "after_save",
+      "canonical_name": "after_save",
+      "blocking": "not_blocking",
+      "since_spec_version": "0.1.0",
+      "payload_schema": {
+        "fields": [
+          {
+            "name": "session_id",
+            "value_type": "string",
+            "required": false,
+            "description": "Harness session identifier, when available."
+          },
+          {
+            "name": "cwd",
+            "value_type": "string",
+            "required": false,
+            "description": "Working directory for the hook invocation."
+          }
+        ]
+      }
+    },
+    {
+      "event": "stop",
+      "canonical_name": "stop",
+      "blocking": "blocks_continuation",
+      "since_spec_version": "0.1.0",
+      "payload_schema": {
+        "fields": [
+          {
+            "name": "session_id",
+            "value_type": "string",
+            "required": false,
+            "description": "Harness session identifier, when available."
+          },
+          {
+            "name": "cwd",
+            "value_type": "string",
+            "required": false,
+            "description": "Working directory for the hook invocation."
+          }
+        ]
+      }
+    }
+  ],
+  "adapters": [
+    {
+      "adapter": "open-agents",
+      "display_name": "Open Agents",
+      "dir_prefix": ".agents",
+      "hook_settings_path": ".agents/hook.json",
+      "hook_settings_shape": "grouped",
+      "hook_command": "sh .agents/hooks/<id>/run.sh",
+      "spec_version": "0.1.0",
+      "adapter": "open-agents",
+      "events": [
+        {
+          "event": "before_finish",
+          "native_event": "before_finish",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [],
+          "caveat": null,
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "after_save",
+          "native_event": "after_save",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [],
+          "caveat": null,
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "pre_tool_use",
+          "native_event": "pre_tool_execution",
+          "aliases": [
+            "pre_tool_execution"
+          ],
+          "coverage": "partial",
+          "scope": [
+            "local function tools",
+            "Bash",
+            "Edit",
+            "Write",
+            "MCP"
+          ],
+          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
+          "source": "https://learn.chatgpt.com/docs/hooks.md",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "post_tool_use",
+          "native_event": "post_tool_execution",
+          "aliases": [
+            "post_tool_execution"
+          ],
+          "coverage": "partial",
+          "scope": [
+            "local function tools",
+            "Bash",
+            "Edit",
+            "Write",
+            "MCP"
+          ],
+          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
+          "source": "https://learn.chatgpt.com/docs/hooks.md",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "session_start",
+          "native_event": null,
+          "aliases": [],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Open Agents hook.json does not currently define a session-start event.",
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "session_end",
+          "native_event": null,
+          "aliases": [],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Open Agents hook.json does not currently define a session-end event.",
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "stop",
+          "native_event": null,
+          "aliases": [],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Open Agents hook.json does not currently define a stop event.",
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        }
+      ]
+    },
+    {
+      "adapter": "claude",
+      "display_name": "Claude",
+      "dir_prefix": ".claude",
+      "hook_settings_path": ".claude/settings.json",
+      "hook_settings_shape": "grouped",
+      "hook_command": "sh .claude/hooks/<id>/run.sh",
+      "spec_version": "0.1.0",
+      "adapter": "claude",
+      "events": [
+        {
+          "event": "session_start",
+          "native_event": "SessionStart",
+          "aliases": [
+            "SessionStart"
+          ],
+          "coverage": "full",
+          "scope": [
+            "startup",
+            "resume",
+            "clear",
+            "compact",
+            "fork"
+          ],
+          "caveat": null,
+          "source": "https://code.claude.com/docs/en/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "session_end",
+          "native_event": "SessionEnd",
+          "aliases": [
+            "SessionEnd"
+          ],
+          "coverage": "full",
+          "scope": [
+            "session lifecycle"
+          ],
+          "caveat": null,
+          "source": "https://code.claude.com/docs/en/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "pre_tool_use",
+          "native_event": "PreToolUse",
+          "aliases": [
+            "PreToolUse"
+          ],
+          "coverage": "full",
+          "scope": [
+            "tool calls"
+          ],
+          "caveat": null,
+          "source": "https://code.claude.com/docs/en/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "post_tool_use",
+          "native_event": "PostToolUse",
+          "aliases": [
+            "PostToolUse"
+          ],
+          "coverage": "full",
+          "scope": [
+            "successful tool calls"
+          ],
+          "caveat": null,
+          "source": "https://code.claude.com/docs/en/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "before_finish",
+          "native_event": "Stop",
+          "aliases": [],
+          "coverage": "partial",
+          "scope": [
+            "main-agent completion"
+          ],
+          "caveat": "Claude Stop runs after the main agent finishes responding and can request continuation; it does not represent every possible pre-finish boundary.",
+          "source": "https://code.claude.com/docs/en/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "after_save",
+          "native_event": null,
+          "aliases": [
+            "FileChanged"
+          ],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Claude FileChanged requires watched filenames or paths that Tuff's standard after_save hook cannot currently express.",
+          "source": "https://code.claude.com/docs/en/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "stop",
+          "native_event": "Stop",
+          "aliases": [
+            "Stop"
+          ],
+          "coverage": "full",
+          "scope": [
+            "main-agent completion"
+          ],
+          "caveat": null,
+          "source": "https://code.claude.com/docs/en/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        }
+      ]
+    },
+    {
+      "adapter": "codex",
+      "display_name": "Codex",
+      "dir_prefix": ".agents",
+      "hook_settings_path": ".agents/hook.json",
+      "hook_settings_shape": "grouped",
+      "hook_command": "sh .agents/hooks/<id>/run.sh",
+      "spec_version": "0.1.0",
+      "adapter": "codex",
+      "events": [
+        {
+          "event": "before_finish",
+          "native_event": "before_finish",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [],
+          "caveat": null,
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "after_save",
+          "native_event": "after_save",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [],
+          "caveat": null,
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "pre_tool_use",
+          "native_event": "pre_tool_execution",
+          "aliases": [
+            "pre_tool_execution"
+          ],
+          "coverage": "partial",
+          "scope": [
+            "local function tools",
+            "Bash",
+            "Edit",
+            "Write",
+            "MCP"
+          ],
+          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
+          "source": "https://learn.chatgpt.com/docs/hooks.md",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "post_tool_use",
+          "native_event": "post_tool_execution",
+          "aliases": [
+            "post_tool_execution"
+          ],
+          "coverage": "partial",
+          "scope": [
+            "local function tools",
+            "Bash",
+            "Edit",
+            "Write",
+            "MCP"
+          ],
+          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
+          "source": "https://learn.chatgpt.com/docs/hooks.md",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "session_start",
+          "native_event": null,
+          "aliases": [],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Codex hook.json does not currently define a session-start event.",
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "session_end",
+          "native_event": null,
+          "aliases": [],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Codex hook.json does not currently define a session-end event.",
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "stop",
+          "native_event": null,
+          "aliases": [],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Codex hook.json does not currently define a stop event.",
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        }
+      ]
+    },
+    {
+      "adapter": "cursor",
+      "display_name": "Cursor",
+      "dir_prefix": ".cursor",
+      "hook_settings_path": ".cursor/hooks.json",
+      "hook_settings_shape": "flat",
+      "hook_command": "sh .cursor/hooks/<id>/run.sh",
+      "spec_version": "0.1.0",
+      "adapter": "cursor",
+      "events": [
+        {
+          "event": "session_start",
+          "native_event": "sessionStart",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [],
+          "caveat": null,
+          "source": "https://cursor.com/blog/agent-best-practices",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "session_end",
+          "native_event": "sessionEnd",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [
+            "session lifecycle"
+          ],
+          "caveat": null,
+          "source": "https://cursor.com/blog/agent-best-practices",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "pre_tool_use",
+          "native_event": "preToolUse",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [
+            "agent tool calls"
+          ],
+          "caveat": "A native matcher can narrow the tools that receive the hook.",
+          "source": "https://cursor.com/blog/agent-best-practices",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "post_tool_use",
+          "native_event": "postToolUse",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [
+            "agent tool calls"
+          ],
+          "caveat": "A native matcher can narrow the tools that receive the hook.",
+          "source": "https://cursor.com/blog/agent-best-practices",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "after_save",
+          "native_event": null,
+          "aliases": [],
+          "coverage": "unsupported",
+          "scope": [],
+          "caveat": "Cursor does not expose a direct after-save hook in this adapter.",
+          "source": null,
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "before_finish",
+          "native_event": "stop",
+          "aliases": [],
+          "coverage": "partial",
+          "scope": [
+            "agent completion"
+          ],
+          "caveat": "Cursor stop can request continuation rather than block a prior action.",
+          "source": "https://cursor.com/blog/agent-best-practices",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "stop",
+          "native_event": "stop",
+          "aliases": [],
+          "coverage": "full",
+          "scope": [
+            "agent completion"
+          ],
+          "caveat": null,
+          "source": "https://cursor.com/blog/agent-best-practices",
+          "since_harness_version": null,
+          "until_harness_version": null
+        }
+      ]
+    }
+  ]
+}

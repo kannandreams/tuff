@@ -120,6 +120,8 @@ User-facing changes should update the `Unreleased` section of [CHANGELOG.md](CHA
 
 The website renders `CHANGELOG.md` as its [Changelog page](https://tuffcli.dev/changelog/). The page is generated at build time by `website/scripts/sync-changelog.mjs`, so there is nothing to update by hand; keep the root file as the only copy.
 
+The hooks specification under `spec/hooks/` is generated too: `hooks-spec.json` is what `tuff hooks spec --json` prints and the tables in `SPEC.md` are rendered from it. After changing `crates/tuff-hooks-spec` or an adapter's compatibility matrix, run `mise run spec-sync` and commit the result; `mise run check` and a pre-commit hook fail on drift. The prose around the tables is edited by hand, and a change to the vocabulary itself moves the specification's own version, as its section 9 describes.
+
 To cut a release:
 
 1. Open a `chore: prepare tuffcli X.Y.Z release` pull request that moves the `Unreleased` entries into a dated `[X.Y.Z]` section, adds the section's comparison link, bumps `version` and the internal path-dependency pins in the root `Cargo.toml`, refreshes `Cargo.lock`, and updates the `--version` integration test. Every pull request merged since the previous tag must have an entry; write one from the pull request description if it was skipped.
