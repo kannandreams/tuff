@@ -227,7 +227,7 @@ fn version_outputs_current_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("tuff 0.8.0"));
+        .stdout(predicate::str::contains("tuff 0.9.0"));
 }
 
 #[test]
