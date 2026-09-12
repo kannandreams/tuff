@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tuffcli.dev/spec/hooks/hooks-spec.schema.json",
+  "title": "Tuff hooks specification document",
+  "description": "The machine-readable form of the Tuff Hooks Specification: the canonical event vocabulary and one compatibility matrix per harness. Tuff produces its own with `tuff hooks spec --json`; another implementation publishes its matrices in the same form.",
+  "type": "object",
+  "required": ["spec_version", "events", "adapters"],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": { "$ref": "#/$defs/semver" },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "adapters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/adapter" }
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "canonical_event": {
+      "type": "string",
+      "enum": ["session_start", "session_end", "pre_tool_use", "post_tool_use", "before_finish", "after_save", "stop"]
+    },
+    "event": {
+      "type": "object",
+      "required": ["event", "canonical_name", "blocking", "since_spec_version", "payload_schema"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "$ref": "#/$defs/canonical_event" },
+        "canonical_name": { "$ref": "#/$defs/canonical_event" },
+        "blocking": {
+          "anyOf": [
+            { "type": "string", "enum": ["not_blocking", "blocks_action", "blocks_continuation"] },
+            {
+              "type": "object",
+              "required": ["custom"],
+              "additionalProperties": false,
+              "properties": { "custom": { "type": "string" } }
+            }
+          ]
+        },
+        "since_spec_version": { "$ref": "#/$defs/semver" },
+        "payload_schema": {
+          "type": "object",
+          "required": ["fields"],
+          "additionalProperties": false,
+          "properties": {
+            "fields": { "type": "array", "items": { "$ref": "#/$defs/payload_field" } }
+          }
+        }
+      }
+    },
+    "payload_field": {
+      "type": "object",
+      "required": ["name", "value_type", "required", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "value_type": { "type": "string", "enum": ["string", "boolean", "number", "object", "array"] },
+        "required": { "type": "boolean" },
+        "description": { "type": "string" }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "required": ["adapter", "display_name", "dir_prefix", "hook_settings_path", "hook_settings_shape", "hook_command", "spec_version", "events"],
+      "additionalProperties": false,
+      "properties": {
+        "adapter": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "display_name": { "type": "string" },
+        "dir_prefix": { "type": "string" },
+        "hook_settings_path": { "type": "string" },
+        "hook_settings_shape": { "type": "string", "enum": ["grouped", "flat"] },
+        "hook_command": { "type": "string" },
+        "spec_version": { "$ref": "#/$defs/semver" },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/compatibility_entry" }
+        }
+      }
+    },
+    "compatibility_entry": {
+      "type": "object",
+      "required": ["event", "native_event", "aliases", "coverage", "scope", "caveat", "source", "since_harness_version", "until_harness_version"],
+      "additionalProperties": false,
+      "properties": {
+        "event": { "$ref": "#/$defs/canonical_event" },
+        "native_event": { "type": ["string", "null"] },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "coverage": { "type": "string", "enum": ["full", "partial", "unsupported"] },
+        "scope": { "type": "array", "items": { "type": "string" } },
+        "caveat": { "type": ["string", "null"] },
+        "source": { "type": ["string", "null"] },
+        "since_harness_version": { "type": ["string", "null"] },
+        "until_harness_version": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

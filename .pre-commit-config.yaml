@@ -28,6 +28,14 @@ repos:
         pass_filenames: false
         files: '^(crates/tuff-cli/assets/tuff-cli-guide\.md|plugins/tuff/.*|\.claude-plugin/.*)$'
 
+      - id: hooks-spec
+        name: Verify the published hooks specification
+        entry: scripts/check-spec.sh
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        files: '^(spec/.*|crates/tuff-hooks-spec/.*|crates/tuff-adapter-[a-z-]+/src/.*|crates/tuff-cli/src/commands/hooks\.rs)$'
+
       - id: commit-message
         name: Validate commit message (Conventional Commits)
         entry: scripts/check-commit-message.sh

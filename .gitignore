@@ -42,3 +42,7 @@ website/src/content/docs/changelog.md
 # Generated from crates/tuff-core/assets/mcp-catalog.toml by
 # website/scripts/sync-mcp-catalog.mjs
 website/src/data/mcp-catalog.json
+
+# Generated from spec/hooks/ by website/scripts/sync-hooks-spec.mjs
+website/src/content/docs/spec/
+website/public/spec/

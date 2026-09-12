@@ -66,5 +66,6 @@ crates/tuff-core/      lifecycle engine and adapter contract
 crates/tuff-hooks-spec/ canonical hook events and compatibility types
 crates/tuff-adapter-*/ native harness adapters
 examples/              runnable capability examples
+spec/                  published specifications, generated from the crates
 website/               Astro/Starlight documentation site
 ```

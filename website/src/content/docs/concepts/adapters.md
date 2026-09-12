@@ -93,24 +93,7 @@ All four adapters currently support:
 
 ## Supported hook events
 
-Manifest-style Tuff-standard hook event support is adapter-specific. Native hook fragments
-supplied with `--hook-file` keep their harness event names and are merged as-is.
-
-| Event | `open-agents` | `claude` | `codex` | `cursor` |
-|---|---|---|---|---|
-| `before_finish` | Yes | Partial, rendered as `Stop` | Yes | Partial, rendered as `stop` |
-| `after_save` | Yes | No | Yes | No |
-| `pre_tool_use` | Yes, rendered as `pre_tool_execution` | Yes, rendered as `PreToolUse` | Partial, rendered as `pre_tool_execution` | Yes, rendered as `preToolUse` |
-| `post_tool_use` | Yes, rendered as `post_tool_execution` | Yes, rendered as `PostToolUse` | Partial, rendered as `post_tool_execution` | Yes, rendered as `postToolUse` |
-| `session_start` | No | Yes, rendered as `SessionStart` | No | Yes, rendered as `sessionStart` |
-| `session_end` | No | Yes, rendered as `SessionEnd` | No | Yes, rendered as `sessionEnd` |
-| `stop` | No | Yes, rendered as `Stop` | No | Yes, rendered as `stop` |
-
-Claude's `before_finish` mapping is partial because Claude's native `Stop` event runs after the main agent finishes responding and can request continuation; it is not a general pre-finish boundary. Claude's native `FileChanged` event requires watched filenames or paths, which the standard `after_save` hook cannot currently express, so `after_save` remains unsupported for that adapter.
-
-Codex and Cursor have dedicated compatibility rows even when their output roots overlap with the
-generic Open Agents adapter. Cursor renders native names such as `sessionStart`, `preToolUse`,
-`postToolUse`, and `stop` into `.cursor/hooks.json`.
+Manifest-style Tuff-standard hook event support is adapter-specific, and each adapter declares it as a compatibility matrix: for every canonical event, the native event it renders to and whether coverage is full, partial with a caveat, or unsupported. The matrices for all four adapters are published in the [Hooks Specification](/spec/hooks/), generated from the same code `tuff add` runs. Native hook fragments supplied with `--hook-file` keep their harness event names and are merged as-is.
 
 If you try to install a manifest-style hook with an unsupported event, Tuff blocks the install
 and shows which events that adapter accepts. Run `tuff hooks matrix` to inspect the registered

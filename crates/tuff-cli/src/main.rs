@@ -18,10 +18,10 @@ use commands::{
     PackBuildOptions, PackInitOptions, cmd_add, cmd_add_mcp, cmd_add_pack, cmd_agent_add,
     cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check,
     cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
-    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_init, cmd_list, cmd_lock_migrate,
-    cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated, cmd_pack_build, cmd_pack_check,
-    cmd_pack_extract, cmd_pack_init, cmd_pack_inspect, cmd_pack_pull, cmd_pack_push,
-    cmd_pack_verify, cmd_scan, cmd_status, cmd_untrack, cmd_update,
+    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_hooks_spec, cmd_init, cmd_list,
+    cmd_lock_migrate, cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated,
+    cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
+    cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_scan, cmd_status, cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -636,6 +636,13 @@ enum HooksCommand {
     /// Print hook compatibility for registered agents.
     Matrix,
 
+    /// Print the hook specification this binary implements, for every agent.
+    Spec {
+        /// Output the specification document as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
+
     /// Check whether a tracked hook can render on a target agent.
     CheckPortability {
         /// Installed hook capability id.
@@ -970,6 +977,7 @@ fn run() -> Result<()> {
         },
         Some(Command::Hooks { action }) => match action {
             HooksCommand::Matrix => cmd_hooks_matrix(&repo_root),
+            HooksCommand::Spec { json } => cmd_hooks_spec(json),
             HooksCommand::CheckPortability { id, target } => {
                 cmd_hooks_check_portability(&repo_root, &id, &target)
             }

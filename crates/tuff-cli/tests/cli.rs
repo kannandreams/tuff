@@ -3419,6 +3419,52 @@ fn hooks_matrix_lists_registered_adapter_compatibility() {
 }
 
 #[test]
+fn hooks_spec_prints_the_document_the_published_specification_is_generated_from() {
+    // No project is needed: the spec is a property of the binary, not of
+    // what a project registered.
+    let temp = TempDir::new().unwrap();
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["hooks", "spec", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["spec_version"], tuff_hooks_spec::SPEC_VERSION);
+    assert_eq!(document["events"].as_array().unwrap().len(), 7);
+    let adapters: Vec<&str> = document["adapters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|adapter| adapter["adapter"].as_str().unwrap())
+        .collect();
+    assert_eq!(adapters, ["open-agents", "claude", "codex", "cursor"]);
+
+    // The committed copy is this output, byte for byte. `mise run spec-sync`
+    // regenerates it; this fails when someone changes a matrix and forgets.
+    let published = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../spec/hooks/hooks-spec.json"
+    ))
+    .expect("spec/hooks/hooks-spec.json is committed");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        String::from_utf8(published).unwrap(),
+        "spec/hooks/hooks-spec.json is out of date; run 'mise run spec-sync'"
+    );
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["hooks", "spec"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Tuff hooks specification 0.1.0"))
+        .stdout(predicate::str::contains("blocks action"))
+        .stdout(predicate::str::contains("cursor"))
+        .stdout(predicate::str::contains("preToolUse"));
+}
+
+#[test]
 fn hooks_check_portability_requires_registered_target() {
     let temp = TempDir::new().unwrap();
     let hook = make_hook_primitive(temp.path(), "pre-commit");

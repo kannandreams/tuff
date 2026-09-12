@@ -12,3 +12,10 @@ Harness version bounds are optional. When Tuff knows that behavior changed in a
 specific harness version, adapters can fill in `since_harness_version` and
 `until_harness_version`. When the version is unknown, those fields should remain
 empty rather than using placeholder values.
+
+The vocabulary this crate defines is published as the [Tuff Hooks
+Specification](https://tuffcli.dev/spec/hooks/), together with every
+adapter's compatibility matrix, a conformance checklist, and a JSON Schema for
+the machine-readable form. `tuff hooks spec --json` prints that document from
+the running binary, and the repository's `spec/hooks/` copy is generated from
+it, so the published specification cannot say something the code does not do.
