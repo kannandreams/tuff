@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-12
+
 ### Added
 
 - **The hooks specification is published.** The vocabulary Tuff renders hooks from, seven canonical events with what each may block, and every harness's compatibility matrix are now a versioned document at [tuffcli.dev/spec/hooks/](https://tuffcli.dev/spec/hooks/) and under `spec/hooks/` in the repository, with a conformance checklist for anything else that wants to implement it and a JSON Schema for the machine-readable form. It is generated, not written: `tuff hooks spec` prints the specification the binary implements, for every harness whether or not the project registers it, and `--json` prints the document the published files are made from. A repository check fails when they drift, so the published tables cannot say something `tuff add` does not do. The hand-kept event tables on the Hooks and Harness Adapters pages, one of which had already drifted, are replaced by links to it. The specification is version 0.1.0 and describes what Tuff has shipped since 0.1.2.
@@ -13,8 +15,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Changed
 
-- `tuff outdated` checks a commit-following git install with one `git ls-remote` instead of a clone. The listing names HEAD and every tag in one round trip, so a `sha` entry never clones, and a `declared` entry clones only when HEAD has moved, which is when the version it declares now has to be read. Each capability is also checked once rather than once per agent it is installed for, which previously cloned a capability installed for two agents twice.
 - The four harness adapters now share one implementation of hook-settings handling, in `tuff-core`. Each adapter used to carry its own copy of the code that merges a hook registration into the harness's settings file and takes it out again, so a fix had to be made four times at once and the copies had drifted in wording. An adapter now declares only what differs: the shape of its settings file, its paths, its event matrix, and how to recognise a project that uses it. Nothing the adapters write has changed; the only visible difference is that the messages for a malformed `--hook-file` fragment read the same for every harness.
+- `tuff outdated` checks a commit-following git install with one `git ls-remote` instead of a clone. The listing names HEAD and every tag in one round trip, so a `sha` entry never clones, and a `declared` entry clones only when HEAD has moved, which is when the version it declares now has to be read. Each capability is also checked once rather than once per agent it is installed for, which previously cloned a capability installed for two agents twice.
 
 ## [0.8.0] - 2026-09-09
 
@@ -251,7 +253,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/kannandreams/tuff/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kannandreams/tuff/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/kannandreams/tuff/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/kannandreams/tuff/compare/v0.5.0...v0.6.0

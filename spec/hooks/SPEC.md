@@ -207,7 +207,7 @@ Compatibility matrices are data about harnesses, not part of the vocabulary. A r
 
 | Tuff releases | Specification |
 |---|---|
-| 0.1.2 through 0.8.0, and unreleased `main` | 0.1.0 |
+| 0.1.2 through 0.9.0 | 0.1.0 |
 
 ## 10. Changes to this specification
 
