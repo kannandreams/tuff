@@ -28,6 +28,11 @@ struct OutdatedRow {
     /// `major`, `minor`, or `patch` when both sides are releases: the size
     /// of the change the author claimed, shown beside `outdated`.
     change: Option<String>,
+    /// The newest release the repository publishes, for a git install. On a
+    /// release-pinned entry this is what LATEST already shows; on a commit
+    /// or declared install it is the release the entry could be pinned to,
+    /// and the reason for the note under the table.
+    latest_release: Option<String>,
 }
 
 /// The `--json` shape of an [`OutdatedRow`], with the same `type`/`target`
@@ -46,6 +51,8 @@ struct JsonOutdatedRow<'a> {
     status: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     change: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_release: Option<&'a str>,
 }
 
 impl OutdatedRow {
@@ -59,6 +66,27 @@ impl OutdatedRow {
             latest: (self.latest != UNRESOLVED).then_some(self.latest.as_str()),
             status: &self.status,
             change: self.change.as_deref(),
+            latest_release: self.latest_release.as_deref(),
+        }
+    }
+}
+
+/// What `classify` concluded about one entry: the three columns, plus the
+/// newest release a git repository publishes when it publishes any.
+struct Verdict {
+    current: String,
+    latest: String,
+    status: String,
+    latest_release: Option<String>,
+}
+
+impl From<(String, String, String)> for Verdict {
+    fn from((current, latest, status): (String, String, String)) -> Self {
+        Verdict {
+            current,
+            latest,
+            status,
+            latest_release: None,
         }
     }
 }
@@ -219,7 +247,7 @@ fn classify(
     entry: &lockfile::CapabilityLockEntry,
     oci_options: &OciTransferOptions,
     cache: &mut PackCheckCache,
-) -> (String, String, String) {
+) -> Verdict {
     let git = match &entry.source {
         lockfile::CapabilitySource::Pack(pack) => {
             return match &pack.registry {
@@ -229,14 +257,16 @@ fn classify(
                     UNRESOLVED.to_string(),
                     "not checked".to_string(),
                 ),
-            };
+            }
+            .into();
         }
         lockfile::CapabilitySource::Local(_) => {
             return (
                 entry.version.clone(),
                 UNRESOLVED.to_string(),
                 "not checked".to_string(),
-            );
+            )
+                .into();
         }
         lockfile::CapabilitySource::Catalog(catalog) if catalog.registry.is_some() => {
             let registry = catalog.registry.as_deref().expect("registry checked above");
@@ -252,7 +282,7 @@ fn classify(
                     Ok(None) => ("unpublished".to_string(), "error"),
                     Err(_) => ("unavailable".to_string(), "error"),
                 };
-            return (entry.version.clone(), latest, status.to_string());
+            return (entry.version.clone(), latest, status.to_string()).into();
         }
         lockfile::CapabilitySource::Catalog(catalog) => {
             let (latest, status) = match crate::catalog::lookup(&catalog.id) {
@@ -264,53 +294,81 @@ fn classify(
                 // either way there is nothing current to compare against.
                 _ => ("unavailable".to_string(), "error"),
             };
-            return (entry.version.clone(), latest, status.to_string());
+            return (entry.version.clone(), latest, status.to_string()).into();
         }
         lockfile::CapabilitySource::Git(git) if git.tag.is_some() => {
             return classify_release(id, entry, git);
         }
         lockfile::CapabilitySource::Git(git) => git,
     };
-    classify_commit(entry, git)
+    classify_commit(id, entry, git)
 }
 
 /// A git install with no release pin is compared commit to commit: HEAD
-/// moved or it did not. What the columns show depends on what the version
-/// is. A `sha` entry shows short commits. A `declared` entry shows the
-/// version the source declared then and declares now, with the claimed
-/// size of the change when both parse; when HEAD moved but the declared
-/// version did not, the row still reads `outdated`, which is exactly why a
-/// declared version is weaker than a release.
+/// moved or it did not. One `ls-remote` answers that and, from the same
+/// listing, whether the repository publishes releases the entry could be
+/// pinned to; the hint that release tags exist lives here rather than on
+/// `add`, where it would cost every untagged install a round trip. What
+/// the columns show depends on what the version is. A `sha` entry shows
+/// short commits and needs no clone. A `declared` entry shows the version
+/// the source declared then and declares now, which takes a clone once
+/// HEAD has moved, with the claimed size of the change when both parse;
+/// when HEAD moved but the declared version did not, the row still reads
+/// `outdated`, which is exactly why a declared version is weaker than a
+/// release.
 fn classify_commit(
+    id: &str,
     entry: &lockfile::CapabilityLockEntry,
     git: &lockfile::GitSource,
-) -> (String, String, String) {
+) -> Verdict {
     let declared = entry.version_scheme == lockfile::VersionScheme::Declared;
     let current = if declared {
         entry.version.clone()
     } else {
         short_sha(&entry.version).to_string()
     };
-    let (_guard, checkout, _) = match git::clone_to_temp(&git.url, None) {
-        Ok(clone) => clone,
-        Err(_) => return (current, "unavailable".to_string(), "error".to_string()),
+    let unavailable = |current: String, latest_release: Option<String>| Verdict {
+        current,
+        latest: "unavailable".to_string(),
+        status: "error".to_string(),
+        latest_release,
     };
-    let Ok(latest_sha) = git::resolve_ref(&checkout) else {
-        return (current, "unavailable".to_string(), "error".to_string());
+    let refs = match git::list_remote_refs(&git.url) {
+        Ok(refs) => refs,
+        Err(_) => return unavailable(current, None),
+    };
+    let releases = release::release_tags(refs.tags.iter().map(|tag| tag.name.as_str()), id);
+    let latest_release = release::latest_release(&releases).map(|tag| tag.version.to_string());
+    // The listing names HEAD unless the URL's `/tree/` segment is not a
+    // branch, in which case the clone is the only way to learn the commit.
+    let latest_sha = match refs.head.or_else(|| clone_head(&git.url)) {
+        Some(sha) => sha,
+        None => return unavailable(current, latest_release),
     };
     if latest_sha == git.git_ref {
-        return (current.clone(), current, "up to date".to_string());
+        return Verdict {
+            latest: current.clone(),
+            current,
+            status: "up to date".to_string(),
+            latest_release,
+        };
     }
     if !declared {
-        return (
+        return Verdict {
             current,
-            short_sha(&latest_sha).to_string(),
-            "outdated".to_string(),
-        );
+            latest: short_sha(&latest_sha).to_string(),
+            status: "outdated".to_string(),
+            latest_release,
+        };
     }
-    let latest_declared = git::discover_capability(&checkout, &git.path, entry.capability_type)
-        .ok()
-        .and_then(|dir| crate::manifest::declared_version(&dir));
+    let latest_declared =
+        git::clone_to_temp(&git.url, None)
+            .ok()
+            .and_then(|(_guard, checkout, _)| {
+                git::discover_capability(&checkout, &git.path, entry.capability_type)
+                    .ok()
+                    .and_then(|dir| crate::manifest::declared_version(&dir))
+            });
     let latest = latest_declared.unwrap_or_else(|| short_sha(&latest_sha).to_string());
     let status = match (Version::parse(&entry.version), Version::parse(&latest)) {
         (Ok(from), Ok(to)) if to != from => {
@@ -318,7 +376,18 @@ fn classify_commit(
         }
         _ => "outdated".to_string(),
     };
-    (current, latest, status)
+    Verdict {
+        current,
+        latest,
+        status,
+        latest_release,
+    }
+}
+
+/// The commit a shallow clone of the URL lands on.
+fn clone_head(url: &str) -> Option<String> {
+    let (_guard, checkout, _) = git::clone_to_temp(url, None).ok()?;
+    git::resolve_ref(&checkout).ok()
 }
 
 /// A tag-pinned install (RFC-101) is compared against the newest release
@@ -329,14 +398,20 @@ fn classify_release(
     id: &str,
     entry: &lockfile::CapabilityLockEntry,
     git: &lockfile::GitSource,
-) -> (String, String, String) {
+) -> Verdict {
     let current = entry.version.clone();
     let tags = match git::list_remote_tags(&git.url) {
         Ok(tags) => tags,
-        Err(_) => return (current, "unavailable".to_string(), "error".to_string()),
+        Err(_) => return (current, "unavailable".to_string(), "error".to_string()).into(),
     };
     let releases = release::release_tags(tags.iter().map(|tag| tag.name.as_str()), id);
     let latest = release::latest_release(&releases).map(|latest| latest.version.to_string());
+    let verdict = |current: String, latest: String, status: &str| Verdict {
+        current,
+        latest_release: (latest != UNRESOLVED).then(|| latest.clone()),
+        latest,
+        status: status.to_string(),
+    };
     // The tag is mutable; the commit is what was installed. A tag that
     // moved, or is gone, changes what LATEST means and wins over the
     // version verdict, while LATEST still shows the way forward.
@@ -346,43 +421,35 @@ fn classify_release(
         .map(|tag| release::tag_integrity(tag, &git.git_ref, &tags));
     match integrity {
         Some(release::TagIntegrity::Repointed { .. }) => {
-            return (
+            return verdict(
                 current,
                 latest.unwrap_or_else(|| UNRESOLVED.to_string()),
-                "repointed".to_string(),
+                "repointed",
             );
         }
         Some(release::TagIntegrity::Missing) => {
-            return (
+            return verdict(
                 current,
                 latest.unwrap_or_else(|| UNRESOLVED.to_string()),
-                "tag missing".to_string(),
+                "tag missing",
             );
         }
         Some(release::TagIntegrity::Matches) | None => {}
     }
     let Some(latest) = release::latest_release(&releases) else {
-        return (current, UNRESOLVED.to_string(), "tag missing".to_string());
+        return verdict(current, UNRESOLVED.to_string(), "tag missing");
     };
     match Version::parse(&entry.version) {
-        Ok(installed) if latest.version > installed => (
+        Ok(installed) if latest.version > installed => verdict(
             current,
             latest.version.to_string(),
-            format!(
+            &format!(
                 "outdated ({})",
                 release::change_kind(&installed, &latest.version)
             ),
         ),
-        Ok(_) => (
-            current,
-            latest.version.to_string(),
-            "up to date".to_string(),
-        ),
-        Err(_) => (
-            current,
-            latest.version.to_string(),
-            "not checked".to_string(),
-        ),
+        Ok(_) => verdict(current, latest.version.to_string(), "up to date"),
+        Err(_) => verdict(current, latest.version.to_string(), "not checked"),
     }
 }
 
@@ -405,22 +472,49 @@ fn collect_rows(
     rows: &mut Vec<OutdatedRow>,
 ) {
     for (id, entry) in &lf.capabilities {
+        // One upstream check per capability; the rows differ only by target.
+        let verdict = classify(id, entry, oci_options, cache);
+        let (status, change) = split_change(verdict.status);
         for target_id in entry.targets.keys() {
-            let (current, latest, status) = classify(id, entry, oci_options, cache);
-            let (status, change) = split_change(status);
             rows.push(OutdatedRow {
                 id: id.clone(),
                 capability_type: entry.capability_type,
                 target: target_id.clone(),
                 version_scheme: entry.version_scheme,
                 from_git: matches!(entry.source, lockfile::CapabilitySource::Git(_)),
-                current,
-                latest,
-                status,
-                change,
+                current: verdict.current.clone(),
+                latest: verdict.latest.clone(),
+                status: status.clone(),
+                change: change.clone(),
+                latest_release: verdict.latest_release.clone(),
             });
         }
     }
+}
+
+/// The note under the table for an untagged git install whose repository
+/// publishes releases: the entry follows a commit when it could follow a
+/// version. One line per capability, however many targets it has, and
+/// only when the check itself succeeded.
+fn release_hints(rows: &[OutdatedRow]) -> Vec<String> {
+    let mut seen = std::collections::BTreeSet::new();
+    rows.iter()
+        .filter(|row| row.from_git && row.status != "error")
+        .filter(|row| row.version_scheme != lockfile::VersionScheme::Semver)
+        .filter_map(|row| {
+            let release = row.latest_release.as_deref()?;
+            seen.insert(row.id.clone()).then(|| {
+                let requirement = match Version::parse(release) {
+                    Ok(version) => format!("^{}.{}", version.major, version.minor),
+                    Err(_) => release.to_string(),
+                };
+                format!(
+                    "note: {} follows a commit, but its repository publishes releases (newest {release}); 'tuff update {}@{requirement}' pins one",
+                    row.id, row.id
+                )
+            })
+        })
+        .collect()
 }
 
 pub fn cmd_outdated(
@@ -458,9 +552,13 @@ pub fn cmd_outdated(
 
     rows.sort_by(|a, b| a.id.cmp(&b.id));
 
+    let hints = release_hints(&rows);
     if json {
         let rows: Vec<JsonOutdatedRow<'_>> = rows.iter().map(OutdatedRow::as_json).collect();
         println!("{}", serde_json::to_string_pretty(&rows)?);
+        for hint in hints {
+            eprintln!("{hint}");
+        }
         return Ok(());
     }
 
@@ -499,6 +597,9 @@ pub fn cmd_outdated(
             &table_rows
         )
     );
+    for hint in hints {
+        eprintln!("{hint}");
+    }
     Ok(())
 }
 
@@ -528,7 +629,12 @@ mod tests {
         // local path, has no git source and no registry to check. Reporting
         // "up to date" here states a conclusion that was never reached: the
         // row would claim the capability is current while LATEST is unknown.
-        let (current, latest, status) = classify(
+        let Verdict {
+            current,
+            latest,
+            status,
+            latest_release,
+        } = classify(
             "example",
             &entry(lockfile::CapabilitySource::local(
                 "agent-capabilities/example",
@@ -537,6 +643,7 @@ mod tests {
             &mut PackCheckCache::default(),
         );
 
+        assert_eq!(latest_release, None);
         assert_eq!(status, "not checked");
         assert_ne!(
             status, "up to date",
@@ -544,6 +651,86 @@ mod tests {
         );
         assert_eq!(latest, "—");
         assert_eq!(current, "1.0.0");
+    }
+
+    fn row(
+        id: &str,
+        scheme: lockfile::VersionScheme,
+        status: &str,
+        release: Option<&str>,
+    ) -> OutdatedRow {
+        OutdatedRow {
+            id: id.to_string(),
+            capability_type: CapabilityType::Skill,
+            target: "open-agents".to_string(),
+            version_scheme: scheme,
+            from_git: true,
+            current: "abc1234".to_string(),
+            latest: "def5678".to_string(),
+            status: status.to_string(),
+            change: None,
+            latest_release: release.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn the_release_note_names_untagged_git_installs_once_each() {
+        // The hint that release tags exist lives on `outdated`, where the
+        // listing already happened, not on `add`. It is one line per
+        // capability however many targets it has, it suggests the caret
+        // range for the newest release, and it stays quiet for an entry
+        // already on a release, for one whose check failed, and for a
+        // repository with no releases.
+        let mut two_targets = row(
+            "commit-skill",
+            lockfile::VersionScheme::Sha,
+            "outdated",
+            Some("1.4.0"),
+        );
+        two_targets.target = "claude".to_string();
+        let rows = vec![
+            row(
+                "commit-skill",
+                lockfile::VersionScheme::Sha,
+                "outdated",
+                Some("1.4.0"),
+            ),
+            two_targets,
+            row(
+                "declared-skill",
+                lockfile::VersionScheme::Declared,
+                "up to date",
+                Some("0.3.1"),
+            ),
+            row(
+                "pinned-skill",
+                lockfile::VersionScheme::Semver,
+                "outdated",
+                Some("2.0.0"),
+            ),
+            row(
+                "failed-skill",
+                lockfile::VersionScheme::Sha,
+                "error",
+                Some("1.0.0"),
+            ),
+            row(
+                "untagged-skill",
+                lockfile::VersionScheme::Sha,
+                "outdated",
+                None,
+            ),
+        ];
+
+        let hints = release_hints(&rows);
+
+        assert_eq!(
+            hints,
+            vec![
+                "note: commit-skill follows a commit, but its repository publishes releases (newest 1.4.0); 'tuff update commit-skill@^1.4' pins one",
+                "note: declared-skill follows a commit, but its repository publishes releases (newest 0.3.1); 'tuff update declared-skill@^0.3' pins one",
+            ]
+        );
     }
 
     #[test]

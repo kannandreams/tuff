@@ -8215,6 +8215,115 @@ fn diff_upstream_on_a_pinned_entry_compares_against_the_newest_allowed_release()
 }
 
 #[test]
+fn outdated_says_when_an_untagged_git_install_could_follow_a_release() {
+    // The RFC-101 hint that release tags exist lives on `outdated`, where
+    // one `ls-remote` already lists them, rather than on `add`, where it
+    // would cost every untagged install a round trip.
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_skill_repo(temp.path());
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args([
+            "add",
+            "skill",
+            &repo_url,
+            "test-skill",
+            "-a",
+            "open-agents",
+            "-a",
+            "claude",
+        ])
+        .assert()
+        .success();
+
+    // No releases yet: a plain commit comparison, and nothing to suggest.
+    let output = tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stdout.contains("up to date"), "{stdout}");
+    assert!(!stderr.contains("note:"), "{stderr}");
+    let row = outdated_row(temp.path(), "test-skill");
+    assert!(row.get("latest_release").is_none(), "{row}");
+
+    // The repository starts tagging releases. The row still compares
+    // commits, since that is what the entry follows, and the note says
+    // a release could be followed instead, once, for both targets.
+    git_ok(&repo, &["tag", "v1.0.0"]);
+    commit_skill_release(&repo, "# Skill 1.4\n", "v1.4.0");
+    let output = tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stdout.contains("outdated"), "{stdout}");
+    assert_eq!(stderr.matches("note: test-skill").count(), 1, "{stderr}");
+    assert!(
+        stderr
+            .contains("publishes releases (newest 1.4.0); 'tuff update test-skill@^1.4' pins one"),
+        "{stderr}"
+    );
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["outdated", "--json"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let rows: Vec<&serde_json::Value> = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["id"] == "test-skill")
+        .collect();
+    assert_eq!(rows.len(), 2, "one row per target: {rows:?}");
+    for row in rows {
+        assert_eq!(row["status"], "outdated", "{row}");
+        assert_eq!(row["latest_release"], "1.4.0", "{row}");
+        assert_eq!(row["version_scheme"], "sha", "{row}");
+    }
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("note: test-skill"),
+        "the note is on stderr in JSON mode too, so the JSON stays clean"
+    );
+
+    // Taking the suggestion moves the entry onto the release, after which
+    // the note has nothing left to say.
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "test-skill@^1.4"])
+        .assert()
+        .success();
+    let output = tuff()
+        .current_dir(temp.path())
+        .arg("outdated")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stdout.contains("up to date"), "{stdout}");
+    assert!(!stderr.contains("note:"), "{stderr}");
+    let row = outdated_row(temp.path(), "test-skill");
+    assert_eq!(row["version_scheme"], "semver", "{row}");
+    assert_eq!(row["latest_release"], "1.4.0", "{row}");
+}
+
+#[test]
 fn a_repointed_or_deleted_release_tag_is_reported_not_trusted() {
     let temp = TempDir::new().unwrap();
     let repo = make_git_skill_repo(temp.path());
