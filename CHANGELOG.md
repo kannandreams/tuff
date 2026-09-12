@@ -13,6 +13,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 ### Changed
 
 - `tuff outdated` checks a commit-following git install with one `git ls-remote` instead of a clone. The listing names HEAD and every tag in one round trip, so a `sha` entry never clones, and a `declared` entry clones only when HEAD has moved, which is when the version it declares now has to be read. Each capability is also checked once rather than once per agent it is installed for, which previously cloned a capability installed for two agents twice.
+- The four harness adapters now share one implementation of hook-settings handling, in `tuff-core`. Each adapter used to carry its own copy of the code that merges a hook registration into the harness's settings file and takes it out again, so a fix had to be made four times at once and the copies had drifted in wording. An adapter now declares only what differs: the shape of its settings file, its paths, its event matrix, and how to recognise a project that uses it. Nothing the adapters write has changed; the only visible difference is that the messages for a malformed `--hook-file` fragment read the same for every harness.
 
 ## [0.8.0] - 2026-09-09
 

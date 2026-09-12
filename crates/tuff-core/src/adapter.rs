@@ -5,21 +5,8 @@ use serde::{Deserialize, Serialize};
 use tuff_hooks_spec::{CompatibilityMatrix, CoverageLevel};
 
 use crate::error::{Result, TuffError};
+pub use crate::hook_settings::{HookSettingsShape, extend_hook_groups};
 use crate::manifest::{CapabilityManifest, CapabilityType, HookConfig};
-
-/// Append hook groups that this event does not already register.
-///
-/// `tuff add` is re-runnable and a pack may be installed over an existing
-/// install, so the same hook fragment is merged more than once. Appending
-/// unconditionally leaves a duplicate group behind on every re-add, and the
-/// harness then runs that hook once per copy.
-pub fn extend_hook_groups(existing: &mut Vec<serde_json::Value>, additions: &[serde_json::Value]) {
-    for addition in additions {
-        if !existing.iter().any(|group| group == addition) {
-            existing.push(addition.clone());
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmittedFile {
@@ -190,6 +177,15 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
     })
 }
 
+/// What a harness adapter declares, and what Tuff does with it.
+///
+/// An adapter is a declaration: where the harness keeps its files, which
+/// hook events it has and how they map onto Tuff's, the shape of its hook
+/// settings file, and how to recognise a project that uses it. Everything
+/// else, planning files, rendering hooks, merging into and removing from
+/// the settings file, is a default method here, so there is one
+/// implementation of each and an adapter overrides one only when its
+/// harness genuinely differs (Cursor's `${env:VAR}` spelling, say).
 pub trait AgentAdapter {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
@@ -198,8 +194,17 @@ pub trait AgentAdapter {
     fn supported_agents(&self) -> &[&'static str];
     fn hook_compatibility(&self) -> &'static CompatibilityMatrix;
     fn hook_settings_relpath(&self) -> &'static str;
+    /// How the settings file at [`hook_settings_relpath`] lays out its
+    /// registrations. This is the whole of what differs between harnesses
+    /// in hook handling; the merge and removal follow from it.
+    ///
+    /// [`hook_settings_relpath`]: AgentAdapter::hook_settings_relpath
+    fn hook_settings_shape(&self) -> HookSettingsShape;
+    /// The native event `tuff create` registers a scaffolded hook under.
     fn scaffold_hook_event(&self) -> &'static str;
-    fn hook_filename(&self) -> &'static str;
+    fn hook_filename(&self) -> &'static str {
+        "run.sh"
+    }
     fn hook_file_content(&self, hook_cfg: &crate::manifest::HookConfig) -> Result<Vec<u8>> {
         render_hook_script(hook_cfg)
     }
@@ -308,17 +313,35 @@ pub trait AgentAdapter {
             diagnostics,
         })
     }
-    fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value;
+    /// The hooks-only fragment that registers `command` under `native_event`.
+    fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value {
+        self.hook_settings_shape()
+            .command_fragment(native_event, command)
+    }
+    /// Merge a hooks-only fragment into the settings file's current bytes.
     fn merge_hook_fragment(
         &self,
         existing: Option<&[u8]>,
         fragment: &serde_json::Value,
-    ) -> Result<Vec<u8>>;
+    ) -> Result<Vec<u8>> {
+        self.hook_settings_shape()
+            .merge_fragment(self.hook_settings_relpath(), existing, fragment)
+    }
+    /// Take Tuff's registrations out of the settings file, leaving the
+    /// user's own alone.
     fn remove_hook_settings(
         &self,
         repo_root: &Path,
         managed_hooks: &[crate::lockfile::ManagedHook],
-    ) -> Result<()>;
+    ) -> Result<()> {
+        crate::hook_settings::remove_registrations(
+            self.hook_settings_relpath(),
+            self.display_name(),
+            repo_root,
+            managed_hooks,
+        )
+    }
+    /// Whether a project already uses this harness.
     fn detect(&self, repo_root: &Path) -> bool;
 
     fn kinds_supported(&self) -> &[CapabilityType];
