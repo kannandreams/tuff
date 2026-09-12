@@ -152,8 +152,49 @@ pub struct RemoteTag {
 /// commit it currently names. That commit is what a repointed tag changes.
 pub fn list_remote_tags(raw_url: &str) -> Result<Vec<RemoteTag>> {
     let (clean_url, _) = clean_git_url(raw_url);
+    let listing = ls_remote(&clean_url, &["--tags"], &[])?;
+    Ok(parse_ls_remote_tags(&listing))
+}
+
+/// What one `ls-remote` says about a repository: the commit its HEAD names
+/// and every tag it publishes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteRefs {
+    /// The commit HEAD names now: the branch a `/tree/<branch>` URL selects,
+    /// otherwise the remote's default branch. `None` when the remote
+    /// advertises no such ref, as for an empty repository or a `/tree/`
+    /// segment that names a commit rather than a branch.
+    pub head: Option<String>,
+    pub tags: Vec<RemoteTag>,
+}
+
+/// HEAD and the tags in one round trip, without cloning. `outdated` uses
+/// this so that "did HEAD move" and "does the repository publish releases"
+/// cost one network call between them rather than a clone plus a listing.
+pub fn list_remote_refs(raw_url: &str) -> Result<RemoteRefs> {
+    let (clean_url, branch) = clean_git_url(raw_url);
+    let head_ref = match branch {
+        Some(branch) => format!("refs/heads/{branch}"),
+        None => "HEAD".to_string(),
+    };
+    let listing = ls_remote(&clean_url, &[], &[&head_ref, "refs/tags/*"])?;
+    let head = listing.lines().find_map(|line| {
+        let (sha, reference) = line.split_once('\t')?;
+        (reference == head_ref).then(|| sha.to_string())
+    });
+    Ok(RemoteRefs {
+        head,
+        tags: parse_ls_remote_tags(&listing),
+    })
+}
+
+/// Run `git ls-remote <flags> <url> <patterns>` and return its stdout.
+fn ls_remote(clean_url: &str, flags: &[&str], patterns: &[&str]) -> Result<String> {
     let output = Command::new("git")
-        .args(["ls-remote", "--tags", &clean_url])
+        .arg("ls-remote")
+        .args(flags)
+        .arg(clean_url)
+        .args(patterns)
         .output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -164,9 +205,7 @@ pub fn list_remote_tags(raw_url: &str) -> Result<Vec<RemoteTag>> {
             format!("{context}: {stderr}")
         }));
     }
-    Ok(parse_ls_remote_tags(&String::from_utf8_lossy(
-        &output.stdout,
-    )))
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 /// Read `git ls-remote --tags` output. A lightweight tag is one row naming

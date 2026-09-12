@@ -6,6 +6,14 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **`tuff outdated` says when a git install could follow a release instead of a commit.** A capability added from a repository without an `@` follows HEAD, and until now nothing told you when that repository started tagging releases; RFC-101 had left open where that hint should live, because putting it on `tuff add` would cost every untagged install a `git ls-remote`. It lives on `outdated`, where the listing already happens: an untagged git row whose repository publishes releases gets a note on standard error under the table naming the newest release and the `tuff update <id>@^<major>.<minor>` that pins it, once per capability however many agents it is installed for. `--json` carries the newest release as `latest_release` on every git row. The note is on standard error in both modes, so the JSON stays clean.
+
+### Changed
+
+- `tuff outdated` checks a commit-following git install with one `git ls-remote` instead of a clone. The listing names HEAD and every tag in one round trip, so a `sha` entry never clones, and a `declared` entry clones only when HEAD has moved, which is when the version it declares now has to be read. Each capability is also checked once rather than once per agent it is installed for, which previously cloned a capability installed for two agents twice.
+
 ## [0.8.0] - 2026-09-09
 
 ### Changed
