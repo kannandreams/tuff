@@ -3798,13 +3798,16 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
         .collect();
     assert_eq!(agents, ["open-agents", "claude", "codex", "cursor"]);
     for matrix in matrices {
+        let agent = matrix["adapter"].as_str().unwrap();
         let rules = matrix["rules"].as_array().unwrap();
         assert_eq!(rules.len(), 8, "two effects by four subjects: {matrix}");
         for rule in rules {
-            assert_eq!(
-                rule["coverage"], "unsupported",
-                "nothing is enforced until an agent compiles policies: {rule}"
-            );
+            let expected = match (agent, rule["subject"].as_str().unwrap()) {
+                ("claude", "mcp") => "full",
+                ("claude", _) => "partial",
+                _ => "unsupported",
+            };
+            assert_eq!(rule["coverage"], expected, "{agent}: {rule}");
         }
     }
     tuff()
@@ -3812,10 +3815,11 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
         .args(["policy", "matrix"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("EFFECT"))
-        .stdout(predicate::str::contains("unsupported"))
         .stdout(predicate::str::contains(
-            "claude: Tuff does not compile policy rules for this agent yet",
+            "permissions.deny Bash(<command> *)",
+        ))
+        .stdout(predicate::str::contains(
+            "codex: Tuff does not compile policy rules for this agent yet",
         ));
 }
 
@@ -3830,7 +3834,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "claude"])
+        .args(["agent", "add", "codex"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
@@ -3844,7 +3848,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
             "--agent",
             "open-agents",
             "--agent",
-            "claude",
+            "codex",
         ])
         .output()
         .unwrap();
@@ -3854,7 +3858,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
         stderr.contains("policy 'infra-guardrails' would not be enforced as written"),
         "{stderr}"
     );
-    for agent in ["Open Agents", "Claude"] {
+    for agent in ["Open Agents", "Codex"] {
         for rule in [
             "rule 1 (deny command \"git push --force\")",
             "rule 2 (deny read \".env\", \"secrets/**\")",
@@ -3872,7 +3876,6 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
         before
     );
     assert!(!project.join(".agents/policies").exists());
-    assert!(!project.join(".claude/policies").exists());
 }
 
 #[test]
@@ -3894,6 +3897,259 @@ fn a_policy_rule_cannot_allow_anything() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot allow anything"));
+}
+
+fn claude_project_with_user_settings(root: &Path) -> std::path::PathBuf {
+    let project = root.join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "claude"])
+        .assert()
+        .success();
+    fs::create_dir_all(project.join(".claude")).unwrap();
+    fs::write(
+        project.join(".claude/settings.json"),
+        r#"{"model": "opus", "permissions": {"deny": ["Bash(curl *)"], "allow": ["Bash(npm test *)"]}}"#,
+    )
+    .unwrap();
+    project
+}
+
+fn claude_settings(project: &Path) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(project.join(".claude/settings.json")).unwrap())
+        .unwrap()
+}
+
+#[test]
+fn a_policy_compiles_to_claude_code_permission_rules_and_keeps_the_users_own() {
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    let policy = write_infra_policy(temp.path());
+
+    let output = tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("Claude: rule 1 (deny command \"git push --force\") is enforced partially"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("rule 4 (deny mcp"),
+        "an MCP rule is enforced fully and gets no warning: {stderr}"
+    );
+
+    let settings = claude_settings(&project);
+    assert_eq!(settings["model"], "opus");
+    assert_eq!(
+        settings["permissions"]["allow"],
+        serde_json::json!(["Bash(npm test *)"])
+    );
+    assert_eq!(
+        settings["permissions"]["deny"],
+        serde_json::json!([
+            "Bash(curl *)",
+            "Bash(git push --force *)",
+            "Read(/**/.env)",
+            "Read(/secrets/**)",
+            "mcp__github__delete_*"
+        ])
+    );
+    assert_eq!(
+        settings["permissions"]["ask"],
+        serde_json::json!(["Bash(terraform apply *)"])
+    );
+    assert!(
+        project
+            .join(".claude/policies/infra-guardrails/policy.toml")
+            .is_file()
+    );
+    let lock = fs::read_to_string(project.join("tuff.lock")).unwrap();
+    assert!(lock.contains("\"managed_permissions\""), "{lock}");
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    let before = fs::read(project.join(".claude/settings.json")).unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read(project.join(".claude/settings.json")).unwrap(),
+        before,
+        "installing again changes nothing"
+    );
+}
+
+#[test]
+fn a_hand_removed_rule_is_drift_and_delete_takes_out_only_the_policys_rules() {
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .assert()
+        .success();
+
+    let mut settings = claude_settings(&project);
+    settings["permissions"]["deny"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|rule| rule != "Bash(git push --force *)");
+    fs::write(
+        project.join(".claude/settings.json"),
+        serde_json::to_string_pretty(&settings).unwrap(),
+    )
+    .unwrap();
+    let output = tuff()
+        .current_dir(&project)
+        .args(["check", "--json"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = report["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "infra-guardrails")
+        .unwrap()
+        .clone();
+    assert_eq!(row["status"], "modified", "{row}");
+    assert!(
+        row["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file == ".claude/settings.json#permissions.deny"),
+        "{row}"
+    );
+
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "infra-guardrails", "--agent", "claude", "--force"])
+        .assert()
+        .success();
+    let settings = claude_settings(&project);
+    assert_eq!(
+        settings["permissions"]["deny"],
+        serde_json::json!(["Bash(curl *)"])
+    );
+    assert!(
+        settings["permissions"].get("ask").is_none(),
+        "a list only the policy used is removed: {settings}"
+    );
+    assert_eq!(
+        settings["permissions"]["allow"],
+        serde_json::json!(["Bash(npm test *)"])
+    );
+    assert!(!project.join(".claude/policies/infra-guardrails").exists());
+    let lock = fs::read_to_string(project.join("tuff.lock")).unwrap();
+    assert!(!lock.contains("infra-guardrails"), "{lock}");
+}
+
+#[test]
+fn updating_a_policy_removes_the_rules_it_no_longer_has() {
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .assert()
+        .success();
+
+    let manifest = fs::read_to_string(policy.join("tuff.toml")).unwrap();
+    let edited = manifest.replace(
+        "[[policy.rules]]\neffect = \"ask\"\ncommand = [\"terraform\", \"apply\"]\n",
+        "[[policy.rules]]\neffect = \"deny\"\nedit = [\"infra/prod/\"]\n",
+    );
+    assert_ne!(edited, manifest);
+    fs::write(policy.join("tuff.toml"), edited).unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["update", "infra-guardrails", "--agent", "claude"])
+        .assert()
+        .success();
+
+    let settings = claude_settings(&project);
+    assert!(settings["permissions"].get("ask").is_none(), "{settings}");
+    assert_eq!(
+        settings["permissions"]["deny"],
+        serde_json::json!([
+            "Bash(curl *)",
+            "Bash(git push --force *)",
+            "Read(/**/.env)",
+            "Read(/secrets/**)",
+            "mcp__github__delete_*",
+            "Edit(/infra/prod/**)"
+        ])
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+}
+
+#[test]
+fn a_corrupt_claude_settings_file_refuses_the_policy_before_anything_is_written() {
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    fs::write(project.join(".claude/settings.json"), "{ not json").unwrap();
+    let before = fs::read_to_string(project.join("tuff.lock")).unwrap();
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            ".claude/settings.json is not valid JSON",
+        ));
+    assert_eq!(
+        fs::read_to_string(project.join(".claude/settings.json")).unwrap(),
+        "{ not json"
+    );
+    assert!(!project.join(".claude/policies").exists());
+    assert_eq!(
+        fs::read_to_string(project.join("tuff.lock")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn a_policy_is_refused_for_every_agent_when_one_selected_agent_cannot_enforce_it() {
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    let settings_before = fs::read_to_string(project.join(".claude/settings.json")).unwrap();
+    let policy = write_infra_policy(temp.path());
+    let output = tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            policy.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--agent",
+            "claude",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("Open Agents: rule 1"), "{stderr}");
+    assert!(
+        !stderr.contains("Claude: rule 1 (deny command \"git push --force\") is not enforced"),
+        "{stderr}"
+    );
+    assert_eq!(
+        fs::read_to_string(project.join(".claude/settings.json")).unwrap(),
+        settings_before,
+        "Claude's settings are untouched when the install as a whole is refused"
+    );
 }
 
 #[test]

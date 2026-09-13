@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use tuff_hooks_spec::CoverageLevel;
 
 use crate::error::{Result, TuffError};
+use crate::lockfile::ManagedPermission;
 
 /// The `[policy]` section of a `type = "policy"` manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -43,6 +44,14 @@ pub enum PolicyEffect {
 
 impl PolicyEffect {
     pub const ALL: [Self; 2] = [Self::Deny, Self::Ask];
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "deny" => Some(Self::Deny),
+            "ask" => Some(Self::Ask),
+            _ => None,
+        }
+    }
 
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -217,6 +226,13 @@ fn validate_command(command: &[String]) -> Result<()> {
         ));
     }
     for token in command {
+        if token.contains('*') {
+            return Err(TuffError::usage(format!(
+                "policy rule command arguments are literal words, and '*' is not a pattern here: '{}'",
+                token.escape_debug()
+            ))
+            .with_hint("a command rule already matches every command that starts with its arguments"));
+        }
         if token.is_empty() || token.chars().any(char::is_whitespace) || token.contains('\0') {
             return Err(TuffError::usage(format!(
                 "policy rule command arguments must be single words without spaces: '{}'",
@@ -384,10 +400,287 @@ pub fn verdicts<'a>(
         .collect()
 }
 
+/// Add and remove native permission rules in a harness settings file, given
+/// the bytes it holds now, and return the bytes it should hold next.
+///
+/// The file belongs to the user, as with hook registrations: every other key
+/// and every rule Tuff did not write is kept. A rule already present is not
+/// added twice. A `deny` or `ask` list that this call empties is removed, and
+/// so is a `permissions` object this call leaves empty. A file that is not
+/// JSON, or whose `permissions` or a touched list has the wrong type, is
+/// refused as corrupt, so a caller can run this before writing anything.
+pub fn merge_permissions(
+    settings_relpath: &str,
+    existing: Option<&[u8]>,
+    remove: &[(PolicyEffect, String)],
+    add: &[(PolicyEffect, String)],
+) -> Result<Vec<u8>> {
+    let mut settings: serde_json::Value = match existing {
+        Some(bytes) if !bytes.is_empty() => serde_json::from_slice(bytes).map_err(|error| {
+            TuffError::corrupt(format!("{settings_relpath} is not valid JSON: {error}"))
+        })?,
+        _ => serde_json::json!({}),
+    };
+    let object = settings
+        .as_object_mut()
+        .ok_or_else(|| TuffError::corrupt(format!("{settings_relpath} must be a JSON object")))?;
+    if add.is_empty() && !object.contains_key("permissions") {
+        return Ok(serde_json::to_string_pretty(&settings)?.into_bytes());
+    }
+    let permissions = object
+        .entry("permissions")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or_else(|| {
+            TuffError::corrupt(format!(
+                "{settings_relpath} field 'permissions' must be an object"
+            ))
+        })?;
+    let not_a_list = |effect: PolicyEffect| {
+        TuffError::corrupt(format!(
+            "{settings_relpath} field 'permissions.{}' must be an array",
+            effect.as_str()
+        ))
+    };
+    for (effect, rule) in remove {
+        if let Some(list) = permissions.get_mut(effect.as_str()) {
+            let list = list.as_array_mut().ok_or_else(|| not_a_list(*effect))?;
+            list.retain(|entry| entry.as_str() != Some(rule.as_str()));
+        }
+    }
+    for (effect, rule) in add {
+        let list = permissions
+            .entry(effect.as_str())
+            .or_insert_with(|| serde_json::json!([]))
+            .as_array_mut()
+            .ok_or_else(|| not_a_list(*effect))?;
+        if !list
+            .iter()
+            .any(|entry| entry.as_str() == Some(rule.as_str()))
+        {
+            list.push(serde_json::Value::String(rule.clone()));
+        }
+    }
+    for effect in PolicyEffect::ALL {
+        let emptied_here = remove.iter().any(|(removed, _)| *removed == effect)
+            && permissions
+                .get(effect.as_str())
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(Vec::is_empty);
+        if emptied_here {
+            permissions.remove(effect.as_str());
+        }
+    }
+    let now_empty = !remove.is_empty() && permissions.is_empty();
+    if now_empty {
+        object.remove("permissions");
+    }
+    Ok(serde_json::to_string_pretty(&settings)?.into_bytes())
+}
+
+/// Take recorded permission rules back out of their settings files.
+///
+/// A settings file that no longer exists holds nothing to remove. One that
+/// is not valid JSON stops the removal, before the caller deletes anything.
+pub fn remove_permissions(
+    repo_root: &std::path::Path,
+    managed: &[ManagedPermission],
+) -> Result<()> {
+    let mut by_file: std::collections::BTreeMap<&str, Vec<(PolicyEffect, String)>> =
+        std::collections::BTreeMap::new();
+    for permission in managed {
+        if let Some(effect) = PolicyEffect::parse(&permission.list) {
+            by_file
+                .entry(permission.settings_path.as_str())
+                .or_default()
+                .push((effect, permission.rule.clone()));
+        }
+    }
+    for (relpath, removals) in by_file {
+        let path = repo_root.join(relpath);
+        if !path.is_file() {
+            continue;
+        }
+        let bytes = std::fs::read(&path)?;
+        let mut merged = merge_permissions(relpath, Some(&bytes), &removals, &[])?;
+        if merged != bytes {
+            merged.push(b'\n');
+            std::fs::write(&path, merged)?;
+        }
+    }
+    Ok(())
+}
+
+/// Whether a recorded rule is still in its list: `clean` when it is,
+/// `missing` when the rule or the file is gone, `modified` when the file is
+/// no longer valid JSON.
+pub fn managed_permission_status(
+    repo_root: &std::path::Path,
+    permission: &ManagedPermission,
+) -> &'static str {
+    let Ok(raw) = std::fs::read_to_string(repo_root.join(&permission.settings_path)) else {
+        return "missing";
+    };
+    let Ok(settings) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return "modified";
+    };
+    let present = settings
+        .get("permissions")
+        .and_then(|permissions| permissions.get(&permission.list))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|list| {
+            list.iter()
+                .any(|entry| entry.as_str() == Some(permission.rule.as_str()))
+        });
+    if present { "clean" } else { "missing" }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::error::ErrorKind;
+
+    fn deny(rule: &str) -> (PolicyEffect, String) {
+        (PolicyEffect::Deny, rule.to_string())
+    }
+
+    fn ask(rule: &str) -> (PolicyEffect, String) {
+        (PolicyEffect::Ask, rule.to_string())
+    }
+
+    #[test]
+    fn merging_permissions_keeps_the_users_rules_and_adds_each_rule_once() {
+        let existing = br#"{"model": "opus", "permissions": {"deny": ["Bash(curl *)"], "allow": ["Bash(npm test *)"]}}"#;
+        let add = [
+            deny("Bash(git push --force *)"),
+            ask("Bash(terraform apply *)"),
+        ];
+        let once = merge_permissions(".claude/settings.json", Some(existing), &[], &add).unwrap();
+        let twice = merge_permissions(".claude/settings.json", Some(&once), &[], &add).unwrap();
+        assert_eq!(once, twice, "a redundant merge leaves the file unchanged");
+        let settings: serde_json::Value = serde_json::from_slice(&once).unwrap();
+        assert_eq!(settings["model"], "opus");
+        assert_eq!(
+            settings["permissions"]["deny"],
+            serde_json::json!(["Bash(curl *)", "Bash(git push --force *)"])
+        );
+        assert_eq!(
+            settings["permissions"]["ask"],
+            serde_json::json!(["Bash(terraform apply *)"])
+        );
+        assert_eq!(
+            settings["permissions"]["allow"],
+            serde_json::json!(["Bash(npm test *)"])
+        );
+    }
+
+    #[test]
+    fn removing_permissions_prunes_only_what_it_emptied() {
+        let existing = br#"{"permissions": {"deny": ["Bash(curl *)", "Bash(git push --force *)"], "ask": ["Bash(terraform apply *)"]}}"#;
+        let merged = merge_permissions(
+            "s.json",
+            Some(existing),
+            &[
+                deny("Bash(git push --force *)"),
+                ask("Bash(terraform apply *)"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let settings: serde_json::Value = serde_json::from_slice(&merged).unwrap();
+        assert_eq!(
+            settings,
+            serde_json::json!({"permissions": {"deny": ["Bash(curl *)"]}})
+        );
+
+        let only_ours =
+            br#"{"model": "opus", "permissions": {"ask": ["Bash(terraform apply *)"]}}"#;
+        let merged = merge_permissions(
+            "s.json",
+            Some(only_ours),
+            &[ask("Bash(terraform apply *)")],
+            &[],
+        )
+        .unwrap();
+        let settings: serde_json::Value = serde_json::from_slice(&merged).unwrap();
+        assert_eq!(settings, serde_json::json!({"model": "opus"}));
+
+        let untouched = br#"{"permissions": {}}"#;
+        let merged = merge_permissions("s.json", Some(untouched), &[], &[]).unwrap();
+        let settings: serde_json::Value = serde_json::from_slice(&merged).unwrap();
+        assert_eq!(
+            settings,
+            serde_json::json!({"permissions": {}}),
+            "nothing removed, nothing pruned"
+        );
+    }
+
+    #[test]
+    fn a_corrupt_settings_file_is_refused() {
+        for (bytes, expected) in [
+            (&b"{ not json"[..], "is not valid JSON"),
+            (&b"[]"[..], "must be a JSON object"),
+            (
+                &br#"{"permissions": []}"#[..],
+                "'permissions' must be an object",
+            ),
+            (
+                &br#"{"permissions": {"deny": "x"}}"#[..],
+                "'permissions.deny' must be an array",
+            ),
+        ] {
+            let error = merge_permissions(
+                ".claude/settings.json",
+                Some(bytes),
+                &[],
+                &[deny("Bash(rm *)")],
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::Corrupt, "{error}");
+            assert!(error.to_string().contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn recorded_permission_status_and_removal_from_disk() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(temp.path().join(".claude")).unwrap();
+        let path = temp.path().join(".claude/settings.json");
+        std::fs::write(
+            &path,
+            r#"{"permissions": {"deny": ["Bash(curl *)", "Bash(rm *)"]}}"#,
+        )
+        .unwrap();
+        let ours = ManagedPermission {
+            settings_path: ".claude/settings.json".to_string(),
+            list: "deny".to_string(),
+            rule: "Bash(rm *)".to_string(),
+        };
+        assert_eq!(managed_permission_status(temp.path(), &ours), "clean");
+        remove_permissions(temp.path(), std::slice::from_ref(&ours)).unwrap();
+        assert_eq!(managed_permission_status(temp.path(), &ours), "missing");
+        let settings: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            settings,
+            serde_json::json!({"permissions": {"deny": ["Bash(curl *)"]}})
+        );
+
+        std::fs::write(&path, "{ not json").unwrap();
+        assert_eq!(managed_permission_status(temp.path(), &ours), "modified");
+        assert!(remove_permissions(temp.path(), &[ours]).is_err());
+    }
+
+    #[test]
+    fn a_command_argument_cannot_be_a_pattern() {
+        let policy =
+            parse("[[policy.rules]]\neffect = \"deny\"\ncommand = [\"git\", \"push\", \"*\"]\n");
+        let error = validate_policy(&policy).unwrap_err();
+        assert!(
+            error.to_string().contains("'*' is not a pattern here"),
+            "{error}"
+        );
+    }
 
     fn parse(toml_body: &str) -> PolicyConfig {
         #[derive(Deserialize)]

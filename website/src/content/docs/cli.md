@@ -580,7 +580,7 @@ Print, for every agent, how each kind of policy rule is enforced: one row per ef
 tuff policy matrix
 ```
 
-No agent enforces policy rules through Tuff yet, so every row currently reads `unsupported`, and `tuff add` of a [policy](/primitives/policies/) is refused with each rule that would not be enforced, per agent.
+Claude Code's rows read `partial` for command and file rules and `full` for MCP rules, and every other agent's rows read `unsupported`. `tuff add` of a [policy](/primitives/policies/) prints the caveat for each partially enforced rule and is refused for any selected agent that would not enforce one of its rules.
 
 ## Diff and Update
 

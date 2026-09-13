@@ -376,6 +376,22 @@ pub trait AgentAdapter {
         crate::policy::not_implemented_matrix()
     }
 
+    /// The settings file this harness reads native permission rules from,
+    /// when it has one a repository can carry.
+    fn permissions_settings_relpath(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// The native permission rules one policy rule compiles to on this
+    /// harness, or `None` when the harness has no such rules. The list the
+    /// rules go in follows the policy rule's effect.
+    fn native_permission_rules(
+        &self,
+        _rule: &crate::policy::PolicyRule,
+    ) -> Result<Option<Vec<String>>> {
+        Ok(None)
+    }
+
     fn kinds_supported(&self) -> &[CapabilityType];
 
     fn supports(&self, capability_type: CapabilityType) -> bool {
@@ -510,9 +526,7 @@ pub trait AgentAdapter {
             CapabilityType::Hook => self.plan_hook(capability, repo_root),
             CapabilityType::Workflow => self.plan_workflow(capability, repo_root),
             CapabilityType::McpServer => self.plan_mcp_server(capability, repo_root),
-            CapabilityType::Policy => Err(TuffError::unsupported(
-                "policy capabilities are not installable yet",
-            )),
+            CapabilityType::Policy => self.plan_policy(capability, repo_root),
             CapabilityType::Skill => self.plan_skill(capability, repo_root),
         }
     }
@@ -532,7 +546,14 @@ pub trait AgentAdapter {
         self.remove_hook_settings(repo_root, managed_hooks)?;
         crate::mcp::remove_tool(&repo_root.join(self.mcp_config_relpath()), primitive_id)?;
         let prefix = self.dir_prefix();
-        for kind in &["skills", "tools", "hooks", "workflows", "mcp-servers"] {
+        for kind in &[
+            "skills",
+            "tools",
+            "hooks",
+            "workflows",
+            "mcp-servers",
+            "policies",
+        ] {
             self.remove_dir(repo_root, prefix, kind, primitive_id)?;
         }
         Ok(())
@@ -727,6 +748,32 @@ pub trait AgentAdapter {
         )])
     }
 
+    /// Emit the canonical `policy.toml` record. The rules the harness reads
+    /// live in its settings file; this record gives the capability a tree
+    /// to hash, so `check`, `diff`, and `delete` treat it like every other
+    /// kind, and `update` can tell when the policy's rules changed.
+    fn plan_policy(
+        &self,
+        capability: &ResolvedCapability,
+        repo_root: &Path,
+    ) -> Result<Vec<PlannedFile>> {
+        let CapabilityKind::Policy { policy } = &capability.kind else {
+            return Err(TuffError::new(
+                "plan_policy called on non-policy capability",
+            ));
+        };
+        let target_path = repo_root
+            .join(self.dir_prefix())
+            .join("policies")
+            .join(&capability.id)
+            .join("policy.toml");
+        let content = serialize_policy(capability, policy)?;
+        Ok(vec![PlannedFile::new(
+            relative_or_absolute_fs(&target_path, repo_root),
+            content,
+        )])
+    }
+
     fn remove_dir(
         &self,
         repo_root: &Path,
@@ -822,6 +869,34 @@ fn serialize_mcp_server(
         capability_type: capability.capability_type,
         description: &capability.description,
         server,
+    };
+    let mut content = toml::to_string_pretty(&document)?;
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    Ok(content.into_bytes())
+}
+
+#[derive(Serialize)]
+struct PolicyDocument<'a> {
+    id: &'a str,
+    version: &'a str,
+    #[serde(rename = "type")]
+    capability_type: CapabilityType,
+    description: &'a str,
+    policy: &'a crate::policy::PolicyConfig,
+}
+
+fn serialize_policy(
+    capability: &ResolvedCapability,
+    policy: &crate::policy::PolicyConfig,
+) -> Result<Vec<u8>> {
+    let document = PolicyDocument {
+        id: &capability.id,
+        version: &capability.version,
+        capability_type: capability.capability_type,
+        description: &capability.description,
+        policy,
     };
     let mut content = toml::to_string_pretty(&document)?;
     if !content.ends_with('\n') {
