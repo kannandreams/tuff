@@ -697,6 +697,15 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
     }
     for capability in &metadata.capabilities {
         validate_non_empty("capability.id", &capability.id)?;
+        // An artifact comes from a registry, and each id becomes the
+        // directory the member installs into and the name recorded in the
+        // lockfile, so it gets the same rule as a manifest id.
+        crate::manifest::validate_capability_id(&capability.id).map_err(|_| {
+            TuffError::corrupt(format!(
+                "pack artifact capability id is not a relative path of plain names: '{}'",
+                capability.id.escape_debug()
+            ))
+        })?;
         validate_non_empty("capability.version", &capability.version)?;
         validate_relative_path(Path::new(&capability.source_path))?;
         if capability.capability_type == CapabilityType::Policy {
@@ -955,6 +964,22 @@ mod tests {
         let error = read_artifact(&path).unwrap_err();
 
         assert!(error.to_string().contains("hash mismatch"));
+    }
+
+    #[test]
+    fn artifact_metadata_rejects_a_capability_id_that_escapes() {
+        // The artifact comes from a registry; its member ids become install
+        // directories and lockfile names.
+        for id in ["../escape", "a/../../b", "/abs"] {
+            let mut hostile = metadata();
+            hostile.capabilities[0].id = id.to_string();
+            let error = validate_artifact_metadata(&hostile).unwrap_err();
+            assert_eq!(error.kind(), crate::error::ErrorKind::Corrupt, "{id}");
+            assert!(
+                error.to_string().contains("relative path of plain names"),
+                "{id}: {error}"
+            );
+        }
     }
 
     #[test]

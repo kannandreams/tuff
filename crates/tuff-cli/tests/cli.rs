@@ -3484,6 +3484,93 @@ fn a_manifest_file_path_cannot_read_or_write_outside_the_capability() {
     }
 }
 
+#[test]
+fn a_capability_id_cannot_aim_install_or_delete_outside_the_project() {
+    // Through 0.9.0 a lockfile entry named `../../../victim` made `tuff
+    // delete` remove `<harness>/<kind>s/../../../victim`, a directory
+    // outside the project, and a manifest id could do the same at install.
+    // A lockfile can arrive committed in someone else's repository.
+    let temp = TempDir::new().unwrap();
+    let work = temp.path();
+    fs::create_dir_all(work.join("victim")).unwrap();
+    fs::write(work.join("victim/important.txt"), "keep me").unwrap();
+    let project = work.join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+
+    let capability = work.join("hostile");
+    fs::create_dir_all(&capability).unwrap();
+    fs::write(
+        capability.join("tuff.toml"),
+        "id = \"../../../victim\"\ntype = \"hook\"\nversion = \"1.0.0\"\ndescription = \"d\"\n[hook]\nevent = \"before_finish\"\ncommand = \"true\"\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            capability.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("relative path of plain names"));
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            capability.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--name",
+            "..",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("relative path of plain names"));
+
+    // The lockfile route: an entry written by an older Tuff, or by hand.
+    let lock_path = project.join("tuff.lock");
+    let mut lock: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&lock_path).unwrap()).unwrap();
+    lock["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "name": "../../../victim",
+            "type": "hook",
+            "version": "1.0.0",
+            "version_scheme": "declared",
+            "description": "d",
+            "target": "open-agents",
+            "installed_path": ".agents/hooks/../../../victim",
+            "sha256": "0".repeat(64),
+            "ownership": "generated",
+            "source": {"kind": "local", "path": "../hostile"}
+        }));
+    fs::write(&lock_path, serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+    for args in [
+        vec!["delete", "../../../victim", "--force"],
+        vec!["list"],
+        vec!["check"],
+    ] {
+        tuff()
+            .current_dir(&project)
+            .args(&args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "not a relative path of plain names",
+            ));
+    }
+    assert_eq!(
+        fs::read_to_string(work.join("victim/important.txt")).unwrap(),
+        "keep me",
+        "a directory outside the project must survive"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn a_symbolic_link_in_a_capability_source_is_refused_not_followed() {

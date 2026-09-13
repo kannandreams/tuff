@@ -464,6 +464,7 @@ pub(super) fn git_manifest(
     if skill_dir.join("tuff.toml").is_file() {
         let mut manifest = load_manifest(skill_dir)?;
         if let Some(name) = name {
+            manifest::validate_capability_id(name)?;
             manifest.id = name.to_string();
         }
         manifest.version = version.to_string();
@@ -521,7 +522,7 @@ fn cmd_add_local(
     let resolved_type = parsed_type.or(Some(inferred.0));
     let mut manifest = load_or_synthetic_manifest(&capability_dir, resolved_type)?;
     if let Some(name) = name {
-        validate_capability_name(name)?;
+        manifest::validate_capability_id(name)?;
         manifest.id = name.to_string();
     }
     let resolved = if resolved_type == Some(CapabilityType::Hook) && hook_file.is_some() {
@@ -579,15 +580,6 @@ fn cmd_add_local(
         None,
         true,
     )
-}
-
-fn validate_capability_name(name: &str) -> Result<()> {
-    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
-        return Err(TuffError::usage(
-            "capability name must be a non-empty single path component",
-        ));
-    }
-    Ok(())
 }
 
 fn load_or_synthetic_manifest(

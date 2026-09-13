@@ -532,6 +532,17 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
             target_entry,
             entry,
         } = row;
+        // A lockfile can be committed to someone else's repository, and
+        // every command that deletes or rewrites a capability builds its
+        // paths from this name. Refuse the file rather than act on it.
+        crate::manifest::validate_capability_id(&name).map_err(|_| {
+            TuffError::corrupt(format!(
+                "{} records a capability named '{}', which is not a relative path of plain names",
+                path.display(),
+                name.escape_debug()
+            ))
+            .with_hint("remove that entry from the lockfile by hand; Tuff will not act on it")
+        })?;
         match capabilities.entry(name) {
             std::collections::btree_map::Entry::Occupied(mut existing) => {
                 existing.get_mut().targets.insert(target, target_entry);

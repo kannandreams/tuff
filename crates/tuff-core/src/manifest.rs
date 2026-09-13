@@ -305,6 +305,39 @@ fn contained_source_file(root: &Path, entry: &str) -> Result<PathBuf> {
     Ok(current)
 }
 
+/// Refuse a capability id that could name a directory outside where it
+/// belongs.
+///
+/// The id names the directory a capability is installed into and, when it
+/// is deleted, the directory Tuff removes: `<harness>/<kind>s/<id>`. Ids may
+/// be nested, `security/security-review` installs into a grouping directory
+/// and that is a supported layout, so the rule is not "no slashes". It is
+/// that every segment is a plain name: no `..` or `.`, no empty segment from
+/// a leading, trailing, or doubled `/`, no backslash, and no NUL. An id that
+/// breaks it would aim install and delete outside that directory, and a
+/// manifest from someone else's repository, or a lockfile committed to one,
+/// could then make `tuff delete` remove a directory outside the project.
+/// Every id Tuff accepts goes through here: manifest ids, name overrides,
+/// pack artifact members, and every name read back from a lockfile.
+pub fn validate_capability_id(id: &str) -> Result<()> {
+    let plain = !id.is_empty()
+        && id.trim() == id
+        && !id.contains(['\\', '\0'])
+        && id
+            .split('/')
+            .all(|segment| !segment.is_empty() && segment != "." && segment != "..");
+    if plain {
+        return Ok(());
+    }
+    Err(TuffError::refused(format!(
+        "capability id must be a relative path of plain names: '{}'",
+        id.escape_debug()
+    ))
+    .with_hint(
+        "use a name such as 'release-checklist' or 'security/review', without '..', '.', a leading '/', or '\\'",
+    ))
+}
+
 fn validate_non_empty(field: &str, value: &str) -> Result<()> {
     if value.is_empty() {
         return Err(TuffError::usage(format!(
@@ -328,6 +361,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     manifest.root = capability_dir.to_path_buf();
 
     validate_non_empty("id", &manifest.id)?;
+    validate_capability_id(&manifest.id)?;
     validate_non_empty("version", &manifest.version)?;
     validate_non_empty("type", &manifest.capability_type.to_string())?;
     validate_non_empty("description", &manifest.description)?;
@@ -699,6 +733,7 @@ pub fn synthetic_manifest(
     name: &str,
     version: &str,
 ) -> Result<CapabilityManifest> {
+    validate_capability_id(name)?;
     let skill_file = skill_dir.join("SKILL.md");
     if !skill_file.exists() {
         return Err(TuffError::not_found(format!(
@@ -1103,6 +1138,59 @@ files = ["SKILL.md"]
             root: tmp.path().to_path_buf(),
         };
         assert!(m.source_files().is_err());
+    }
+
+    #[test]
+    fn a_capability_id_is_a_relative_path_of_plain_names() {
+        // Nested ids are a supported layout (`tuff add skill <repo>
+        // security/security-review`), so they must keep working.
+        for id in [
+            "release-checklist",
+            "tuff-cli-guide",
+            "a.b",
+            "x_1",
+            "...x",
+            "security/security-review",
+            "a/b/c",
+        ] {
+            assert!(validate_capability_id(id).is_ok(), "{id}");
+        }
+        for id in [
+            "",
+            ".",
+            "..",
+            "../victim",
+            "../../victim",
+            "a/../b",
+            "a/..",
+            "./a",
+            "a/./b",
+            "/abs",
+            "a/",
+            "a//b",
+            "a\\b",
+            "nul\0x",
+            " padded",
+            "padded ",
+        ] {
+            let error = validate_capability_id(id).unwrap_err();
+            assert_eq!(error.kind(), crate::error::ErrorKind::Refused, "{id:?}");
+        }
+    }
+
+    #[test]
+    fn a_manifest_with_an_escaping_id_is_refused_at_load() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("tuff.toml"),
+            "id = \"../../victim\"\ntype = \"hook\"\nversion = \"1.0.0\"\ndescription = \"d\"\n[hook]\nevent = \"stop\"\ncommand = \"true\"\n",
+        )
+        .unwrap();
+        let error = load_manifest(tmp.path()).unwrap_err();
+        assert!(
+            error.to_string().contains("relative path of plain names"),
+            "{error}"
+        );
     }
 
     #[test]
