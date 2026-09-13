@@ -13,6 +13,13 @@ If you install a policy for any other agent, such as Cursor or Codex, `tuff add`
 This is on purpose. If Tuff installed the policy anyway, the agent would ignore the rules, but you would think they were in place.
 :::
 
+The recording below runs the [policy guardrails example](https://github.com/kannandreams/tuff-pack-examples/tree/main/projects/policy-guardrails). Claude Code is asked for a value in `.env` and reads the file. `tuff add` then installs a policy that denies reading `.env`, and the same question is denied.
+
+<video controls muted playsinline preload="none" poster="/video/policy-guardrails-demo.png" width="1600" height="800" style="width:100%;height:auto;border-radius:0.5rem;">
+  <source src="/video/policy-guardrails-demo.mp4" type="video/mp4" />
+  <a href="/video/policy-guardrails-demo.mp4">Download the recording</a> if your browser cannot play it inline.
+</video>
+
 ## Format
 
 ```toml title="tuff.toml"
