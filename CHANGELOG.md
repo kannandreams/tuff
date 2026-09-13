@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-13
+
 ### Changed
 
 - **`tuff agent list` names the agents that actually read the Open Agents layout.** The `open-agents` row listed Roo, which shut down in May 2026, and Cline, which reads skills from `.cline/skills/` rather than `.agents/skills/`. Each agent was checked against its own documentation, and the row now lists Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, Windsurf, Amp, Goose, and JetBrains Junie. The `tuff-cli-guide` skill that `tuff init` installs lists the same agents, and now also names the `codex` and `cursor` adapters it had left out.
@@ -275,7 +277,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/kannandreams/tuff/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/kannandreams/tuff/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/kannandreams/tuff/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kannandreams/tuff/compare/v0.7.0...v0.8.0
