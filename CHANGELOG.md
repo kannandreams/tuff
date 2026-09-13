@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-13
+
 ### Added
 
 - **The hooks specification is version 0.2.0, tested by a second implementation.** To find out whether the published specification was complete enough to implement, an implementation was written from it alone, by an author with no access to Tuff's source, and a harness installed the same hook with it and with `tuff` for every harness and every event name, comparing what each wrote. The two agreed on every install and refusal, every settings file, idempotency, and removal, and differed in exactly three places the specification had not described: which runtime files are installed and where, how single quotes are escaped in the wrapper, and which object the recorded hash covers. Version 0.2.0 states all three and every other point that implementation had to guess, including that a name matching no row is refused, that formatting of a settings file is not significant, and the removal algorithm step by step. It also adds three requirements to refuse hostile input: an id that is not a relative path of plain names, a listed file that escapes its directory, and a listed file that would replace the wrapper. The harness and that implementation ship as a conformance kit in `spec/hooks/conformance/`, and `mise run check` runs it on every change, so Tuff and its specification cannot drift apart again without a failing check.
@@ -268,7 +270,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/kannandreams/tuff/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/kannandreams/tuff/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kannandreams/tuff/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/kannandreams/tuff/compare/v0.6.0...v0.7.0
