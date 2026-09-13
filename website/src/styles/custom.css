@@ -353,9 +353,32 @@ body.tuff-standalone {
 .tuff-nav-links { display: flex; align-items: center; gap: .55rem; }
 .tuff-nav-links a { display: inline-flex; align-items: center; padding: .42rem .7rem; border-radius: .3rem; color: #6d6861; font-size: .85rem; font-weight: 500; text-decoration: none; transition: color .15s ease, background-color .15s ease; }
 .tuff-nav-links a:hover, .tuff-nav-links a:focus-visible { color: #eeeae2; background: #1b1e1b; outline: none; }
-.tuff-github-button { display: inline-flex; align-items: center; gap: .45rem; padding: .48rem .72rem; border: 1px solid #343934; border-radius: .3rem; color: #eeeae2; background: #1b1e1b; box-shadow: 0 1px 0 rgba(255, 255, 255, .08) inset; font-family: 'JetBrains Mono', monospace; font-size: .8rem; text-decoration: none; }
-.tuff-github-button:hover { color: #fff; background: #242824; }
-.tuff-github-button svg { width: .85rem; height: .85rem; fill: currentColor; }
+.tuff-nav-links a { white-space: nowrap; }
+.tuff-nav-links a svg { width: .85rem; height: .85rem; margin-right: .4rem; fill: currentColor; }
+/* Between phone and wide desktop the labels do not all fit, so links with an
+   icon show only the icon (the label stays for screen readers and the
+   tooltip), and on narrower screens the repository card shows only the
+   GitHub mark. Below 561px the links are hidden and the full card returns. */
+@media (min-width: 561px) and (max-width: 1180px) {
+  .tuff-nav-links a:has(svg) svg { margin-right: 0; }
+  .tuff-nav-links a:has(svg) .tuff-nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (min-width: 561px) and (max-width: 900px) {
+  .tuff-nav .tuff-repo-text { display: none; }
+}
+/* GitHub repository card (src/components/GitHubRepo.astro). */
+.tuff-repo { display: inline-flex; align-items: center; gap: .6rem; color: var(--sl-color-gray-2); font-family: 'JetBrains Mono', monospace; line-height: 1.15; text-decoration: none; white-space: nowrap; transition: color .15s ease, background-color .15s ease; }
+.tuff-repo:hover { color: var(--sl-color-white); }
+.tuff-repo-mark { flex: none; width: 1.6rem; height: 1.6rem; fill: currentColor; }
+.tuff-repo-text { display: flex; flex-direction: column; gap: .22rem; }
+.tuff-repo-name { font-size: .78rem; font-weight: 500; }
+.tuff-repo-facts { display: flex; gap: .7rem; font-size: .7rem; }
+.tuff-repo-fact { display: inline-flex; align-items: center; gap: .25rem; }
+.tuff-repo-fact[hidden] { display: none; }
+.tuff-repo-fact svg { width: .72rem; height: .72rem; fill: currentColor; }
+/* On the standalone pages the card sits on the cream page as dark text. */
+.tuff-repo--plain { color: #1a1918; }
+.tuff-repo--plain:hover { color: var(--tuff-accent, #c35a35); }
 
 body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child {
   display: none;
@@ -380,7 +403,7 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 
 .tuff-landing a { text-decoration: none; }
 .tuff-landing h1, .tuff-landing h2, .tuff-landing p { margin: 0; }
-.tuff-hero, .tuff-section { width: 100%; max-width: 1200px; box-sizing: border-box; margin: 0 auto; padding: 5.25rem 3rem; }
+.tuff-hero, .tuff-section { width: 100%; max-width: 1200px; box-sizing: border-box; margin: 0 auto; padding: 3.5rem 3rem; }
 .tuff-eyebrow, .tuff-section-label, .tuff-wordmark, .tuff-tagline, .tuff-term-body,
 .tuff-term-bar, .tuff-cap-card small, .tuff-cap-card strong, .tuff-manifest,
 .tuff-compile, .tuff-harness-list, .tuff-why-grid strong, .tuff-why-grid b,
@@ -534,15 +557,28 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 .tuff-pack-files { margin-top: 1rem; color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .61rem; line-height: 1.4; }
 .tuff-pack-files li { overflow-wrap: anywhere; }
 .tuff-pack-cta { margin-top: 1.25rem; }
-.tuff-adapter-diagram { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 2rem; padding: 2.6rem 2.25rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; }
+.tuff-adapter { border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; }
+.tuff-adapter-tabs { padding-left: 1.5rem; }
+.tuff-adapter-diagram { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 2rem; padding: 2.25rem 2.25rem 2.6rem; }
+.tuff-adapter-diagram[hidden] { display: none; }
 .tuff-manifest { width: 100%; max-width: none; box-sizing: border-box; justify-self: stretch; padding: 1rem 1.1rem; border: 1px solid #343934; border-radius: .3rem; background: #242824; color: #f18453; font-size: .82rem; line-height: 1.9; }
 .tuff-manifest span { color: #989d94; }
+.tuff-manifest .tuff-manifest-file { margin-bottom: .35rem; color: #6f746c; font-size: .66rem; letter-spacing: .04em; }
+@media (prefers-reduced-motion: no-preference) {
+  .tuff-adapter-diagram .tuff-manifest > div, .tuff-adapter-diagram .tuff-harness-list > div { animation: tuff-line .38s ease both; animation-delay: calc(var(--i, 0) * .09s); }
+}
 .tuff-compile { display: flex; flex-direction: column; align-items: center; gap: .35rem; color: #989d94; font-size: .62rem; }
 .tuff-compile i { position: relative; width: 3rem; height: 1px; background: #4c544c; }
 .tuff-compile i::after { position: absolute; top: -.53rem; right: -.1rem; color: #f18453; content: '›'; font-size: 1rem; line-height: 1; }
 .tuff-harness-list { display: flex; flex-direction: column; gap: .55rem; color: #eeeae2; font-size: .84rem; }
-.tuff-harness-list div { display: flex; justify-content: space-between; gap: 1rem; padding: .65rem .8rem; border: 1px solid #343934; border-radius: .3rem; background: #242824; }
+.tuff-harness-list div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .35rem 1rem; padding: .65rem .8rem; border: 1px solid #343934; border-radius: .3rem; background: #242824; }
+.tuff-harness-list strong { font-weight: 500; }
 .tuff-harness-list small { color: #989d94; font-size: .72rem; }
+.tuff-harness-list code { flex-basis: 100%; color: #f18453; font-family: 'JetBrains Mono', monospace; font-size: .7rem; overflow-wrap: anywhere; }
+.tuff-harness-list .is-muted { border-style: dashed; background: transparent; color: #8f938b; }
+.tuff-harness-list .is-muted code { color: #6f746c; }
+/* Keeps a flag such as --force from breaking at its hyphens on narrow screens. */
+.tuff-nowrap { font-style: normal; white-space: nowrap; }
 .tuff-why-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
 .tuff-why-grid > div { display: flex; flex-direction: column; }
 .tuff-why-grid b { margin-bottom: .65rem; color: var(--tuff-accent); font-size: .7rem; font-weight: 500; }
@@ -564,7 +600,13 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 .tuff-standalone-footer a { color: inherit; text-decoration: none; }
 .tuff-standalone-footer a:hover { color: #6d6861; }
 .tuff-altern-badge { display: block; flex: 0 0 auto; line-height: 0; }
-.tuff-altern-badge img { display: block; width: 150px; height: 32px; }
+/* The badge is 430×151; size by width and let the height follow so it is never squashed. */
+.tuff-altern-badge img { display: block; width: 120px; height: auto; }
+/* A link to the creator's other project, highlighted with the site accent. */
+.tuff-standalone-footer .tuff-footer-promo { display: inline-flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: .2rem .5rem; padding: .5rem .8rem; border: 1px solid rgba(232, 93, 42, .35); border-radius: .3rem; background: #fdf0e9; color: #6d6861; transition: border-color .15s ease, background-color .15s ease; }
+.tuff-standalone-footer .tuff-footer-promo:hover { border-color: #e85d2a; background: #fbe4d8; color: #1a1918; }
+.tuff-footer-promo strong { color: #c35a35; font-size: .78rem; font-weight: 700; }
+.tuff-footer-promo-label { color: #9b958b; font-size: .62rem; letter-spacing: .04em; }
 
 @media (max-width: 900px) {
   .tuff-nav { padding-left: 1.25rem; padding-right: 1.25rem; }
@@ -572,10 +614,13 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
   .tuff-landing { margin-left: -1rem; margin-right: -1rem; }
   .tuff-landing.tuff-landing--standalone { margin-left: 0; margin-right: 0; }
   .tuff-hero, .tuff-section { padding-left: 1.25rem; padding-right: 1.25rem; }
+  .tuff-section { padding-top: 3rem; padding-bottom: 3rem; }
+  .tuff-section--stats { padding-top: 0; padding-bottom: 0; }
+  .tuff-section--last { padding-bottom: 6rem; }
   .tuff-hero { grid-template-columns: 1fr; row-gap: 2.25rem; }
   .tuff-hero::before { background-image: radial-gradient(circle at 80% 8%, rgba(232, 93, 42, .1), transparent 30%), radial-gradient(#dcd7cd 1px, transparent 1.2px); }
   .tuff-harness-strip-note { margin-left: 0; }
-  .tuff-standalone-footer { padding-left: 1.25rem; padding-right: 1.25rem; }
+  .tuff-standalone-footer { flex-wrap: wrap; justify-content: center; row-gap: 1.25rem; padding-left: 1.25rem; padding-right: 1.25rem; }
   .tuff-stats { grid-template-columns: 1fr; }
   .tuff-cap-grid { grid-template-columns: repeat(2, 1fr); }
   .tuff-cap-card:nth-child(5) { grid-column: span 2; }
@@ -592,8 +637,8 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 @media (max-width: 560px) {
   .tuff-nav-links { display: none; }
   .tuff-standalone-footer { flex-direction: column; }
-  .tuff-hero, .tuff-section { padding-top: 3.5rem; padding-bottom: 3.5rem; }
-  .tuff-hero { padding-bottom: 2.5rem; }
+  .tuff-hero { padding-top: 3.5rem; padding-bottom: 2.5rem; }
+  .tuff-section { padding-top: 2.5rem; padding-bottom: 2.5rem; }
   .tuff-section--stats { padding-top: 0; padding-bottom: 0; }
   .tuff-cap-grid, .tuff-why-grid { grid-template-columns: 1fr; }
   .tuff-cap-card:nth-child(5) { grid-column: auto; }

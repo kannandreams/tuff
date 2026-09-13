@@ -102,7 +102,7 @@ target lock entry and baseline while preserving the capability files and MCP
 configuration. The original source directory is never
 deleted by `delete`.
 
-See the [CLI Reference](/cli#tuff-delete) for cleanup flags and explicit agent selection.
+See the [CLI Reference](/cli/clean-up/#tuff-delete) for cleanup flags and explicit agent selection.
 
 ## Git-sourced capability lifecycle
 

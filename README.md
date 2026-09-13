@@ -48,7 +48,7 @@ tuff check
 
 Tuff installs [`rust-implement`](https://github.com/pproenca/dot-skills/tree/master/skills/.curated/rust-implement) into `.agents/skills/`, records its Git revision, and creates your project skill in `.agents/` and `.claude/`. Each target is tracked in `tuff.lock` with a pristine baseline for drift checks. Commit the capability files and lockfile so the whole team gets the same setup.
 
-The `open-agents` target works with Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, Roo, Cline, and Windsurf. Tuff also ships dedicated adapters for Claude Code, Codex, and Cursor.
+Tuff ships dedicated adapters for Claude Code, Codex, and Cursor. The `open-agents` target writes skills to `.agents/skills/`, which GitHub Copilot, Gemini CLI, OpenCode, Windsurf, Amp, Goose, and JetBrains Junie also read.
 
 ## What changes with Tuff
 

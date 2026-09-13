@@ -5,8 +5,12 @@ description: Policies declare what an agent must never do, or must ask before do
 
 A policy capability is a list of rules that narrow what a coding agent may do in a project: commands it must not run, files it must not read or edit, MCP tools it must not call, and actions it must ask a person about first. It is written once, and each agent the project uses enforces it in its own way, or Tuff says plainly that it cannot.
 
-:::caution[Preview]
-Claude Code enforces policies today, through its own permission rules. For every other agent, `tuff add` refuses a policy and names each rule that agent would not enforce, rather than installing it and letting you believe it works.
+:::caution[Preview: Claude Code only]
+Only Claude Code can enforce policies today. Tuff turns each rule into one of Claude Code's own permission rules.
+
+If you install a policy for any other agent, such as Cursor or Codex, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
+
+This is on purpose. If Tuff installed the policy anyway, the agent would ignore the rules, but you would think they were in place.
 :::
 
 ## Format
@@ -65,14 +69,51 @@ Tuff compiles each rule into Claude Code's own permission rules in `.claude/sett
 | `edit = ["infra/prod/"]` | `Edit(/infra/prod/**)` | `deny` or `ask` |
 | `mcp = "github:delete_*"` | `mcp__github__delete_*` | `deny` or `ask` |
 
-The rules are merged into the file alongside everything already there. Your own permission rules and other settings are kept, a rule already present is not added twice, and a corrupt settings file is refused before anything is written. The lockfile records each compiled rule, so `tuff check` reports a rule removed by hand as drift, `tuff update` takes out the rules a changed policy no longer has, and `tuff delete` removes exactly the rules the policy added and nothing else.
+### What happens to your settings file
 
-Claude Code's command and file rules are real, but its own documentation says they are not a security boundary, and Tuff reports them as `partial` for that reason:
+- **Your existing settings stay.** Tuff adds its rules next to the permission rules and settings already in `.claude/settings.json`. A rule that is already there is not added again.
+- **A broken file is not touched.** If Tuff cannot read `.claude/settings.json`, it stops before writing anything.
+- **Tuff remembers which rules it added.** Each rule is recorded in `tuff.lock`, so later commands only touch those rules:
 
-- A command rule matches the command as Claude writes it, including inside compound commands such as `cd x && git push --force`. The same program run another way, such as by absolute path, through `sh -c`, or as `git -C . push --force`, is not matched.
-- A file rule covers Claude's file tools and the shell commands Claude Code recognises, such as `cat` and `sed`, not a script or program that opens the file itself.
+| Command | What it does with the policy's rules |
+|---|---|
+| `tuff check` | Reports a rule that was deleted from the file by hand |
+| `tuff update` | Removes rules the updated policy no longer has |
+| `tuff delete` | Removes the rules this policy added, and nothing else |
 
-An MCP rule names the tool itself, so Tuff reports it as `full`. For enforcement that does not depend on how a command is spelled, use Claude Code's sandbox, which a repository file does not control.
+### How much each rule protects
+
+| Rule | Coverage | Why |
+|---|---|---|
+| `mcp` | `full` | The rule names the MCP tool, so every call to it is caught |
+| `command` | `partial` | Only the command as Claude writes it is caught |
+| `read`, `edit` | `partial` | Only Claude's own file tools and common shell commands are caught |
+
+A **command rule** catches the command even inside a longer one, such as
+`cd x && git push --force`. It does not catch the same action written a
+different way:
+
+- with the program's full path, such as `/usr/bin/git push --force`
+- inside another shell, such as `sh -c "git push --force"`
+- with options before the subcommand, such as `git -C . push --force`
+
+A **file rule** covers Claude's file tools and shell commands Claude Code
+recognises, such as `cat` and `sed`. It does not stop a script or program
+that opens the file itself.
+
+This limit comes from Claude Code, not Tuff: Claude Code matches the text of
+a command, and its own documentation says command and file rules are not a
+security boundary.
+
+:::caution[Use the sandbox when a rule must never be bypassed]
+Policies stop an agent from doing something harmful by accident, such as a
+force push or reading `.env`. They are not a guarantee.
+
+If a command or file must never be reached, also turn on Claude Code's
+sandbox, which blocks it at the operating-system level however it is written.
+Tuff cannot turn the sandbox on for you, because no file in the repository
+controls it.
+:::
 
 ## What each agent can enforce
 
@@ -80,6 +121,47 @@ An MCP rule names the tool itself, so Tuff reports it as `full`. For enforcement
 tuff policy matrix
 tuff policy matrix --json
 ```
+
+Example output, showing Claude Code and Cursor. The full output also lists
+Open Agents and Codex, whose rows read `unsupported` like Cursor's:
+
+```text
+┌─────────────┬────────┬─────────┬─────────────┬────────────────────────────────────────┐
+│ ADAPTER     │ EFFECT │ SUBJECT │ COVERAGE    │ MECHANISM                              │
+├─────────────┼────────┼─────────┼─────────────┼────────────────────────────────────────┤
+│ claude      │ deny   │ command │ partial     │ permissions.deny Bash(<command> *)     │
+│ claude      │ deny   │ read    │ partial     │ permissions.deny Read(<path>)          │
+│ claude      │ deny   │ edit    │ partial     │ permissions.deny Edit(<path>)          │
+│ claude      │ deny   │ mcp     │ full        │ permissions.deny mcp__<server>__<tool> │
+│ claude      │ ask    │ command │ partial     │ permissions.ask Bash(<command> *)      │
+│ claude      │ ask    │ read    │ partial     │ permissions.ask Read(<path>)           │
+│ claude      │ ask    │ edit    │ partial     │ permissions.ask Edit(<path>)           │
+│ claude      │ ask    │ mcp     │ full        │ permissions.ask mcp__<server>__<tool>  │
+│ cursor      │ deny   │ command │ unsupported │                                        │
+│ cursor      │ deny   │ read    │ unsupported │                                        │
+│ cursor      │ deny   │ edit    │ unsupported │                                        │
+│ cursor      │ deny   │ mcp     │ unsupported │                                        │
+│ cursor      │ ask    │ command │ unsupported │                                        │
+│ cursor      │ ask    │ read    │ unsupported │                                        │
+│ cursor      │ ask    │ edit    │ unsupported │                                        │
+│ cursor      │ ask    │ mcp     │ unsupported │                                        │
+└─────────────┴────────┴─────────┴─────────────┴────────────────────────────────────────┘
+
+Notes:
+- claude: matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched
+- claude: covers Claude's file tools and the shell commands Claude Code recognises, such as cat and sed, not a script or program that opens the file itself
+- cursor: Tuff does not compile policy rules for this agent yet
+```
+
+How to read it:
+
+| Column | What it means |
+|---|---|
+| `ADAPTER` | The agent |
+| `EFFECT` | `deny` or `ask` |
+| `SUBJECT` | The kind of rule: `command`, `read`, `edit`, or `mcp` |
+| `COVERAGE` | `full` (always enforced), `partial` (enforced with the limits in the notes), or `unsupported` (not enforced, so `tuff add` refuses the policy) |
+| `MECHANISM` | What Tuff writes for that agent, such as a Claude Code permission rule |
 
 The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor, Codex, and Open Agents enforce nothing yet.
 

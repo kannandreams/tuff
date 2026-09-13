@@ -1,20 +1,20 @@
 ---
 title: Intro
-description: Capability lifecycle management for coding agents.
+description: What Tuff is, the problems it solves, and the capabilities it manages for Claude Code, Codex, Cursor, and other coding agents.
 ---
 
 import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-<strong class="intro-brand">Tuff</strong> is a Rust-powered CLI for managing agent capabilities such as skills, tools, hooks,
-and workflows. It provides lifecycle tracking, drift detection, baseline diffs, and merge-aware
+<strong class="intro-brand">Tuff</strong> is a Rust-powered CLI for managing agent capabilities such as skills, tools, MCP servers,
+hooks, policies, and workflows. It provides lifecycle tracking, drift detection, baseline diffs, and merge-aware
 updates. It works with Codex, Claude Code, Cursor, GitHub Copilot, and any agent harness that
 follows the open Agents standard.
 
 ## Why Tuff exists
 
 Agent coding tools increasingly depend on capabilities: skills that teach an agent how
-to work in a project, tools it can call, hooks that run at key events, and workflows that
-compose them together. Together, they define how an agent works.
+to work in a project, tools and MCP servers it can call, hooks that run at key events,
+policies that limit what it may do, and workflows that compose them together. Together, they define how an agent works.
 
 Today these capabilities are either siloed on one engineer's machine, invisible to the
 rest of the team, or copied by hand across projects and left to drift silently.
@@ -54,19 +54,29 @@ These are common situations teams encounter as capabilities are shared across re
       description="Executable capabilities with typed parameters and clear contracts."
     />
     <LinkCard
+      title="MCP Servers"
+      href="/primitives/mcp-servers"
+      description="External MCP servers wired into every agent from one declaration."
+    />
+    <LinkCard
       title="Hooks"
       href="/primitives/hooks"
       description="Event-driven automation that runs at key points in a task."
     />
     <LinkCard
+      title="Policies"
+      href="/primitives/policies"
+      description="Rules that limit what an agent may run, read, edit, or call. Preview."
+    />
+    <LinkCard
       title="Workflows"
       href="/primitives/workflows"
-      description="Composable patterns that bundle skills, tools, and hooks."
+      description="Composable patterns that bundle skills, tools, and hooks. Roadmap."
     />
   </CardGrid>
 </div>
 
-All four types share the same lifecycle: install, baseline, drift detection, diff,
+Every type shares the same lifecycle: install, baseline, drift detection, diff,
 and merge-aware update through `tuff create`, `tuff add`, `tuff update`, and
 `tuff diff`.
 
@@ -80,7 +90,7 @@ and merge-aware update through `tuff create`, `tuff add`, `tuff update`, and
 
 ### Multi-harness output
 
-- **Open Agents** (`.agents/`): serves Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, Roo, Cline, Windsurf. Skills: `SKILL.md`, tools: automatic MCP server registration, hooks: TOML config, workflows: dependency manifests.
+- **Open Agents** (`.agents/`): skills in `.agents/skills/` are also read by GitHub Copilot, Gemini CLI, OpenCode, Windsurf, Amp, Goose, and JetBrains Junie. Skills: `SKILL.md`, tools: automatic MCP server registration, hooks: TOML config, workflows: dependency manifests.
 - **Claude Code** (`.claude/`): native directory format with JSON tool configs and MCP auto-registration.
 
 ### Scope and team workflows
@@ -93,7 +103,7 @@ and merge-aware update through `tuff create`, `tuff add`, `tuff update`, and
 
 - `tuff check` exits 1 on any failure: drift, missing files, invalid state.
 - `tuff check --json` for machine-readable CI output.
-- Copy-paste [GitHub Actions workflow](/cli#tuff-check) in the CLI reference.
+- Copy-paste [GitHub Actions workflow](/cli/ci/#ci-with-github-actions) in the CLI reference.
 
 ## Inspiration
 

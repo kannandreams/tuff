@@ -41,7 +41,7 @@ To make that harness the default for later commands, run:
 tuff agent set-default claude
 ```
 
-See [`tuff agent`](/cli#tuff-agent) for registration, defaults, aliases, and global settings.
+See [`tuff agent`](/cli/agents/#tuff-agent) for registration, defaults, aliases, and global settings.
 
 ## 3. Create and track your first capability
 
@@ -58,7 +58,7 @@ To create it for another agent explicitly:
 tuff create skill my-skill --agent claude
 ```
 
-See [`tuff create`](/cli#tuff-create) for skills, tools, hooks, workflows, and repeated agent
+See [`tuff create`](/cli/add/#tuff-create) for skills, tools, hooks, workflows, and repeated agent
 selection.
 
 If your project already has a skill under `.agents/skills/`, add it in place:
@@ -67,7 +67,7 @@ If your project already has a skill under `.agents/skills/`, add it in place:
 tuff add skill .agents/skills/existing-skill --agent open-agents
 ```
 
-See [`tuff add`](/cli#tuff-add) for adopting existing files and installing from git.
+See [`tuff add`](/cli/add/#tuff-add) for adopting existing files and installing from git.
 
 ## 4. Inspect what is installed
 
@@ -76,7 +76,7 @@ tuff list
 ```
 
 `tuff list` shows the capability type, agent, drift status, and emitted path. See
-[`tuff list`](/cli#tuff-list) for scope and type filters.
+[`tuff list`](/cli/inspect/#tuff-list) for scope and type filters.
 
 ## 5. Edit and detect drift
 
@@ -88,7 +88,7 @@ tuff diff my-skill
 ```
 
 `tuff list` shows the capability as modified and `tuff diff` shows the tracked changes. See
-[`tuff diff`](/cli#tuff-diff) for baseline and upstream comparisons.
+[`tuff diff`](/cli/diff-update/#tuff-diff) for baseline and upstream comparisons.
 
 If the drift is intentional and should become the new baseline:
 
@@ -98,7 +98,7 @@ tuff update my-skill
 
 Commands use the configured default agent when `-a/--agent` is omitted. Pass `-a <agent>` to
 operate on a different agent, or repeat the flag for multiple agents. See
-[`tuff update`](/cli#tuff-update) for source-aware updates and dry runs.
+[`tuff update`](/cli/diff-update/#tuff-update) for source-aware updates and dry runs.
 
 For existing files that were added in place, later edits follow this same drift and update flow.
 
@@ -110,7 +110,7 @@ tuff add skill https://github.com/pproenca/dot-skills rust-implement --agent ope
 
 The command installs the selected capability, tracks the upstream revision, and records
 everything in the lockfile. Replace `skill` with `tool`, `hook`, or `workflow` when installing
-another capability type. See [`tuff add`](/cli#tuff-add) for local and Git source patterns.
+another capability type. See [`tuff add`](/cli/add/#tuff-add) for local and Git source patterns.
 
 ## 7. Check for updates
 
@@ -120,8 +120,8 @@ tuff update rust-implement
 ```
 
 `tuff outdated` compares tracked git-backed capabilities against their latest upstream revision,
-and `tuff update` reconciles them when you are ready. See [`tuff outdated`](/cli#tuff-outdated)
-and [`tuff update`](/cli#tuff-update).
+and `tuff update` reconciles them when you are ready. See [`tuff outdated`](/cli/inspect/#tuff-outdated)
+and [`tuff update`](/cli/diff-update/#tuff-update).
 
 ## 8. Clean up a capability
 
@@ -138,7 +138,7 @@ Tuff tracking:
 tuff untrack my-skill
 ```
 
-See [`tuff delete`](/cli#tuff-delete) and [`tuff untrack`](/cli#tuff-untrack) for explicit
+See [`tuff delete`](/cli/clean-up/#tuff-delete) and [`tuff untrack`](/cli/clean-up/#tuff-untrack) for explicit
 agent selection, global scope, and force behavior.
 
 `tuff agent remove <agent>` only unregisters the agent. It does not remove capabilities.
@@ -151,7 +151,7 @@ tuff check
 # my-skill           skill    open-agents    ok
 ```
 
-See [`tuff check`](/cli#tuff-check) for JSON output, failure handling, and the GitHub Actions
+See [`tuff check`](/cli/ci/#tuff-check) for JSON output, failure handling, and the GitHub Actions
 example.
 
 For deeper scenario walkthroughs, see the [development lifecycle guide](/concepts/development-lifecycle).
