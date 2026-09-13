@@ -15,6 +15,12 @@ set -euo pipefail
 # the code. The JSON is also validated against spec/hooks/hooks-spec.schema.json,
 # with a small validator here rather than a dependency, since the schema uses
 # only the common keywords.
+#
+# Last, the conformance kit in spec/hooks/conformance/ installs the same hook
+# with the binary and with the example implementation, which was written from
+# the specification alone, for every harness and event name, and fails when
+# the two write anything different. That is what keeps Tuff, its
+# specification, and an outside reading of it in agreement.
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
@@ -210,6 +216,28 @@ for error in errors:
     print(f"error: {error}", file=sys.stderr)
 sys.exit(1 if errors else 0)
 PY
+
+example="spec/hooks/conformance/example/tuff_hooks_example.py"
+if [[ ! -f "$example" ]]; then
+  echo "error: $example is missing; the conformance kit needs an implementation to compare" >&2
+  status=1
+else
+  cargo build -q -p tuffcli
+  target_dir="$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
+  if ! python3 spec/hooks/conformance/compare.py \
+    --tuff "$target_dir/debug/tuff" \
+    --impl "$example" \
+    --spec "$json"; then
+    cat >&2 <<MSG
+error: the example implementation and tuff disagree (see above)
+
+  Decide which side is wrong. If tuff changed on purpose, the specification
+  and the example must say the same thing; if the specification was silent,
+  that is a gap to close in spec/hooks/SPEC.md.
+MSG
+    status=1
+  fi
+fi
 
 if [[ $status -eq 0 ]]; then
   echo "hooks specification OK"

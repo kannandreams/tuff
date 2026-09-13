@@ -53,7 +53,7 @@ The file is written in the layout `JSON.stringify(value, null, 2)` produces: two
 
 | Field | Description |
 |---|---|
-| `name` | Capability identifier |
+| `name` | Capability identifier, a relative path of plain names such as `release-checklist` or `security/security-review`. A lockfile holding any other name is refused as corrupt, since Tuff builds install and delete paths from it |
 | `type` | `"skill"`, `"tool"`, `"hook"`, `"workflow"`, `"mcp-server"`, or `"policy"` |
 | `version` | The capability's own version |
 | `version_scheme` | What `version` holds: `semver` (a release chosen by tag; `source.tag` names it), `declared` (what the manifest or `SKILL.md` frontmatter says), or `sha` (the pinned commit itself) |

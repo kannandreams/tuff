@@ -8,7 +8,12 @@
 use serde::{Deserialize, Serialize};
 
 /// Current version of the Tuff hook specification.
-pub const SPEC_VERSION: &str = "0.1.0";
+pub const SPEC_VERSION: &str = "0.2.0";
+
+/// The spec version that introduced the seven events of the first
+/// published vocabulary. Kept apart from [`SPEC_VERSION`] so that moving
+/// the spec forward does not rewrite when an existing event arrived.
+const FIRST_SPEC_VERSION: &str = "0.1.0";
 
 /// Canonical Tuff hook events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -204,12 +209,60 @@ impl CompatibilityMatrix {
             })
     }
 
-    /// Returns supported native event names for user-facing error messages.
+    /// Returns supported native event names, each once, in matrix order.
+    ///
+    /// Two canonical events can render to the same native event (Cursor
+    /// maps both `before_finish` and `stop` to `stop`), so the list is
+    /// de-duplicated.
     pub fn supported_native_events(&self) -> Vec<&'static str> {
-        self.events
+        let mut names: Vec<&'static str> = Vec::new();
+        for name in self
+            .events
             .iter()
             .filter_map(CompatibilityEntry::native_event_name)
-            .collect()
+        {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        names
+    }
+
+    /// The event names a manifest may use for this adapter, for messages:
+    /// each supported canonical event, then any alias its row accepts, then
+    /// the native event it renders to when that is a different name.
+    ///
+    /// A refusal used to list only native names, which read as though a
+    /// manifest could write them; a manifest names the canonical event,
+    /// and a native name works only where the matrix lists it as an alias.
+    pub fn accepted_events_summary(&self) -> String {
+        let mut parts = Vec::new();
+        for entry in self
+            .events
+            .iter()
+            .filter(|entry| entry.coverage.is_supported())
+        {
+            let canonical = entry.event.as_str();
+            let mut seen: Vec<&str> = vec![canonical];
+            let mut notes: Vec<String> = Vec::new();
+            for alias in entry.aliases {
+                if !seen.contains(alias) {
+                    seen.push(alias);
+                    notes.push((*alias).to_string());
+                }
+            }
+            if let Some(native) = entry.native_event
+                && !seen.contains(&native)
+            {
+                notes.push(format!("renders as {native}"));
+            }
+            parts.push(if notes.is_empty() {
+                canonical.to_string()
+            } else {
+                format!("{canonical} ({})", notes.join(", "))
+            });
+        }
+        parts.join(", ")
     }
 }
 
@@ -235,7 +288,7 @@ pub const EVENT_SPECS: &[HookEventSpec] = &[
         event: HookEvent::SessionStart,
         canonical_name: "session_start",
         blocking: BlockingScope::NotBlocking,
-        since_spec_version: SPEC_VERSION,
+        since_spec_version: FIRST_SPEC_VERSION,
         payload_schema: PayloadSchema {
             fields: COMMON_PAYLOAD_FIELDS,
         },
@@ -244,7 +297,7 @@ pub const EVENT_SPECS: &[HookEventSpec] = &[
         event: HookEvent::SessionEnd,
         canonical_name: "session_end",
         blocking: BlockingScope::NotBlocking,
-        since_spec_version: SPEC_VERSION,
+        since_spec_version: FIRST_SPEC_VERSION,
         payload_schema: PayloadSchema {
             fields: COMMON_PAYLOAD_FIELDS,
         },
@@ -253,7 +306,7 @@ pub const EVENT_SPECS: &[HookEventSpec] = &[
         event: HookEvent::PreToolUse,
         canonical_name: "pre_tool_use",
         blocking: BlockingScope::BlocksAction,
-        since_spec_version: SPEC_VERSION,
+        since_spec_version: FIRST_SPEC_VERSION,
         payload_schema: PayloadSchema {
             fields: COMMON_PAYLOAD_FIELDS,
         },
@@ -262,7 +315,7 @@ pub const EVENT_SPECS: &[HookEventSpec] = &[
         event: HookEvent::PostToolUse,
         canonical_name: "post_tool_use",
         blocking: BlockingScope::BlocksContinuation,
-        since_spec_version: SPEC_VERSION,
+        since_spec_version: FIRST_SPEC_VERSION,
         payload_schema: PayloadSchema {
             fields: COMMON_PAYLOAD_FIELDS,
         },
@@ -271,7 +324,7 @@ pub const EVENT_SPECS: &[HookEventSpec] = &[
         event: HookEvent::BeforeFinish,
         canonical_name: "before_finish",
         blocking: BlockingScope::BlocksContinuation,
-        since_spec_version: SPEC_VERSION,
+        since_spec_version: FIRST_SPEC_VERSION,
         payload_schema: PayloadSchema {
             fields: COMMON_PAYLOAD_FIELDS,
         },
@@ -280,7 +333,7 @@ pub const EVENT_SPECS: &[HookEventSpec] = &[
         event: HookEvent::AfterSave,
         canonical_name: "after_save",
         blocking: BlockingScope::NotBlocking,
-        since_spec_version: SPEC_VERSION,
+        since_spec_version: FIRST_SPEC_VERSION,
         payload_schema: PayloadSchema {
             fields: COMMON_PAYLOAD_FIELDS,
         },
@@ -289,7 +342,7 @@ pub const EVENT_SPECS: &[HookEventSpec] = &[
         event: HookEvent::Stop,
         canonical_name: "stop",
         blocking: BlockingScope::BlocksContinuation,
-        since_spec_version: SPEC_VERSION,
+        since_spec_version: FIRST_SPEC_VERSION,
         payload_schema: PayloadSchema {
             fields: COMMON_PAYLOAD_FIELDS,
         },
@@ -311,6 +364,99 @@ mod tests {
         since_harness_version: None,
         until_harness_version: None,
     };
+
+    #[test]
+    fn supported_native_events_lists_each_name_once() {
+        const EVENTS: &[CompatibilityEntry] = &[
+            CompatibilityEntry {
+                event: HookEvent::BeforeFinish,
+                native_event: Some("stop"),
+                aliases: &[],
+                coverage: CoverageLevel::Partial,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+            CompatibilityEntry {
+                event: HookEvent::Stop,
+                native_event: Some("stop"),
+                aliases: &[],
+                coverage: CoverageLevel::Full,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+        ];
+        let matrix = CompatibilityMatrix {
+            spec_version: SPEC_VERSION,
+            adapter: "test",
+            events: EVENTS,
+        };
+        assert_eq!(matrix.supported_native_events(), vec!["stop"]);
+    }
+
+    #[test]
+    fn accepted_events_summary_leads_with_the_names_a_manifest_can_write() {
+        const EVENTS: &[CompatibilityEntry] = &[
+            CompatibilityEntry {
+                event: HookEvent::PreToolUse,
+                native_event: Some("preToolUse"),
+                aliases: &[],
+                coverage: CoverageLevel::Full,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+            CompatibilityEntry {
+                event: HookEvent::PostToolUse,
+                native_event: Some("PostToolUse"),
+                aliases: &["PostToolUse"],
+                coverage: CoverageLevel::Full,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+            CompatibilityEntry {
+                event: HookEvent::Stop,
+                native_event: Some("stop"),
+                aliases: &[],
+                coverage: CoverageLevel::Full,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+            CompatibilityEntry {
+                event: HookEvent::AfterSave,
+                native_event: None,
+                aliases: &["FileChanged"],
+                coverage: CoverageLevel::Unsupported,
+                scope: &[],
+                caveat: None,
+                source: None,
+                since_harness_version: None,
+                until_harness_version: None,
+            },
+        ];
+        let matrix = CompatibilityMatrix {
+            spec_version: SPEC_VERSION,
+            adapter: "test",
+            events: EVENTS,
+        };
+        assert_eq!(
+            matrix.accepted_events_summary(),
+            "pre_tool_use (renders as preToolUse), post_tool_use (PostToolUse), stop"
+        );
+    }
 
     #[test]
     fn hook_event_display_uses_canonical_name() {

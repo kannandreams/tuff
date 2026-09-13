@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.1.0",
+  "spec_version": "0.2.0",
   "events": [
     {
       "event": "session_start",
@@ -164,7 +164,7 @@
       "hook_settings_path": ".agents/hook.json",
       "hook_settings_shape": "grouped",
       "hook_command": "sh .agents/hooks/<id>/run.sh",
-      "spec_version": "0.1.0",
+      "spec_version": "0.2.0",
       "adapter": "open-agents",
       "events": [
         {
@@ -269,7 +269,7 @@
       "hook_settings_path": ".claude/settings.json",
       "hook_settings_shape": "grouped",
       "hook_command": "sh .claude/hooks/<id>/run.sh",
-      "spec_version": "0.1.0",
+      "spec_version": "0.2.0",
       "adapter": "claude",
       "events": [
         {
@@ -386,7 +386,7 @@
       "hook_settings_path": ".agents/hook.json",
       "hook_settings_shape": "grouped",
       "hook_command": "sh .agents/hooks/<id>/run.sh",
-      "spec_version": "0.1.0",
+      "spec_version": "0.2.0",
       "adapter": "codex",
       "events": [
         {
@@ -491,7 +491,7 @@
       "hook_settings_path": ".cursor/hooks.json",
       "hook_settings_shape": "flat",
       "hook_command": "sh .cursor/hooks/<id>/run.sh",
-      "spec_version": "0.1.0",
+      "spec_version": "0.2.0",
       "adapter": "cursor",
       "events": [
         {

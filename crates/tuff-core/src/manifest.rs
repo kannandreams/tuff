@@ -246,20 +246,41 @@ impl CapabilityManifest {
         Ok(paths)
     }
 
+    /// Each listed file with the path it installs under: its path in the
+    /// capability directory with one leading `src/` removed.
+    ///
+    /// The same file listed twice installs once. Two different files that
+    /// would install under the same path are refused: `check.sh` and
+    /// `src/check.sh` both install as `check.sh`, and writing both used to
+    /// keep whichever came last without saying so.
     pub fn read_source_contents_with_names(&self) -> Result<Vec<(String, Vec<u8>)>> {
-        self.source_files()?
-            .iter()
-            .map(|p| {
-                let rel = p
-                    .strip_prefix(&self.root)
-                    .unwrap_or(p)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                let rel = rel.strip_prefix("src/").unwrap_or(&rel).to_string();
-                let content = std::fs::read(p)?;
-                Ok((rel, content))
-            })
-            .collect()
+        let mut installed: Vec<(String, PathBuf, Vec<u8>)> = Vec::new();
+        for p in self.source_files()? {
+            let rel = p
+                .strip_prefix(&self.root)
+                .unwrap_or(&p)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let rel = rel.strip_prefix("src/").unwrap_or(&rel).to_string();
+            if let Some((_, first, _)) = installed.iter().find(|(name, _, _)| *name == rel) {
+                if *first == p {
+                    continue;
+                }
+                return Err(TuffError::refused(format!(
+                    "capability '{}' lists two files that would install as '{rel}': {} and {}",
+                    self.id,
+                    first.display(),
+                    p.display()
+                ))
+                .with_hint("rename one of them, or list only one"));
+            }
+            let content = std::fs::read(&p)?;
+            installed.push((rel, p, content));
+        }
+        Ok(installed
+            .into_iter()
+            .map(|(rel, _, content)| (rel, content))
+            .collect())
     }
 }
 
@@ -1118,6 +1139,28 @@ files = ["SKILL.md"]
             .source_files()
             .unwrap_err();
         assert!(error.to_string().contains("must be a file"), "{error}");
+    }
+
+    #[test]
+    fn listed_files_that_install_to_the_same_path_are_refused_but_a_repeat_is_not() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("src")).unwrap();
+        fs::write(tmp.path().join("check.sh"), "top").unwrap();
+        fs::write(tmp.path().join("src/check.sh"), "src").unwrap();
+
+        let repeated = manifest_listing(tmp.path(), &["check.sh", "./check.sh", "check.sh"])
+            .read_source_contents_with_names()
+            .unwrap();
+        assert_eq!(repeated, vec![("check.sh".to_string(), b"top".to_vec())]);
+
+        let error = manifest_listing(tmp.path(), &["check.sh", "src/check.sh"])
+            .read_source_contents_with_names()
+            .unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Refused);
+        assert!(
+            error.to_string().contains("would install as 'check.sh'"),
+            "{error}"
+        );
     }
 
     #[test]
