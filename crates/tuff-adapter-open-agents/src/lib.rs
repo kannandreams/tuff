@@ -17,15 +17,19 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::McpServer,
 ];
 
+/// Agents that read skills from `.agents/skills/`, checked against each
+/// tool's documentation on 2026-09-13. Roo Code shut down in May 2026, and
+/// Cline reads `.cline/skills/`, so neither is listed.
 pub const SUPPORTED_AGENTS: &[&str] = &[
     "Codex",
     "Cursor",
     "OpenCode",
     "GitHub Copilot",
     "Gemini CLI",
-    "Roo",
-    "Cline",
     "Windsurf",
+    "Amp",
+    "Goose",
+    "JetBrains Junie",
 ];
 
 pub const HOOK_SETTINGS_RELPATH: &str = ".agents/hook.json";

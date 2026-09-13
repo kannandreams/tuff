@@ -7,7 +7,7 @@ Tuff uses verified materialized trees from its user cache directory as the refer
 local diffing and upstream-aware updates. Diffing uses temporary Git trees through libgit2;
 the consuming project does not need to be a Git repository.
 
-This page explains the behavior behind the commands. See the [CLI Reference](/cli#tuff-diff) for
+This page explains the behavior behind the commands. See the [CLI Reference](/cli/diff-update/#tuff-diff) for
 the complete command and flag syntax.
 
 There are three distinct flows:

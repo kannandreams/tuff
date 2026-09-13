@@ -81,8 +81,10 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff init --global` — initialize global scope
 
 ### Agents
-- `open-agents` — Codex, Cursor, OpenCode, Copilot, Gemini CLI, Roo, Cline
+- `open-agents` — `.agents/` layout; its skills are read by Codex, Cursor, OpenCode, Copilot, Gemini CLI, Windsurf, Amp, Goose, Junie
 - `claude` — Claude Code
+- `codex` — Codex
+- `cursor` — Cursor
 
 ### Scope
 - Project (default): `tuff.lock` in repo root — committed with project

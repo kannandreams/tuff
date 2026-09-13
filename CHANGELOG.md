@@ -6,6 +6,11 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Changed
+
+- **`tuff agent list` names the agents that actually read the Open Agents layout.** The `open-agents` row listed Roo, which shut down in May 2026, and Cline, which reads skills from `.cline/skills/` rather than `.agents/skills/`. Each agent was checked against its own documentation, and the row now lists Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, Windsurf, Amp, Goose, and JetBrains Junie. The `tuff-cli-guide` skill that `tuff init` installs lists the same agents, and now also names the `codex` and `cursor` adapters it had left out.
+- The documentation site is reorganised. The CLI reference is split into pages by task, `tuff.toml` and `tuff.lock` each have a plain-language page under Start Here, and the landing page shows what a hook and a policy compile to for each agent.
+
 ## [0.10.0] - 2026-09-13
 
 ### Added

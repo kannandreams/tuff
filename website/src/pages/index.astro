@@ -15,8 +15,15 @@ const description = 'Manage project-owned skills, tools, hooks, workflows, and M
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Tuff — capability lifecycle manager for coding agents" />
     <meta property="og:description" content={description} />
+    <meta property="og:url" content="https://tuffcli.dev/" />
+    <meta property="og:site_name" content="Tuff" />
     <meta property="og:image" content="https://tuffcli.dev/img/tuff-readme-banner.png" />
+    <meta property="og:image:width" content="1950" />
+    <meta property="og:image:height" content="807" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://tuffcli.dev/img/tuff-readme-banner.png" />
+    <link rel="canonical" href="https://tuffcli.dev/" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Tuff — manage coding-agent capabilities in your repo</title>
   </head>
@@ -79,14 +86,16 @@ const description = 'Manage project-owned skills, tools, hooks, workflows, and M
             <li class="tuff-chip tuff-chip--adapter" title="Dedicated adapter">Claude Code</li>
             <li class="tuff-chip tuff-chip--adapter" title="Dedicated adapter">Codex</li>
             <li class="tuff-chip tuff-chip--adapter" title="Dedicated adapter">Cursor</li>
-            <li class="tuff-chip">GitHub Copilot</li>
-            <li class="tuff-chip">Gemini CLI</li>
-            <li class="tuff-chip">OpenCode</li>
-            <li class="tuff-chip">Windsurf</li>
-            <li class="tuff-chip">Roo</li>
-            <li class="tuff-chip">Cline</li>
+            <!-- Agents below read skills from .agents/skills/, checked against each tool's docs on 2026-09-13. -->
+            <li class="tuff-chip" title="Skills via .agents/skills">GitHub Copilot</li>
+            <li class="tuff-chip" title="Skills via .agents/skills">Gemini CLI</li>
+            <li class="tuff-chip" title="Skills via .agents/skills">OpenCode</li>
+            <li class="tuff-chip" title="Skills via .agents/skills">Windsurf</li>
+            <li class="tuff-chip" title="Skills via .agents/skills">Amp</li>
+            <li class="tuff-chip" title="Skills via .agents/skills">Goose</li>
+            <li class="tuff-chip" title="Skills via .agents/skills">Junie</li>
           </ul>
-          <span class="tuff-harness-strip-note"><i aria-hidden="true"></i> dedicated adapter</span>
+          <span class="tuff-harness-strip-note"><i aria-hidden="true"></i> dedicated adapter · others via .agents/skills</span>
         </div>
       </section>
 
@@ -160,20 +169,53 @@ const description = 'Manage project-owned skills, tools, hooks, workflows, and M
       </section>
 
       <section class="tuff-section">
-        <div class="tuff-section-head"><div class="tuff-section-label">//harnesses</div><h2>Write once, emit per harness</h2><p>Tuff compiles a canonical manifest into whatever file shape each agent harness expects natively.</p></div>
-        <div class="tuff-adapter-diagram">
-          <div class="tuff-manifest"><div><span>type:</span> hook</div><div><span>event:</span> PreToolUse</div><div><span>runner:</span> ./lint.sh</div><div><span>blocking:</span> true</div></div>
-          <div class="tuff-compile"><i></i><span>compile</span></div>
-          <div class="tuff-harness-list"><div>claude-code <small>.claude/hooks.json</small></div><div>cursor <small>.cursor/hooks.yaml</small></div><div>codex <small>.codex/hooks.json</small></div></div>
+        <div class="tuff-section-head"><div class="tuff-section-label">//harnesses</div><h2>Write once, emit per harness</h2><p>Write a capability once in <code>tuff.toml</code>. Tuff turns it into the file each agent reads, in that agent's own format.</p></div>
+        <!-- The outputs below are what `tuff add` writes today (tuff 0.10.0). Codex is left out of the hook
+             example until internal #40 moves its hooks to the file Codex reads. -->
+        <div class="tuff-adapter" data-adapter-tabs>
+          <div class="tuff-install-tabs tuff-adapter-tabs" role="tablist" aria-label="Capability example">
+            <button class="is-active" type="button" role="tab" id="tuff-adapter-tab-hook" aria-controls="tuff-adapter-hook" aria-selected="true">hook</button>
+            <button type="button" role="tab" id="tuff-adapter-tab-policy" aria-controls="tuff-adapter-policy" aria-selected="false" tabindex="-1">policy</button>
+          </div>
+          <div class="tuff-adapter-diagram" role="tabpanel" id="tuff-adapter-hook" aria-labelledby="tuff-adapter-tab-hook">
+            <div class="tuff-manifest">
+              <div class="tuff-manifest-file" style="--i: 0">tuff.toml</div>
+              <div style="--i: 1"><span>id =</span> "lint-before-tools"</div>
+              <div style="--i: 2"><span>type =</span> "hook"</div>
+              <div style="--i: 3"><span>[hook]</span></div>
+              <div style="--i: 4"><span>event =</span> "pre_tool_use"</div>
+              <div style="--i: 5"><span>command =</span> "npm run lint"</div>
+            </div>
+            <div class="tuff-compile"><i></i><span>tuff add</span></div>
+            <div class="tuff-harness-list">
+              <div style="--i: 3"><strong>claude</strong><small>.claude/settings.json</small><code>"PreToolUse" → sh .claude/hooks/lint-before-tools/run.sh</code></div>
+              <div style="--i: 4"><strong>cursor</strong><small>.cursor/hooks.json</small><code>"preToolUse" → sh .cursor/hooks/lint-before-tools/run.sh</code></div>
+            </div>
+          </div>
+          <div class="tuff-adapter-diagram" role="tabpanel" id="tuff-adapter-policy" aria-labelledby="tuff-adapter-tab-policy" hidden>
+            <div class="tuff-manifest">
+              <div class="tuff-manifest-file" style="--i: 0">tuff.toml</div>
+              <div style="--i: 1"><span>id =</span> "no-force-push"</div>
+              <div style="--i: 2"><span>type =</span> "policy"</div>
+              <div style="--i: 3"><span>[[policy.rules]]</span></div>
+              <div style="--i: 4"><span>effect =</span> "deny"</div>
+              <div style="--i: 5"><span>command =</span> ["git", "push", <em class="tuff-nowrap">"--force"]</em></div>
+            </div>
+            <div class="tuff-compile"><i></i><span>tuff add</span></div>
+            <div class="tuff-harness-list">
+              <div style="--i: 3"><strong>claude</strong><small>.claude/settings.json</small><code>"permissions.deny" → "Bash(git push <em class="tuff-nowrap">--force *)"</em></code></div>
+              <div class="is-muted" style="--i: 4"><strong>codex, cursor</strong><small>not enforced yet</small><code>install refused, so no rule is assumed</code></div>
+            </div>
+          </div>
         </div>
       </section>
 
       <section class="tuff-section tuff-section--last">
         <div class="tuff-section-head"><div class="tuff-section-label">//day two</div><h2>Operational Features</h2><p>The parts that matter after day one.</p></div>
         <div class="tuff-why-grid">
-          <div><b>01</b><strong>CI Integration</strong><p>Run the check in CI and fail the build on drift, not after it's already shipped.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/cli/#ci-with-github-action">GitHub Actions</a></div>
+          <div><b>01</b><strong>CI Integration</strong><p>Run the check in CI and fail the build on drift, not after it's already shipped.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/cli/ci/#ci-with-github-actions">GitHub Actions</a></div>
           <div><b>02</b><strong>Tuff Skills</strong><p>Tuff ships as a skill itself. The agent learns the CLI and hook spec on install, so it writes manifests and runs commands for you instead of you doing it by hand.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/getting-started">tuff init</a></div>
-          <div><b>03</b><strong>Audit Reports</strong><p>Generate a full report of every installed capability, its source, and its policy status, right from the CLI, no hosted service required.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/cli">tuff generate report</a></div>
+          <div><b>03</b><strong>Audit Reports</strong><p>Generate a full report of every installed capability, its source, and its policy status, right from the CLI, no hosted service required.</p><a class="tuff-button tuff-button--primary tuff-feature-button" href="/cli/inspect/#tuff-generate">tuff generate report</a></div>
         </div>
       </section>
     </main>
@@ -212,5 +254,55 @@ const description = 'Manage project-owned skills, tools, hooks, workflows, and M
       copy.textContent = 'copied';
       setTimeout(() => { copy.textContent = 'copy'; }, 1200);
     });
+  });
+
+  // The harness example: switch between the hook and policy panels. While the
+  // section is on screen the panels alternate, until the reader picks one,
+  // hovers or focuses the example, or prefers reduced motion.
+  document.querySelectorAll<HTMLElement>('[data-adapter-tabs]').forEach((group) => {
+    const tabs = [...group.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    let chosen = false;
+    let paused = false;
+    let visible = false;
+
+    const select = (tab: HTMLButtonElement, focus = false) => {
+      for (const item of tabs) {
+        const on = item === tab;
+        item.classList.toggle('is-active', on);
+        item.setAttribute('aria-selected', String(on));
+        item.tabIndex = on ? 0 : -1;
+        const panel = document.getElementById(item.getAttribute('aria-controls') ?? '');
+        if (panel) panel.hidden = !on;
+      }
+      if (focus) tab.focus();
+    };
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => {
+        chosen = true;
+        select(tab);
+      });
+      tab.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+        event.preventDefault();
+        chosen = true;
+        const step = event.key === 'ArrowRight' ? 1 : tabs.length - 1;
+        select(tabs[(index + step) % tabs.length], true);
+      });
+    });
+
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }, { threshold: 0.4 }).observe(group);
+    group.addEventListener('mouseenter', () => { paused = true; });
+    group.addEventListener('mouseleave', () => { paused = false; });
+    group.addEventListener('focusin', () => { paused = true; });
+    group.addEventListener('focusout', () => { paused = false; });
+
+    setInterval(() => {
+      if (chosen || paused || !visible || document.hidden) return;
+      const current = tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true');
+      select(tabs[(current + 1) % tabs.length]);
+    }, 6000);
   });
 </script>

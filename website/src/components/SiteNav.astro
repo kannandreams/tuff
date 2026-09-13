@@ -7,6 +7,12 @@
 //
 // An `external` link leaves the site, so it opens in a new tab and never
 // matches `current`.
+//
+// A link with an `icon` shows only the icon at mid widths, where the labels
+// do not fit; its label stays for screen readers and as the tooltip.
+import GitHubRepo from './GitHubRepo.astro';
+import { navIcons } from '../lib/nav-icons';
+
 interface Props {
   /** Href of the current page, so its link can be marked. */
   current?: string;
@@ -14,17 +20,17 @@ interface Props {
 
 const { current } = Astro.props;
 
-const links = [
-  { href: '/getting-started', label: 'Docs' },
-  { href: '/primitives/overview', label: 'Capabilities' },
-  { href: '/mcp-catalog', label: 'MCP Catalog' },
-  { href: '/#packs', label: 'Packs' },
-  { href: '/concepts/adapters', label: 'Adapters' },
-  { href: '/blog', label: 'Blog' },
+const links: { href: string; label: string; external?: boolean; icon?: string }[] = [
+  { href: '/primitives/overview', label: 'Capabilities', icon: navIcons.puzzle },
+  { href: '/mcp-catalog', label: 'MCP Catalog', icon: navIcons.server },
+  { href: '/#packs', label: 'Packs', icon: navIcons.box },
+  { href: '/concepts/adapters', label: 'Adapters', icon: navIcons.plug },
+  { href: '/blog', label: 'Blog', icon: navIcons.pencil },
   {
     href: 'https://marketplace.visualstudio.com/items?itemName=kannandreams.tuff',
-    label: 'VS Code',
+    label: 'VS Code Extension',
     external: true,
+    icon: navIcons.vscode,
   },
 ];
 ---
@@ -40,15 +46,14 @@ const links = [
             aria-current={link.href === current ? 'page' : undefined}
             target={link.external ? '_blank' : undefined}
             rel={link.external ? 'noopener noreferrer' : undefined}
+            title={link.icon ? link.label : undefined}
           >
-            {link.label}
+            {link.icon && <svg viewBox="0 0 24 24" aria-hidden="true" set:html={link.icon} />}
+            <span class="tuff-nav-label">{link.label}</span>
           </a>
         ))
       }
     </div>
   </div>
-  <a class="tuff-github-button" href="https://github.com/kannandreams/tuff" aria-label="View Tuff on GitHub">
-    View on GitHub
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.04c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.6-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"/></svg>
-  </a>
+  <GitHubRepo class="tuff-repo--plain" />
 </nav>

@@ -45,13 +45,13 @@ code --install-extension tuff-0.1.0.vsix
 
 The **Capabilities** view groups everything installed in the project by kind: skills, tools, hooks, workflows, and MCP servers. Each row carries the version recorded in the lockfile and the agents the capability was installed for. A capability installed for several harnesses is one row that expands into one child per agent.
 
-Rows carry the same drift states [`tuff list`](/cli/#tuff-list) reports. A capability whose installed files no longer match what was recorded reads as modified; one whose files are gone reads as missing. The status bar carries the counts, so a hand edit is visible before an agent session runs into it.
+Rows carry the same drift states [`tuff list`](/cli/inspect/#tuff-list) reports. A capability whose installed files no longer match what was recorded reads as modified; one whose files are gone reads as missing. The status bar carries the counts, so a hand edit is visible before an agent session runs into it.
 
 Clicking a capability opens its entry file, `SKILL.md` or `server.toml` or `tuff.toml`, and reveals the directory in the Explorer when it has none.
 
 ## Updates are asked for, not assumed
 
-[`tuff outdated`](/cli/#tuff-outdated) reaches the network and clones git sources to answer, which is not something a sidebar should do every time a file is saved. So the extension does not check for updates on its own. Run **Tuff: Check for Updates** from the view title or the command palette, and rows gain the move available and the claimed size of the change, such as `1.2.0 to 1.4.0 (minor)`.
+[`tuff outdated`](/cli/inspect/#tuff-outdated) reaches the network and clones git sources to answer, which is not something a sidebar should do every time a file is saved. So the extension does not check for updates on its own. Run **Tuff: Check for Updates** from the view title or the command palette, and rows gain the move available and the claimed size of the change, such as `1.2.0 to 1.4.0 (minor)`.
 
 Until that has run, the view says `updates not checked` rather than showing everything as current. A release tag that moved or vanished upstream is shown as its own finding, not as staleness, matching how the CLI reports it.
 
@@ -79,9 +79,9 @@ Deleting and packing stay in the CLI. The extension is a view with a few safe ac
 
 Most projects that install this extension already have skills in them, written by hand or dropped in from somewhere else, and Tuff knows about none of them. **Tuff: Scan for Existing Capabilities** reads `.claude`, `.cursor`, and `.agents`, lists what it finds, and lets you pick what to track.
 
-Everything picked is tracked [where it already is](/cli/#tuff-scan). Nothing is moved, copied, or rewritten: the lockfile records the path the capability already has, and the files are left alone.
+Everything picked is tracked [where it already is](/cli/add/#tuff-scan). Nothing is moved, copied, or rewritten: the lockfile records the path the capability already has, and the files are left alone.
 
-The picker offers only what Tuff can actually take. A directory that shares an id with another one, or that is missing a `[hook]` or `[server]` section it needs, is reported with the reason instead — the same statuses [`tuff scan`](/cli/#tuff-scan) prints.
+The picker offers only what Tuff can actually take. A directory that shares an id with another one, or that is missing a `[hook]` or `[server]` section it needs, is reported with the reason instead — the same statuses [`tuff scan`](/cli/add/#tuff-scan) prints.
 
 Scanning changes nothing and works in a folder Tuff has never seen, so the empty view offers it alongside **Initialize Project**. If you scan first and pick something in a folder that has no `tuff.lock`, the extension says so and offers to run `tuff init` before tracking, since tracking is what needs the lockfile.
 

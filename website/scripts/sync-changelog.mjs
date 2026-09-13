@@ -29,7 +29,7 @@ const body = lines
 
 const page = `---
 title: Changelog
-description: Every user-facing change to Tuff, by release.
+description: Every user-facing change to the Tuff CLI, by release, with new features, bug fixes, and security fixes.
 ---
 
 <!-- Generated from CHANGELOG.md by website/scripts/sync-changelog.mjs. Edit the source, not this file. -->
