@@ -3485,6 +3485,117 @@ fn a_manifest_file_path_cannot_read_or_write_outside_the_capability() {
 }
 
 #[test]
+fn a_listed_file_cannot_replace_the_hook_wrapper() {
+    // The install note says which command the hook runs, and the
+    // registration runs `run.sh`. A listed `run.sh`, or `src/run.sh` once
+    // the `src/` prefix is removed, used to overwrite the wrapper, so a
+    // different script ran than the one the note described.
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+
+    for (id, listed) in [("listed-run", "run.sh"), ("listed-src-run", "src/run.sh")] {
+        let capability = temp.path().join(id);
+        fs::create_dir_all(capability.join("src")).unwrap();
+        fs::write(capability.join(listed), "echo not-the-declared-command\n").unwrap();
+        fs::write(
+            capability.join("tuff.toml"),
+            format!(
+                "id = \"{id}\"\ntype = \"hook\"\nversion = \"1.0.0\"\ndescription = \"d\"\nfiles = [\"{listed}\"]\n[hook]\nevent = \"before_finish\"\ncommand = \"echo declared\"\n"
+            ),
+        )
+        .unwrap();
+        tuff()
+            .current_dir(&project)
+            .args([
+                "add",
+                capability.to_str().unwrap(),
+                "--agent",
+                "open-agents",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "which is the wrapper Tuff generates",
+            ));
+        assert!(
+            !project.join(format!(".agents/hooks/{id}")).exists(),
+            "{listed}: nothing is installed"
+        );
+    }
+}
+
+#[test]
+fn two_listed_files_cannot_install_to_the_same_path() {
+    // `check.sh` and `src/check.sh` both install as `check.sh`, because
+    // one leading `src/` is removed. Tuff used to write both, keep the
+    // second, and report "installed" twice.
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    let capability = temp.path().join("clash");
+    fs::create_dir_all(capability.join("src")).unwrap();
+    fs::write(capability.join("check.sh"), "echo top\n").unwrap();
+    fs::write(capability.join("src/check.sh"), "echo src\n").unwrap();
+    fs::write(
+        capability.join("tuff.toml"),
+        "id = \"clash\"\ntype = \"hook\"\nversion = \"1.0.0\"\ndescription = \"d\"\nfiles = [\"check.sh\", \"src/check.sh\"]\n[hook]\nevent = \"before_finish\"\ncommand = \"true\"\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            capability.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("would install as 'check.sh'"));
+    assert!(!project.join(".agents/hooks/clash").exists());
+}
+
+#[test]
+fn deleting_a_hook_with_a_corrupt_settings_file_changes_nothing() {
+    // Delete used to remove the hook's directory first and only then parse
+    // the settings file, so a corrupt file failed the delete after the
+    // files were gone, leaving a tracked capability with nothing on disk.
+    let temp = TempDir::new().unwrap();
+    let hook = make_hook_primitive(temp.path(), "fragile-hook");
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .success();
+    let hook_dir = temp.path().join(".agents/hooks/fragile-hook");
+    assert!(hook_dir.join("run.sh").is_file());
+
+    fs::write(temp.path().join(".agents/hook.json"), "{ not json").unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .args(["delete", "fragile-hook", "--force"])
+        .assert()
+        .failure();
+    assert!(
+        hook_dir.join("run.sh").is_file(),
+        "a refused delete leaves the hook's files in place"
+    );
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(
+        lock.contains("\"name\": \"fragile-hook\""),
+        "and the capability still tracked"
+    );
+}
+
+#[test]
 fn a_capability_id_cannot_aim_install_or_delete_outside_the_project() {
     // Through 0.9.0 a lockfile entry named `../../../victim` made `tuff
     // delete` remove `<harness>/<kind>s/../../../victim`, a directory
@@ -3677,7 +3788,7 @@ fn hooks_spec_prints_the_document_the_published_specification_is_generated_from(
         .args(["hooks", "spec"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Tuff hooks specification 0.1.0"))
+        .stdout(predicate::str::contains("Tuff hooks specification 0.2.0"))
         .stdout(predicate::str::contains("blocks action"))
         .stdout(predicate::str::contains("cursor"))
         .stdout(predicate::str::contains("preToolUse"));

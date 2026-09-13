@@ -212,24 +212,44 @@ pub trait AgentAdapter {
         let matrix = self.hook_compatibility();
         let Some(entry) = matrix.find_event(&context.hook.event) else {
             return Err(TuffError::unsupported(format!(
-                "{} does not support hook event '{}'. Supported events: {}",
+                "{} does not support hook event '{}'. A manifest can use: {}",
                 self.display_name(),
                 context.hook.event,
-                matrix.supported_native_events().join(", ")
+                matrix.accepted_events_summary()
             )));
         };
         let Some(native_event) = entry.native_event_name() else {
             let suffix = entry
                 .caveat
-                .map(|caveat| format!(": {caveat}"))
+                .map(|caveat| format!(": {}", caveat.trim_end_matches('.')))
                 .unwrap_or_default();
             return Err(TuffError::unsupported(format!(
-                "{} does not support hook event '{}'{}",
+                "{} does not support hook event '{}'{}. A manifest can use: {}",
                 self.display_name(),
                 context.hook.event,
-                suffix
+                suffix,
+                matrix.accepted_events_summary()
             )));
         };
+
+        // The wrapper is what the registration runs and what the install
+        // note describes. A listed runtime file landing on the same path
+        // would silently replace it, so the harness would run a script the
+        // user was never shown.
+        if let Some((listed, _)) = context
+            .source_files
+            .iter()
+            .find(|(relative, _)| relative == self.hook_filename())
+        {
+            return Err(TuffError::refused(format!(
+                "hook '{}' lists a file installed as '{listed}', which is the wrapper Tuff generates to run its command",
+                context.capability_id
+            ))
+            .with_hint(format!(
+                "rename that file; '{}' is reserved in the hook directory",
+                self.hook_filename()
+            )));
+        }
 
         let command = format!(
             "sh {}/hooks/{}/{}",
@@ -354,22 +374,23 @@ pub trait AgentAdapter {
         let matrix = self.hook_compatibility();
         let Some(entry) = matrix.find_event(raw_event) else {
             return Err(TuffError::unsupported(format!(
-                "{} does not support hook event '{}'. Supported events: {}",
+                "{} does not support hook event '{}'. A manifest can use: {}",
                 self.display_name(),
                 raw_event,
-                matrix.supported_native_events().join(", ")
+                matrix.accepted_events_summary()
             )));
         };
         entry.native_event_name().ok_or_else(|| {
             let suffix = entry
                 .caveat
-                .map(|caveat| format!(": {caveat}"))
+                .map(|caveat| format!(": {}", caveat.trim_end_matches('.')))
                 .unwrap_or_default();
             TuffError::unsupported(format!(
-                "{} does not support hook event '{}'{}",
+                "{} does not support hook event '{}'{}. A manifest can use: {}",
                 self.display_name(),
                 raw_event,
-                suffix
+                suffix,
+                matrix.accepted_events_summary()
             ))
         })
     }
@@ -490,12 +511,18 @@ pub trait AgentAdapter {
         repo_root: &Path,
         managed_hooks: &[crate::lockfile::ManagedHook],
     ) -> Result<()> {
+        // Settings first, files last. Taking registrations out of a settings
+        // file is the step that can refuse, when the user's file is not valid
+        // JSON; deleting directories cannot meaningfully be refused. In this
+        // order a corrupt file stops the removal with every file still in
+        // place and the capability still tracked, instead of after its files
+        // are gone.
+        self.remove_hook_settings(repo_root, managed_hooks)?;
+        crate::mcp::remove_tool(&repo_root.join(self.mcp_config_relpath()), primitive_id)?;
         let prefix = self.dir_prefix();
         for kind in &["skills", "tools", "hooks", "workflows", "mcp-servers"] {
             self.remove_dir(repo_root, prefix, kind, primitive_id)?;
         }
-        crate::mcp::remove_tool(&repo_root.join(self.mcp_config_relpath()), primitive_id)?;
-        self.remove_hook_settings(repo_root, managed_hooks)?;
         Ok(())
     }
 

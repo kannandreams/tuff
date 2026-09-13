@@ -397,7 +397,10 @@ mod tests {
     fn the_event_table_names_each_event_by_its_canonical_name() {
         for spec in EVENT_SPECS {
             assert_eq!(spec.canonical_name, spec.event.as_str());
-            assert_eq!(spec.since_spec_version, SPEC_VERSION);
+            assert_eq!(
+                spec.since_spec_version, "0.1.0",
+                "the seven events arrived in the first published version"
+            );
         }
     }
 }

@@ -197,3 +197,5 @@ Hooks run automatically when triggered by the harness. They are never executed b
 Tuff during install or update. Review the command in the hook settings file carefully. A hook that
 modifies files or runs destructive commands affects every agent session.
 :::
+
+Tuff also refuses a hook that tries to run something other than what it declares. The harness runs the `run.sh` wrapper Tuff generates, which runs the hook's declared `command`, and the install note names that command. A hook that lists its own `run.sh` among its `files`, which would replace the wrapper, is refused, as is a listed file that reaches outside the hook's directory. The full rules are in the [Hooks Specification](/spec/hooks/).
