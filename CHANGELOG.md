@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Fixed
+
+- **A capability's manifest can no longer read or write files outside where it belongs.** Through 0.9.0, an entry in a `tuff.toml` `files` list was joined to the capability directory to read it and to the harness directory to write it, without checking the path. `files = ["../../outside.txt"]` therefore copied a file from beside the capability into the project outside the harness directory, and enough `../` segments aimed the write anywhere the user could write. A listed file that was a symbolic link was followed, so its target's contents were copied into the project. A native hook source added with `--hook-file` followed links the same way. Capabilities are installed from other people's repositories, so a hostile one could have used this to overwrite files in a project or pull a local secret into it. Every `files` entry and a tool's entrypoint must now be a relative path inside the capability directory with no `..`, no leading `/`, and no symbolic link anywhere along it, and must name a regular file; native hook sources refuse links; and as a second line of defence nothing is written outside the install directory whatever planned it. The install is refused before anything is written. Skill directories without a manifest and capability packs already refused both and are unchanged. If you have installed capabilities from sources you do not control, review their `tuff.toml` `files` lists for `..` or links.
+
 ## [0.9.0] - 2026-09-12
 
 ### Added

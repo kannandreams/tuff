@@ -51,7 +51,7 @@ runtime_deps = ["chalk", "@octokit/rest"]    # shown at install time, never auto
 | `version` | Semantic version | Yes |
 | `type` | Must be `"tool"` | Yes |
 | `description` | Shown to the agent: what the tool does and when to call it | Yes |
-| `files` | Source files to copy (entrypoint auto-added if present) | No |
+| `files` | Source files to copy, relative to `tuff.toml` (entrypoint auto-added if present) | No |
 | `parameters` | JSON Schema object defining input contract | Yes |
 | `parameters.type` | Must be `"object"` | Yes |
 | `parameters.properties` | At least one parameter definition required | Yes |
@@ -69,7 +69,7 @@ runtime_deps = ["chalk", "@octokit/rest"]    # shown at install time, never auto
 Every tool goes through these checks at `tuff add` time:
 
 1. **Schema validation:** `parameters` must be a valid JSON Schema with `type: object` and at least one property
-2. **Entrypoint validation:** `entrypoint` must resolve to an existing file, with no path traversal (`../` or absolute paths rejected)
+2. **Path validation:** `entrypoint` and every `files` entry must name an existing regular file inside the capability directory. `../` segments, absolute paths, and symbolic links anywhere along the path are rejected, so a capability cannot read a file from outside itself or write one outside the harness directory.
 3. **Dependencies displayed:** `runtime_deps` are shown in a note before install; they are never auto-installed
 4. **MCP opt-in:** only tools with `implementation.mcp = true` are registered as MCP servers
 5. **No execution:** installing a tool only writes files; the entrypoint is never run

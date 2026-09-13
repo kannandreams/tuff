@@ -712,7 +712,7 @@ fn managed_hooks_for(
 
 fn write_render_plan(root: &Path, files: &[crate::adapter::PlannedFile]) -> Result<()> {
     for file in files {
-        let destination = root.join(&file.path);
+        let destination = root.join(super::add::contained_planned_path(&file.path)?);
         if destination.exists() && !file.allow_existing {
             return Err(TuffError::usage(format!(
                 "pack members render the same target path: {}",
