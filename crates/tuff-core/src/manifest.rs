@@ -215,27 +215,31 @@ fn default_cwd() -> String {
 }
 
 impl CapabilityManifest {
+    /// The files this capability installs, each confirmed to be a regular
+    /// file inside the capability directory.
+    ///
+    /// Every entry in `files`, and a tool's entrypoint, is a path the
+    /// manifest's author chose, and a capability can come from anyone's
+    /// repository. Each is copied into the project under the harness
+    /// directory using the same relative path, so an entry that climbs out
+    /// with `..`, is absolute, or passes through a symbolic link would read
+    /// a file from outside the capability and write it outside the place
+    /// Tuff installs to. Those are refused, the same way pack members and
+    /// skill directories already refuse them.
     pub fn source_files(&self) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
         for f in &self.files {
-            let clean = f.trim_start_matches("./");
-            let path = self.root.join(clean);
-            if !path.exists() {
-                return Err(TuffError::not_found(format!(
-                    "capability source file not found: {}",
-                    path.display()
-                )));
-            }
+            let path = contained_source_file(&self.root, f)?;
             paths.push(path);
         }
 
         if self.capability_type == CapabilityType::Tool
             && let Some(ref imp) = self.implementation
         {
-            let ep_path = self.root.join(&imp.entrypoint);
+            let ep_path = self.root.join(imp.entrypoint.trim_start_matches("./"));
             if !paths.contains(&ep_path) && ep_path.exists() {
-                paths.push(ep_path);
+                paths.push(contained_source_file(&self.root, &imp.entrypoint)?);
             }
         }
 
@@ -257,6 +261,48 @@ impl CapabilityManifest {
             })
             .collect()
     }
+}
+
+/// Resolve one manifest-listed path to a regular file inside `root`.
+///
+/// The entry must be relative, may start with `./`, and may not contain
+/// `..`, a root, or a platform prefix. No component along it may be a
+/// symbolic link, since a link is the other way to reach outside the
+/// directory while every component still looks plain.
+fn contained_source_file(root: &Path, entry: &str) -> Result<PathBuf> {
+    let trimmed = entry.trim_start_matches("./");
+    let relative = crate::pack::validate_relative_path(Path::new(trimmed)).map_err(|_| {
+        TuffError::refused(format!(
+            "capability source path must stay inside the capability directory: '{entry}'"
+        ))
+        .with_hint("list files by their path relative to tuff.toml, without '..' or a leading '/'")
+    })?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(TuffError::refused(format!(
+                    "symbolic links are not allowed in capability sources: {}",
+                    current.display()
+                )));
+            }
+            Ok(_) => {}
+            Err(_) => {
+                return Err(TuffError::not_found(format!(
+                    "capability source file not found: {}",
+                    root.join(&relative).display()
+                )));
+            }
+        }
+    }
+    if !current.is_file() {
+        return Err(TuffError::usage(format!(
+            "capability source must be a file, not a directory: {}",
+            current.display()
+        )));
+    }
+    Ok(current)
 }
 
 fn validate_non_empty(field: &str, value: &str) -> Result<()> {
@@ -938,6 +984,105 @@ files = ["SKILL.md"]
         let files = m.source_files().unwrap();
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("SKILL.md"));
+    }
+
+    fn manifest_listing(root: &Path, files: &[&str]) -> CapabilityManifest {
+        CapabilityManifest {
+            id: "t".into(),
+            version: "1.0".into(),
+            capability_type: CapabilityType::Hook,
+            description: "desc".into(),
+            files: files.iter().map(|f| f.to_string()).collect(),
+            parameters: None,
+            implementation: None,
+            hook: None,
+            workflow: None,
+            server: None,
+            targets: vec![],
+            root: root.to_path_buf(),
+        }
+    }
+
+    #[test]
+    fn source_files_refuse_a_path_that_climbs_out_of_the_capability() {
+        // A capability from someone else's repository chooses these paths.
+        // `../` would read a file beside the capability and, because the
+        // relative path is reused for the destination, write it outside the
+        // harness directory Tuff installs into.
+        let tmp = TempDir::new().unwrap();
+        let capability = tmp.path().join("capability");
+        fs::create_dir_all(&capability).unwrap();
+        fs::write(tmp.path().join("outside.txt"), "outside").unwrap();
+        fs::write(capability.join("inside.txt"), "inside").unwrap();
+
+        for entry in [
+            "../outside.txt",
+            "sub/../../outside.txt",
+            "./../outside.txt",
+        ] {
+            let error = manifest_listing(&capability, &["inside.txt", entry])
+                .source_files()
+                .unwrap_err();
+            assert_eq!(error.kind(), crate::error::ErrorKind::Refused, "{entry}");
+            assert!(
+                error
+                    .to_string()
+                    .contains("must stay inside the capability directory"),
+                "{entry}: {error}"
+            );
+        }
+        let absolute = tmp.path().join("outside.txt");
+        let error = manifest_listing(&capability, &[absolute.to_str().unwrap()])
+            .source_files()
+            .unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Refused);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn source_files_refuse_a_symbolic_link_anywhere_along_the_path() {
+        let tmp = TempDir::new().unwrap();
+        let capability = tmp.path().join("capability");
+        let secrets = tmp.path().join("secrets");
+        fs::create_dir_all(capability.join("docs")).unwrap();
+        fs::create_dir_all(&secrets).unwrap();
+        fs::write(secrets.join("key.txt"), "pretend secret").unwrap();
+        std::os::unix::fs::symlink(secrets.join("key.txt"), capability.join("notes.md")).unwrap();
+        std::os::unix::fs::symlink(&secrets, capability.join("docs").join("linked")).unwrap();
+
+        for entry in ["notes.md", "docs/linked/key.txt"] {
+            let error = manifest_listing(&capability, &[entry])
+                .source_files()
+                .unwrap_err();
+            assert_eq!(error.kind(), crate::error::ErrorKind::Refused, "{entry}");
+            assert!(
+                error.to_string().contains("symbolic links are not allowed"),
+                "{entry}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn source_files_accept_plain_nested_and_dot_slash_paths() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("src/lib")).unwrap();
+        fs::write(tmp.path().join("src/lib/check.sh"), "x").unwrap();
+        fs::write(tmp.path().join("run.sh"), "x").unwrap();
+
+        let files = manifest_listing(tmp.path(), &["./run.sh", "src/lib/check.sh"])
+            .source_files()
+            .unwrap();
+        assert_eq!(
+            files,
+            vec![
+                tmp.path().join("run.sh"),
+                tmp.path().join("src/lib/check.sh")
+            ]
+        );
+        let error = manifest_listing(tmp.path(), &["src"])
+            .source_files()
+            .unwrap_err();
+        assert!(error.to_string().contains("must be a file"), "{error}");
     }
 
     #[test]

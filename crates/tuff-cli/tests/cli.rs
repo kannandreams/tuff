@@ -3419,6 +3419,138 @@ fn hooks_matrix_lists_registered_adapter_compatibility() {
 }
 
 #[test]
+fn a_manifest_file_path_cannot_read_or_write_outside_the_capability() {
+    // Through 0.9.0, `files = ["../../outside.txt"]` copied a
+    // file from beside the capability into `.agents/outside.txt`: the
+    // relative path was reused for the destination, so it climbed out of
+    // the hook directory too. A capability can come from anyone's
+    // repository, so both directions are refused before anything is
+    // written.
+    let temp = TempDir::new().unwrap();
+    let work = temp.path();
+    fs::write(work.join("outside.txt"), "outside the capability").unwrap();
+    let project = work.join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+
+    for (kind, section) in [
+        (
+            "hook",
+            "[hook]\nevent = \"before_finish\"\ncommand = \"true\"\n",
+        ),
+        ("skill", ""),
+    ] {
+        // Two levels below `work`, so `../../outside.txt` names the real
+        // file: the escape must be one that would have succeeded, not a path
+        // that happens not to exist.
+        let capability = work.join("capabilities").join(format!("escaping-{kind}"));
+        fs::create_dir_all(&capability).unwrap();
+        fs::write(capability.join("SKILL.md"), "# Skill\n").unwrap();
+        fs::write(
+            capability.join("tuff.toml"),
+            format!(
+                "id = \"escaping-{kind}\"\ntype = \"{kind}\"\nversion = \"1.0.0\"\ndescription = \"d\"\nfiles = [\"SKILL.md\", \"../../outside.txt\"]\n{section}"
+            ),
+        )
+        .unwrap();
+        let before = fs::read_to_string(project.join("tuff.lock")).unwrap();
+        tuff()
+            .current_dir(&project)
+            .args([
+                "add",
+                capability.to_str().unwrap(),
+                "--agent",
+                "open-agents",
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "must stay inside the capability directory",
+            ));
+        assert!(
+            !project.join(".agents/outside.txt").exists(),
+            "{kind}: nothing may be written outside the harness directory"
+        );
+        assert!(
+            !project
+                .join(format!(".agents/{kind}s/escaping-{kind}"))
+                .exists()
+        );
+        assert_eq!(
+            fs::read_to_string(project.join("tuff.lock")).unwrap(),
+            before,
+            "{kind}: a refused install records nothing"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symbolic_link_in_a_capability_source_is_refused_not_followed() {
+    // A link would copy whatever it points at, a key file for instance,
+    // into the project, where it could be committed. Listed files and
+    // native hook sources both refuse links, as skill and pack sources
+    // already did.
+    let temp = TempDir::new().unwrap();
+    let work = temp.path();
+    fs::create_dir_all(work.join("secrets")).unwrap();
+    fs::write(work.join("secrets/key.txt"), "pretend secret").unwrap();
+    let project = work.join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+
+    let listed = work.join("listed-hook");
+    fs::create_dir_all(&listed).unwrap();
+    std::os::unix::fs::symlink(work.join("secrets/key.txt"), listed.join("notes.md")).unwrap();
+    fs::write(
+        listed.join("tuff.toml"),
+        "id = \"listed-hook\"\ntype = \"hook\"\nversion = \"1.0.0\"\ndescription = \"d\"\nfiles = [\"notes.md\"]\n[hook]\nevent = \"before_finish\"\ncommand = \"true\"\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["add", listed.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("symbolic links are not allowed"));
+    assert!(!project.join(".agents/hooks/listed-hook").exists());
+
+    let native = work.join("native-hook");
+    fs::create_dir_all(&native).unwrap();
+    fs::write(
+        native.join("hook.json"),
+        r#"{"hooks": {"before_finish": [{"hooks": [{"type": "command", "command": "sh {{hook_dir}}/run.sh"}]}]}}"#,
+    )
+    .unwrap();
+    fs::write(native.join("run.sh"), "true\n").unwrap();
+    std::os::unix::fs::symlink(work.join("secrets"), native.join("docs")).unwrap();
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            "hook",
+            native.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--hook-file",
+            "hook.json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("symbolic links are not allowed"));
+    assert!(!project.join(".agents/hooks/native-hook").exists());
+    let leaked = std::process::Command::new("grep")
+        .args(["-rl", "pretend secret", project.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        leaked.stdout.is_empty(),
+        "the linked file's contents must not reach the project: {}",
+        String::from_utf8_lossy(&leaked.stdout)
+    );
+}
+
+#[test]
 fn hooks_spec_prints_the_document_the_published_specification_is_generated_from() {
     // No project is needed: the spec is a property of the binary, not of
     // what a project registered.

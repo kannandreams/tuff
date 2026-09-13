@@ -740,11 +740,22 @@ fn collect_native_hook_source_files_inner(
     for entry in fs::read_dir(current)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() {
+        // `is_dir` and `is_file` follow links, so a link inside a hook
+        // source would copy whatever it points at into the project, and a
+        // link to an ancestor would recurse forever. Refused, as skill and
+        // pack sources already refuse it.
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(TuffError::refused(format!(
+                "symbolic links are not allowed in capability sources: {}",
+                path.display()
+            )));
+        }
+        if metadata.is_dir() {
             collect_native_hook_source_files_inner(root, &path, hook_path, capability_id, files)?;
             continue;
         }
-        if !path.is_file() || same_file_path(&path, hook_path) {
+        if !metadata.is_file() || same_file_path(&path, hook_path) {
             continue;
         }
 
@@ -901,7 +912,7 @@ pub(crate) fn write_planned_file(
     install_root: &Path,
     planned: &adapter::PlannedFile,
 ) -> Result<adapter::EmittedFile> {
-    let target_path = install_root.join(&planned.path);
+    let target_path = install_root.join(contained_planned_path(&planned.path)?);
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -911,6 +922,19 @@ pub(crate) fn write_planned_file(
         path: planned.path.clone(),
         hash: lockfile::hash_bytes(&planned.content),
         baseline_hash: lockfile::hash_bytes(&planned.content),
+    })
+}
+
+/// Refuse to write a planned file anywhere but under the install root.
+///
+/// Planners build these paths from manifest content, so this is the last
+/// line of defence if one of them ever lets `..` or an absolute path
+/// through: nothing is written outside the project, whatever planned it.
+pub(crate) fn contained_planned_path(path: &str) -> Result<std::path::PathBuf> {
+    crate::pack::validate_relative_path(Path::new(path)).map_err(|_| {
+        TuffError::refused(format!(
+            "refusing to write outside the install directory: '{path}'"
+        ))
     })
 }
 
