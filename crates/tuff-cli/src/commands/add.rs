@@ -860,6 +860,7 @@ fn adopt_capability_in_place(
         lockfile::TargetLockEntry {
             managed_hooks: Vec::new(),
             managed_mcp_entry: None,
+            managed_permissions: Vec::new(),
             ownership: lockfile::TargetOwnership::Imported,
             sha256: baseline_hash,
             installed_path: relative_or_absolute_canonical(capability_dir, install_root),
@@ -1012,6 +1013,123 @@ pub(crate) fn add_targets_from_installed_dir(
     )
 }
 
+/// A policy compiled for one agent, ready to write once nothing can refuse.
+struct CompiledPolicy {
+    settings_path: std::path::PathBuf,
+    merged: Vec<u8>,
+    managed: Vec<lockfile::ManagedPermission>,
+}
+
+/// Say, per agent, which rules are enforced only partially and why.
+fn warn_partially_enforced_policy(
+    policy: &tuff_core::policy::PolicyConfig,
+    target_ids: &[String],
+) -> Result<()> {
+    for tid in target_ids {
+        let Some(adapter) = AdapterKind::from_id(tid) else {
+            continue;
+        };
+        for verdict in tuff_core::policy::verdicts(policy, &adapter.policy_compatibility())? {
+            if verdict.entry.coverage == tuff_hooks_spec::CoverageLevel::Partial {
+                let why = verdict
+                    .entry
+                    .caveat
+                    .as_deref()
+                    .unwrap_or("partial coverage");
+                eprintln!(
+                    "{}: rule {} ({}) is enforced partially: {why}",
+                    adapter.display_name(),
+                    verdict.index + 1,
+                    verdict.rule.describe()
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Compile a policy into each agent's native permission rules and compute
+/// the settings file each will hold, removing rules a previous install of
+/// the same policy recorded and this one no longer has. Everything here can
+/// refuse, a corrupt settings file included, and nothing here writes.
+fn compile_policy(
+    install_root: &Path,
+    capability_id: &str,
+    policy: &tuff_core::policy::PolicyConfig,
+    adapters: &[AdapterKind],
+    lockfile: &lockfile::Lockfile,
+) -> Result<BTreeMap<String, CompiledPolicy>> {
+    let mut compiled = BTreeMap::new();
+    for adapter in adapters {
+        let settings_relpath = adapter.permissions_settings_relpath().ok_or_else(|| {
+            TuffError::unsupported(format!(
+                "{} has no native permission rules for policy '{capability_id}'",
+                adapter.display_name()
+            ))
+        })?;
+        let mut managed: Vec<lockfile::ManagedPermission> = Vec::new();
+        for rule in &policy.rules {
+            let effect = rule.effect()?;
+            let native = adapter.native_permission_rules(rule)?.ok_or_else(|| {
+                TuffError::unsupported(format!(
+                    "{} cannot compile policy rule ({}) natively",
+                    adapter.display_name(),
+                    rule.describe()
+                ))
+            })?;
+            for native_rule in native {
+                let permission = lockfile::ManagedPermission {
+                    settings_path: settings_relpath.to_string(),
+                    list: effect.as_str().to_string(),
+                    rule: native_rule,
+                };
+                if !managed.contains(&permission) {
+                    managed.push(permission);
+                }
+            }
+        }
+        let as_pairs = |permissions: &mut dyn Iterator<Item = &lockfile::ManagedPermission>| {
+            permissions
+                .filter_map(|permission| {
+                    tuff_core::policy::PolicyEffect::parse(&permission.list)
+                        .map(|effect| (effect, permission.rule.clone()))
+                })
+                .collect::<Vec<_>>()
+        };
+        let previous = lockfile
+            .capabilities
+            .get(capability_id)
+            .and_then(|entry| entry.targets.get(adapter.id()))
+            .map(|target| target.managed_permissions.clone())
+            .unwrap_or_default();
+        let stale = as_pairs(&mut previous.iter().filter(|permission| {
+            permission.settings_path == settings_relpath && !managed.contains(permission)
+        }));
+        let additions = as_pairs(&mut managed.iter());
+        let settings_path = install_root.join(settings_relpath);
+        let existing = if settings_path.is_file() {
+            Some(fs::read(&settings_path)?)
+        } else {
+            None
+        };
+        let merged = tuff_core::policy::merge_permissions(
+            settings_relpath,
+            existing.as_deref(),
+            &stale,
+            &additions,
+        )?;
+        compiled.insert(
+            adapter.id().to_string(),
+            CompiledPolicy {
+                settings_path,
+                merged,
+                managed,
+            },
+        );
+    }
+    Ok(compiled)
+}
+
 /// Refuse a policy any rule of which a selected agent would not enforce.
 ///
 /// A policy reported as installed where nothing enforces it is worse than
@@ -1067,6 +1185,9 @@ pub(crate) fn install_capability(
 ) -> Result<()> {
     if let CapabilityKind::Policy { ref policy } = capability.kind {
         refuse_unenforced_policy(&capability.id, policy, target_ids)?;
+        if report {
+            warn_partially_enforced_policy(policy, target_ids)?;
+        }
     }
     let mut adapters = Vec::new();
     for tid in target_ids {
@@ -1145,6 +1266,13 @@ pub(crate) fn install_capability(
         }
     }
 
+    let compiled_policies = match &capability.kind {
+        CapabilityKind::Policy { policy } => {
+            compile_policy(install_root, &capability.id, policy, &adapters, &lockfile)?
+        }
+        _ => BTreeMap::new(),
+    };
+
     let mut new_targets: BTreeMap<String, TargetLockEntry> = BTreeMap::new();
 
     for (adapter, planned_files) in &plans {
@@ -1201,6 +1329,22 @@ pub(crate) fn install_capability(
             }
         }
 
+        if let Some(compiled) = compiled_policies.get(adapter.id()) {
+            if let Some(parent) = compiled.settings_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&compiled.settings_path, &compiled.merged)?;
+            if report {
+                println!(
+                    "compiled {} permission rule(s) for {} ({}) -> {}",
+                    compiled.managed.len(),
+                    capability.id,
+                    adapter.id(),
+                    lockfile::relative_or_absolute_fs(&compiled.settings_path, install_root)
+                );
+            }
+        }
+
         let installed_root = install_root
             .join(adapter.dir_prefix())
             .join(capability.capability_type.plural_dir())
@@ -1212,6 +1356,10 @@ pub(crate) fn install_capability(
             TargetLockEntry {
                 managed_hooks,
                 managed_mcp_entry: None,
+                managed_permissions: compiled_policies
+                    .get(adapter.id())
+                    .map(|compiled| compiled.managed.clone())
+                    .unwrap_or_default(),
                 ownership: target_ownership_for(capability, install_root, *adapter),
                 sha256: baseline_hash,
                 installed_path: lockfile::relative_or_absolute_fs(&installed_root, install_root),

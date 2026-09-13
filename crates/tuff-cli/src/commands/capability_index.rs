@@ -106,6 +106,7 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path, scope: Scope) -> Res
             TargetLockEntry {
                 managed_hooks: Vec::new(),
                 managed_mcp_entry: None,
+                managed_permissions: Vec::new(),
                 ownership: lockfile::TargetOwnership::Generated,
                 sha256: baseline_hash,
                 installed_path: lockfile::relative_or_absolute_fs(&installed_root, repo_root),
@@ -357,6 +358,7 @@ mod tests {
             TargetLockEntry {
                 managed_hooks: Vec::new(),
                 managed_mcp_entry: None,
+                managed_permissions: Vec::new(),
                 ownership: TargetOwnership::Generated,
                 sha256: String::new(),
                 installed_path: String::new(),

@@ -70,6 +70,18 @@ fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<
                 }
             }
 
+            for permission in &target_entry.managed_permissions {
+                if crate::policy::managed_permission_status(scope_root, permission) != "clean" {
+                    let location = format!(
+                        "{}#permissions.{}",
+                        permission.settings_path, permission.list
+                    );
+                    if !failing_files.contains(&location) {
+                        failing_files.push(location);
+                    }
+                }
+            }
+
             if let Some(managed_entry) = &target_entry.managed_mcp_entry
                 && lockfile::managed_mcp_entry_status(scope_root, id, managed_entry) != "clean"
             {

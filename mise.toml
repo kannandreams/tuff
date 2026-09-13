@@ -55,10 +55,11 @@ set -euo pipefail
 # `TuffError::new` builds an Internal error: an invariant Tuff itself broke,
 # not a message for the user to act on. The remaining uses are all genuinely
 # that -- staged-lockfile invariants, plan_* called on the wrong capability
-# type, a malformed entry in the catalog compiled into the binary. Anything
-# a user can cause should carry a kind instead:
+# type (plan_hook, plan_workflow, plan_mcp_server, and plan_policy), a
+# malformed entry in the catalog compiled into the binary. Anything a user
+# can cause should carry a kind instead:
 # usage / not_found / refused / drift / source_failed / corrupt / unsupported.
-budget=13
+budget=14
 count=$(grep -rn 'TuffError::new' crates/*/src --include='*.rs' | grep -vc 'crates/tuff-core/src/error.rs')
 
 if [ "$count" -gt "$budget" ]; then

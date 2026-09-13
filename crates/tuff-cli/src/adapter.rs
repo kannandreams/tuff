@@ -89,4 +89,6 @@ forward_to_implementation! {
     fn detect(&self, repo_root: &Path) -> bool;
     fn kinds_supported(&self) -> &[CapabilityType];
     fn policy_compatibility(&self) -> Vec<tuff_core::policy::PolicyCoverageEntry>;
+    fn permissions_settings_relpath(&self) -> Option<&'static str>;
+    fn native_permission_rules(&self, rule: &tuff_core::policy::PolicyRule) -> Result<Option<Vec<String>>>;
 }

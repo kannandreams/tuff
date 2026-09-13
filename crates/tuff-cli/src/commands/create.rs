@@ -137,6 +137,7 @@ pub fn cmd_create(
             TargetLockEntry {
                 managed_hooks,
                 managed_mcp_entry: None,
+                managed_permissions: Vec::new(),
                 ownership: lockfile::TargetOwnership::Generated,
                 sha256: baseline_hash,
                 installed_path: lockfile::relative_or_absolute_fs(root, repo_root),

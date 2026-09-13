@@ -65,6 +65,9 @@ pub(crate) fn local_modifications(
         .managed_hooks
         .iter()
         .any(|hook| lockfile::managed_hook_status(scope_root, hook) == "modified")
+        || target_entry.managed_permissions.iter().any(|permission| {
+            tuff_core::policy::managed_permission_status(scope_root, permission) != "clean"
+        })
         || target_entry
             .managed_mcp_entry
             .as_ref()
@@ -127,6 +130,11 @@ pub fn cmd_delete(
     }
 
     for target in &target_ids {
+        // Compiled permission rules come out first, like hook settings: a
+        // corrupt settings file stops the delete with every file in place.
+        if let Some(target_entry) = entry.targets.get(target) {
+            tuff_core::policy::remove_permissions(&scope_root, &target_entry.managed_permissions)?;
+        }
         if let Some(adapter) = AdapterKind::from_id(target) {
             let managed_hooks = entry
                 .targets
