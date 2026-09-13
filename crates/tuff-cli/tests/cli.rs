@@ -3748,6 +3748,154 @@ fn a_symbolic_link_in_a_capability_source_is_refused_not_followed() {
     );
 }
 
+fn write_infra_policy(root: &Path) -> std::path::PathBuf {
+    let dir = root.join("infra-guardrails");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("tuff.toml"),
+        r#"id = "infra-guardrails"
+type = "policy"
+version = "1.0.0"
+description = "No force pushes, no secrets, and a human approves terraform apply."
+
+[[policy.rules]]
+effect = "deny"
+command = ["git", "push", "--force"]
+reason = "Force pushes rewrite shared history."
+
+[[policy.rules]]
+effect = "deny"
+read = [".env", "secrets/**"]
+
+[[policy.rules]]
+effect = "ask"
+command = ["terraform", "apply"]
+
+[[policy.rules]]
+effect = "deny"
+mcp = "github:delete_*"
+"#,
+    )
+    .unwrap();
+    dir
+}
+
+#[test]
+fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
+    // No project needed: the matrix is a property of the binary.
+    let temp = TempDir::new().unwrap();
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["policy", "matrix", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let matrices: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let matrices = matrices.as_array().unwrap();
+    let agents: Vec<&str> = matrices
+        .iter()
+        .map(|matrix| matrix["adapter"].as_str().unwrap())
+        .collect();
+    assert_eq!(agents, ["open-agents", "claude", "codex", "cursor"]);
+    for matrix in matrices {
+        let rules = matrix["rules"].as_array().unwrap();
+        assert_eq!(rules.len(), 8, "two effects by four subjects: {matrix}");
+        for rule in rules {
+            assert_eq!(
+                rule["coverage"], "unsupported",
+                "nothing is enforced until an agent compiles policies: {rule}"
+            );
+        }
+    }
+    tuff()
+        .current_dir(temp.path())
+        .args(["policy", "matrix"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("EFFECT"))
+        .stdout(predicate::str::contains("unsupported"))
+        .stdout(predicate::str::contains(
+            "claude: Tuff does not compile policy rules for this agent yet",
+        ));
+}
+
+#[test]
+fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
+    // Installing a policy that nothing enforces would tell the user they
+    // are protected when they are not, so it is refused, with each rule and
+    // agent named, and nothing is written.
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "claude"])
+        .assert()
+        .success();
+    let policy = write_infra_policy(temp.path());
+    let before = fs::read_to_string(project.join("tuff.lock")).unwrap();
+
+    let output = tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            policy.to_str().unwrap(),
+            "--agent",
+            "open-agents",
+            "--agent",
+            "claude",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("policy 'infra-guardrails' would not be enforced as written"),
+        "{stderr}"
+    );
+    for agent in ["Open Agents", "Claude"] {
+        for rule in [
+            "rule 1 (deny command \"git push --force\")",
+            "rule 2 (deny read \".env\", \"secrets/**\")",
+            "rule 3 (ask command \"terraform apply\")",
+            "rule 4 (deny mcp \"github:delete_*\")",
+        ] {
+            assert!(
+                stderr.contains(&format!("{agent}: {rule} is not enforced")),
+                "{agent} / {rule}: {stderr}"
+            );
+        }
+    }
+    assert_eq!(
+        fs::read_to_string(project.join("tuff.lock")).unwrap(),
+        before
+    );
+    assert!(!project.join(".agents/policies").exists());
+    assert!(!project.join(".claude/policies").exists());
+}
+
+#[test]
+fn a_policy_rule_cannot_allow_anything() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    let dir = temp.path().join("widening");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("tuff.toml"),
+        "id = \"widening\"\ntype = \"policy\"\nversion = \"1.0.0\"\ndescription = \"d\"\n\n[[policy.rules]]\neffect = \"allow\"\ncommand = [\"rm\", \"-rf\"]\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["add", dir.to_str().unwrap(), "--agent", "open-agents"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot allow anything"));
+}
+
 #[test]
 fn hooks_spec_prints_the_document_the_published_specification_is_generated_from() {
     // No project is needed: the spec is a property of the binary, not of

@@ -572,6 +572,16 @@ than a guessed `up to date`.
 tuff outdated --json | jq '.[] | select(.status == "outdated" or .status == "repointed")'
 ```
 
+### `tuff policy matrix`
+
+Print, for every agent, how each kind of policy rule is enforced: one row per effect (`deny`, `ask`) and subject (`command`, `read`, `edit`, `mcp`), with its coverage and the mechanism the rule compiles to. It needs no project. `--json` prints one object per agent with its `rules`.
+
+```sh frame="terminal"
+tuff policy matrix
+```
+
+No agent enforces policy rules through Tuff yet, so every row currently reads `unsupported`, and `tuff add` of a [policy](/primitives/policies/) is refused with each rule that would not be enforced, per agent.
+
 ## Diff and Update
 
 ### `tuff diff`

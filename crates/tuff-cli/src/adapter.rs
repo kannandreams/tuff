@@ -88,4 +88,5 @@ forward_to_implementation! {
     fn remove_hook_settings(&self, repo_root: &Path, managed_hooks: &[tuff_core::lockfile::ManagedHook]) -> Result<()>;
     fn detect(&self, repo_root: &Path) -> bool;
     fn kinds_supported(&self) -> &[CapabilityType];
+    fn policy_compatibility(&self) -> Vec<tuff_core::policy::PolicyCoverageEntry>;
 }
