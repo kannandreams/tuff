@@ -30,13 +30,15 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff add hook <path> [name] -a <agent>` — install a hook
 - `tuff add workflow <path> [name] -a <agent>` — install a workflow
 - `tuff add .agents/skills/<id> -a open-agents` — track existing agent files in place
-- `tuff add <git-url> skill <name> -a <agent>` — install skill from git
-- `tuff add <git-url> tool <name> -a <agent>` — install tool from git
-- `tuff add <git-url> hook <name> -a <agent>` — install hook from git
+- `tuff add skill <git-url> <name> -a <agent>` — install a skill from git; `<name>` is its directory in the repository
+- `tuff add tool <git-url> <name> -a <agent>` — install a tool from git
+- `tuff add hook <git-url> <name> -a <agent>` — install a hook from git
+- `tuff add workflow <git-url> <name> -a <agent>` — install a workflow from git
 - `tuff add skill <git-url> <name>@<version|range> -a <agent>` — install a tagged release (`1.2.0`, `^1.2`, `>=1, <2`); the lockfile records the tag, the requirement, and the commit
 - without `@`, a git install records the version the source declares (`version` in `tuff.toml`, or `version:`/`metadata.version:` in `SKILL.md` frontmatter), shown as `1.2.0 (declared)` since it is weaker than a release; a source declaring nothing records the commit SHA
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
+- `tuff add <policy-dir> -a claude` — install a policy (`type = "policy"`); only Claude Code enforces policies today, and the install is refused for any agent that would not enforce every rule
 - `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry, linear, context7) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
 
 ### Packs
@@ -61,6 +63,11 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff diff <id>@<range> --upstream` — preview what a different requirement would change before `tuff update <id>@<range>`
 - `tuff outdated` — check all capabilities for available updates; `repointed` or `tag missing` on a release-pinned entry means the tag moved or vanished upstream, and `tuff update <id> --force` replaces the install with what the tag names now
 - `tuff mcp doctor` — spawn each installed MCP server for real and verify the handshake + tool list, not just that the config entry exists
+- `tuff mcp catalog` — list the built-in MCP servers `tuff add mcp <id>` installs by name
+- `tuff mcp search <query>` — search the MCP registry for installable servers
+- `tuff scan` — find capabilities already in `.claude/`, `.cursor/`, or `.agents/` that Tuff is not tracking; changes nothing
+- `tuff scan --adopt` — track every untracked capability `scan` found, in place
+- `tuff policy matrix` — show how each agent enforces each kind of policy rule
 
 ### Update & Merge
 - `tuff update <id> --check` — preview local baseline promotion or upstream changes
@@ -75,7 +82,10 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff list --json`, `tuff outdated --json`, `tuff diff <id> --json` — the same rows as JSON, with the same `type`/`target`/`status` keys as `check --json`; prefer these over parsing tables
 
 ### Manage
-- `tuff remove <id>` — remove a capability
+- `tuff delete <id> -a <agent>` — remove the files Tuff generated for a capability and its lockfile entry; `--force` when the files have local changes. It never deletes the original source directory
+- `tuff untrack <id> -a <agent>` — stop tracking a capability but keep its files; use this for capabilities adopted in place, which `delete` refuses
+- `tuff lock migrate` — rewrite `tuff.lock` in the current schema, changing nothing else
+- `tuff cache clear` — delete Tuff's disposable machine-local cache
 - `tuff agent list` — show available agent harnesses
 - `tuff agent add <id>` — register an agent and initialize its project directory
 - `tuff init --global` — initialize global scope

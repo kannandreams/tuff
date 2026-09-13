@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `tuff-cli-guide` skill no longer tells agents to run commands that do not exist.** The guide that `tuff init` installs for each agent, and that the Claude Code plugin ships, listed `tuff remove <id>`, which Tuff has never had, and wrote git installs as `tuff add <git-url> skill <name>`, which puts the URL where a local path is expected. It now lists `tuff delete` and `tuff untrack`, writes git installs type first (`tuff add skill <git-url> <name>`), and adds the commands it had left out: `tuff scan`, `tuff policy matrix`, `tuff mcp catalog` and `search`, installing a policy, `tuff lock migrate`, and `tuff cache clear`.
+
 ## [0.10.1] - 2026-09-13
 
 ### Changed
