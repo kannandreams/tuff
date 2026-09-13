@@ -80,6 +80,9 @@ pub struct CapabilityManifest {
     pub workflow: Option<WorkflowConfig>,
     #[serde(default)]
     pub server: Option<McpServerConfig>,
+    /// The rules of a `type = "policy"` capability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy: Option<crate::policy::PolicyConfig>,
     #[serde(default)]
     #[allow(dead_code)]
     pub targets: Vec<String>,
@@ -493,9 +496,17 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             );
         }
         CapabilityType::Policy => {
-            return Err(TuffError::unsupported(
-                "policy capabilities are not supported yet",
-            ));
+            let policy = manifest.policy.as_ref().ok_or_else(|| {
+                TuffError::usage(
+                    "policy capability requires a [policy] section with at least one [[policy.rules]] entry",
+                )
+            })?;
+            crate::policy::validate_policy(policy)?;
+            if !manifest.files.is_empty() {
+                return Err(TuffError::usage(
+                    "a policy capability installs no files; remove `files` from its tuff.toml",
+                ));
+            }
         }
         CapabilityType::McpServer => {
             let server = manifest.server.as_ref().ok_or_else(|| {
@@ -777,6 +788,7 @@ pub fn synthetic_manifest(
         hook: None,
         workflow: None,
         server: None,
+        policy: None,
         targets: Vec::new(),
         root: skill_dir.to_path_buf(),
     })
@@ -1034,6 +1046,7 @@ files = ["SKILL.md"]
             hook: None,
             workflow: None,
             server: None,
+            policy: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };
@@ -1054,6 +1067,7 @@ files = ["SKILL.md"]
             hook: None,
             workflow: None,
             server: None,
+            policy: None,
             targets: vec![],
             root: root.to_path_buf(),
         }
@@ -1177,6 +1191,7 @@ files = ["SKILL.md"]
             hook: None,
             workflow: None,
             server: None,
+            policy: None,
             targets: vec![],
             root: tmp.path().to_path_buf(),
         };
@@ -1234,6 +1249,33 @@ files = ["SKILL.md"]
             error.to_string().contains("relative path of plain names"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn a_policy_manifest_loads_and_refuses_files() {
+        let tmp = TempDir::new().unwrap();
+        let head = "id = \"guard\"\ntype = \"policy\"\nversion = \"1.0.0\"\ndescription = \"d\"\n";
+        let rules =
+            "[[policy.rules]]\neffect = \"deny\"\ncommand = [\"git\", \"push\", \"--force\"]\n";
+        fs::write(tmp.path().join("tuff.toml"), format!("{head}{rules}")).unwrap();
+        let manifest = load_manifest(tmp.path()).unwrap();
+        assert_eq!(manifest.policy.unwrap().rules.len(), 1);
+
+        fs::write(tmp.path().join("tuff.toml"), head).unwrap();
+        let error = load_manifest(tmp.path()).unwrap_err();
+        assert!(
+            error.to_string().contains("requires a [policy] section"),
+            "{error}"
+        );
+
+        fs::write(tmp.path().join("x.sh"), "x").unwrap();
+        fs::write(
+            tmp.path().join("tuff.toml"),
+            format!("{head}files = [\"x.sh\"]\n{rules}"),
+        )
+        .unwrap();
+        let error = load_manifest(tmp.path()).unwrap_err();
+        assert!(error.to_string().contains("installs no files"), "{error}");
     }
 
     #[test]

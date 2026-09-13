@@ -642,6 +642,7 @@ fn synthetic_local_manifest(
         hook: None,
         workflow: None,
         server: None,
+        policy: None,
         targets: vec![],
         root: capability_dir.to_path_buf(),
     })
@@ -1011,6 +1012,50 @@ pub(crate) fn add_targets_from_installed_dir(
     )
 }
 
+/// Refuse a policy any rule of which a selected agent would not enforce.
+///
+/// A policy reported as installed where nothing enforces it is worse than
+/// no policy, because it removes the reason to look. Every rule is checked
+/// against every selected agent's matrix before anything is planned or
+/// written, and each rule an agent would not enforce is named.
+fn refuse_unenforced_policy(
+    id: &str,
+    policy: &tuff_core::policy::PolicyConfig,
+    target_ids: &[String],
+) -> Result<()> {
+    let mut unenforced = Vec::new();
+    for tid in target_ids {
+        let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
+            TuffError::usage(format!("unknown agent '{tid}'"))
+                .with_hint("run 'tuff agent list' to see available agents")
+        })?;
+        for verdict in tuff_core::policy::verdicts(policy, &adapter.policy_compatibility())? {
+            if verdict.entry.coverage == tuff_hooks_spec::CoverageLevel::Unsupported {
+                let why = verdict
+                    .entry
+                    .caveat
+                    .as_deref()
+                    .map(|caveat| format!(": {caveat}"))
+                    .unwrap_or_default();
+                unenforced.push(format!(
+                    "  {}: rule {} ({}) is not enforced{why}",
+                    adapter.display_name(),
+                    verdict.index + 1,
+                    verdict.rule.describe()
+                ));
+            }
+        }
+    }
+    if unenforced.is_empty() {
+        return Ok(());
+    }
+    Err(TuffError::unsupported(format!(
+        "policy '{id}' would not be enforced as written, so it was not installed:\n{}",
+        unenforced.join("\n")
+    ))
+    .with_hint("run 'tuff policy matrix' to see what each agent can enforce"))
+}
+
 pub(crate) fn install_capability(
     install_root: &Path,
     scope: Scope,
@@ -1020,6 +1065,9 @@ pub(crate) fn install_capability(
     source: Option<lockfile::CapabilitySource>,
     report: bool,
 ) -> Result<()> {
+    if let CapabilityKind::Policy { ref policy } = capability.kind {
+        refuse_unenforced_policy(&capability.id, policy, target_ids)?;
+    }
     let mut adapters = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {

@@ -103,6 +103,7 @@ pub fn lookup(id: &str) -> Result<Option<CapabilityManifest>> {
         hook: None,
         workflow: None,
         server: Some(config),
+        policy: None,
         targets: Vec::new(),
         root: PathBuf::new(),
     }))

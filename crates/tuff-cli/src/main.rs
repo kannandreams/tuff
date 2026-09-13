@@ -21,7 +21,8 @@ use commands::{
     cmd_hooks_check_portability, cmd_hooks_matrix, cmd_hooks_spec, cmd_init, cmd_list,
     cmd_lock_migrate, cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated,
     cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
-    cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_scan, cmd_status, cmd_untrack, cmd_update,
+    cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_policy_matrix, cmd_scan, cmd_status,
+    cmd_untrack, cmd_update,
 };
 use error::{Result, TuffError};
 use manifest::CapabilityType;
@@ -245,6 +246,12 @@ enum Command {
     Hooks {
         #[command(subcommand)]
         action: HooksCommand,
+    },
+
+    /// Inspect what each agent can enforce of a policy.
+    Policy {
+        #[command(subcommand)]
+        action: PolicyCommand,
     },
 
     /// Manage Tuff's disposable machine-local cache.
@@ -632,6 +639,16 @@ enum AgentCommand {
 }
 
 #[derive(Subcommand)]
+enum PolicyCommand {
+    /// Print, for every agent, how each kind of policy rule is enforced.
+    Matrix {
+        /// Output the matrix as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum HooksCommand {
     /// Print hook compatibility for registered agents.
     Matrix,
@@ -981,6 +998,9 @@ fn run() -> Result<()> {
             HooksCommand::CheckPortability { id, target } => {
                 cmd_hooks_check_portability(&repo_root, &id, &target)
             }
+        },
+        Some(Command::Policy { action }) => match action {
+            PolicyCommand::Matrix { json } => cmd_policy_matrix(json),
         },
         Some(Command::Cache {
             action: CacheCommand::Clear,

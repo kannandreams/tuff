@@ -96,6 +96,9 @@ pub enum CapabilityKind {
     McpServer {
         server: crate::manifest::McpServerConfig,
     },
+    Policy {
+        policy: crate::policy::PolicyConfig,
+    },
 }
 
 impl CapabilityKind {
@@ -106,6 +109,7 @@ impl CapabilityKind {
             Self::Hook { .. } => CapabilityType::Hook,
             Self::Workflow { .. } => CapabilityType::Workflow,
             Self::McpServer { .. } => CapabilityType::McpServer,
+            Self::Policy { .. } => CapabilityType::Policy,
         }
     }
 }
@@ -155,11 +159,11 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
                     TuffError::usage("workflow capability requires [workflow] section")
                 })?,
             },
-            CapabilityType::Policy => {
-                return Err(TuffError::unsupported(
-                    "policy capabilities are not installable yet",
-                ));
-            }
+            CapabilityType::Policy => CapabilityKind::Policy {
+                policy: manifest.policy.clone().ok_or_else(|| {
+                    TuffError::usage("policy capability requires a [policy] section")
+                })?,
+            },
             CapabilityType::McpServer => CapabilityKind::McpServer {
                 server: manifest.server.clone().ok_or_else(|| {
                     TuffError::usage("mcp-server capability requires [server] section")
@@ -363,6 +367,14 @@ pub trait AgentAdapter {
     }
     /// Whether a project already uses this harness.
     fn detect(&self, repo_root: &Path) -> bool;
+
+    /// How this harness enforces each kind of policy rule, one row per
+    /// effect and subject. The default says, for every row, that Tuff does
+    /// not compile policies for this harness, so a policy is refused for it
+    /// rather than reported as installed.
+    fn policy_compatibility(&self) -> Vec<crate::policy::PolicyCoverageEntry> {
+        crate::policy::not_implemented_matrix()
+    }
 
     fn kinds_supported(&self) -> &[CapabilityType];
 

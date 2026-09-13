@@ -313,6 +313,7 @@ pub fn to_manifest(server: &RegistryServer, id: &str) -> Result<CapabilityManife
         workflow: None,
         hook: None,
         server: Some(config),
+        policy: None,
         targets: Vec::new(),
     })
 }
