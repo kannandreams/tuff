@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Changed
+
+- **The Claude Code plugin is now version 0.2.0.** Its version had stayed at 0.1.1 since the plugin was first packaged, so Claude Code had no new version to update to, and existing installs could keep an old `tuff-cli-guide` skill, including the `tuff remove` command fixed in 0.10.2. Updating the plugin now brings in the current skill.
+
 ## [0.10.2] - 2026-09-14
 
 ### Fixed
