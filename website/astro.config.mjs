@@ -33,7 +33,7 @@ export default defineConfig({
           authors: {
             kannan: {
               name: 'Kannan Kalidasan',
-              title: 'Tuff maintainer',
+              title: 'Tuff Creator',
               url: 'https://github.com/kannandreams',
             },
           },
