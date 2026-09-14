@@ -1,5 +1,5 @@
 ---
-title: One MCP server, three harnesses, one command
+title: Managing MCP server configuration across coding agents
 description: Declare an MCP server once and let Tuff write the config for Claude Code, Cursor, and Codex, then check that it starts.
 date: 2026-09-02
 authors: kannan
