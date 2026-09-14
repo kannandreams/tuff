@@ -1,7 +1,7 @@
 {
   "name": "tuff",
   "displayName": "Tuff",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Drive the Tuff capability lifecycle manager from a Claude Code session: install, version, diff, and validate the skills, tools, hooks, workflows, and MCP servers a repository gives its agents. Requires the tuff CLI on PATH.",
   "author": {
     "name": "Kannan Kalidasan",
