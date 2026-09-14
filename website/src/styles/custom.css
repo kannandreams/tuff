@@ -579,6 +579,33 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 .tuff-harness-list .is-muted code { color: #6f746c; }
 /* Keeps a flag such as --force from breaking at its hyphens on narrow screens. */
 .tuff-nowrap { font-style: normal; white-space: nowrap; }
+
+/* Blog index: each post preview is a dark card like the landing capability cards.
+   The title link is stretched over the whole card, so anywhere on it opens the post;
+   tag and author links sit above that layer and keep working. */
+.sl-blog-posts { gap: 1.25rem !important; }
+.sl-blog-preview { position: relative; gap: 1rem !important; padding: 1.5rem 1.6rem 1.35rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; transition: background-color .15s ease, box-shadow .15s ease; }
+.sl-blog-preview:hover, .sl-blog-preview:focus-within { background: #242824; box-shadow: inset 0 0 0 1px #9a4c30; }
+.sl-blog-preview .sl-blog-preview-link { margin-bottom: .75rem !important; }
+.sl-blog-preview .sl-blog-preview-link::before { position: absolute; inset: 0; z-index: 0; border-radius: inherit; content: ''; }
+.sl-blog-preview .sl-blog-preview-link:focus-visible { outline: none; }
+.sl-blog-preview .sl-blog-preview-link:focus-visible::before { outline: 2px solid #f18453; outline-offset: 2px; }
+.sl-blog-preview .sl-blog-preview-title { margin: 0; color: #eeeae2 !important; font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; line-height: 1.3; letter-spacing: -.03em; font-weight: 600; }
+.sl-blog-preview:hover .sl-blog-preview-title, .sl-blog-preview:focus-within .sl-blog-preview-title { color: #f18453 !important; }
+.sl-blog-preview .sl-blog-metadata { color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .75rem; }
+.sl-blog-preview .sl-blog-metadata-secondary { color: #6f746c; }
+.sl-blog-preview .sl-blog-metadata a { position: relative; z-index: 1; color: #c9ccc5; }
+/* The card stays dark in the light theme too, so its text colours must not follow the theme. */
+.sl-blog-preview .sl-blog-author-name { color: #f18453 !important; }
+.sl-blog-preview .sl-blog-author:hover .sl-blog-author-name { color: #eeeae2 !important; }
+.sl-blog-preview .sl-blog-author-title { color: #989d94 !important; }
+.sl-blog-preview .sl-blog-preview-excerpt, .sl-blog-preview .sl-blog-preview-excerpt p { color: #aeb1aa !important; font-size: .92rem; line-height: 1.65; }
+.sl-blog-preview .sl-blog-preview-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1rem; padding-top: 1rem; border-top: 1px solid #343934; }
+.sl-blog-preview .sl-blog-tags { color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .72rem; }
+.sl-blog-preview .sl-blog-tag { position: relative; z-index: 1; border-color: #3d433d !important; color: #aeb1aa; background: #1b1e1b; font-size: .7rem !important; }
+.sl-blog-preview .sl-blog-tag:hover { border-color: #f18453 !important; color: #f18453; }
+.sl-blog-preview .sl-blog-preview-footer::after { margin-left: auto; color: #f18453; content: 'Read post →'; font-family: 'JetBrains Mono', monospace; font-size: .78rem; font-weight: 500; transition: transform .15s ease; }
+.sl-blog-preview:hover .sl-blog-preview-footer::after { transform: translateX(.2rem); }
 .tuff-why-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
 .tuff-why-grid > div { display: flex; flex-direction: column; }
 .tuff-why-grid b { margin-bottom: .65rem; color: var(--tuff-accent); font-size: .7rem; font-weight: 500; }
