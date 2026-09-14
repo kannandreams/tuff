@@ -6,9 +6,15 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-09-14
+
 ### Fixed
 
 - **The `tuff-cli-guide` skill no longer tells agents to run commands that do not exist.** The guide that `tuff init` installs for each agent, and that the Claude Code plugin ships, listed `tuff remove <id>`, which Tuff has never had, and wrote git installs as `tuff add <git-url> skill <name>`, which puts the URL where a local path is expected. It now lists `tuff delete` and `tuff untrack`, writes git installs type first (`tuff add skill <git-url> <name>`), and adds the commands it had left out: `tuff scan`, `tuff policy matrix`, `tuff mcp catalog` and `search`, installing a policy, `tuff lock migrate`, and `tuff cache clear`.
+
+### Changed
+
+- The blog has a post on agent policies across harnesses, and the blog index shows each post as a card with a link to read it.
 
 ## [0.10.1] - 2026-09-13
 
@@ -281,7 +287,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/kannandreams/tuff/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/kannandreams/tuff/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/kannandreams/tuff/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/kannandreams/tuff/compare/v0.8.0...v0.9.0
