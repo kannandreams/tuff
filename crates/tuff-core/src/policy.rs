@@ -476,6 +476,210 @@ fn merge_rules_file(
     Ok(merged.into_bytes())
 }
 
+/// Whether a native permissions file is an OpenCode config file, whose
+/// `permission` object maps permission names to actions, or to patterns and
+/// actions, and whose order OpenCode reads as precedence.
+pub fn is_opencode_config(relpath: &str) -> bool {
+    std::path::Path::new(relpath)
+        .file_name()
+        .is_some_and(|name| name == "opencode.json")
+}
+
+/// Where `tuff check` reports a compiled rule that is missing: the file for
+/// a rules file, the permission for an OpenCode config, and the list for a
+/// JSON settings file.
+pub fn permission_location(permission: &ManagedPermission) -> String {
+    if is_rules_file(&permission.settings_path) {
+        permission.settings_path.clone()
+    } else if is_opencode_config(&permission.settings_path) {
+        let (name, _) = opencode_rule(&permission.rule);
+        format!("{}#permission.{name}", permission.settings_path)
+    } else {
+        format!(
+            "{}#permissions.{}",
+            permission.settings_path, permission.list
+        )
+    }
+}
+
+/// An OpenCode rule as Tuff records it: the permission name, then a space
+/// and a pattern when the rule sits in that permission's object. A rule with
+/// no pattern is a top-level `"<name>": "<action>"` entry, as for MCP tools.
+fn opencode_rule(rule: &str) -> (&str, Option<&str>) {
+    match rule.split_once(' ') {
+        Some((name, pattern)) => (name, Some(pattern)),
+        None => (rule, None),
+    }
+}
+
+/// A JSON value that keeps object keys in file order. OpenCode applies the
+/// last matching permission rule, so reordering its config changes what it
+/// enforces, and serde_json in this workspace sorts keys.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+enum OrderedJson {
+    Object(indexmap::IndexMap<String, OrderedJson>),
+    Array(Vec<OrderedJson>),
+    Scalar(serde_json::Value),
+}
+
+impl OrderedJson {
+    fn action(effect: PolicyEffect) -> Self {
+        Self::Scalar(serde_json::Value::String(effect.as_str().to_string()))
+    }
+
+    fn is_action(&self, effect: PolicyEffect) -> bool {
+        matches!(self, Self::Scalar(serde_json::Value::String(action)) if action == effect.as_str())
+    }
+
+    /// OpenCode's shorthand `"read": "allow"` means `{"*": "allow"}`.
+    fn expand_shorthand(&mut self) {
+        if let Self::Scalar(serde_json::Value::String(_)) = self {
+            let action = std::mem::replace(self, Self::Object(indexmap::IndexMap::new()));
+            if let Self::Object(patterns) = self {
+                patterns.insert("*".to_string(), action);
+            }
+        }
+    }
+}
+
+const OPENCODE_SCHEMA: &str = "https://opencode.ai/config.json";
+
+/// `merge_permissions` for an OpenCode config file.
+///
+/// Every key, rule, and position already in the file is kept. Tuff's rules
+/// are appended, `ask` before `deny`, so that a `deny` wins where both
+/// match. A rule already in the file with the same pattern and a different
+/// action is refused rather than overwritten. The result is empty when the
+/// file holds nothing but `$schema` after a removal, so the caller can
+/// remove it.
+fn merge_opencode_config(
+    relpath: &str,
+    existing: Option<&[u8]>,
+    remove: &[(PolicyEffect, String)],
+    add: &[(PolicyEffect, String)],
+) -> Result<Vec<u8>> {
+    let corrupt = |detail: &str| TuffError::corrupt(format!("{relpath} {detail}"));
+    let mut root = match existing {
+        Some(bytes) if !bytes.iter().all(u8::is_ascii_whitespace) => serde_json::from_slice::<
+            OrderedJson,
+        >(bytes)
+        .map_err(|error| TuffError::corrupt(format!("{relpath} is not valid JSON: {error}")))?,
+        _ => OrderedJson::Object(indexmap::IndexMap::from([(
+            "$schema".to_string(),
+            OrderedJson::Scalar(serde_json::Value::String(OPENCODE_SCHEMA.to_string())),
+        )])),
+    };
+    let OrderedJson::Object(root_map) = &mut root else {
+        return Err(corrupt("must be a JSON object"));
+    };
+    if add.is_empty() && !root_map.contains_key("permission") {
+        return render_opencode_config(&root, false);
+    }
+    let permission = root_map
+        .entry("permission".to_string())
+        .or_insert_with(|| OrderedJson::Object(indexmap::IndexMap::new()));
+    permission.expand_shorthand();
+    let OrderedJson::Object(permission) = permission else {
+        return Err(corrupt("field 'permission' must be an object"));
+    };
+
+    for (effect, rule) in remove {
+        let (name, pattern) = opencode_rule(rule);
+        let Some(pattern) = pattern else {
+            if permission
+                .get(name)
+                .is_some_and(|value| value.is_action(*effect))
+            {
+                permission.shift_remove(name);
+            }
+            continue;
+        };
+        let emptied = match permission.get_mut(name) {
+            Some(OrderedJson::Object(patterns))
+                if patterns
+                    .get(pattern)
+                    .is_some_and(|value| value.is_action(*effect)) =>
+            {
+                patterns.shift_remove(pattern);
+                patterns.is_empty()
+            }
+            _ => false,
+        };
+        if emptied {
+            permission.shift_remove(name);
+        }
+    }
+
+    let conflict = |name: &str, pattern: Option<&str>| {
+        let rule = match pattern {
+            Some(pattern) => format!("permission.{name} \"{pattern}\""),
+            None => format!("permission \"{name}\""),
+        };
+        TuffError::refused(format!(
+            "{relpath} already has its own {rule} with a different action, so the policy was not installed"
+        ))
+        .with_hint("remove or change that rule in the file, or change the policy")
+    };
+    let ordered = add
+        .iter()
+        .filter(|(effect, _)| *effect == PolicyEffect::Ask)
+        .chain(
+            add.iter()
+                .filter(|(effect, _)| *effect == PolicyEffect::Deny),
+        );
+    for (effect, rule) in ordered {
+        let (name, pattern) = opencode_rule(rule);
+        let action = OrderedJson::action(*effect);
+        match pattern {
+            None => {
+                if permission
+                    .get(name)
+                    .is_some_and(|value| !value.is_action(*effect))
+                {
+                    return Err(conflict(name, None));
+                }
+                permission.shift_remove(name);
+                permission.insert(name.to_string(), action);
+            }
+            Some(pattern) => {
+                let entry = permission
+                    .entry(name.to_string())
+                    .or_insert_with(|| OrderedJson::Object(indexmap::IndexMap::new()));
+                entry.expand_shorthand();
+                let OrderedJson::Object(patterns) = entry else {
+                    return Err(corrupt(&format!(
+                        "field 'permission.{name}' must be an object or an action"
+                    )));
+                };
+                if patterns
+                    .get(pattern)
+                    .is_some_and(|value| !value.is_action(*effect))
+                {
+                    return Err(conflict(name, Some(pattern)));
+                }
+                patterns.shift_remove(pattern);
+                patterns.insert(pattern.to_string(), action);
+            }
+        }
+    }
+
+    if !remove.is_empty() && permission.is_empty() {
+        root_map.shift_remove("permission");
+    }
+    let only_schema = root_map.keys().all(|key| key == "$schema");
+    render_opencode_config(&root, !remove.is_empty() && only_schema)
+}
+
+fn render_opencode_config(root: &OrderedJson, empty: bool) -> Result<Vec<u8>> {
+    if empty {
+        return Ok(Vec::new());
+    }
+    let mut text = serde_json::to_string_pretty(root)?;
+    text.push('\n');
+    Ok(text.into_bytes())
+}
+
 /// Add and remove native permission rules in a harness settings file, given
 /// the bytes it holds now, and return the bytes it should hold next.
 ///
@@ -496,6 +700,9 @@ pub fn merge_permissions(
 ) -> Result<Vec<u8>> {
     if is_rules_file(settings_relpath) {
         return merge_rules_file(settings_relpath, existing, remove, add);
+    }
+    if is_opencode_config(settings_relpath) {
+        return merge_opencode_config(settings_relpath, existing, remove, add);
     }
     let mut settings: serde_json::Value = match existing {
         Some(bytes) if !bytes.is_empty() => serde_json::from_slice(bytes).map_err(|error| {
@@ -585,7 +792,9 @@ pub fn remove_permissions(
         }
         let bytes = std::fs::read(&path)?;
         let mut merged = merge_permissions(relpath, Some(&bytes), &removals, &[])?;
-        if is_rules_file(relpath) {
+        // A rules file and an OpenCode config both come back empty once
+        // nothing Tuff or the user wrote is left in them.
+        if is_rules_file(relpath) || is_opencode_config(relpath) {
             // The rules file exists only to hold compiled rules.
             if merged.is_empty() {
                 std::fs::remove_file(&path)?;
@@ -612,6 +821,24 @@ pub fn managed_permission_status(
     let Ok(raw) = std::fs::read_to_string(repo_root.join(&permission.settings_path)) else {
         return "missing";
     };
+    if is_opencode_config(&permission.settings_path) {
+        let Ok(settings) = serde_json::from_str::<serde_json::Value>(&raw) else {
+            return "modified";
+        };
+        let (name, pattern) = opencode_rule(&permission.rule);
+        let entry = settings
+            .get("permission")
+            .and_then(|permissions| permissions.get(name));
+        let action = match pattern {
+            Some(pattern) => entry.and_then(|patterns| patterns.get(pattern)),
+            None => entry,
+        };
+        return if action.and_then(serde_json::Value::as_str) == Some(permission.list.as_str()) {
+            "clean"
+        } else {
+            "missing"
+        };
+    }
     if is_rules_file(&permission.settings_path) {
         return if raw.lines().any(|line| line == permission.rule) {
             "clean"
@@ -809,6 +1036,110 @@ mod tests {
         );
         remove_permissions(temp.path(), &[recorded(&prompt)]).unwrap();
         assert!(!path.exists(), "a rules file with no rules left is removed");
+    }
+
+    #[test]
+    fn an_opencode_config_keeps_the_users_order_and_puts_policy_rules_last() {
+        const RELPATH: &str = ".opencode/opencode.json";
+        let existing = br#"{"$schema": "https://opencode.ai/config.json", "permission": {"bash": {"*": "allow", "git push *": "allow"}, "read": "allow"}, "model": "x"}"#;
+        let add = [
+            deny("bash git push --force *"),
+            ask("bash terraform apply *"),
+            deny("read .env"),
+            deny("read */.env"),
+            deny("github_delete_*"),
+        ];
+        let once = merge_permissions(RELPATH, Some(existing), &[], &add).unwrap();
+        let twice = merge_permissions(RELPATH, Some(&once), &[], &add).unwrap();
+        assert_eq!(once, twice, "a redundant merge leaves the file unchanged");
+        let OrderedJson::Object(root) = serde_json::from_slice::<OrderedJson>(&once).unwrap()
+        else {
+            panic!("an object")
+        };
+        assert_eq!(
+            root.keys().collect::<Vec<_>>(),
+            ["$schema", "permission", "model"]
+        );
+        let OrderedJson::Object(permission) = &root["permission"] else {
+            panic!("an object")
+        };
+        assert_eq!(
+            permission.keys().collect::<Vec<_>>(),
+            ["bash", "read", "github_delete_*"]
+        );
+        let OrderedJson::Object(bash) = &permission["bash"] else {
+            panic!("an object")
+        };
+        assert_eq!(
+            bash.keys().collect::<Vec<_>>(),
+            ["*", "git push *", "terraform apply *", "git push --force *"],
+            "ask rules come before deny rules, both after the user's"
+        );
+        let OrderedJson::Object(read) = &permission["read"] else {
+            panic!("an object")
+        };
+        assert_eq!(read.keys().collect::<Vec<_>>(), ["*", ".env", "*/.env"]);
+
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(temp.path().join(".opencode")).unwrap();
+        std::fs::write(temp.path().join(RELPATH), &once).unwrap();
+        let recorded: Vec<ManagedPermission> = add
+            .iter()
+            .map(|(effect, rule)| ManagedPermission {
+                settings_path: RELPATH.to_string(),
+                list: effect.as_str().to_string(),
+                rule: rule.clone(),
+            })
+            .collect();
+        for permission in &recorded {
+            assert_eq!(
+                managed_permission_status(temp.path(), permission),
+                "clean",
+                "{permission:?}"
+            );
+        }
+        assert_eq!(
+            permission_location(&recorded[0]),
+            ".opencode/opencode.json#permission.bash"
+        );
+        remove_permissions(temp.path(), &recorded).unwrap();
+        let left: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(temp.path().join(RELPATH)).unwrap())
+                .unwrap();
+        assert_eq!(
+            left,
+            serde_json::json!({
+                "$schema": "https://opencode.ai/config.json",
+                "permission": {"bash": {"*": "allow", "git push *": "allow"}, "read": {"*": "allow"}},
+                "model": "x"
+            })
+        );
+    }
+
+    #[test]
+    fn an_opencode_config_refuses_a_conflicting_rule_and_empties_when_only_tuff_wrote_it() {
+        const RELPATH: &str = ".opencode/opencode.json";
+        let conflicting = br#"{"permission": {"bash": {"git push --force *": "allow"}}}"#;
+        let error = merge_permissions(
+            RELPATH,
+            Some(conflicting),
+            &[],
+            &[deny("bash git push --force *")],
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Refused, "{error}");
+
+        let rule = deny("bash git push --force *");
+        let created = merge_permissions(RELPATH, None, &[], std::slice::from_ref(&rule)).unwrap();
+        let removed =
+            merge_permissions(RELPATH, Some(&created), std::slice::from_ref(&rule), &[]).unwrap();
+        assert!(
+            removed.is_empty(),
+            "a file with only $schema left is removed"
+        );
+
+        let error = merge_permissions(RELPATH, Some(b"[]"), &[], &[rule]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Corrupt, "{error}");
     }
 
     #[test]

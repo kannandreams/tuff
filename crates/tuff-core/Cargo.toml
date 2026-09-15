@@ -13,6 +13,10 @@ repository.workspace = true
 tuff-hooks-spec.workspace = true
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+# Order-preserving JSON objects for harness config files whose rule order is
+# precedence (OpenCode), without turning on serde_json's preserve_order for
+# the whole workspace.
+indexmap = { version = "2", features = ["serde"] }
 sha2 = "0.10.9"
 git2 = { version = "0.20", features = ["vendored-libgit2", "vendored-openssl"] }
 semver = "1.0.27"

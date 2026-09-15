@@ -1,0 +1,14 @@
+[package]
+name = "tuff-adapter-opencode"
+version.workspace = true
+edition.workspace = true
+description = "OpenCode adapter for Tuff."
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+
+[dependencies]
+tuff-core.workspace = true
+tuff-hooks-spec.workspace = true

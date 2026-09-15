@@ -134,7 +134,7 @@ fn normalize(path: &str) -> String {
 fn discover(repo_root: &Path, tracked: Option<&BTreeSet<String>>) -> Result<Vec<Found>> {
     let mut prefixes: BTreeSet<&'static str> = BTreeSet::new();
     for adapter in AdapterKind::all() {
-        if adapter.detect(repo_root) {
+        if scanned(adapter, repo_root) {
             prefixes.insert(adapter.dir_prefix());
         }
     }
@@ -406,10 +406,18 @@ fn report_table(repo_root: &Path, found: &[Found], uninitialized: bool) -> Resul
     Ok(())
 }
 
+/// Whether a harness folder is walked: the harness is present, and takes a
+/// kind of capability that lives in a folder. OpenCode's policy-only target
+/// takes none, so `.opencode/` is not reported as holding untracked
+/// capabilities.
+fn scanned(adapter: AdapterKind, repo_root: &Path) -> bool {
+    adapter.detect(repo_root) && KINDS.iter().any(|kind| adapter.supports(*kind))
+}
+
 fn searched(repo_root: &Path) -> String {
     let mut prefixes: BTreeSet<&'static str> = BTreeSet::new();
     for adapter in AdapterKind::all() {
-        if adapter.detect(repo_root) {
+        if scanned(adapter, repo_root) {
             prefixes.insert(adapter.dir_prefix());
         }
     }

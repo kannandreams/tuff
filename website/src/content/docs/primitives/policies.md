@@ -5,8 +5,8 @@ description: Policies declare what an agent must never do, or must ask before do
 
 A policy capability is a list of rules that narrow what a coding agent may do in a project: commands it must not run, files it must not read or edit, MCP tools it must not call, and actions it must ask a person about first. It is written once, and each agent the project uses enforces it in its own way, or Tuff says plainly that it cannot.
 
-:::caution[Preview: Claude Code and Codex]
-Claude Code enforces every kind of policy rule. Codex enforces `command` rules only. Tuff turns each rule into the agent's own rules.
+:::caution[Preview: Claude Code, OpenCode, and Codex]
+Claude Code and OpenCode enforce every kind of policy rule. Codex enforces `command` rules only. Tuff turns each rule into the agent's own rules.
 
 If you install a policy for an agent that does not enforce one of its rules, such as Cursor, or Codex for a `read` rule, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
 
@@ -147,6 +147,29 @@ A rule's `reason` becomes the rule's `justification`, which Codex shows when it 
 codex execpolicy check --rules .codex/rules/tuff.rules -- git push --force
 ```
 
+## OpenCode
+
+Tuff compiles every kind of rule into OpenCode's `permission` settings, in `.opencode/opencode.json`. Add the `opencode` agent first with `tuff agent add opencode`.
+
+| Policy rule | OpenCode rule in `permission` |
+|---|---|
+| `command = ["git", "push", "--force"]` | `"bash": {"git push --force *": "deny"}` |
+| `read = [".env"]` | `"read": {".env": "deny", "*/.env": "deny"}` |
+| `read = ["secrets/**"]` | `"read": {"secrets/**": "deny"}` |
+| `edit = ["infra/prod/"]` | `"edit": {"infra/prod/*": "deny"}` |
+| `mcp = "github:delete_*"` | `"github_delete_*": "deny"` |
+
+An `ask` rule is written with `"ask"` in place of `"deny"`.
+
+- **Precedence.** OpenCode applies the last permission rule that matches. It loads `.opencode/opencode.json` after the project's `opencode.json`, and Tuff adds its rules after the rules already in `.opencode/opencode.json`, `ask` before `deny`. The policy's rules therefore take precedence over the project's own. Inline `OPENCODE_CONFIG_CONTENT`, managed configuration, and an agent's own `permission` settings are applied later and can still override them.
+- **Your files.** Tuff keeps the keys, rules, and order already in `.opencode/opencode.json`, and stops with an error if that file has a rule for the same pattern with a different action. It does not edit `opencode.json` or `.opencode/opencode.jsonc`.
+- **Commands.** OpenCode checks each command it parses from the shell input, so `cd x && git push --force` and `git push --force > push.log` are matched. `sh -c "git push --force"`, `/usr/bin/git push --force`, and `git -C . push --force` are not.
+- **Files.** OpenCode matches the path relative to the project, so a pattern without a `/`, such as `.env`, becomes two OpenCode patterns. A `read` rule covers OpenCode's read tool, and an `edit` rule its edit, write, and patch tools. `grep`, `glob`, `list`, and shell commands are separate permissions and are not covered.
+- **MCP tools.** A denied tool is hidden from the agent. OpenCode names a tool `<server>_<tool>`, with characters other than letters, digits, `_`, and `-` replaced by `_`.
+- **Ask.** `opencode run` rejects the request an `ask` rule raises, and `opencode --auto` approves it.
+
+`opencode` is a policy-only target. Skills reach OpenCode through `open-agents`, and `tuff init` does not register `opencode`.
+
 ## What each agent can enforce
 
 ```sh frame="terminal"
@@ -155,8 +178,8 @@ tuff policy matrix --json
 ```
 
 Example output, showing Claude Code and Cursor. The full output also lists
-Open Agents, whose rows read `unsupported` like Cursor's, and Codex, whose
-`command` rows read `partial`:
+Open Agents, whose rows read `unsupported` like Cursor's, Codex, whose
+`command` rows read `partial`, and OpenCode, whose rows read like Claude Code's:
 
 ```text
 ┌─────────────┬────────┬─────────┬─────────────┬────────────────────────────────────────┐
@@ -196,7 +219,7 @@ How to read it:
 | `COVERAGE` | `full` (always enforced), `partial` (enforced with the limits in the notes), or `unsupported` (not enforced, so `tuff add` refuses the policy) |
 | `MECHANISM` | What Tuff writes for that agent, such as a Claude Code permission rule |
 
-The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor and Open Agents enforce nothing yet, and Codex enforces `command` rules only.
+The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor and Open Agents enforce nothing yet, Codex enforces `command` rules only, and OpenCode enforces every kind of rule.
 
 ## Rules an agent does not enforce
 
