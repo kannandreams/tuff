@@ -427,6 +427,55 @@ pub fn enforcement(
     Ok((enforced, unenforced))
 }
 
+/// Whether a native permissions file is a rules file, one compiled rule per
+/// line, such as Codex's `.codex/rules/tuff.rules`, rather than a JSON
+/// settings file.
+pub fn is_rules_file(relpath: &str) -> bool {
+    relpath.ends_with(".rules")
+}
+
+/// The first line of a rules file Tuff writes.
+pub const RULES_FILE_HEADER: &str = "# Managed by Tuff: rules compiled from policy capabilities. Change the policy and run tuff update rather than editing this file.";
+
+/// `merge_permissions` for a rules file. Tuff owns the file, but lines it
+/// did not write are kept. The result is empty when no rule is left, so the
+/// caller can remove the file.
+fn merge_rules_file(
+    relpath: &str,
+    existing: Option<&[u8]>,
+    remove: &[(PolicyEffect, String)],
+    add: &[(PolicyEffect, String)],
+) -> Result<Vec<u8>> {
+    let text = match existing {
+        Some(bytes) => std::str::from_utf8(bytes)
+            .map_err(|_| TuffError::corrupt(format!("{relpath} is not valid UTF-8")))?,
+        None => "",
+    };
+    let mut lines: Vec<String> = text
+        .lines()
+        .filter(|line| !remove.iter().any(|(_, rule)| rule == line))
+        .map(str::to_string)
+        .collect();
+    if !lines.iter().any(|line| line == RULES_FILE_HEADER) {
+        lines.insert(0, RULES_FILE_HEADER.to_string());
+    }
+    for (_, rule) in add {
+        if !lines.contains(rule) {
+            lines.push(rule.clone());
+        }
+    }
+    let has_rules = lines.iter().any(|line| {
+        let line = line.trim();
+        !line.is_empty() && !line.starts_with('#')
+    });
+    if !has_rules {
+        return Ok(Vec::new());
+    }
+    let mut merged = lines.join("\n");
+    merged.push('\n');
+    Ok(merged.into_bytes())
+}
+
 /// Add and remove native permission rules in a harness settings file, given
 /// the bytes it holds now, and return the bytes it should hold next.
 ///
@@ -436,12 +485,18 @@ pub fn enforcement(
 /// so is a `permissions` object this call leaves empty. A file that is not
 /// JSON, or whose `permissions` or a touched list has the wrong type, is
 /// refused as corrupt, so a caller can run this before writing anything.
+///
+/// A rules file (`is_rules_file`) holds one rule per line instead, and comes
+/// back empty when no rule is left in it.
 pub fn merge_permissions(
     settings_relpath: &str,
     existing: Option<&[u8]>,
     remove: &[(PolicyEffect, String)],
     add: &[(PolicyEffect, String)],
 ) -> Result<Vec<u8>> {
+    if is_rules_file(settings_relpath) {
+        return merge_rules_file(settings_relpath, existing, remove, add);
+    }
     let mut settings: serde_json::Value = match existing {
         Some(bytes) if !bytes.is_empty() => serde_json::from_slice(bytes).map_err(|error| {
             TuffError::corrupt(format!("{settings_relpath} is not valid JSON: {error}"))
@@ -530,6 +585,15 @@ pub fn remove_permissions(
         }
         let bytes = std::fs::read(&path)?;
         let mut merged = merge_permissions(relpath, Some(&bytes), &removals, &[])?;
+        if is_rules_file(relpath) {
+            // The rules file exists only to hold compiled rules.
+            if merged.is_empty() {
+                std::fs::remove_file(&path)?;
+            } else if merged != bytes {
+                std::fs::write(&path, merged)?;
+            }
+            continue;
+        }
         if merged != bytes {
             merged.push(b'\n');
             std::fs::write(&path, merged)?;
@@ -548,6 +612,13 @@ pub fn managed_permission_status(
     let Ok(raw) = std::fs::read_to_string(repo_root.join(&permission.settings_path)) else {
         return "missing";
     };
+    if is_rules_file(&permission.settings_path) {
+        return if raw.lines().any(|line| line == permission.rule) {
+            "clean"
+        } else {
+            "missing"
+        };
+    }
     let Ok(settings) = serde_json::from_str::<serde_json::Value>(&raw) else {
         return "modified";
     };
@@ -696,6 +767,48 @@ mod tests {
         std::fs::write(&path, "{ not json").unwrap();
         assert_eq!(managed_permission_status(temp.path(), &ours), "modified");
         assert!(remove_permissions(temp.path(), &[ours]).is_err());
+    }
+
+    #[test]
+    fn a_rules_file_holds_one_rule_per_line_and_is_removed_when_emptied() {
+        const RELPATH: &str = ".codex/rules/tuff.rules";
+        let forbid =
+            deny(r#"prefix_rule(pattern = ["git", "push", "--force"], decision = "forbidden")"#);
+        let prompt = ask(r#"prefix_rule(pattern = ["terraform", "apply"], decision = "prompt")"#);
+        let once =
+            merge_permissions(RELPATH, None, &[], &[forbid.clone(), prompt.clone()]).unwrap();
+        let twice =
+            merge_permissions(RELPATH, Some(&once), &[], std::slice::from_ref(&forbid)).unwrap();
+        assert_eq!(once, twice, "a redundant merge leaves the file unchanged");
+        assert_eq!(
+            String::from_utf8(once.clone()).unwrap(),
+            format!("{RULES_FILE_HEADER}\n{}\n{}\n", forbid.1, prompt.1)
+        );
+
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(temp.path().join(".codex/rules")).unwrap();
+        let path = temp.path().join(RELPATH);
+        std::fs::write(&path, &once).unwrap();
+        let recorded = |(effect, rule): &(PolicyEffect, String)| ManagedPermission {
+            settings_path: RELPATH.to_string(),
+            list: effect.as_str().to_string(),
+            rule: rule.clone(),
+        };
+        assert_eq!(
+            managed_permission_status(temp.path(), &recorded(&forbid)),
+            "clean"
+        );
+        remove_permissions(temp.path(), &[recorded(&forbid)]).unwrap();
+        assert_eq!(
+            managed_permission_status(temp.path(), &recorded(&forbid)),
+            "missing"
+        );
+        assert_eq!(
+            managed_permission_status(temp.path(), &recorded(&prompt)),
+            "clean"
+        );
+        remove_permissions(temp.path(), &[recorded(&prompt)]).unwrap();
+        assert!(!path.exists(), "a rules file with no rules left is removed");
     }
 
     #[test]

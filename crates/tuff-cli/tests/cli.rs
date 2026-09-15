@@ -3804,7 +3804,7 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
         for rule in rules {
             let expected = match (agent, rule["subject"].as_str().unwrap()) {
                 ("claude", "mcp") => "full",
-                ("claude", _) => "partial",
+                ("claude", _) | ("codex", "command") => "partial",
                 _ => "unsupported",
             };
             assert_eq!(rule["coverage"], expected, "{agent}: {rule}");
@@ -3819,7 +3819,10 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
             "permissions.deny Bash(<command> *)",
         ))
         .stdout(predicate::str::contains(
-            "codex: Tuff does not compile policy rules for this agent yet",
+            ".codex/rules/tuff.rules prefix_rule(decision = \"forbidden\")",
+        ))
+        .stdout(predicate::str::contains(
+            "cursor: Tuff does not compile policy rules for this agent yet",
         ));
 }
 
@@ -3834,7 +3837,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "codex"])
+        .args(["agent", "add", "cursor"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
@@ -3848,7 +3851,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
             "--agent",
             "open-agents",
             "--agent",
-            "codex",
+            "cursor",
         ])
         .output()
         .unwrap();
@@ -3858,7 +3861,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
         stderr.contains("policy 'infra-guardrails' would not be enforced as written"),
         "{stderr}"
     );
-    for agent in ["Open Agents", "Codex"] {
+    for agent in ["Open Agents", "Cursor"] {
         for rule in [
             "rule 1 (deny command \"git push --force\")",
             "rule 2 (deny read \".env\", \"secrets/**\")",
@@ -4160,7 +4163,7 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "codex"])
+        .args(["agent", "add", "cursor"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
@@ -4168,7 +4171,7 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
 
     let refused = tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "codex"])
+        .args(["add", policy.to_str().unwrap(), "--agent", "cursor"])
         .output()
         .unwrap();
     assert!(!refused.status.success());
@@ -4184,7 +4187,7 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
             "add",
             policy.to_str().unwrap(),
             "--agent",
-            "codex",
+            "cursor",
             "--accept-unenforced",
         ])
         .output()
@@ -4193,12 +4196,12 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
     let stderr = String::from_utf8(accepted.stderr).unwrap();
     assert!(
         stderr.contains(
-            "policy 'infra-guardrails' was not installed: Codex enforces none of its rules"
+            "policy 'infra-guardrails' was not installed: Cursor enforces none of its rules"
         ),
         "{stderr}"
     );
     assert!(
-        stderr.contains("Codex: rule 2 (deny read \".env\", \"secrets/**\") is not enforced"),
+        stderr.contains("Cursor: rule 2 (deny read \".env\", \"secrets/**\") is not enforced"),
         "{stderr}"
     );
     assert_eq!(
@@ -4206,6 +4209,123 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
         before
     );
     assert!(!project.join(".agents/policies").exists());
+}
+
+#[test]
+fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "codex"])
+        .assert()
+        .success();
+    let policy = write_infra_policy(temp.path());
+
+    // Codex has no rule for the read and MCP rules, so a plain add is refused.
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "codex"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Codex: rule 2 (deny read \".env\", \"secrets/**\") is not enforced",
+        ));
+
+    let output = tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            policy.to_str().unwrap(),
+            "--agent",
+            "codex",
+            "--accept-unenforced",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("Codex: rule 1 (deny command \"git push --force\") is enforced partially"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "Codex: rule 4 (deny mcp \"github:delete_*\") is not enforced, so it was not installed"
+        ),
+        "{stderr}"
+    );
+
+    let rules_path = project.join(".codex/rules/tuff.rules");
+    let rules = fs::read_to_string(&rules_path).unwrap();
+    let compiled: Vec<&str> = rules
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .collect();
+    assert_eq!(
+        compiled,
+        [
+            r#"prefix_rule(pattern = ["git", "push", "--force"], decision = "forbidden", justification = "Force pushes rewrite shared history.")"#,
+            r#"prefix_rule(pattern = ["terraform", "apply"], decision = "prompt")"#,
+        ]
+    );
+
+    let output = tuff()
+        .current_dir(&project)
+        .args(["check", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let recorded: Vec<u64> = report["gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|gap| gap["rule"].as_u64().unwrap())
+        .collect();
+    assert_eq!(recorded, [2, 4], "{report}");
+    tuff()
+        .current_dir(&project)
+        .args(["check", "--strict"])
+        .assert()
+        .failure();
+
+    // A compiled rule removed by hand is drift, reported against the file.
+    let prompt_rule = compiled[1].to_string();
+    fs::write(&rules_path, rules.replace(&format!("{prompt_rule}\n"), "")).unwrap();
+    let output = tuff()
+        .current_dir(&project)
+        .args(["check", "--json"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = report["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "infra-guardrails")
+        .unwrap()
+        .clone();
+    assert_eq!(row["status"], "modified", "{row}");
+    assert!(
+        row["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file == ".codex/rules/tuff.rules"),
+        "{row}"
+    );
+
+    // Delete takes out the policy's rules, and the file with them.
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "infra-guardrails", "--agent", "codex", "--force"])
+        .assert()
+        .success();
+    assert!(!rules_path.exists());
 }
 
 #[test]

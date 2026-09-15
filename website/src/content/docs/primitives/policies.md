@@ -5,10 +5,10 @@ description: Policies declare what an agent must never do, or must ask before do
 
 A policy capability is a list of rules that narrow what a coding agent may do in a project: commands it must not run, files it must not read or edit, MCP tools it must not call, and actions it must ask a person about first. It is written once, and each agent the project uses enforces it in its own way, or Tuff says plainly that it cannot.
 
-:::caution[Preview: Claude Code only]
-Only Claude Code can enforce policies today. Tuff turns each rule into one of Claude Code's own permission rules.
+:::caution[Preview: Claude Code and Codex]
+Claude Code enforces every kind of policy rule. Codex enforces `command` rules only. Tuff turns each rule into the agent's own rules.
 
-If you install a policy for any other agent, such as Cursor or Codex, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
+If you install a policy for an agent that does not enforce one of its rules, such as Cursor, or Codex for a `read` rule, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
 
 This is on purpose. If Tuff installed the policy anyway, the agent would ignore the rules, but you would think they were in place.
 
@@ -124,6 +124,29 @@ Tuff cannot turn the sandbox on for you, because no file in the repository
 controls it.
 :::
 
+## Codex
+
+Tuff compiles `command` rules into Codex's command rules, in a file Tuff owns at `.codex/rules/tuff.rules`:
+
+| Policy rule | Codex rule |
+|---|---|
+| `effect = "deny"`, `command = ["git", "push", "--force"]` | `prefix_rule(pattern = ["git", "push", "--force"], decision = "forbidden")` |
+| `effect = "ask"`, `command = ["terraform", "apply"]` | `prefix_rule(pattern = ["terraform", "apply"], decision = "prompt")` |
+
+A rule's `reason` becomes the rule's `justification`, which Codex shows when it refuses the command. These mappings were checked against Codex CLI 0.154.0.
+
+- **Trust.** Codex loads project rules only when the project is trusted. Until then the file is written but not applied.
+- **Experimental.** Codex's documentation labels rules experimental.
+- **Matching.** Codex matches a command's leading words, and splits a simple chain such as `git add . && git push --force` to check each command. A script with redirection, `$(...)`, a variable assignment, a wildcard, or control flow is checked as one command, so `git push --force > push.log` is not matched. A program run by absolute path, such as `/usr/bin/git`, may not be matched.
+- **Ask without approvals.** Where Codex never asks for approval, as in `codex exec` by default, a `prompt` rule refuses the command.
+- **Other rules.** Codex rules match commands, not file paths or MCP tools, so `read`, `edit`, and `mcp` rules are not enforced in Codex. A policy with such rules installs for Codex only with [`--accept-unenforced`](#rules-an-agent-does-not-enforce).
+
+`tuff check` reports a compiled rule removed from the file by hand, and `tuff delete` removes the policy's rules and the file once no rules remain. To see how Codex reads a rule:
+
+```sh frame="terminal"
+codex execpolicy check --rules .codex/rules/tuff.rules -- git push --force
+```
+
 ## What each agent can enforce
 
 ```sh frame="terminal"
@@ -132,7 +155,8 @@ tuff policy matrix --json
 ```
 
 Example output, showing Claude Code and Cursor. The full output also lists
-Open Agents and Codex, whose rows read `unsupported` like Cursor's:
+Open Agents, whose rows read `unsupported` like Cursor's, and Codex, whose
+`command` rows read `partial`:
 
 ```text
 ┌─────────────┬────────┬─────────┬─────────────┬────────────────────────────────────────┐
@@ -172,7 +196,7 @@ How to read it:
 | `COVERAGE` | `full` (always enforced), `partial` (enforced with the limits in the notes), or `unsupported` (not enforced, so `tuff add` refuses the policy) |
 | `MECHANISM` | What Tuff writes for that agent, such as a Claude Code permission rule |
 
-The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor, Codex, and Open Agents enforce nothing yet.
+The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor and Open Agents enforce nothing yet, and Codex enforces `command` rules only.
 
 ## Rules an agent does not enforce
 
