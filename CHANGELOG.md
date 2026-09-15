@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **`tuff add --accept-unenforced` and `tuff check --strict` for policies.** By default `tuff add` still refuses a policy when a selected agent does not enforce one of its rules. With `--accept-unenforced`, each agent gets the rules it enforces, each rule it does not is printed with the reason and recorded in `tuff.lock`, and an agent that enforces none of the rules still refuses the policy. `tuff check` prints the recorded rules on every run, lists them under `gaps` in `--json`, and exits 0 for them; `tuff check --strict` exits 1 while any are recorded. `tuff update` recomputes the record without the flag. Lockfiles with no recorded rules are unchanged.
+
 ### Changed
 
 - **The Claude Code plugin is now version 0.2.0.** Its version had stayed at 0.1.1 since the plugin was first packaged, so Claude Code had no new version to update to, and existing installs could keep an old `tuff-cli-guide` skill, including the `tuff remove` command fixed in 0.10.2. Updating the plugin now brings in the current skill.

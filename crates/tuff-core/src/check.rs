@@ -17,10 +17,25 @@ pub struct CheckResult {
     pub files: Vec<String>,
 }
 
+/// A policy rule recorded as not enforced for an agent (RFC-107 D6).
+#[derive(Debug, Serialize)]
+pub struct PolicyGap {
+    pub id: String,
+    pub target: String,
+    /// One-based position of the rule in the policy.
+    pub rule: usize,
+    pub description: String,
+    pub reason: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct CheckOutcome {
     pub valid: bool,
     pub results: Vec<CheckResult>,
+    /// Recorded policy rules an agent does not enforce. They do not affect
+    /// `valid`; `tuff check --strict` fails on them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub gaps: Vec<PolicyGap>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,27 +46,47 @@ pub enum CheckScope {
 
 pub fn run_checks(repo_root: &Path, scope: CheckScope) -> Result<CheckOutcome> {
     let mut results = Vec::new();
+    let mut gaps = Vec::new();
 
     if scope == CheckScope::ProjectAndGlobal
         && let Some(lf) = lockfile::read_optional_lockfile(&lockfile::project_lockfile(repo_root))?
     {
-        check_lockfile(repo_root, &lf, &mut results);
+        check_lockfile(repo_root, &lf, &mut results, &mut gaps);
     }
 
     if let Some(home) = home_dir() {
         let lock_path = crate::paths::global_lockfile(&home);
         if let Some(lf) = lockfile::read_optional_lockfile(&lock_path)? {
-            check_lockfile(&home, &lf, &mut results);
+            check_lockfile(&home, &lf, &mut results, &mut gaps);
         }
     }
 
     let valid = results.iter().all(|r| r.status == "ok");
-    Ok(CheckOutcome { valid, results })
+    Ok(CheckOutcome {
+        valid,
+        results,
+        gaps,
+    })
 }
 
-fn check_lockfile(scope_root: &Path, lf: &lockfile::Lockfile, results: &mut Vec<CheckResult>) {
+fn check_lockfile(
+    scope_root: &Path,
+    lf: &lockfile::Lockfile,
+    results: &mut Vec<CheckResult>,
+    gaps: &mut Vec<PolicyGap>,
+) {
     for (id, entry) in lf.capabilities.iter() {
         for (target_id, target_entry) in entry.targets.iter() {
+            for unenforced in &target_entry.unenforced_rules {
+                gaps.push(PolicyGap {
+                    id: id.clone(),
+                    target: target_id.clone(),
+                    rule: unenforced.rule,
+                    description: unenforced.description.clone(),
+                    reason: unenforced.reason.clone(),
+                });
+            }
+
             let mut failing_files = Vec::new();
 
             if target_entry.installed_path.is_empty() {

@@ -192,6 +192,7 @@ tuff hooks check-portability pre-commit-lint --target claude
 | `-g, --global` | Install to global user scope |
 | `-n, --name <id>` | Override the installed capability ID for an auto-detected local source |
 | `--hook-file <path>` | Hook-only native settings fragment, relative to the hook source directory |
+| `--accept-unenforced` | For a policy added with `tuff add <path>`: install the rules each agent enforces and record the rest in `tuff.lock`, instead of refusing the policy. See [Rules an agent does not enforce](/primitives/policies/#rules-an-agent-does-not-enforce) |
 
 The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
 `workflow`) rather than a `--type` flag. For a typed local source, the name is

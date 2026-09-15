@@ -4153,6 +4153,185 @@ fn a_policy_is_refused_for_every_agent_when_one_selected_agent_cannot_enforce_it
 }
 
 #[test]
+fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "codex"])
+        .assert()
+        .success();
+    let policy = write_infra_policy(temp.path());
+    let before = fs::read_to_string(project.join("tuff.lock")).unwrap();
+
+    let refused = tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "codex"])
+        .output()
+        .unwrap();
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8(refused.stderr).unwrap();
+    assert!(
+        stderr.contains("pass --accept-unenforced to install the rules each agent enforces"),
+        "the refusal names the flag: {stderr}"
+    );
+
+    let accepted = tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            policy.to_str().unwrap(),
+            "--agent",
+            "codex",
+            "--accept-unenforced",
+        ])
+        .output()
+        .unwrap();
+    assert!(!accepted.status.success());
+    let stderr = String::from_utf8(accepted.stderr).unwrap();
+    assert!(
+        stderr.contains(
+            "policy 'infra-guardrails' was not installed: Codex enforces none of its rules"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("Codex: rule 2 (deny read \".env\", \"secrets/**\") is not enforced"),
+        "{stderr}"
+    );
+    assert_eq!(
+        fs::read_to_string(project.join("tuff.lock")).unwrap(),
+        before
+    );
+    assert!(!project.join(".agents/policies").exists());
+}
+
+#[test]
+fn accepting_unenforced_rules_records_nothing_when_every_rule_is_enforced() {
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            policy.to_str().unwrap(),
+            "--agent",
+            "claude",
+            "--accept-unenforced",
+        ])
+        .assert()
+        .success();
+    let lock = fs::read_to_string(project.join("tuff.lock")).unwrap();
+    assert!(lock.contains("\"managed_permissions\""), "{lock}");
+    assert!(!lock.contains("unenforced_rules"), "{lock}");
+    tuff()
+        .current_dir(&project)
+        .args(["check", "--strict"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn accept_unenforced_is_refused_on_a_typed_add() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["add", "--accept-unenforced", "skill", "./anything"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--accept-unenforced applies to 'tuff add <path>' of a policy",
+        ));
+}
+
+#[test]
+fn check_reports_recorded_unenforced_rules_and_strict_fails_until_they_close() {
+    // No shipped agent enforces some rule kinds and not others yet, so the
+    // record is written into the lockfile the way `tuff add
+    // --accept-unenforced` writes it.
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .assert()
+        .success();
+    let lock_path = project.join("tuff.lock");
+    let mut lock: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&lock_path).unwrap()).unwrap();
+    let row = lock["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|row| row["name"] == "infra-guardrails")
+        .unwrap();
+    row["unenforced_rules"] = serde_json::json!([{
+        "rule": 2,
+        "description": "deny read \".env\", \"secrets/**\"",
+        "reason": "this agent has no setting for file reads"
+    }]);
+    fs::write(&lock_path, serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+
+    tuff()
+        .current_dir(&project)
+        .arg("check")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "rule 2 (deny read \".env\", \"secrets/**\") is not enforced: this agent has no setting for file reads",
+        ));
+    let output = tuff()
+        .current_dir(&project)
+        .args(["check", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let gaps = report["gaps"].as_array().unwrap();
+    assert_eq!(gaps.len(), 1, "{report}");
+    assert_eq!(gaps[0]["id"], "infra-guardrails");
+    assert_eq!(gaps[0]["target"], "claude");
+    assert_eq!(gaps[0]["rule"], 2);
+    tuff()
+        .current_dir(&project)
+        .args(["check", "--strict"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--strict"));
+    tuff()
+        .current_dir(&project)
+        .args(["check", "--strict", "--ignore-failures"])
+        .assert()
+        .success();
+
+    // The recorded gap keeps the policy accepting unenforced rules, so
+    // update needs no flag, and it recomputes the gaps: Claude Code
+    // enforces every rule, so none remain.
+    tuff()
+        .current_dir(&project)
+        .args(["update", "infra-guardrails", "--agent", "claude"])
+        .assert()
+        .success();
+    assert!(
+        !fs::read_to_string(&lock_path)
+            .unwrap()
+            .contains("unenforced_rules")
+    );
+    tuff()
+        .current_dir(&project)
+        .args(["check", "--strict"])
+        .assert()
+        .success();
+}
+
+#[test]
 fn hooks_spec_prints_the_document_the_published_specification_is_generated_from() {
     // No project is needed: the spec is a property of the binary, not of
     // what a project registered.
