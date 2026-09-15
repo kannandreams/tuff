@@ -3796,15 +3796,18 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
         .iter()
         .map(|matrix| matrix["adapter"].as_str().unwrap())
         .collect();
-    assert_eq!(agents, ["open-agents", "claude", "codex", "cursor"]);
+    assert_eq!(
+        agents,
+        ["open-agents", "claude", "codex", "cursor", "opencode"]
+    );
     for matrix in matrices {
         let agent = matrix["adapter"].as_str().unwrap();
         let rules = matrix["rules"].as_array().unwrap();
         assert_eq!(rules.len(), 8, "two effects by four subjects: {matrix}");
         for rule in rules {
             let expected = match (agent, rule["subject"].as_str().unwrap()) {
-                ("claude", "mcp") => "full",
-                ("claude", _) | ("codex", "command") => "partial",
+                ("claude" | "opencode", "mcp") => "full",
+                ("claude" | "opencode", _) | ("codex", "command") => "partial",
                 _ => "unsupported",
             };
             assert_eq!(rule["coverage"], expected, "{agent}: {rule}");
@@ -4326,6 +4329,133 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
         .assert()
         .success();
     assert!(!rules_path.exists());
+}
+
+#[test]
+fn a_policy_compiles_into_the_opencode_config_after_the_projects_own_rules() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(project.join(".opencode")).unwrap();
+    let root_config =
+        r#"{"$schema": "https://opencode.ai/config.json", "permission": {"bash": {"*": "allow"}}}"#;
+    fs::write(project.join("opencode.json"), root_config).unwrap();
+    fs::write(
+        project.join(".opencode/opencode.json"),
+        r#"{"$schema": "https://opencode.ai/config.json", "permission": {"bash": {"git push *": "allow"}}, "model": "deepseek/deepseek-v4-flash"}"#,
+    )
+    .unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    assert!(
+        !fs::read_to_string(project.join("tuff.lock"))
+            .unwrap()
+            .contains("\"opencode\""),
+        "init does not record OpenCode, which takes no skills"
+    );
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "opencode"])
+        .assert()
+        .success();
+    let policy = write_infra_policy(temp.path());
+
+    let output = tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "opencode"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr
+            .contains("OpenCode: rule 1 (deny command \"git push --force\") is enforced partially"),
+        "{stderr}"
+    );
+    assert_eq!(
+        fs::read_to_string(project.join("opencode.json")).unwrap(),
+        root_config,
+        "the project's own opencode.json is not edited"
+    );
+
+    let config_path = project.join(".opencode/opencode.json");
+    let raw = fs::read_to_string(&config_path).unwrap();
+    let position = |needle: &str| {
+        raw.find(needle)
+            .unwrap_or_else(|| panic!("{needle} in {raw}"))
+    };
+    assert!(
+        position("\"git push *\"") < position("\"terraform apply *\""),
+        "{raw}"
+    );
+    assert!(
+        position("\"terraform apply *\"") < position("\"git push --force *\""),
+        "{raw}"
+    );
+    let config: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(config["model"], "deepseek/deepseek-v4-flash");
+    assert_eq!(config["permission"]["bash"]["git push --force *"], "deny");
+    assert_eq!(config["permission"]["bash"]["terraform apply *"], "ask");
+    assert_eq!(config["permission"]["read"][".env"], "deny");
+    assert_eq!(config["permission"]["read"]["*/.env"], "deny");
+    assert_eq!(config["permission"]["read"]["secrets/**"], "deny");
+    assert_eq!(config["permission"]["github_delete_*"], "deny");
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    // A compiled rule removed by hand is drift, reported against its permission.
+    let mut edited = config.clone();
+    edited["permission"]["read"]
+        .as_object_mut()
+        .unwrap()
+        .remove(".env");
+    fs::write(&config_path, serde_json::to_string_pretty(&edited).unwrap()).unwrap();
+    let output = tuff()
+        .current_dir(&project)
+        .args(["check", "--json"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = report["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "infra-guardrails")
+        .unwrap()
+        .clone();
+    assert!(
+        row["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file == ".opencode/opencode.json#permission.read"),
+        "{row}"
+    );
+
+    // Delete takes out only the policy's rules.
+    tuff()
+        .current_dir(&project)
+        .args([
+            "delete",
+            "infra-guardrails",
+            "--agent",
+            "opencode",
+            "--force",
+        ])
+        .assert()
+        .success();
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+    assert_eq!(
+        after,
+        serde_json::json!({
+            "$schema": "https://opencode.ai/config.json",
+            "permission": {"bash": {"git push *": "allow"}},
+            "model": "deepseek/deepseek-v4-flash"
+        })
+    );
+    assert_eq!(
+        fs::read_to_string(project.join("opencode.json")).unwrap(),
+        root_config
+    );
 }
 
 #[test]

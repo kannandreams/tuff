@@ -13,11 +13,13 @@ use tuff_adapter_claude::Claude;
 use tuff_adapter_codex::Codex;
 use tuff_adapter_cursor::Cursor;
 use tuff_adapter_open_agents::OpenAgents;
+use tuff_adapter_opencode::OpenCode;
 
 static OPEN_AGENTS: OpenAgents = OpenAgents;
 static CLAUDE: Claude = Claude;
 static CODEX: Codex = Codex;
 static CURSOR: Cursor = Cursor;
+static OPENCODE: OpenCode = OpenCode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdapterKind {
@@ -25,11 +27,18 @@ pub enum AdapterKind {
     Claude,
     Codex,
     Cursor,
+    OpenCode,
 }
 
 impl AdapterKind {
     pub fn all() -> Vec<Self> {
-        vec![Self::OpenAgents, Self::Claude, Self::Codex, Self::Cursor]
+        vec![
+            Self::OpenAgents,
+            Self::Claude,
+            Self::Codex,
+            Self::Cursor,
+            Self::OpenCode,
+        ]
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
@@ -38,6 +47,7 @@ impl AdapterKind {
             "claude" | "claude-code" => Some(Self::Claude),
             "codex" => Some(Self::Codex),
             "cursor" => Some(Self::Cursor),
+            "opencode" => Some(Self::OpenCode),
             _ => None,
         }
     }
@@ -48,6 +58,7 @@ impl AdapterKind {
             Self::Claude => &CLAUDE,
             Self::Codex => &CODEX,
             Self::Cursor => &CURSOR,
+            Self::OpenCode => &OPENCODE,
         }
     }
 }

@@ -11,7 +11,7 @@ registration lives.
 
 ## Supported Adapters
 
-Tuff currently ships four adapters:
+Tuff currently ships five adapters:
 
 | Adapter | Target id | Main output root |
 |---|---|---|
@@ -19,6 +19,9 @@ Tuff currently ships four adapters:
 | Claude | `claude` | `.claude/` |
 | Codex | `codex` | `.agents/` |
 | Cursor | `cursor` | `.cursor/` |
+| OpenCode | `opencode` | `.opencode/` |
+
+`opencode` takes [policies](/primitives/policies/#opencode) only. OpenCode reads skills from the `.agents/` layout, so install those with `open-agents`.
 
 `open-agents` remains the generic shared `.agents/` adapter. Codex now has a dedicated adapter even
 though it currently emits the same directory family, because its hook coverage and native behavior

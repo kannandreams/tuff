@@ -155,6 +155,26 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
+  tuff-adapter-opencode:
+    name: Publish tuff-adapter-opencode
+    needs: tuff-core
+    runs-on: ubuntu-latest
+    environment: release-tuff-adapter-opencode
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-adapter-opencode --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
   tuffcli:
     name: Publish tuffcli
     needs:
@@ -162,6 +182,7 @@ jobs:
       - tuff-adapter-claude
       - tuff-adapter-codex
       - tuff-adapter-cursor
+      - tuff-adapter-opencode
     runs-on: ubuntu-latest
     environment: release-tuffcli
     permissions:

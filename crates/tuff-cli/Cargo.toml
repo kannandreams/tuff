@@ -20,6 +20,7 @@ tuff-adapter-open-agents.workspace = true
 tuff-adapter-claude.workspace = true
 tuff-adapter-codex.workspace = true
 tuff-adapter-cursor.workspace = true
+tuff-adapter-opencode.workspace = true
 clap = { version = "4.5.53", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

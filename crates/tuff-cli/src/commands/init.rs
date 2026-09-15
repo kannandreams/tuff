@@ -20,11 +20,16 @@ const TUFF_GUIDE_CONTENT: &str = include_str!("../../assets/tuff-cli-guide.md");
 /// `open-agents` writes, so recording it would add a second lockfile target
 /// pointing at a file that is already emitted, and its detector matches the
 /// directory this command creates.
+///
+/// A harness that takes no skills, such as OpenCode's policy-only target, is
+/// absent too: this command installs the CLI guide skill into every harness
+/// it records.
 fn detected_harnesses(repo_root: &Path) -> Vec<AdapterKind> {
     AdapterKind::all()
         .into_iter()
         .filter(|adapter| {
             !matches!(adapter, AdapterKind::OpenAgents | AdapterKind::Codex)
+                && adapter.supports(CapabilityType::Skill)
                 && adapter.detect(repo_root)
         })
         .collect()

@@ -39,12 +39,13 @@ tuff agent add open-agents
 tuff agent add claude
 tuff agent add codex
 tuff agent add cursor
+tuff agent add opencode
 ```
 
 Registering an agent also creates its project directory (`.agents/` or
 `.claude/`) if it does not already exist.
 
-`claude-code` remains an alias for `claude`. `codex` and `cursor` are dedicated adapter IDs.
+`claude-code` remains an alias for `claude`. `codex`, `cursor`, and `opencode` are dedicated adapter IDs. `opencode` takes [policies](/primitives/policies/#opencode) only, and `tuff init` does not register it.
 
 ### Remove an agent
 

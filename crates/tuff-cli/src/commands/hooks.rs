@@ -65,8 +65,11 @@ pub fn hooks_spec_document() -> HooksSpecDocument {
     HooksSpecDocument {
         spec_version: SPEC_VERSION,
         events: EVENT_SPECS,
+        // The specification describes hook targets. An adapter that takes no
+        // hooks, such as OpenCode's policy-only target, is not one.
         adapters: AdapterKind::all()
             .into_iter()
+            .filter(|adapter| adapter.supports(CapabilityType::Hook))
             .map(|adapter| AdapterSpec {
                 adapter: adapter.id(),
                 display_name: adapter.display_name(),
@@ -120,7 +123,10 @@ pub fn cmd_hooks_spec(json: bool) -> Result<()> {
 
     let mut rows = Vec::new();
     let mut notes = Vec::new();
-    for adapter in AdapterKind::all() {
+    for adapter in AdapterKind::all()
+        .into_iter()
+        .filter(|adapter| adapter.supports(CapabilityType::Hook))
+    {
         rows.extend(matrix_rows(adapter));
         notes.extend(matrix_notes(adapter));
     }
