@@ -25,6 +25,35 @@ pub fn cmd_add(
     global: bool,
     hook_file: Option<&Path>,
 ) -> Result<()> {
+    cmd_add_accepting(
+        repo_root,
+        source,
+        name,
+        capability_type,
+        target_ids,
+        global,
+        hook_file,
+        false,
+    )
+}
+
+/// `tuff add`, where `accept_unenforced` (`--accept-unenforced`) installs a
+/// policy's rules that each selected agent enforces and records the rest,
+/// instead of refusing the policy (RFC-107 D6).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "CLI dispatch passes source and install context"
+)]
+pub fn cmd_add_accepting(
+    repo_root: &Path,
+    source: Option<&Path>,
+    name: Option<&str>,
+    capability_type: Option<&str>,
+    target_ids: &[String],
+    global: bool,
+    hook_file: Option<&Path>,
+    accept_unenforced: bool,
+) -> Result<()> {
     let source = source.ok_or_else(|| TuffError::usage("source path or URL is required"))?;
     let (scope, install_root) = if global {
         let home = home_dir()?;
@@ -46,6 +75,7 @@ pub fn cmd_add(
             capability_type,
             repo_root,
             hook_file,
+            accept_unenforced,
         );
     }
     if let Some(name) = name
@@ -65,6 +95,7 @@ pub fn cmd_add(
         capability_type,
         name,
         hook_file,
+        accept_unenforced,
     )
 }
 
@@ -320,6 +351,7 @@ fn cmd_add_git(
     capability_type: Option<&str>,
     project_root: &Path,
     hook_file: Option<&Path>,
+    accept_unenforced: bool,
 ) -> Result<()> {
     // `<name>@<requirement>` asks for a release (RFC-101). The tags are
     // listed before anything is cloned, so a request nothing satisfies
@@ -420,7 +452,7 @@ fn cmd_add_git(
         eprintln!("{warning}");
     }
 
-    let result = install_capability(
+    let result = install_capability_accepting(
         install_root,
         scope,
         &capability,
@@ -434,6 +466,7 @@ fn cmd_add_git(
             requested: request.map(|request| request.to_string()),
         })),
         true,
+        accept_unenforced,
     );
     drop(source_guard);
     result
@@ -499,6 +532,7 @@ pub(crate) fn cmd_add_local_path(
         Some(capability_type.as_str()),
         None,
         None,
+        false,
     )
 }
 
@@ -515,6 +549,7 @@ fn cmd_add_local(
     capability_type: Option<&str>,
     name: Option<&str>,
     hook_file: Option<&Path>,
+    accept_unenforced: bool,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability_path);
     let parsed_type = capability_type.and_then(CapabilityType::parse);
@@ -571,7 +606,7 @@ fn cmd_add_local(
         );
     }
 
-    install_capability(
+    install_capability_accepting(
         install_root,
         scope,
         &resolved,
@@ -579,6 +614,7 @@ fn cmd_add_local(
         target_ids,
         None,
         true,
+        accept_unenforced,
     )
 }
 
@@ -861,6 +897,7 @@ fn adopt_capability_in_place(
             managed_hooks: Vec::new(),
             managed_mcp_entry: None,
             managed_permissions: Vec::new(),
+            unenforced_rules: Vec::new(),
             ownership: lockfile::TargetOwnership::Imported,
             sha256: baseline_hash,
             installed_path: relative_or_absolute_canonical(capability_dir, install_root),
@@ -1058,6 +1095,7 @@ fn compile_policy(
     policy: &tuff_core::policy::PolicyConfig,
     adapters: &[AdapterKind],
     lockfile: &lockfile::Lockfile,
+    enforcement: &BTreeMap<String, PolicyEnforcement>,
 ) -> Result<BTreeMap<String, CompiledPolicy>> {
     let mut compiled = BTreeMap::new();
     for adapter in adapters {
@@ -1068,7 +1106,14 @@ fn compile_policy(
             ))
         })?;
         let mut managed: Vec<lockfile::ManagedPermission> = Vec::new();
-        for rule in &policy.rules {
+        let enforced = enforcement
+            .get(adapter.id())
+            .map(|agent| agent.enforced.as_slice())
+            .unwrap_or_default();
+        for (index, rule) in policy.rules.iter().enumerate() {
+            if !enforced.contains(&index) {
+                continue;
+            }
             let effect = rule.effect()?;
             let native = adapter.native_permission_rules(rule)?.ok_or_else(|| {
                 TuffError::unsupported(format!(
@@ -1130,48 +1175,114 @@ fn compile_policy(
     Ok(compiled)
 }
 
-/// Refuse a policy any rule of which a selected agent would not enforce.
+/// The rules of a policy one agent enforces, and a record of the rest.
+struct PolicyEnforcement {
+    /// Zero-based positions of the rules to compile.
+    enforced: Vec<usize>,
+    unenforced: Vec<lockfile::UnenforcedRule>,
+}
+
+/// Check every rule of a policy against every selected agent's matrix,
+/// before anything is planned or written.
 ///
 /// A policy reported as installed where nothing enforces it is worse than
-/// no policy, because it removes the reason to look. Every rule is checked
-/// against every selected agent's matrix before anything is planned or
-/// written, and each rule an agent would not enforce is named.
-fn refuse_unenforced_policy(
+/// no policy, because it removes the reason to look. Without `accept`, a
+/// rule that any selected agent would not enforce refuses the whole policy,
+/// naming each such rule. With `accept` (`--accept-unenforced`, RFC-107 D6),
+/// each agent gets the rules it enforces and a record of the rest, and only
+/// an agent that enforces none of the rules refuses the policy.
+fn policy_enforcement(
     id: &str,
     policy: &tuff_core::policy::PolicyConfig,
     target_ids: &[String],
-) -> Result<()> {
-    let mut unenforced = Vec::new();
+    accept: bool,
+) -> Result<BTreeMap<String, PolicyEnforcement>> {
+    let mut by_agent = BTreeMap::new();
+    let mut unenforced_lines = Vec::new();
+    let mut enforcing_nothing = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
             TuffError::usage(format!("unknown agent '{tid}'"))
                 .with_hint("run 'tuff agent list' to see available agents")
         })?;
-        for verdict in tuff_core::policy::verdicts(policy, &adapter.policy_compatibility())? {
-            if verdict.entry.coverage == tuff_hooks_spec::CoverageLevel::Unsupported {
-                let why = verdict
-                    .entry
-                    .caveat
-                    .as_deref()
-                    .map(|caveat| format!(": {caveat}"))
-                    .unwrap_or_default();
-                unenforced.push(format!(
-                    "  {}: rule {} ({}) is not enforced{why}",
-                    adapter.display_name(),
-                    verdict.index + 1,
-                    verdict.rule.describe()
-                ));
-            }
+        let (enforced, unenforced) =
+            tuff_core::policy::enforcement(policy, &adapter.policy_compatibility())?;
+        for rule in &unenforced {
+            unenforced_lines.push(format!(
+                "  {}: rule {} ({}) is not enforced: {}",
+                adapter.display_name(),
+                rule.rule,
+                rule.description,
+                rule.reason
+            ));
+        }
+        if enforced.is_empty() {
+            enforcing_nothing.push(adapter.display_name().to_string());
+        }
+        by_agent.insert(
+            adapter.id().to_string(),
+            PolicyEnforcement {
+                enforced,
+                unenforced,
+            },
+        );
+    }
+    if unenforced_lines.is_empty() {
+        return Ok(by_agent);
+    }
+    if !accept {
+        return Err(TuffError::unsupported(format!(
+            "policy '{id}' would not be enforced as written, so it was not installed:\n{}",
+            unenforced_lines.join("\n")
+        ))
+        .with_hint(
+            "run 'tuff policy matrix' to see what each agent can enforce, or pass --accept-unenforced to install the rules each agent enforces and record the rest in tuff.lock",
+        ));
+    }
+    if !enforcing_nothing.is_empty() {
+        let verb = if enforcing_nothing.len() == 1 {
+            "enforces"
+        } else {
+            "enforce"
+        };
+        return Err(TuffError::unsupported(format!(
+            "policy '{id}' was not installed: {} {verb} none of its rules:\n{}",
+            enforcing_nothing.join(", "),
+            unenforced_lines.join("\n")
+        ))
+        .with_hint("run 'tuff policy matrix' to see what each agent can enforce"));
+    }
+    Ok(by_agent)
+}
+
+/// Say, per agent, which rules were not installed because the agent does
+/// not enforce them.
+fn warn_unenforced_policy_rules(enforcement: &BTreeMap<String, PolicyEnforcement>) {
+    for (agent_id, agent) in enforcement {
+        let name = AdapterKind::from_id(agent_id)
+            .map_or(agent_id.as_str(), |adapter| adapter.display_name());
+        for rule in &agent.unenforced {
+            eprintln!(
+                "{name}: rule {} ({}) is not enforced, so it was not installed: {}; recorded in tuff.lock",
+                rule.rule, rule.description, rule.reason
+            );
         }
     }
-    if unenforced.is_empty() {
-        return Ok(());
-    }
-    Err(TuffError::unsupported(format!(
-        "policy '{id}' would not be enforced as written, so it was not installed:\n{}",
-        unenforced.join("\n")
-    ))
-    .with_hint("run 'tuff policy matrix' to see what each agent can enforce"))
+}
+
+/// Whether an installed policy already recorded rules an agent does not
+/// enforce, which only an install with `--accept-unenforced` does. Such a
+/// policy keeps accepting them, so `tuff update` needs no flag.
+fn policy_recorded_unenforced_rules(install_root: &Path, scope: Scope, id: &str) -> bool {
+    lockfile::require_scoped_lockfile(install_root, scope)
+        .ok()
+        .and_then(|lockfile| lockfile.capabilities.get(id).cloned())
+        .is_some_and(|entry| {
+            entry
+                .targets
+                .values()
+                .any(|target| !target.unenforced_rules.is_empty())
+        })
 }
 
 pub(crate) fn install_capability(
@@ -1183,12 +1294,47 @@ pub(crate) fn install_capability(
     source: Option<lockfile::CapabilitySource>,
     report: bool,
 ) -> Result<()> {
-    if let CapabilityKind::Policy { ref policy } = capability.kind {
-        refuse_unenforced_policy(&capability.id, policy, target_ids)?;
-        if report {
-            warn_partially_enforced_policy(policy, target_ids)?;
+    install_capability_accepting(
+        install_root,
+        scope,
+        capability,
+        manifest,
+        target_ids,
+        source,
+        report,
+        false,
+    )
+}
+
+/// `install_capability`, where `accept_unenforced` installs a policy's
+/// enforced rules and records the rest instead of refusing the policy.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "install_capability's context plus the --accept-unenforced choice"
+)]
+pub(crate) fn install_capability_accepting(
+    install_root: &Path,
+    scope: Scope,
+    capability: &adapter::ResolvedCapability,
+    manifest: &manifest::CapabilityManifest,
+    target_ids: &[String],
+    source: Option<lockfile::CapabilitySource>,
+    report: bool,
+    accept_unenforced: bool,
+) -> Result<()> {
+    let policy_enforcement = match capability.kind {
+        CapabilityKind::Policy { ref policy } => {
+            let accept = accept_unenforced
+                || policy_recorded_unenforced_rules(install_root, scope, &capability.id);
+            let enforcement = policy_enforcement(&capability.id, policy, target_ids, accept)?;
+            if report {
+                warn_partially_enforced_policy(policy, target_ids)?;
+                warn_unenforced_policy_rules(&enforcement);
+            }
+            enforcement
         }
-    }
+        _ => BTreeMap::new(),
+    };
     let mut adapters = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
@@ -1267,9 +1413,14 @@ pub(crate) fn install_capability(
     }
 
     let compiled_policies = match &capability.kind {
-        CapabilityKind::Policy { policy } => {
-            compile_policy(install_root, &capability.id, policy, &adapters, &lockfile)?
-        }
+        CapabilityKind::Policy { policy } => compile_policy(
+            install_root,
+            &capability.id,
+            policy,
+            &adapters,
+            &lockfile,
+            &policy_enforcement,
+        )?,
         _ => BTreeMap::new(),
     };
 
@@ -1359,6 +1510,10 @@ pub(crate) fn install_capability(
                 managed_permissions: compiled_policies
                     .get(adapter.id())
                     .map(|compiled| compiled.managed.clone())
+                    .unwrap_or_default(),
+                unenforced_rules: policy_enforcement
+                    .get(adapter.id())
+                    .map(|agent| agent.unenforced.clone())
                     .unwrap_or_default(),
                 ownership: target_ownership_for(capability, install_root, *adapter),
                 sha256: baseline_hash,

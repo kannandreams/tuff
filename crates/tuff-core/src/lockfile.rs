@@ -259,6 +259,12 @@ pub struct TargetLockEntry {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub managed_permissions: Vec<ManagedPermission>,
+    #[serde(
+        default,
+        rename = "unenforcedRules",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub unenforced_rules: Vec<UnenforcedRule>,
     #[serde(default)]
     pub ownership: TargetOwnership,
     #[serde(default)]
@@ -309,6 +315,19 @@ pub struct ManagedPermission {
     /// The list the rule sits in: `deny` or `ask`.
     pub list: String,
     pub rule: String,
+}
+
+/// A policy rule the agent does not enforce, recorded when the policy was
+/// installed with `--accept-unenforced` (RFC-107 D6). `tuff check` reports
+/// each one, and `tuff check --strict` fails while any are recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnenforcedRule {
+    /// One-based position of the rule in the policy.
+    pub rule: usize,
+    /// The rule as `tuff add` describes it, such as `deny read ".env"`.
+    pub description: String,
+    /// Why the agent does not enforce it.
+    pub reason: String,
 }
 
 /// Hash an MCP entry value exactly as `managed_mcp_entry_status` will when
@@ -668,6 +687,7 @@ fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
                     managed_hooks: item.managed_hooks,
                     managed_mcp_entry: item.managed_mcp_entry,
                     managed_permissions: Vec::new(),
+                    unenforced_rules: Vec::new(),
                     ownership: item.ownership,
                     sha256: item.sha256,
                     installed_path: item.installed_path,
@@ -714,6 +734,7 @@ fn rows_from_wire(wire: WireLockfile) -> Vec<Row> {
                 managed_hooks: item.managed_hooks,
                 managed_mcp_entry: item.managed_mcp_entry,
                 managed_permissions: item.managed_permissions,
+                unenforced_rules: item.unenforced_rules,
                 ownership: item.ownership,
                 sha256: item.sha256,
                 installed_path: item.installed_path,
@@ -759,6 +780,7 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
                 managed_hooks: target_entry.managed_hooks.clone(),
                 managed_mcp_entry: target_entry.managed_mcp_entry.clone(),
                 managed_permissions: target_entry.managed_permissions.clone(),
+                unenforced_rules: target_entry.unenforced_rules.clone(),
                 implementation: entry.implementation.clone(),
                 parameters: entry.parameters.clone(),
                 workflow: entry.workflow.clone(),
@@ -820,6 +842,8 @@ struct WireCapability {
     managed_mcp_entry: Option<ManagedMcpEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     managed_permissions: Vec<ManagedPermission>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    unenforced_rules: Vec<UnenforcedRule>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     implementation: Option<ImplementationConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -997,6 +1021,7 @@ mod tests {
                         managed_hooks: Vec::new(),
                         managed_mcp_entry: None,
                         managed_permissions: Vec::new(),
+                        unenforced_rules: Vec::new(),
                         ownership: TargetOwnership::Generated,
                         sha256: hash_bytes(b"content"),
                         installed_path: ".agents/skills/test".into(),

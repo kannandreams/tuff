@@ -11,6 +11,8 @@ Only Claude Code can enforce policies today. Tuff turns each rule into one of Cl
 If you install a policy for any other agent, such as Cursor or Codex, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
 
 This is on purpose. If Tuff installed the policy anyway, the agent would ignore the rules, but you would think they were in place.
+
+`--accept-unenforced` does not change this for an agent that enforces none of the policy's rules. See [Rules an agent does not enforce](#rules-an-agent-does-not-enforce).
 :::
 
 The recording below runs the [policy guardrails example](https://github.com/kannandreams/tuff-pack-examples/tree/main/projects/policy-guardrails). Claude Code is asked for a value in `.env` and reads the file. `tuff add` then installs a policy that denies reading `.env`, and the same question is denied.
@@ -171,6 +173,22 @@ How to read it:
 | `MECHANISM` | What Tuff writes for that agent, such as a Claude Code permission rule |
 
 The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor, Codex, and Open Agents enforce nothing yet.
+
+## Rules an agent does not enforce
+
+By default, `tuff add` refuses a policy when a selected agent does not enforce one of its rules, and installs nothing. `--accept-unenforced` installs the rules each agent enforces instead, and records the others in `tuff.lock`:
+
+```sh frame="terminal"
+tuff add ./policies/infra-guardrails --agent <agent> --accept-unenforced
+```
+
+- `tuff add` prints each rule it did not install, with the agent and the reason.
+- An agent that enforces none of the policy's rules still refuses the policy, with or without the flag.
+- `tuff check` prints every recorded rule on each run, and exits 0 for them.
+- `tuff check --strict` exits 1 while any rule is recorded, and `tuff check --json` lists them under `gaps`.
+- `tuff update` recomputes the record without the flag. A rule the agent enforces in a newer Tuff, or a rule removed from the policy, leaves the record.
+
+`--accept-unenforced` applies to `tuff add <path>`. Typed commands such as `tuff add skill` refuse it.
 
 ## Where policies do not go
 

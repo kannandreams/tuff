@@ -15,9 +15,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    PackBuildOptions, PackInitOptions, cmd_add, cmd_add_mcp, cmd_add_pack, cmd_agent_add,
-    cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear, cmd_check,
-    cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
+    PackBuildOptions, PackInitOptions, cmd_add, cmd_add_accepting, cmd_add_mcp, cmd_add_pack,
+    cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear,
+    cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
     cmd_hooks_check_portability, cmd_hooks_matrix, cmd_hooks_spec, cmd_init, cmd_list,
     cmd_lock_migrate, cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated,
     cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
@@ -65,6 +65,11 @@ enum Command {
         /// Install to global scope.
         #[arg(short = 'g', long = "global")]
         global: bool,
+
+        /// For a policy: install the rules each agent enforces and record the
+        /// rest in tuff.lock, instead of refusing the policy.
+        #[arg(long = "accept-unenforced")]
+        accept_unenforced: bool,
 
         #[command(subcommand)]
         kind: Option<AddCommand>,
@@ -202,6 +207,10 @@ enum Command {
         /// Validate global scope only.
         #[arg(long = "global")]
         global: bool,
+
+        /// Also fail while a policy rule is recorded as not enforced for an agent.
+        #[arg(long = "strict")]
+        strict: bool,
     },
 
     /// Delete Tuff-generated capability files.
@@ -597,7 +606,13 @@ fn reject_parent_add_options(
     name: Option<&String>,
     agent: &[String],
     global: bool,
+    accept_unenforced: bool,
 ) -> Result<()> {
+    if accept_unenforced {
+        return Err(TuffError::usage(
+            "--accept-unenforced applies to 'tuff add <path>' of a policy, not to typed 'tuff add' commands",
+        ));
+    }
     if source.is_some() || name.is_some() || !agent.is_empty() || global {
         return Err(TuffError::usage(
             "for typed 'tuff add' commands, put --agent and --global after the capability source",
@@ -739,9 +754,10 @@ fn run() -> Result<()> {
             name,
             agent,
             global,
+            accept_unenforced,
             kind,
         }) => match kind {
-            None => cmd_add(
+            None => cmd_add_accepting(
                 &repo_root,
                 source.as_deref(),
                 name.as_deref(),
@@ -749,6 +765,7 @@ fn run() -> Result<()> {
                 &agent,
                 global,
                 None,
+                accept_unenforced,
             ),
             Some(AddCommand::Skill {
                 source: typed_source,
@@ -756,7 +773,13 @@ fn run() -> Result<()> {
                 agent: typed_agent,
                 global: typed_global,
             }) => {
-                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                reject_parent_add_options(
+                    source.as_ref(),
+                    name.as_ref(),
+                    &agent,
+                    global,
+                    accept_unenforced,
+                )?;
                 cmd_add(
                     &repo_root,
                     Some(typed_source.as_path()),
@@ -773,7 +796,13 @@ fn run() -> Result<()> {
                 agent: typed_agent,
                 global: typed_global,
             }) => {
-                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                reject_parent_add_options(
+                    source.as_ref(),
+                    name.as_ref(),
+                    &agent,
+                    global,
+                    accept_unenforced,
+                )?;
                 cmd_add(
                     &repo_root,
                     Some(typed_source.as_path()),
@@ -791,7 +820,13 @@ fn run() -> Result<()> {
                 agent: typed_agent,
                 global: typed_global,
             }) => {
-                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                reject_parent_add_options(
+                    source.as_ref(),
+                    name.as_ref(),
+                    &agent,
+                    global,
+                    accept_unenforced,
+                )?;
                 cmd_add(
                     &repo_root,
                     Some(typed_source.as_path()),
@@ -808,7 +843,13 @@ fn run() -> Result<()> {
                 agent: typed_agent,
                 global: typed_global,
             }) => {
-                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                reject_parent_add_options(
+                    source.as_ref(),
+                    name.as_ref(),
+                    &agent,
+                    global,
+                    accept_unenforced,
+                )?;
                 cmd_add(
                     &repo_root,
                     Some(typed_source.as_path()),
@@ -824,7 +865,13 @@ fn run() -> Result<()> {
                 agent: typed_agent,
                 reference: typed_reference,
             }) => {
-                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                reject_parent_add_options(
+                    source.as_ref(),
+                    name.as_ref(),
+                    &agent,
+                    global,
+                    accept_unenforced,
+                )?;
                 cmd_add_pack(
                     &repo_root,
                     &typed_source,
@@ -839,7 +886,13 @@ fn run() -> Result<()> {
                 yes,
                 registry,
             }) => {
-                reject_parent_add_options(source.as_ref(), name.as_ref(), &agent, global)?;
+                reject_parent_add_options(
+                    source.as_ref(),
+                    name.as_ref(),
+                    &agent,
+                    global,
+                    accept_unenforced,
+                )?;
                 cmd_add_mcp(
                     &repo_root,
                     &sources,
@@ -975,7 +1028,8 @@ fn run() -> Result<()> {
             json,
             ignore_failures,
             global,
-        }) => cmd_check(&repo_root, json, ignore_failures, global),
+            strict,
+        }) => cmd_check(&repo_root, json, ignore_failures, global, strict),
         Some(Command::Delete {
             id,
             scope,

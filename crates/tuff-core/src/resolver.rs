@@ -159,6 +159,7 @@ mod tests {
                             managed_hooks: Vec::new(),
                             managed_mcp_entry: None,
                             managed_permissions: Vec::new(),
+                            unenforced_rules: Vec::new(),
                             ownership: lockfile::TargetOwnership::Generated,
                             sha256: String::new(),
                             installed_path: String::new(),

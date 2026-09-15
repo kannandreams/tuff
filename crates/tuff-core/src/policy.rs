@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use tuff_hooks_spec::CoverageLevel;
 
 use crate::error::{Result, TuffError};
-use crate::lockfile::ManagedPermission;
+use crate::lockfile::{ManagedPermission, UnenforcedRule};
 
 /// The `[policy]` section of a `type = "policy"` manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -398,6 +398,33 @@ pub fn verdicts<'a>(
             Ok(RuleVerdict { index, rule, entry })
         })
         .collect()
+}
+
+/// Split a policy's rules by whether a harness enforces them: the zero-based
+/// positions of the rules its matrix covers `full` or `partial`, and a
+/// record of each rule it covers `unsupported`, for the lockfile when the
+/// policy is installed with `--accept-unenforced` (RFC-107 D6).
+pub fn enforcement(
+    policy: &PolicyConfig,
+    matrix: &[PolicyCoverageEntry],
+) -> Result<(Vec<usize>, Vec<UnenforcedRule>)> {
+    let mut enforced = Vec::new();
+    let mut unenforced = Vec::new();
+    for verdict in verdicts(policy, matrix)? {
+        if verdict.entry.coverage == CoverageLevel::Unsupported {
+            unenforced.push(UnenforcedRule {
+                rule: verdict.index + 1,
+                description: verdict.rule.describe(),
+                reason: verdict
+                    .entry
+                    .caveat
+                    .unwrap_or_else(|| "this agent does not enforce this kind of rule".to_string()),
+            });
+        } else {
+            enforced.push(verdict.index);
+        }
+    }
+    Ok((enforced, unenforced))
 }
 
 /// Add and remove native permission rules in a harness settings file, given
@@ -839,6 +866,42 @@ mcp = "github:delete_*"
             matrix
                 .iter()
                 .all(|entry| entry.coverage == CoverageLevel::Unsupported && entry.caveat.is_some())
+        );
+    }
+
+    #[test]
+    fn enforcement_separates_the_rules_a_harness_enforces_from_the_ones_it_does_not() {
+        let policy = parse(INFRA);
+        let mut matrix = Vec::new();
+        for effect in PolicyEffect::ALL {
+            for subject in [PolicySubjectKind::Command, PolicySubjectKind::Mcp] {
+                matrix.push(PolicyCoverageEntry {
+                    effect,
+                    subject,
+                    coverage: CoverageLevel::Partial,
+                    mechanism: Some("native".to_string()),
+                    caveat: None,
+                    source: None,
+                });
+            }
+        }
+        let (enforced, unenforced) = enforcement(&policy, &matrix).unwrap();
+        assert_eq!(enforced, vec![0, 2, 3]);
+        assert_eq!(
+            unenforced,
+            vec![UnenforcedRule {
+                rule: 2,
+                description: "deny read \".env\", \"secrets/**\"".to_string(),
+                reason: "this agent declares nothing for this kind of rule".to_string(),
+            }]
+        );
+
+        let (enforced, unenforced) = enforcement(&policy, &not_implemented_matrix()).unwrap();
+        assert!(enforced.is_empty());
+        assert_eq!(unenforced.len(), 4);
+        assert_eq!(
+            unenforced[0].reason,
+            "Tuff does not compile policy rules for this agent yet"
         );
     }
 

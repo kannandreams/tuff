@@ -12,7 +12,10 @@ tuff check                    # check all capabilities
 tuff check --global           # check global capabilities only
 tuff check --json             # machine-readable JSON output
 tuff check --ignore-failures  # report failures but exit 0
+tuff check --strict           # also fail on policy rules recorded as not enforced
 ```
+
+A policy installed with `tuff add --accept-unenforced` records each rule an agent does not enforce. `tuff check` prints those rules on every run and exits 0 for them. `tuff check --strict` exits 1 while any are recorded. See [Rules an agent does not enforce](/primitives/policies/#rules-an-agent-does-not-enforce).
 
 Example output:
 
