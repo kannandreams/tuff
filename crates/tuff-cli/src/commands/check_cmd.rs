@@ -48,10 +48,9 @@ pub fn cmd_check(
             println!(
                 // The type column matches the rows above, which print the
                 // capability type unpadded.
-                "{} {:<24} {} {:<12} rule {} ({}) is not enforced: {}",
+                "{} {:<24} policy {:<12} rule {} ({}) is not enforced: {}",
                 paint("!", "33"),
                 gap.id,
-                "policy",
                 gap.target,
                 gap.rule,
                 gap.description,
