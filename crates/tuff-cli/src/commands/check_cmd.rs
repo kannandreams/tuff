@@ -46,7 +46,9 @@ pub fn cmd_check(
         // enforce them. Reported on every run so the gap stays visible.
         for gap in &outcome.gaps {
             println!(
-                "{} {:<24} {:<10} {:<12} rule {} ({}) is not enforced: {}",
+                // The type column matches the rows above, which print the
+                // capability type unpadded.
+                "{} {:<24} {} {:<12} rule {} ({}) is not enforced: {}",
                 paint("!", "33"),
                 gap.id,
                 "policy",

@@ -107,10 +107,17 @@ fn check_lockfile(
 
             for permission in &target_entry.managed_permissions {
                 if crate::policy::managed_permission_status(scope_root, permission) != "clean" {
-                    let location = format!(
-                        "{}#permissions.{}",
-                        permission.settings_path, permission.list
-                    );
+                    // A rules file holds nothing but compiled rules, so the
+                    // file itself is the location; a JSON settings file
+                    // names the list.
+                    let location = if crate::policy::is_rules_file(&permission.settings_path) {
+                        permission.settings_path.clone()
+                    } else {
+                        format!(
+                            "{}#permissions.{}",
+                            permission.settings_path, permission.list
+                        )
+                    };
                     if !failing_files.contains(&location) {
                         failing_files.push(location);
                     }

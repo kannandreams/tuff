@@ -5,7 +5,11 @@ use tuff_hooks_spec::{
 };
 
 use tuff_core::adapter::{AgentAdapter, HookSettingsShape};
+use tuff_core::error::Result;
 use tuff_core::manifest::CapabilityType;
+use tuff_core::policy::{
+    PolicyCoverageEntry, PolicyEffect, PolicyRule, PolicySubject, PolicySubjectKind,
+};
 
 pub const ID: &str = "codex";
 pub const DISPLAY_NAME: &str = "Codex";
@@ -15,11 +19,109 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::Hook,
     CapabilityType::Workflow,
     CapabilityType::McpServer,
+    CapabilityType::Policy,
 ];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["Codex"];
 
 pub const HOOK_SETTINGS_RELPATH: &str = ".agents/hook.json";
+
+/// The rules file Tuff owns for compiled policy command rules. Codex loads
+/// every `.rules` file under `<repo>/.codex/rules/` in a trusted project.
+pub const RULES_RELPATH: &str = ".codex/rules/tuff.rules";
+const CODEX_RULES_DOCS: &str = "https://developers.openai.com/codex/rules";
+
+/// How Codex enforces each kind of policy rule, from its rules documentation
+/// and checked against Codex CLI 0.154.0 on 2026-09-15. Command rules
+/// compile to `prefix_rule` entries; Codex rules match commands only.
+pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
+    const COMMAND: &str = "matches the command's leading words, and each command of a simple chain joined by &&, ||, ; or |; a script with redirection, $(...), a variable assignment, a wildcard, or control flow is matched as one command and not caught, and a program run by absolute path such as /usr/bin/git may not be matched; Codex loads project rules only in a trusted project and labels rules experimental";
+    const FILES: &str = "Codex rules match commands, not file paths, and Tuff does not compile Codex's sandbox permission profiles";
+    const MCP: &str = "Tuff does not compile MCP tool rules for Codex yet";
+    let row =
+        |effect, subject, coverage, mechanism: Option<&str>, caveat: String| PolicyCoverageEntry {
+            effect,
+            subject,
+            coverage,
+            mechanism: mechanism.map(str::to_string),
+            caveat: Some(caveat),
+            source: Some(CODEX_RULES_DOCS.to_string()),
+        };
+    use PolicyEffect::{Ask, Deny};
+    use PolicySubjectKind::{Command, Edit, Mcp, Read};
+    use tuff_hooks_spec::CoverageLevel::{Partial, Unsupported};
+    vec![
+        row(
+            Deny,
+            Command,
+            Partial,
+            Some(".codex/rules/tuff.rules prefix_rule(decision = \"forbidden\")"),
+            COMMAND.to_string(),
+        ),
+        row(Deny, Read, Unsupported, None, FILES.to_string()),
+        row(Deny, Edit, Unsupported, None, FILES.to_string()),
+        row(Deny, Mcp, Unsupported, None, MCP.to_string()),
+        row(
+            Ask,
+            Command,
+            Partial,
+            Some(".codex/rules/tuff.rules prefix_rule(decision = \"prompt\")"),
+            format!(
+                "{COMMAND}; where Codex never asks for approval, as in codex exec by default, the command is refused"
+            ),
+        ),
+        row(Ask, Read, Unsupported, None, FILES.to_string()),
+        row(Ask, Edit, Unsupported, None, FILES.to_string()),
+        row(Ask, Mcp, Unsupported, None, MCP.to_string()),
+    ]
+}
+
+/// The Codex rules file entry one policy rule compiles to, or `None` for a
+/// kind of rule Codex rules cannot express.
+///
+/// `deny` becomes `decision = "forbidden"` and `ask` becomes
+/// `decision = "prompt"`. The rule's `reason`, when given, becomes the
+/// `justification` Codex shows when it refuses the command.
+pub fn permission_rules(rule: &PolicyRule) -> Result<Option<Vec<String>>> {
+    let PolicySubject::Command(arguments) = rule.subject()? else {
+        return Ok(None);
+    };
+    let decision = match rule.effect()? {
+        PolicyEffect::Deny => "forbidden",
+        PolicyEffect::Ask => "prompt",
+    };
+    let pattern = arguments
+        .iter()
+        .map(|argument| starlark_string(argument))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let justification = rule
+        .reason
+        .as_deref()
+        .map(|reason| format!(", justification = {}", starlark_string(reason)))
+        .unwrap_or_default();
+    Ok(Some(vec![format!(
+        "prefix_rule(pattern = [{pattern}], decision = \"{decision}\"{justification})"
+    )]))
+}
+
+/// A double-quoted Starlark string literal. A policy has already refused
+/// whitespace in command arguments, so control characters can only come
+/// from a reason, where a space keeps the rule on one line.
+fn starlark_string(text: &str) -> String {
+    let mut quoted = String::with_capacity(text.len() + 2);
+    quoted.push('"');
+    for character in text.chars() {
+        match character {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            character if character.is_control() => quoted.push(' '),
+            character => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
 
 pub struct Codex;
 
@@ -148,6 +250,18 @@ impl AgentAdapter for Codex {
         HookSettingsShape::Grouped
     }
 
+    fn policy_compatibility(&self) -> Vec<PolicyCoverageEntry> {
+        policy_matrix()
+    }
+
+    fn permissions_settings_relpath(&self) -> Option<&'static str> {
+        Some(RULES_RELPATH)
+    }
+
+    fn native_permission_rules(&self, rule: &PolicyRule) -> Result<Option<Vec<String>>> {
+        permission_rules(rule)
+    }
+
     fn detect(&self, repo_root: &Path) -> bool {
         repo_root.join(".agents").exists() || repo_root.join("AGENTS.md").exists()
     }
@@ -194,6 +308,72 @@ mod tests {
     }
 
     #[test]
+    fn command_rules_compile_to_prefix_rules_and_other_subjects_to_nothing() {
+        let rule = |effect: &str| PolicyRule {
+            effect: effect.to_string(),
+            command: None,
+            read: None,
+            edit: None,
+            mcp: None,
+            reason: None,
+        };
+        let words = |words: &[&str]| Some(words.iter().map(|word| word.to_string()).collect());
+        let rules = [
+            PolicyRule {
+                command: words(&["git", "push", "--force"]),
+                reason: Some("Force pushes rewrite \"shared\" history.".to_string()),
+                ..rule("deny")
+            },
+            PolicyRule {
+                command: words(&["terraform", "apply"]),
+                ..rule("ask")
+            },
+            PolicyRule {
+                read: words(&[".env"]),
+                ..rule("deny")
+            },
+            PolicyRule {
+                mcp: Some("github:delete_*".to_string()),
+                ..rule("deny")
+            },
+        ];
+        let compiled: Vec<_> = rules
+            .iter()
+            .map(|rule| permission_rules(rule).unwrap())
+            .collect();
+        assert_eq!(
+            compiled,
+            vec![
+                Some(vec![
+                    r#"prefix_rule(pattern = ["git", "push", "--force"], decision = "forbidden", justification = "Force pushes rewrite \"shared\" history.")"#
+                        .to_string()
+                ]),
+                Some(vec![
+                    r#"prefix_rule(pattern = ["terraform", "apply"], decision = "prompt")"#
+                        .to_string()
+                ]),
+                None,
+                None,
+            ]
+        );
+    }
+
+    #[test]
+    fn the_policy_matrix_enforces_command_rules_only() {
+        let matrix = Codex.policy_compatibility();
+        assert_eq!(matrix.len(), 8);
+        for entry in &matrix {
+            let expected = if entry.subject == PolicySubjectKind::Command {
+                tuff_hooks_spec::CoverageLevel::Partial
+            } else {
+                tuff_hooks_spec::CoverageLevel::Unsupported
+            };
+            assert_eq!(entry.coverage, expected, "{entry:?}");
+            assert!(entry.caveat.is_some(), "{entry:?}");
+        }
+    }
+
+    #[test]
     fn id_and_display_name_are_not_empty() {
         assert!(!ID.is_empty());
         assert!(!DISPLAY_NAME.is_empty());
@@ -201,7 +381,7 @@ mod tests {
 
     #[test]
     fn supported_types_covers_all_capability_types() {
-        assert_eq!(SUPPORTED_TYPES.len(), 5);
+        assert_eq!(SUPPORTED_TYPES.len(), 6);
     }
 
     #[test]
