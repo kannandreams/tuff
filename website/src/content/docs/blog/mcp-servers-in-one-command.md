@@ -1,17 +1,17 @@
 ---
 title: Managing MCP server configuration across coding agents
-description: Declare an MCP server once and let Tuff write the config for Claude Code, Cursor, and Codex, then check that it starts.
+description: Declare an MCP server once, and Tuff writes the config for Claude Code, Cursor, and Codex and checks that the server starts.
 date: 2026-09-02
 authors: kannan
 tags: [mcp, tutorial]
-excerpt: Declare an external MCP server once, let Tuff write the config entry every harness expects, then prove the server actually starts. A ten-minute walkthrough you can run as you read.
+excerpt: Declare an external MCP server once, and Tuff writes the config entry each harness reads and checks that the server starts. The steps run in a new directory in about ten minutes.
 ---
 
-Every coding harness reads MCP servers from its own file: Claude Code from `.mcp.json`, Cursor from `.cursor/mcp.json`, Codex and OpenCode from `.agents/mcp.json`. Same server, three dialects, three hand edits per machine, and a typo in any of them fails silently inside the harness. Tuff 0.1.8 makes the server a capability, so the declaration lives in one place and the config entries are generated output.
+Each coding harness reads MCP servers from its own file: Claude Code from `.mcp.json`, Cursor from `.cursor/mcp.json`, and Codex and OpenCode from `.agents/mcp.json`. The same server needs one hand edit per file, and the harness does not report a typo in any of them. Since Tuff 0.1.8 an MCP server is a capability: the declaration lives in one place, and Tuff generates the config entries.
 
-This walkthrough uses the `everything` server from the built-in catalog. It is the reference server the MCP project publishes for exercising the protocol, it needs no API key, and it makes a good first target for `tuff mcp doctor`. You need `tuff` and Node's `npx` on your `PATH`. Everything below is real output from a fresh directory.
+This walkthrough uses the `everything` server from the built-in catalog. It is the reference server the MCP project publishes for exercising the protocol, and it needs no API key. You need `tuff` and Node's `npx` on your `PATH`.
 
-## 1. Install it into every harness at once
+## 1. Install the server for three harnesses
 
 ```sh frame="terminal"
 mkdir mcp-demo && cd mcp-demo
@@ -29,7 +29,7 @@ registered MCP server everything (open-agents) -> .agents/mcp.json
 installed everything from the built-in catalog (catalog 1.0.0)
 ```
 
-Two things were written per harness. The config entry is what the harness reads:
+Tuff writes two files per harness. The config entry is the file the harness reads:
 
 ```json title=".mcp.json"
 {
@@ -42,7 +42,7 @@ Two things were written per harness. The config entry is what the harness reads:
 }
 ```
 
-The tracked record is the canonical declaration Tuff hashes, so `check` and `diff` treat the server exactly like a skill:
+The tracked record is the declaration Tuff hashes. `tuff check` and `tuff diff` use it in the same way as for a skill:
 
 ```toml title=".claude/mcp-servers/everything/server.toml"
 id = "everything"
@@ -59,9 +59,9 @@ args = ["-y", "@modelcontextprotocol/server-everything"]
 tools_summary = "echo, add, longRunningOperation, sampleLLM, getTinyImage"
 ```
 
-The catalog stores no server code. Each entry is a launch declaration verified against the vendor's own README; the server itself is fetched by `npx`, `uvx`, or `docker` when the harness starts it.
+Each catalog entry is a launch declaration checked against the vendor's README. The catalog holds no server code: `npx`, `uvx`, or `docker` fetches the server when the harness starts it.
 
-## 2. See it in the lifecycle
+## 2. List the installed server
 
 ```sh frame="terminal"
 tuff list
@@ -74,11 +74,11 @@ tuff list
 │ everything │ mcp-server │ 1.0.0   │ project │ open-agents │ ✓ clean │ .agents/mcp-servers/everything │
 ```
 
-One row per harness, because each has its own copy of the entry to keep clean.
+`tuff list` shows one row per harness, because each harness has its own copy of the entry.
 
-## 3. Prove the server starts
+## 3. Check that the server starts
 
-A well-formed entry in the right file is not the same as a server that runs. `tuff mcp doctor` spawns each installed server, completes the MCP `initialize` handshake, and asks it for its tool list:
+`tuff mcp doctor` starts each installed server, completes the MCP `initialize` handshake, and requests its tool list:
 
 ```sh frame="terminal"
 tuff mcp doctor
@@ -89,11 +89,11 @@ tuff mcp doctor
 │ everything │ stdio     │ claude, cursor, open-agents │ ✓ ok   │ 13 tool(s) │
 ```
 
-Thirteen real tools, reported by the real process, in about two seconds. One row rather than three, because the process is the same whichever harness launches it. Doctor exits non-zero when any server is unhealthy, so it sits next to `tuff check` in CI.
+The server reported 13 tools, and the check took about two seconds. Doctor prints one row per server, because every harness launches the same process. It exits non-zero when a server is unhealthy, so it can run in CI next to `tuff check`.
 
-## 4. Catch a hand edit
+## 4. Detect a hand edit
 
-Open `.mcp.json` and append `"--verbose"` to the args, the kind of tweak that happens during debugging and never gets reverted. Tuff notices, because every managed entry carries a baseline hash:
+Add `"--verbose"` to the args in `.mcp.json`. Every managed entry has a baseline hash, so `tuff check` reports the change:
 
 ```sh frame="terminal"
 tuff check
@@ -105,7 +105,7 @@ tuff check
 ✓ everything               mcp-server open-agents  ok
 ```
 
-The failing row names the file and the entry. Restoring the canonical entry is an update, and a plain update refuses to throw away an edit it cannot see the intent of:
+The failing row names the file and the entry. `tuff update` restores the entry, and without `--force` it refuses to overwrite a local change:
 
 ```sh frame="terminal"
 tuff update everything -a claude
@@ -125,11 +125,11 @@ registered MCP server everything (claude) -> .mcp.json
 ✓ everything               mcp-server claude       ok
 ```
 
-Servers you added by hand next to Tuff's are never inspected or touched.
+`tuff check` and `tuff update` leave servers added by hand next to Tuff's unchanged.
 
-## 5. Secrets stay out of the repo
+## 5. Servers that need a token
 
-Most useful servers need a token. Tuff never stores one. A manifest can only say which environment variable holds it, and the catalog entry for GitHub's server says exactly that:
+A manifest names the environment variable that holds a token, and Tuff does not store the token. The catalog entry for GitHub's server uses `GITHUB_PERSONAL_ACCESS_TOKEN`:
 
 ```sh frame="terminal"
 tuff add mcp github -a claude
@@ -144,23 +144,23 @@ note: 'github' reads a variable from the environment; export GITHUB_PERSONAL_ACC
 │ github     │ stdio     │ claude         │ ? missing env │ export GITHUB_PERSONAL_ACCESS_TOKEN │
 ```
 
-The GitHub server was never spawned; doctor checked the environment first and told you what to export. At a real terminal, the install step also asks whether your token lives under a different variable name, so a catalog default never forces you to rename your own environment.
+Doctor checks the environment before starting a server, so the GitHub server was not started. In an interactive terminal, `tuff add` also asks whether the token is stored under a different variable name.
 
-## 6. Clean up
+## 6. Remove the servers
 
 ```sh frame="terminal"
 tuff delete everything -a claude -a cursor -a open-agents
 tuff delete github -a claude
 ```
 
-The config entries and tracked records go together, and the `mcpServers` object is left in place for whatever you add next.
+`tuff delete` removes the config entries and the tracked records, and leaves the `mcpServers` object in each file.
 
-## What the agent sees
+## The tuff-capabilities skill
 
-Alongside all of this, Tuff regenerates a small `tuff-capabilities` skill in each harness listing every installed server with its transport and tool summary. The agent reads that on session start, so it knows the `everything` tools are already loaded and can call them directly rather than rediscovering them.
+Tuff regenerates a `tuff-capabilities` skill in each harness. It lists every installed server with its transport and tool summary, and the agent reads it at the start of a session.
 
-## Where to go next
+## Further reading
 
 - The [MCP Servers reference](/primitives/mcp-servers/) covers the manifest, the full catalog, and the safety rules.
-- Point `tuff add mcp` at a directory or a git URL to declare a server the catalog does not have.
-- If you ship your own server, that is an [MCP-native tool](/primitives/tools/): Tuff copies the code and registers it, rather than pointing at a package.
+- `tuff add mcp` also accepts a directory or a git URL for a server the catalog does not include.
+- A server you ship yourself is an [MCP-native tool](/primitives/tools/): Tuff copies its code and registers it.
