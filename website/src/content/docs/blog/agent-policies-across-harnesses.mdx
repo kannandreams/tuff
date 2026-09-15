@@ -1,27 +1,25 @@
 ---
 title: Managing centralised guardrail policies for coding agents
-description: Why guardrails for coding agents belong in one reviewed file, how each harness enforces them differently, and how Tuff compiles, tracks, and checks them.
+description: How coding harnesses enforce permission rules, and how Tuff compiles one policy into those rules, refuses harnesses that cannot enforce it, and detects drift.
 date: 2026-09-14
 authors: kannan
 tags: [policy, security]
-excerpt: Every coding agent has its own permission system, and none of them agree. Here is why guardrails belong in one reviewed policy, how Tuff turns that policy into each harness's native rules, and how to keep those rules in place after day one.
+excerpt: Each coding harness has its own permission system. A Tuff policy declares deny and ask rules once, compiles them into each harness's native rules, and fails tuff check when a compiled rule is removed.
 ---
 
-A coding agent in your repository can run shell commands, read any file it can reach, and call every tool its MCP servers expose. Most of the time that is the point. But every team has a short list of things an agent must never do on its own: force-push to a shared branch, read `.env`, run `terraform apply` without a person looking, or call an MCP tool that deletes things.
+A coding agent in a repository can run shell commands, read files, and call the tools its MCP servers expose. Teams usually have a short list of actions an agent must not take on its own, such as force-pushing to a shared branch, reading `.env`, running `terraform apply` without approval, or calling an MCP tool that deletes data.
 
-Writing that list down is easy. Getting every agent the team uses to actually obey it, and to keep obeying it next month, is the hard part. This post covers why, and how Tuff's policy capability handles it.
+## Where teams put guardrails today
 
-## The problem: guardrails live in the wrong places
+### Instruction files
 
-### Instructions are advice, not enforcement
+Teams often write these rules in `CLAUDE.md` or `AGENTS.md`, for example "never force push". An instruction file is part of the prompt. The model reads the rule and decides whether to follow it, and nothing outside the model checks the tool call.
 
-The first place most teams put a rule is `CLAUDE.md` or `AGENTS.md`: "never force push". The model reads that and usually follows it. Usually is the problem. An instruction file is part of the prompt. It competes with the task, the context window, and whatever the agent decides is the fastest route to a green build. Nothing outside the model checks it.
+A harness permission rule is checked by the harness: each tool call is matched against the rule before it runs.
 
-A guardrail has to sit outside the model, in the harness, where a tool call is matched against a rule before it runs.
+### Harness permission settings
 
-### Every harness enforces rules in its own way
-
-Every major harness has a way to do that, and no two use the same one:
+Each harness has its own permission settings:
 
 <div class="not-content tuff-adapter" role="figure" aria-label="The same guardrail written four ways, one per harness">
   <div class="tuff-adapter-diagram">
@@ -42,35 +40,33 @@ Every major harness has a way to do that, and no two use the same one:
   </div>
 </div>
 
-The differences go deeper than file names:
+The settings differ in four ways:
 
-- **Different vocabularies.** Some harnesses match rules per tool and per command pattern. Others give you a coarse posture, such as an approval mode and a sandbox level, rather than a list of forbidden commands.
-- **Different effects.** One harness can deny, ask, or allow. Another can only allow or deny. A rule that means "ask a person first" may have nowhere to go.
-- **Different matching.** A command rule in one harness matches a prefix of the words. In another it is a glob. Paths are relative in one place and absolute in the next.
-- **Different homes.** Some rules live in the repository and are reviewed like code. Others live in a user's home directory, where nobody else can see them.
+- **Vocabulary.** Some harnesses match rules per tool and per command pattern. Others set an approval mode and a sandbox level instead of listing commands.
+- **Effects.** Some harnesses support deny, ask, and allow. Others support only allow and deny, so a rule that asks a person first has no equivalent.
+- **Matching.** A command rule matches a prefix of the words in one harness and a glob in another. Paths are relative in some settings files and absolute in others.
+- **Location.** Some settings files live in the repository and are reviewed with the code. Others live in the user's home directory.
 
-A team running two or three agents ends up with the same intent written several times, in several dialects, by several people. Nobody can say whether the copies agree, and when someone edits one of them while debugging, nobody finds out.
+A team that uses several agents writes the same rule once per harness. The copies can diverge, and an edit to one copy made while debugging is not reported anywhere.
 
-### The failure you do not see
+### Rules that are not enforced
 
-The worst outcome is not a missing rule. It is a rule you *think* is in place. If "deny reading `.env`" is written for a harness that cannot enforce it, or its matching works differently than you expected, the agent reads the file and nobody is told. A guardrail that fails silently is worse than none, because people stop being careful.
+If a rule is written for a harness that cannot enforce it, or the harness matches it differently than the author expected, the agent performs the action and no error is shown.
 
-## Why one central policy helps
+## A central policy
 
-Treat guardrails the way you already treat dependencies: declare them once, in the repository, and generate what each tool needs.
+A central policy is declared once in the repository, and the harness settings are generated from it:
 
-- **One source of truth.** The intent is written once, reviewed in a pull request, and versioned with the code it protects.
-- **Shareable.** A platform or security team can publish a policy once, and every project installs the same version instead of copying rules by hand.
-- **Honest per harness.** Each harness is asked what it can really enforce, and the answer is stated rather than assumed.
-- **Checkable.** Because the generated rules are tracked, drift can be detected and fail CI like any other broken build.
+- **Single source.** The rules are reviewed in a pull request and versioned with the code.
+- **Shared.** A platform or security team publishes a policy, and each project installs the same version.
+- **Coverage per harness.** Each harness declares which rules it can enforce, and installation fails for a rule it cannot.
+- **Drift detection.** The generated rules are tracked, and a removed rule fails CI.
 
-That is what a Tuff policy is.
+## How Tuff manages a policy
 
-## How Tuff does it
+### The policy file
 
-### Write the policy once
-
-A policy is a capability like a skill or a hook, with its own `tuff.toml`:
+A policy is a capability, like a skill or a hook, with its own `tuff.toml`:
 
 ```toml title="policies/infra-guardrails/tuff.toml"
 id = "infra-guardrails"
@@ -96,11 +92,11 @@ effect = "deny"
 mcp = "github:delete_*"
 ```
 
-Each rule has an effect, `deny` or `ask`, and exactly one subject: a command, file paths the agent must not read, file paths it must not edit, or an MCP tool. The subjects are deliberately small. They are what harnesses can actually match, commands by prefix and paths by pattern, so a rule never says more than it can do. Mistakes are refused when the policy loads, rather than ignored: a rule with two subjects, a `*` inside a command, a path that climbs out with `..`, or a misspelt field.
+Each rule has an effect, `deny` or `ask`, and exactly one subject: a command, file paths the agent must not read, file paths it must not edit, or an MCP tool. Commands match by prefix and paths by pattern, which is what harness permission rules can match. Tuff refuses a policy when it loads if a rule has two subjects, a `*` inside a command, a path that climbs out with `..`, or a misspelt field.
 
-### Tuff compiles it into each harness's own rules
+### Compiling to Claude Code permission rules
 
-Tuff does not add a runtime or a proxy between the agent and your machine. It writes the harness's own permission rules, so the harness enforces them the same way it enforces rules you wrote yourself:
+`tuff add` writes the policy into the harness's own permission rules, and the harness enforces them in the same way as rules written by hand:
 
 <div class="not-content tuff-adapter" role="figure" aria-label="tuff add compiles one policy into Claude Code permission rules and refuses harnesses that cannot enforce it">
   <div class="tuff-adapter-diagram">
@@ -121,7 +117,7 @@ Tuff does not add a runtime or a proxy between the agent and your machine. It wr
   </div>
 </div>
 
-Here it is for Claude Code, run in a fresh project:
+Installing the policy for Claude Code in a new project:
 
 ```sh frame="terminal"
 tuff add ./policies/infra-guardrails -a claude
@@ -135,7 +131,7 @@ installed infra-guardrails (claude) -> .claude/policies/infra-guardrails/policy.
 compiled 5 permission rule(s) for infra-guardrails (claude) -> .claude/settings.json
 ```
 
-Four rules became five native rules, because the `read` rule lists two paths:
+The `read` rule lists two paths, so the four policy rules compile to five Claude Code rules:
 
 ```json title=".claude/settings.json"
 {
@@ -153,11 +149,67 @@ Four rules became five native rules, because the `read` rule lists two paths:
 }
 ```
 
-Notice what came first: a caveat for every rule that is only partly enforced. You learn at install time that `sh -c "git push --force"` would get past the command rule, not after an incident. The [policies reference](/primitives/policies/) has a short recording of this policy stopping Claude Code from reading `.env`.
+`tuff add` prints a caveat for each rule that is only partly enforced. The command rule, for example, does not match `sh -c "git push --force"`.
 
-### A harness that cannot enforce the policy is refused
+`tuff policy matrix` lists each harness, effect, and subject with a coverage of `full`, `partial`, or `unsupported`, the terms the [Hooks Specification](/spec/hooks/) uses, and the Claude Code rule each one compiles to:
 
-Tuff compiles policies for Claude Code today. Asking for another harness does not quietly write a file that harness ignores. It stops, installs nothing, and lists every rule that would not be enforced:
+```text frame="terminal" title="tuff policy matrix"
+$ tuff policy matrix
+┌─────────────┬────────┬─────────┬─────────────┬────────────────────────────────────────┐
+│ ADAPTER     │ EFFECT │ SUBJECT │ COVERAGE    │ MECHANISM                              │
+├─────────────┼────────┼─────────┼─────────────┼────────────────────────────────────────┤
+│ open-agents │ deny   │ command │ unsupported │                                        │
+│ open-agents │ deny   │ read    │ unsupported │                                        │
+│ open-agents │ deny   │ edit    │ unsupported │                                        │
+│ open-agents │ deny   │ mcp     │ unsupported │                                        │
+│ open-agents │ ask    │ command │ unsupported │                                        │
+│ open-agents │ ask    │ read    │ unsupported │                                        │
+│ open-agents │ ask    │ edit    │ unsupported │                                        │
+│ open-agents │ ask    │ mcp     │ unsupported │                                        │
+│ claude      │ deny   │ command │ partial     │ permissions.deny Bash(<command> *)     │
+│ claude      │ deny   │ read    │ partial     │ permissions.deny Read(<path>)          │
+│ claude      │ deny   │ edit    │ partial     │ permissions.deny Edit(<path>)          │
+│ claude      │ deny   │ mcp     │ full        │ permissions.deny mcp__<server>__<tool> │
+│ claude      │ ask    │ command │ partial     │ permissions.ask Bash(<command> *)      │
+│ claude      │ ask    │ read    │ partial     │ permissions.ask Read(<path>)           │
+│ claude      │ ask    │ edit    │ partial     │ permissions.ask Edit(<path>)           │
+│ claude      │ ask    │ mcp     │ full        │ permissions.ask mcp__<server>__<tool>  │
+│ codex       │ deny   │ command │ unsupported │                                        │
+│ codex       │ deny   │ read    │ unsupported │                                        │
+│ codex       │ deny   │ edit    │ unsupported │                                        │
+│ codex       │ deny   │ mcp     │ unsupported │                                        │
+│ codex       │ ask    │ command │ unsupported │                                        │
+│ codex       │ ask    │ read    │ unsupported │                                        │
+│ codex       │ ask    │ edit    │ unsupported │                                        │
+│ codex       │ ask    │ mcp     │ unsupported │                                        │
+│ cursor      │ deny   │ command │ unsupported │                                        │
+│ cursor      │ deny   │ read    │ unsupported │                                        │
+│ cursor      │ deny   │ edit    │ unsupported │                                        │
+│ cursor      │ deny   │ mcp     │ unsupported │                                        │
+│ cursor      │ ask    │ command │ unsupported │                                        │
+│ cursor      │ ask    │ read    │ unsupported │                                        │
+│ cursor      │ ask    │ edit    │ unsupported │                                        │
+│ cursor      │ ask    │ mcp     │ unsupported │                                        │
+└─────────────┴────────┴─────────┴─────────────┴────────────────────────────────────────┘
+
+Notes:
+- open-agents: Tuff does not compile policy rules for this agent yet
+- claude: matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched
+- claude: covers Claude's file tools and the shell commands Claude Code recognises, such as cat and sed, not a script or program that opens the file itself
+- codex: Tuff does not compile policy rules for this agent yet
+- cursor: Tuff does not compile policy rules for this agent yet
+```
+
+The recording below runs the [policy guardrails example](https://github.com/kannandreams/tuff-pack-examples/tree/main/projects/policy-guardrails). Claude Code is asked for a value in `.env` and reads the file. `tuff add` then installs a policy that denies reading `.env`, and the same request is denied.
+
+<video controls muted playsinline preload="none" poster="/video/policy-guardrails-demo.png" width="1600" height="800" style="width:100%;height:auto;border-radius:0.5rem;">
+  <source src="/video/policy-guardrails-demo.mp4" type="video/mp4" />
+  <a href="/video/policy-guardrails-demo.mp4">Download the recording</a> if your browser cannot play it inline.
+</video>
+
+### Harnesses that cannot enforce a policy
+
+Tuff 0.10 compiles policies only for Claude Code. For any other harness, `tuff add` installs nothing and lists each rule that harness would not enforce:
 
 ```sh frame="terminal"
 tuff add ./policies/infra-guardrails -a cursor
@@ -172,23 +224,21 @@ error: policy 'infra-guardrails' would not be enforced as written, so it was not
 hint: run 'tuff policy matrix' to see what each agent can enforce
 ```
 
-This is the silent gap from earlier, closed on purpose. `tuff policy matrix` prints every harness, effect, and subject with a coverage of `full`, `partial`, or `unsupported`, the same terms the [Hooks Specification](/spec/hooks/) uses, so the claim is written down and reviewable rather than implied.
+Every Cursor row in `tuff policy matrix` reads `unsupported`, so each of the four rules is listed.
 
-### A policy cannot allow anything
+### No allow rules
 
-There is no `allow` effect, and a rule that uses one is refused. A policy is meant to be shared: it can come from another team's repository or a published pack. A shared policy that could grant permissions could quietly widen what an agent may do in every project that installs it. A policy that can only take permissions away can, at worst, be too strict, and too strict is something you notice straight away. Permissions an agent *should* have stay in the harness's own settings, owned by the project.
+A policy has no `allow` effect, and Tuff refuses a rule that uses one. Policies can come from another team's repository or a published pack, and an allow rule in a shared policy would widen what an agent may do in every project that installs it. Permissions an agent needs go in the harness's own settings.
 
-## Keeping the guardrails in place
+## Keeping the rules in place
 
-Installing the rules is day one. Guardrails usually fail later, when someone deletes a line while debugging a denied command and forgets to put it back. Tuff treats the compiled rules as managed output.
+### Existing settings
 
-### Your settings file stays yours
+Tuff adds its rules next to the existing contents of `.claude/settings.json` and records each rule it wrote in `tuff.lock`. It leaves rules it did not add unchanged, skips a rule that is already present, and stops before writing if the settings file is not valid JSON.
 
-Tuff adds its rules next to whatever is already in `.claude/settings.json` and records each one it wrote in `tuff.lock`. It never rewrites rules it did not add, a rule already present is not added twice, and a settings file that is not valid JSON is left alone and stops the install before anything is written.
+### Detecting a removed rule
 
-### Drift fails the check
-
-Remove `Read(/**/.env)` from the settings file by hand, then run:
+Remove `Read(/**/.env)` from the settings file, then run:
 
 ```sh frame="terminal"
 tuff check
@@ -198,7 +248,7 @@ tuff check
 ✗ infra-guardrails         policy claude       modified (.claude/settings.json#permissions.deny)
 ```
 
-`tuff check` exits non-zero, so the same command that guards your skills and hooks in CI now guards your guardrails. The [CI guide](/cli/ci/#ci-with-github-actions) shows the GitHub Actions setup. To put the rules back:
+`tuff check` exits non-zero, so a CI job that runs it fails. The [CI guide](/cli/ci/#ci-with-github-actions) shows the GitHub Actions setup. To restore the rules:
 
 ```sh frame="terminal"
 tuff update infra-guardrails -a claude --force
@@ -210,9 +260,9 @@ compiled 5 permission rule(s) for infra-guardrails (claude) -> .claude/settings.
 ✓ infra-guardrails         policy claude       ok
 ```
 
-### Updates and removal touch only what the policy owns
+### Updating and deleting a policy
 
-When the platform team ships `infra-guardrails` 1.1.0 without a rule, `tuff update` removes the rule the new version dropped. `tuff delete` removes exactly the rules the policy added and nothing else. In a settings file that also held a hand-written `Bash(curl *)` deny rule and a `model` setting, deleting the policy leaves this:
+When a new version of a policy drops a rule, `tuff update` removes that rule from the settings file. `tuff delete` removes the rules the policy added and leaves the rest of the file. For a settings file that also had a hand-written `Bash(curl *)` deny rule and a `model` setting, deleting the policy leaves:
 
 ```json title=".claude/settings.json"
 {
@@ -225,22 +275,18 @@ When the platform team ships `infra-guardrails` 1.1.0 without a rule, `tuff upda
 }
 ```
 
-## Where policies sit among your defences
-
-A policy is one layer, and it helps to be clear about which one:
+## Policies, instructions, and the sandbox
 
 | Layer | Example | What it stops |
 |---|---|---|
-| Instructions | `CLAUDE.md`, `AGENTS.md` | Nothing on its own. The model reads it as advice. |
+| Instructions | `CLAUDE.md`, `AGENTS.md` | Nothing on its own. The model reads it as part of the prompt. |
 | Harness policy | A Tuff policy compiled to permission rules | The agent's own tool calls that match a rule, before they run. |
 | Sandbox | The harness's operating-system sandbox, containers | The action at the operating-system level, however it is written. |
 
-Harness permission rules match the tool call the agent makes, which is why Tuff reports command and file rules as `partial`. Claude Code's own documentation says these rules are not a security boundary. Policies are very good at stopping the accidents that actually happen, such as a force push or a stray read of `.env`. When something must never be reached, also turn on the harness's sandbox. Tuff cannot turn it on for you, because no file in the repository controls it.
+Harness permission rules match the tool call the agent makes, so Tuff reports command and file rules as `partial`. Claude Code's documentation states that these rules are not a security boundary. To block an action however it is written, also enable the harness's sandbox. Tuff cannot enable it, because no file in the repository controls the sandbox.
 
-## Try it
+## Further reading
 
-- The [policies reference](/primitives/policies/) covers the full format, the Claude Code mapping, and the coverage matrix.
-- The [policy guardrails example](https://github.com/kannandreams/tuff-pack-examples/tree/main/projects/policy-guardrails) is the project from the recording, ready to run.
-- Bundle a policy with the skills, hooks, and MCP servers it protects in a [capability pack](/concepts/packs/), so the rules travel with the integration.
-
-Compilers for more harnesses are on the way. Until one lands, Tuff will keep saying so plainly, rather than letting you believe a rule is in place when it is not.
+- The [policies reference](/primitives/policies/) covers the format, the Claude Code mapping, and the coverage matrix.
+- The [policy guardrails example](https://github.com/kannandreams/tuff-pack-examples/tree/main/projects/policy-guardrails) is the project from the recording.
+- A [capability pack](/concepts/packs/) bundles a policy with the skills, hooks, and MCP servers it applies to.
