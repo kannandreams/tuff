@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-16
+
 ### Added
 
 - **`tuff add --accept-unenforced` and `tuff check --strict` for policies.** By default `tuff add` still refuses a policy when a selected agent does not enforce one of its rules. With `--accept-unenforced`, each agent gets the rules it enforces, each rule it does not is printed with the reason and recorded in `tuff.lock`, and an agent that enforces none of the rules still refuses the policy. `tuff check` prints the recorded rules on every run, lists them under `gaps` in `--json`, and exits 0 for them; `tuff check --strict` exits 1 while any are recorded. `tuff update` recomputes the record without the flag. Lockfiles with no recorded rules are unchanged.
@@ -297,7 +299,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/kannandreams/tuff/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/kannandreams/tuff/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/kannandreams/tuff/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/kannandreams/tuff/compare/v0.9.0...v0.10.0
