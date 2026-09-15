@@ -35,7 +35,10 @@ Tuff writes two files per harness. The config entry is the file the harness read
 {
   "mcpServers": {
     "everything": {
-      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-everything"
+      ],
       "command": "npx"
     }
   }
@@ -53,7 +56,12 @@ description = "Reference server exercising the full MCP surface: tools, resource
 [server]
 transport = "stdio"
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-everything"]
+args = [
+    "-y",
+    "@modelcontextprotocol/server-everything",
+]
+
+[server.env]
 
 [server.metadata]
 tools_summary = "echo, add, longRunningOperation, sampleLLM, getTinyImage"
@@ -68,13 +76,18 @@ tuff list
 ```
 
 ```text
-│ ID         │ TYPE       │ VERSION │ SCOPE   │ AGENT       │ STATUS  │ PATH                           │
-│ everything │ mcp-server │ 1.0.0   │ project │ claude      │ ✓ clean │ .claude/mcp-servers/everything │
-│ everything │ mcp-server │ 1.0.0   │ project │ cursor      │ ✓ clean │ .cursor/mcp-servers/everything │
-│ everything │ mcp-server │ 1.0.0   │ project │ open-agents │ ✓ clean │ .agents/mcp-servers/everything │
+┌───────────────────┬────────────┬─────────┬─────────┬─────────────┬─────────┬──────────────────────────────────┐
+│ ID                │ TYPE       │ VERSION │ SCOPE   │ AGENT       │ STATUS  │ PATH                             │
+├───────────────────┼────────────┼─────────┼─────────┼─────────────┼─────────┼──────────────────────────────────┤
+│ everything        │ mcp-server │ 1.0.0   │ project │ claude      │ ✓ clean │ .claude/mcp-servers/everything   │
+│ everything        │ mcp-server │ 1.0.0   │ project │ cursor      │ ✓ clean │ .cursor/mcp-servers/everything   │
+│ everything        │ mcp-server │ 1.0.0   │ project │ open-agents │ ✓ clean │ .agents/mcp-servers/everything   │
+│ tuff-capabilities │ skill      │ 1.0.0   │ project │ open-agents │ ✓ clean │ .agents/skills/tuff-capabilities │
+│ tuff-cli-guide    │ skill      │ 0.1.0   │ project │ open-agents │ ✓ clean │ .agents/skills/tuff-cli-guide    │
+└───────────────────┴────────────┴─────────┴─────────┴─────────────┴─────────┴──────────────────────────────────┘
 ```
 
-`tuff list` shows one row per harness, because each harness has its own copy of the entry.
+`tuff list` shows one `everything` row per harness, because each harness has its own copy of the entry. `tuff init` installed the `tuff-cli-guide` skill, and the `tuff-capabilities` skill is described in the last section.
 
 ## 3. Check that the server starts
 
@@ -85,11 +98,14 @@ tuff mcp doctor
 ```
 
 ```text
+┌────────────┬───────────┬─────────────────────────────┬────────┬────────────┐
 │ ID         │ TRANSPORT │ HARNESSES                   │ STATUS │ DETAIL     │
+├────────────┼───────────┼─────────────────────────────┼────────┼────────────┤
 │ everything │ stdio     │ claude, cursor, open-agents │ ✓ ok   │ 13 tool(s) │
+└────────────┴───────────┴─────────────────────────────┴────────┴────────────┘
 ```
 
-The server reported 13 tools, and the check took about two seconds. Doctor prints one row per server, because every harness launches the same process. It exits non-zero when a server is unhealthy, so it can run in CI next to `tuff check`.
+The server reported 13 tools. With the npm package already cached, the check took about half a second. Doctor prints one row per server, because every harness launches the same process. It exits non-zero when a server is unhealthy, so it can run in CI next to `tuff check`.
 
 ## 4. Detect a hand edit
 
@@ -103,6 +119,8 @@ tuff check
 ✗ everything               mcp-server claude       modified (.mcp.json#everything)
 ✓ everything               mcp-server cursor       ok
 ✓ everything               mcp-server open-agents  ok
+✓ tuff-capabilities        skill open-agents  ok
+✓ tuff-cli-guide           skill open-agents  ok
 ```
 
 The failing row names the file and the entry. `tuff update` restores the entry, and without `--force` it refuses to overwrite a local change:
@@ -112,7 +130,8 @@ tuff update everything -a claude
 ```
 
 ```text
-error: 'everything' has local changes; run 'tuff diff everything' first or use --force to reload from the catalog
+error: 'everything' has local changes
+hint: run 'tuff diff everything' first, or use --force to reload from the catalog
 ```
 
 ```sh frame="terminal"
@@ -121,8 +140,13 @@ tuff check
 ```
 
 ```text
+installed everything (claude) -> .claude/mcp-servers/everything/server.toml
 registered MCP server everything (claude) -> .mcp.json
 ✓ everything               mcp-server claude       ok
+✓ everything               mcp-server cursor       ok
+✓ everything               mcp-server open-agents  ok
+✓ tuff-capabilities        skill open-agents  ok
+✓ tuff-cli-guide           skill open-agents  ok
 ```
 
 `tuff check` and `tuff update` leave servers added by hand next to Tuff's unchanged.
@@ -137,11 +161,16 @@ tuff mcp doctor
 ```
 
 ```text
+installed github (claude) -> .claude/mcp-servers/github/server.toml
+registered MCP server github (claude) -> .mcp.json
 note: 'github' reads a variable from the environment; export GITHUB_PERSONAL_ACCESS_TOKEN before starting the harness
-
-│ ID         │ TRANSPORT │ HARNESSES      │ STATUS        │ DETAIL                              │
-│ everything │ stdio     │ claude         │ ✓ ok          │ 13 tool(s)                          │
-│ github     │ stdio     │ claude         │ ? missing env │ export GITHUB_PERSONAL_ACCESS_TOKEN │
+installed github from the built-in catalog (catalog 1.0.0)
+┌────────────┬───────────┬─────────────────────────────┬───────────────┬─────────────────────────────────────┐
+│ ID         │ TRANSPORT │ HARNESSES                   │ STATUS        │ DETAIL                              │
+├────────────┼───────────┼─────────────────────────────┼───────────────┼─────────────────────────────────────┤
+│ everything │ stdio     │ claude, cursor, open-agents │ ✓ ok          │ 13 tool(s)                          │
+│ github     │ stdio     │ claude                      │ ? missing env │ export GITHUB_PERSONAL_ACCESS_TOKEN │
+└────────────┴───────────┴─────────────────────────────┴───────────────┴─────────────────────────────────────┘
 ```
 
 Doctor checks the environment before starting a server, so the GitHub server was not started. In an interactive terminal, `tuff add` also asks whether the token is stored under a different variable name.
@@ -153,11 +182,16 @@ tuff delete everything -a claude -a cursor -a open-agents
 tuff delete github -a claude
 ```
 
+```text
+deleted 'everything' from project scope
+deleted 'github' from project scope
+```
+
 `tuff delete` removes the config entries and the tracked records, and leaves the `mcpServers` object in each file.
 
 ## The tuff-capabilities skill
 
-Tuff regenerates a `tuff-capabilities` skill in each harness. It lists every installed server with its transport and tool summary, and the agent reads it at the start of a session.
+Tuff regenerates a `tuff-capabilities` skill in `.agents/skills/` when capabilities change. It lists every installed server with its description, transport, and tool summary, and tells the agent that the servers are already loaded by the harness.
 
 ## Further reading
 
