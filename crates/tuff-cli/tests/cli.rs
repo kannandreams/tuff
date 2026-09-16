@@ -4459,6 +4459,113 @@ fn a_policy_compiles_into_the_opencode_config_after_the_projects_own_rules() {
 }
 
 #[test]
+fn an_mcp_server_registers_under_mcp_in_the_opencode_config_beside_the_policy_rules() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(project.join(".opencode")).unwrap();
+    fs::write(
+        project.join(".opencode/opencode.json"),
+        r#"{"$schema": "https://opencode.ai/config.json", "permission": {"bash": {"*": "allow", "git push *": "allow"}}}"#,
+    )
+    .unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "opencode"])
+        .assert()
+        .success();
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--agent", "opencode"])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(&project)
+        .args(["add", "mcp", "everything", "github", "-a", "opencode"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "registered MCP server everything (opencode) -> .opencode/opencode.json",
+        ))
+        .stderr(predicate::str::contains("GITHUB_PERSONAL_ACCESS_TOKEN"));
+
+    let config_path = project.join(".opencode/opencode.json");
+    let raw = fs::read_to_string(&config_path).unwrap();
+    let config: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert!(config.get("mcpServers").is_none(), "{raw}");
+    let everything = &config["mcp"]["everything"];
+    assert_eq!(everything["type"], "local");
+    assert_eq!(
+        everything["command"],
+        serde_json::json!(["npx", "-y", "@modelcontextprotocol/server-everything"])
+    );
+    assert!(everything.get("args").is_none(), "{raw}");
+    assert_eq!(
+        config["mcp"]["github"]["environment"]["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+    );
+    // The policy rules keep their order, which OpenCode reads as precedence.
+    let position = |needle: &str| {
+        raw.find(needle)
+            .unwrap_or_else(|| panic!("{needle} in {raw}"))
+    };
+    assert!(
+        position("\"*\": \"allow\"") < position("\"git push *\""),
+        "{raw}"
+    );
+    assert!(
+        position("\"git push *\"") < position("\"terraform apply *\""),
+        "{raw}"
+    );
+    assert!(
+        position("\"terraform apply *\"") < position("\"git push --force *\""),
+        "{raw}"
+    );
+    assert!(
+        project
+            .join(".opencode/mcp-servers/everything/server.toml")
+            .is_file()
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    // A hand edit to the entry is drift, reported against the entry.
+    let mut edited = config.clone();
+    edited["mcp"]["everything"]["command"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::Value::String("--verbose".into()));
+    fs::write(&config_path, serde_json::to_string_pretty(&edited).unwrap()).unwrap();
+    tuff()
+        .current_dir(&project)
+        .arg("check")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            ".opencode/opencode.json#everything",
+        ));
+
+    // Delete takes out the entries and the emptied mcp object, and leaves
+    // the policy rules in place.
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "everything", "-a", "opencode", "--force"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "github", "-a", "opencode"])
+        .assert()
+        .success();
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+    assert!(after.get("mcp").is_none(), "{after}");
+    assert_eq!(after["permission"]["bash"]["git push --force *"], "deny");
+    tuff().current_dir(&project).arg("check").assert().success();
+}
+
+#[test]
 fn accepting_unenforced_rules_records_nothing_when_every_rule_is_enforced() {
     let temp = TempDir::new().unwrap();
     let project = claude_project_with_user_settings(temp.path());

@@ -233,10 +233,13 @@ For each selected harness Tuff writes two things:
 | `cursor` | `.cursor/mcp.json` | `${env:VAR}` | `.cursor/mcp-servers/<id>/server.toml` |
 | `open-agents` | `.agents/mcp.json` | `${VAR}` | `.agents/mcp-servers/<id>/server.toml` |
 | `codex` | `.agents/mcp.json` (shared with open-agents) | `${VAR}` | `.agents/mcp-servers/<id>/server.toml` |
+| `opencode` | `mcp` in `.opencode/opencode.json` | `{env:VAR}` | `.opencode/mcp-servers/<id>/server.toml` |
 
 The config entry is what the harness reads. `server.toml` is the canonical
 declaration Tuff hashes, so `tuff check` and `tuff diff` treat the capability
 exactly like a skill or tool.
+
+OpenCode reads MCP servers from `opencode.json`, under `mcp`, in its own shape: `type` is `local` or `remote`, a local server's program and arguments are one `command` array, and its variables sit under `environment`. Tuff writes the entry into `.opencode/opencode.json`, which OpenCode merges over the project's `opencode.json`, so the project's own file is not edited. Add the agent first with `tuff agent add opencode`. OpenCode does not read `.agents/mcp.json`, so a server installed with `-a open-agents` does not start in OpenCode.
 
 :::caution[Codex]
 The Codex adapter currently emits the same `.agents/mcp.json` entry as

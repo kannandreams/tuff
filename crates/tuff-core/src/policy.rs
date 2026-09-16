@@ -517,7 +517,7 @@ fn opencode_rule(rule: &str) -> (&str, Option<&str>) {
 /// enforces, and serde_json in this workspace sorts keys.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-enum OrderedJson {
+pub(crate) enum OrderedJson {
     Object(indexmap::IndexMap<String, OrderedJson>),
     Array(Vec<OrderedJson>),
     Scalar(serde_json::Value),
@@ -543,7 +543,7 @@ impl OrderedJson {
     }
 }
 
-const OPENCODE_SCHEMA: &str = "https://opencode.ai/config.json";
+pub(crate) const OPENCODE_SCHEMA: &str = "https://opencode.ai/config.json";
 
 /// `merge_permissions` for an OpenCode config file.
 ///

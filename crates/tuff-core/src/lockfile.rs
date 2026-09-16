@@ -344,6 +344,7 @@ pub fn managed_mcp_entry_status(
     entry: &ManagedMcpEntry,
 ) -> &'static str {
     let path = repo_root.join(&entry.config_path);
+    let servers_key = crate::mcp::servers_key(&path);
     let Ok(raw) = std::fs::read_to_string(path) else {
         return "missing";
     };
@@ -351,7 +352,7 @@ pub fn managed_mcp_entry_status(
         return "modified";
     };
     let Some(current) = config
-        .get("mcpServers")
+        .get(servers_key)
         .and_then(|servers| servers.get(capability_id))
     else {
         return "missing";

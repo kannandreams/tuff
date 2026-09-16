@@ -168,7 +168,7 @@ An `ask` rule is written with `"ask"` in place of `"deny"`.
 - **MCP tools.** A denied tool is hidden from the agent. OpenCode names a tool `<server>_<tool>`, with characters other than letters, digits, `_`, and `-` replaced by `_`.
 - **Ask.** `opencode run` rejects the request an `ask` rule raises, and `opencode --auto` approves it.
 
-`opencode` is a policy-only target. Skills reach OpenCode through `open-agents`, and `tuff init` does not register `opencode`.
+`opencode` takes policies and [MCP servers](/primitives/mcp-servers/#what-gets-written). Skills reach OpenCode through `open-agents`, and `tuff init` does not register `opencode`.
 
 ## What each agent can enforce
 
