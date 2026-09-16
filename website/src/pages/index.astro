@@ -2,6 +2,10 @@
 import '../styles/custom.css';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteNav from '../components/SiteNav.astro';
+import HeroVariants from '../components/HeroVariants.astro';
+
+// Hero variations are a local preview only; a production build shows the current hero.
+const heroPreview = import.meta.env.DEV;
 
 const docs = '/getting-started';
 const description = 'Manage project-owned skills, tools, hooks, MCP servers, and policies for coding agents.';
@@ -31,7 +35,7 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
     <SiteNav current="/" />
 
     <main class="tuff-landing tuff-landing--standalone">
-      <section class="tuff-hero">
+      <section class="tuff-hero" data-hero-variant="current">
         <div class="tuff-hero-main">
           <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
           <p class="tuff-tagline">Capability lifecycle manager for coding agents.</p>
@@ -98,6 +102,8 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
           <span class="tuff-harness-strip-note"><i aria-hidden="true"></i> dedicated adapter · others via .agents/skills</span>
         </div>
       </section>
+
+      {heroPreview && <HeroVariants />}
 
       <section class="tuff-section tuff-section--stats">
         <div class="tuff-stats">
@@ -219,10 +225,43 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
       </section>
     </main>
     <SiteFooter />
+    {heroPreview && (
+      <div class="hv-picker">
+        <label for="hv-select">Hero preview</label>
+        <select id="hv-select">
+          <option value="current">Current</option>
+          <option value="1">1 · From scattered to governed</option>
+          <option value="2">2 · Build an agent's toolkit once</option>
+          <option value="3">3 · The lifecycle, told as steps</option>
+        </select>
+      </div>
+    )}
   </body>
 </html>
 
+<style is:global>
+  .tuff-hero[hidden] { display: none !important; }
+  .hv-picker { position: fixed; right: 1rem; bottom: 1rem; z-index: 50; display: flex; align-items: center; gap: .55rem; padding: .55rem .7rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, .25); color: #eeeae2; font-family: 'JetBrains Mono', monospace; font-size: .72rem; }
+  .hv-picker select { padding: .3rem .4rem; border: 1px solid #4c544c; border-radius: .25rem; color: #eeeae2; background: #242824; font: inherit; }
+</style>
+
 <script>
+  // Local hero preview: show one variant, remembered in the URL (?hero=2).
+  const heroSelect = document.querySelector<HTMLSelectElement>('#hv-select');
+  if (heroSelect) {
+    const show = (value: string) => {
+      document.querySelectorAll<HTMLElement>('[data-hero-variant]').forEach((section) => {
+        section.hidden = section.dataset.heroVariant !== value;
+      });
+      heroSelect.value = value;
+      const url = new URL(location.href);
+      url.searchParams.set('hero', value);
+      history.replaceState(null, '', url);
+    };
+    show(new URL(location.href).searchParams.get('hero') ?? 'current');
+    heroSelect.addEventListener('change', () => show(heroSelect.value));
+  }
+
   const commands = {
     uv: 'uv tool install tuffcli',
     pip: 'pip install tuffcli',
