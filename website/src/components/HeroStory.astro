@@ -292,10 +292,8 @@ const projects = [
 </script>
 
 <style>
+  /* Moss green, the second tone: orange marks Tuff's actions, green marks capabilities in use and the view over them. */
   .hs, .hs-dash-section { --g: #4a7a5e; --g-dark: #83b477; --g-soft: rgba(131, 180, 119, .14); }
-  :global([data-green='sage']) :is(.hs, .hs-dash-section) { --g: #5f8f72; --g-dark: #9cc7a3; --g-soft: rgba(156, 199, 163, .15); }
-  :global([data-green='pine']) :is(.hs, .hs-dash-section) { --g: #2f6b58; --g-dark: #5fb39a; --g-soft: rgba(95, 179, 154, .15); }
-  :global([data-green='off']) :is(.hs, .hs-dash-section) { --g: var(--tuff-accent); --g-dark: #f18453; --g-soft: rgba(241, 132, 83, .12); }
   .hs { grid-template-columns: minmax(0, .66fr) minmax(0, 1.34fr); column-gap: 2.5rem; align-items: center; padding-top: 3rem; padding-bottom: 2.75rem; }
   .hs-main { padding-top: 0; }
   .hs-headlines { margin-top: 1.4rem; }
