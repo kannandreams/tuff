@@ -1,6 +1,7 @@
 ---
-// Preview-only: option 1 reworked around one use case (a support agent),
-// with option 3's steps and a dashboard mock. Local dev only.
+// The landing page hero: one support agent's capabilities through the four
+// steps Tuff covers, and the dashboard section below it. The dashboard is
+// in progress (RFC-108), so its section says so and shows sample data.
 const docs = '/getting-started';
 
 // One support agent, one capability of each kind. `out` is what each harness
@@ -47,11 +48,11 @@ const projects = [
 ];
 ---
 
-<section class="tuff-hero hs" data-hero-variant="4" hidden>
+<section class="tuff-hero hs">
   <div class="tuff-hero-main hs-main">
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
     <div class="hs-headlines">
-      <h2 class="hs-roll" data-hs-headline="e">
+      <h2 class="hs-roll">
         <span class="hs-roll-slot">
           <span class="hs-roll-item" data-hs-roll=0>Manage capabilities<i>.</i></span>
           <span class="hs-roll-item" data-hs-roll=1>Use them across harnesses<i>.</i></span>
@@ -59,35 +60,10 @@ const projects = [
           <span class="hs-roll-item" data-hs-roll=3>Govern them everywhere<i>.</i></span>
         </span>
       </h2>
-      <h2 class="hs-hl" data-hs-headline="a" hidden>
-        <span data-hs-line="0"><b>01</b>Manage capabilities.</span>
-        <span data-hs-line="1"><b>02</b>Use them across harnesses.</span>
-        <span data-hs-line="2"><b>03</b>Ship them with your agent.</span>
-        <span data-hs-line="3"><b>04</b>Govern them everywhere.</span>
-      </h2>
-      <h2 class="hs-hl" data-hs-headline="b" hidden>
-        <span data-hs-line="0"><b>01</b>One set of capabilities.</span>
-        <span data-hs-line="1"><b>02</b>Every coding agent.</span>
-        <span data-hs-line="2"><b>03</b>Every agent you ship.</span>
-        <span data-hs-line="3"><b>04</b>One view of all of it.</span>
-      </h2>
-      <h2 class="hs-hl hs-hl--compact" data-hs-headline="c" hidden>
-        <span class="hs-hl-lead">Your agents’ capabilities, managed like code.</span>
-        <span data-hs-line="0"><b>01</b>write</span>
-        <span data-hs-line="1"><b>02</b>code</span>
-        <span data-hs-line="2"><b>03</b>ship</span>
-        <span data-hs-line="3"><b>04</b>govern</span>
-      </h2>
-      <h2 class="hs-hl" data-hs-headline="d" hidden>
-        <span data-hs-line="0"><b>01</b>Build it once.</span>
-        <span data-hs-line="1"><b>02</b>Run it in every harness.</span>
-        <span data-hs-line="2"><b>03</b>Pack it with the agent.</span>
-        <span data-hs-line="3"><b>04</b>See it across the organisation.</span>
-      </h2>
     </div>
     <div class="tuff-hero-actions">
       <a class="tuff-button tuff-button--primary" href={docs}>Get started <span aria-hidden="true">→</span></a>
-      <a class="tuff-button tuff-button--quiet" href="#hs-dashboard">See the dashboard</a>
+      <a class="tuff-button tuff-button--quiet" href="#dashboard">See the dashboard</a>
     </div>
     <div class="hs-install">
       <span aria-hidden="true">$</span><code>uv tool install tuffcli</code>
@@ -164,11 +140,11 @@ const projects = [
 
 </section>
 
-<section class="tuff-section hs-dash-section" id="hs-dashboard" data-hero-variant="4" hidden>
+<section class="tuff-section hs-dash-section" id="dashboard">
   <div class="tuff-section-head">
-    <div class="tuff-section-label">//dashboard</div>
+    <div class="tuff-section-label">//dashboard <span class="hs-soon">in progress</span></div>
     <h2>Every agent’s capabilities, across the organisation</h2>
-    <p>Projects publish a report from CI. The dashboard shows each agent’s skills, tools, MCP servers, hooks, and policies, which harness runs them, what changed, and when.</p>
+    <p>Projects publish a report from CI. The dashboard shows each agent’s skills, tools, MCP servers, hooks, and policies, which harness runs them, what changed, and when. It is being built now; the view below uses sample data.</p>
   </div>
 
   <div class="hs-app" aria-label="Dashboard preview with sample data">
@@ -283,12 +259,6 @@ const projects = [
       setTimeout(() => { button.textContent = 'copy'; }, 1200);
     });
   });
-
-  // Preview only: pick a headline with ?headline=a|b|c|d.
-  const headline = new URL(location.href).searchParams.get('headline') ?? 'e';
-  document.querySelectorAll<HTMLElement>('[data-hs-headline]').forEach((block) => {
-    block.hidden = block.dataset.hsHeadline !== headline;
-  });
 </script>
 
 <style>
@@ -297,18 +267,8 @@ const projects = [
   .hs { grid-template-columns: minmax(0, .66fr) minmax(0, 1.34fr); column-gap: 2.5rem; align-items: center; padding-top: 3rem; padding-bottom: 2.75rem; }
   .hs-main { padding-top: 0; }
   .hs-headlines { margin-top: 1.4rem; }
-  .hs-hl { display: grid; gap: .15rem; margin: 0; color: var(--tuff-text); font-family: 'Geist', system-ui, sans-serif; font-size: clamp(1.25rem, 2.1vw, 1.7rem); font-weight: 600; line-height: 1.3; letter-spacing: -.04em; }
-  .hs-hl span { display: flex; align-items: baseline; gap: .6rem; color: var(--tuff-text); white-space: nowrap; }
-  .hs-hl span b { position: relative; min-width: 1.6rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .62rem; font-weight: 500; letter-spacing: 0; transition: color .4s ease; }
-  .hs-hl span.is-on b { color: var(--tuff-accent); }
-  .hs-hl span:is([data-hs-line='1'], [data-hs-line='3']).is-on b { color: var(--g); }
-  .hs-hl span:is([data-hs-line='1'], [data-hs-line='3']) b::before { background: var(--g); }
   .hs :global(.tuff-button--quiet:hover) { border-color: var(--g); color: var(--g); }
-  .hs-hl span b::before { content: ''; position: absolute; left: -.7rem; top: 50%; width: .35rem; height: .35rem; border-radius: 50%; background: var(--tuff-accent); opacity: 0; transform: translateY(-50%) scale(.4); transition: opacity .3s ease, transform .3s ease; }
-  .hs-hl span.is-on b::before { opacity: 1; transform: translateY(-50%) scale(1); }
-  .hs-hl--compact { gap: .35rem; }
-  .hs-hl--compact .hs-hl-lead { display: block; margin-bottom: .6rem; color: var(--tuff-text); }
-  .hs-hl--compact span[data-hs-line] { display: inline-flex; font-family: 'JetBrains Mono', monospace; font-size: 1rem; letter-spacing: 0; }
+  .hs-soon { margin-left: .5rem; padding: .12rem .45rem; border: 1px solid color-mix(in srgb, var(--g) 45%, transparent); border-radius: 999px; color: var(--g); background: color-mix(in srgb, var(--g) 8%, transparent); font-size: .62rem; letter-spacing: .02em; }
   .hs-install { display: flex; align-items: center; gap: .6rem; max-width: 22rem; margin-top: 1.4rem; padding: .75rem .9rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; box-shadow: 0 1rem 2.5rem rgba(38, 31, 22, .1); font-family: 'JetBrains Mono', monospace; font-size: .85rem; }
   .hs-install > span { color: var(--g-dark); }
   .hs-install code { flex: 1; color: #eeeae2; font-family: inherit; white-space: nowrap; }
@@ -316,7 +276,6 @@ const projects = [
   .hs-install button:hover { color: #f18453; border-color: #9a4c30; }
   .hs-install-more { display: inline-block; margin-top: .5rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
   .hs-install-more:hover { color: var(--tuff-accent); }
-  .hs-hl[hidden], .hs-roll[hidden] { display: none; }
   .hs-roll { margin: .35rem 0 0; font-family: 'Inter Tight', 'Geist', system-ui, sans-serif; font-size: clamp(1.25rem, 2.2vw, 1.95rem); font-weight: 700; line-height: 1.2; letter-spacing: -.03em; }
   /* Every sentence occupies the same grid cell, so the slot is as wide as the longest one and never wraps. */
   .hs-roll-slot { display: inline-grid; overflow: hidden; padding: .08em 0; white-space: nowrap; vertical-align: top; }
@@ -475,8 +434,7 @@ const projects = [
     .hs { grid-template-columns: 1fr; }
   }
   @media (max-width: 760px) {
-    .hs-hl span { white-space: normal; }
-    .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hs-fork, .hs-govern-body { grid-template-columns: 1fr; }
     .hs-app-grid { grid-template-columns: 1fr; }
     .hs-app-body { grid-template-columns: 1fr; }
