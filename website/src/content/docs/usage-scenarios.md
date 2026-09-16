@@ -20,7 +20,7 @@ When the team needs a reusable subset, `tuff pack init company-agent-pack --from
 company-agent-pack/
   tuff-pack.toml
   capabilities/
-    rust-test-workflow/
+    rust-testing/
     security-review/
     release-prep/
 ```

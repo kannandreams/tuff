@@ -58,7 +58,7 @@ To create it for another agent explicitly:
 tuff create skill my-skill -a claude
 ```
 
-See [`tuff create`](/cli/add/#tuff-create) for skills, tools, hooks, workflows, and repeated agent
+See [`tuff create`](/cli/add/#tuff-create) for skills, tools, hooks, and repeated harness
 selection.
 
 If your project already has a skill under `.agents/skills/`, add it in place:
@@ -109,7 +109,7 @@ tuff add skill https://github.com/pproenca/dot-skills rust-implement -a open-age
 ```
 
 The command installs the selected capability, tracks the upstream revision, and records
-everything in the lockfile. Replace `skill` with `tool`, `hook`, or `workflow` when installing
+everything in the lockfile. Replace `skill` with `tool` or `hook` when installing
 another capability type. See [`tuff add`](/cli/add/#tuff-add) for local and Git source patterns.
 
 ## 7. Check for updates

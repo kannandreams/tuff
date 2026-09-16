@@ -101,7 +101,6 @@ pub fn lookup(id: &str) -> Result<Option<CapabilityManifest>> {
         parameters: None,
         implementation: None,
         hook: None,
-        workflow: None,
         server: Some(config),
         policy: None,
         targets: Vec::new(),

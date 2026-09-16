@@ -618,7 +618,6 @@ mod tests {
             targets: BTreeMap::new(),
             implementation: None,
             parameters: None,
-            workflow: None,
             server: None,
         }
     }

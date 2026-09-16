@@ -11,7 +11,6 @@ Create and track a new agent-local capability:
 tuff create skill my-skill
 tuff create tool my-tool -a claude
 tuff create hook review-hook -a open-agents -a claude
-tuff create workflow release-flow -a claude
 ```
 
 The capability type and id are positional. `-a, --harness` is optional and
@@ -29,7 +28,7 @@ two forms:
 2. Use an explicit capability-type subcommand when the type is known or when
    installing from a Git repository.
 
-The available capability types are `skill`, `tool`, `hook`, `workflow`, and
+The available capability types are `skill`, `tool`, `hook`, and
 `mcp-server`. In the examples below, `<capability-type>` means “replace this
 placeholder with one of those types.” External MCP servers have their own
 subcommand, [`tuff add mcp`](/cli/mcp/#install-an-mcp-server), and packs have
@@ -91,7 +90,7 @@ repository. For example:
 tuff add skill https://github.com/owner/repo rust-implement -a open-agents
 ```
 
-Use the same structure for a tool, hook, or workflow by replacing `skill` with
+Use the same structure for a tool or hook by replacing `skill` with
 the corresponding capability type.
 
 ### Install a release
@@ -188,14 +187,14 @@ tuff hooks check-portability pre-commit-lint --target claude
 
 | Flag | Description |
 |---|---|
-| `-a, --harness <id>` | Harness to install for (optional, repeatable; defaults to the configured harness). `--agent` is the older name |
+| `-a, --harness <id>` | Harness to install for (optional, repeatable; defaults to the configured harness). Tuff 0.11 and earlier call it `--agent` |
 | `-g, --global` | Install to global user scope |
 | `-n, --name <id>` | Override the installed capability ID for an auto-detected local source |
 | `--hook-file <path>` | Hook-only native settings fragment, relative to the hook source directory |
 | `--accept-unenforced` | For a policy added with `tuff add <path>`: install the rules each agent enforces and record the rest in `tuff.lock`, instead of refusing the policy. See [Rules an agent does not enforce](/primitives/policies/#rules-an-agent-does-not-enforce) |
 
-The capability type is specified as a subcommand (`skill`, `tool`, `hook`, or
-`workflow`) rather than a `--type` flag. For a typed local source, the name is
+The capability type is specified as a subcommand (`skill`, `tool`, or `hook`)
+rather than a `--type` flag. For a typed local source, the name is
 optional and is normally inferred from the source. For a Git source, the name
 is required so Tuff knows which capability directory to discover.
 

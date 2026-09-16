@@ -3,11 +3,11 @@ title: Capability Packs
 description: Build, verify, extract, and install immutable bundles of Tuff capabilities.
 ---
 
-A capability pack is a versioned release unit containing one or more agent capabilities. Each skill, tool, hook, or workflow keeps its own capability ID, type, and version; the pack adds a separate name and version for promoting the tested collection as one artifact.
+A capability pack is a versioned release unit containing one or more agent capabilities. Each skill, tool, hook, or MCP server keeps its own capability ID, type, and version; the pack adds a separate name and version for promoting the tested collection as one artifact.
 
 Tuff packs are Tuff's implementation of that idea: the `.tuffpack` artifact and the `tuff pack` commands that build, verify, publish, and install it. The artifact carries a Tuff media type rather than a neutral interchange format, so this page uses "Tuff pack" wherever the distinction from a container image matters, and "capability pack" or plain "pack" everywhere else.
 
-Use packs when a platform team needs to deliver the same reviewed skills, tools, hooks, and workflows into multiple repositories or ephemeral agent runtimes. Continue using `tuff add <capability-type>` when you only need to manage one capability.
+Use packs when a platform team needs to deliver the same reviewed skills, tools, hooks, and MCP servers into multiple repositories or ephemeral agent runtimes. Continue using `tuff add <capability-type>` when you only need to manage one capability.
 
 :::tip[Learn with a working example]
 The [log aggregation agent](https://github.com/kannandreams/tuff-pack-examples/tree/main/projects/log-aggregation-agent), in the [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples), packages a skill, a tool, a hook, and a workflow as one pack, publishes it to GHCR, and consumes it from a clean container. Run `./scripts/demo.sh` there to walk the lifecycle yourself; it asks before every step.
@@ -52,7 +52,7 @@ This is the normal starting point: add or create capabilities once, test them in
 
 ### Choose capabilities, a version, and targets
 
-Use repeatable selectors when the pack should contain only part of the project. Selecting a workflow automatically includes its tracked transitive requirements.
+Use repeatable selectors when the pack should contain only part of the project.
 
 ```sh frame="terminal"
 tuff pack build \
@@ -93,7 +93,7 @@ targets = ["open-agents"]
 capabilities = ["crm-operating", "lead-triage"]
 ```
 
-Workflow requirements are expanded into this list when the definition is created, making review straightforward. Build it with:
+Build it with:
 
 ```sh frame="terminal"
 tuff pack check tuff-packs/crm-integration
@@ -161,7 +161,7 @@ tuff pack verify tuff-dist/crm-integration-1.2.0.tuffpack
 tuff pack inspect tuff-dist/crm-integration-1.2.0.tuffpack
 ```
 
-Pack builds validate every capability, ensure workflow requirements are present with the correct types, reject workflow cycles, and confirm every configured adapter supports every member. The artifact contains the verified member sources and pre-rendered target trees. Files and metadata are canonically ordered, so identical input produces identical artifact bytes and SHA-256 digest.
+Pack builds validate every capability, reject duplicate ids, and confirm every configured adapter supports every member. The artifact contains the verified member sources and pre-rendered target trees. Files and metadata are canonically ordered, so identical input produces identical artifact bytes and SHA-256 digest.
 
 Building, verifying, extracting, and installing a pack never executes member tools or hooks. Runtime dependencies remain the responsibility of the destination environment.
 

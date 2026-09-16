@@ -9,7 +9,7 @@ harness. It separates two concerns:
 1. The harness CLI controls a session: prompt, working directory, model,
    permissions, output, and resume behavior.
 2. Tuff manages reusable project capabilities: skills, tools, hooks, and
-   workflows, then emits them into the selected harness layout.
+   policies, then emits them into the selected harness layout.
 
 The upstream CLIs change quickly. Treat this page as a workflow map and run
 `<command> --help` for the exact version installed on your machine. The links

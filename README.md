@@ -4,7 +4,7 @@
 
 <p align="center"><strong>Make your coding-agent playbook reproducible.</strong></p>
 
-<p align="center">Install, version, diff, and update the skills, tools, hooks, and workflows that make your agents useful.</p>
+<p align="center">Install, version, diff, and update the skills, tools, hooks, MCP servers, and policies that make your agents useful.</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
@@ -67,9 +67,10 @@ Tuff ships dedicated adapters for Claude Code, Codex, and Cursor. The `open-agen
 | **Skill** | Reusable instructions, conventions, and domain context. |
 | **Tool** | Executable behavior with a clear contract. |
 | **Hook** | Automation triggered at meaningful agent events. |
-| **Workflow** | A composable sequence of capabilities. |
+| **MCP server** | An external server wired into every harness from one declaration. |
+| **Policy** | Rules that narrow what an agent may run, read, edit, or call. |
 
-All four use the same lifecycle:
+All five use the same lifecycle:
 
 ```text
 local files / git repository / existing agent assets

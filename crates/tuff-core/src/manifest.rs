@@ -10,7 +10,6 @@ pub enum CapabilityType {
     Skill,
     Tool,
     Hook,
-    Workflow,
     Policy,
     /// An external MCP server Tuff wires into each harness's native MCP
     /// config. Distinct from a `tool` with `implementation.mcp = true`,
@@ -25,7 +24,6 @@ impl CapabilityType {
             Self::Skill => "skills",
             Self::Tool => "tools",
             Self::Hook => "hooks",
-            Self::Workflow => "workflows",
             Self::Policy => "policies",
             Self::McpServer => "mcp-servers",
         }
@@ -36,7 +34,6 @@ impl CapabilityType {
             Self::Skill => "skill",
             Self::Tool => "tool",
             Self::Hook => "hook",
-            Self::Workflow => "workflow",
             Self::Policy => "policy",
             Self::McpServer => "mcp-server",
         }
@@ -47,7 +44,6 @@ impl CapabilityType {
             "skill" => Some(Self::Skill),
             "tool" => Some(Self::Tool),
             "hook" => Some(Self::Hook),
-            "workflow" => Some(Self::Workflow),
             "policy" => Some(Self::Policy),
             "mcp-server" | "mcp" => Some(Self::McpServer),
             _ => None,
@@ -76,8 +72,6 @@ pub struct CapabilityManifest {
     pub implementation: Option<ImplementationConfig>,
     #[serde(default)]
     pub hook: Option<HookConfig>,
-    #[serde(default)]
-    pub workflow: Option<WorkflowConfig>,
     #[serde(default)]
     pub server: Option<McpServerConfig>,
     /// The rules of a `type = "policy"` capability.
@@ -199,18 +193,6 @@ pub struct HookConfig {
     pub command: String,
     #[serde(default = "default_cwd")]
     pub working_directory: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowConfig {
-    pub requires: Vec<Requirement>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Requirement {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub capability_type: CapabilityType,
 }
 
 fn default_cwd() -> String {
@@ -454,47 +436,6 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
                 manifest.source_files()?;
             }
         }
-        CapabilityType::Workflow => {
-            let wf = manifest.workflow.as_ref().ok_or_else(|| {
-                TuffError::usage("workflow capability requires a [[workflow.requires]] section")
-            })?;
-
-            if wf.requires.is_empty() {
-                return Err(TuffError::usage(
-                    "workflow 'requires' must have at least one entry",
-                ));
-            }
-
-            let mut seen = std::collections::HashSet::new();
-            for req in &wf.requires {
-                if req.id.trim().is_empty() {
-                    return Err(TuffError::usage(
-                        "workflow requirement 'id' must not be empty",
-                    ));
-                }
-                if req.id == manifest.id {
-                    return Err(TuffError::usage("workflow cannot require itself"));
-                }
-                if !seen.insert(&req.id) {
-                    return Err(TuffError::usage(format!(
-                        "duplicate requirement '{}' in workflow",
-                        req.id
-                    )));
-                }
-            }
-
-            let names: Vec<_> = wf
-                .requires
-                .iter()
-                .map(|r| format!("{} ({})", r.id, r.capability_type))
-                .collect();
-            eprintln!(
-                "note: workflow '{}' requires {} capabilities: {}",
-                manifest.id,
-                names.len(),
-                names.join(", ")
-            );
-        }
         CapabilityType::Policy => {
             let policy = manifest.policy.as_ref().ok_or_else(|| {
                 TuffError::usage(
@@ -625,6 +566,12 @@ fn parse_manifest(raw: &str, manifest_path: &Path) -> Result<CapabilityManifest>
                 example,
                 message.trim()
             ))
+        } else if message.contains("unknown variant `workflow`") {
+            TuffError::usage(format!(
+                "invalid manifest at {}: Tuff no longer has workflow capabilities",
+                manifest_path.display()
+            ))
+            .with_hint("install the skills, tools, and hooks the workflow listed on their own, or group them in a pack")
         } else {
             TuffError::from(error)
         }
@@ -786,7 +733,6 @@ pub fn synthetic_manifest(
         parameters: None,
         implementation: None,
         hook: None,
-        workflow: None,
         server: None,
         policy: None,
         targets: Vec::new(),
@@ -1044,7 +990,6 @@ files = ["SKILL.md"]
             parameters: None,
             implementation: None,
             hook: None,
-            workflow: None,
             server: None,
             policy: None,
             targets: vec![],
@@ -1065,7 +1010,6 @@ files = ["SKILL.md"]
             parameters: None,
             implementation: None,
             hook: None,
-            workflow: None,
             server: None,
             policy: None,
             targets: vec![],
@@ -1189,7 +1133,6 @@ files = ["SKILL.md"]
             parameters: None,
             implementation: None,
             hook: None,
-            workflow: None,
             server: None,
             policy: None,
             targets: vec![],
@@ -1415,11 +1358,16 @@ files = ["SKILL.md"]
             CapabilityType::parse("mcp"),
             Some(CapabilityType::McpServer)
         );
-        let wire = toml::to_string(&Requirement {
-            id: "x".into(),
+        #[derive(serde::Serialize)]
+        struct Wire {
+            #[serde(rename = "type")]
+            capability_type: CapabilityType,
+        }
+        let wire = toml::to_string(&Wire {
             capability_type: CapabilityType::McpServer,
         })
         .unwrap();
         assert!(wire.contains("type = \"mcp-server\""), "{wire}");
+        assert_eq!(CapabilityType::parse("workflow"), None);
     }
 }

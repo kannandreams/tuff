@@ -17,7 +17,6 @@ pub const SUPPORTED_TYPES: &[CapabilityType] = &[
     CapabilityType::Skill,
     CapabilityType::Tool,
     CapabilityType::Hook,
-    CapabilityType::Workflow,
     CapabilityType::McpServer,
     CapabilityType::Policy,
 ];
@@ -676,7 +675,7 @@ mod tests {
 
     #[test]
     fn supported_types_covers_all_capability_types() {
-        assert_eq!(SUPPORTED_TYPES.len(), 6);
+        assert_eq!(SUPPORTED_TYPES.len(), 5);
     }
 
     #[test]

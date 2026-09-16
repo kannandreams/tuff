@@ -271,8 +271,8 @@ pub fn discover_capability(
     name: &str,
     capability_type: CapabilityType,
 ) -> Result<PathBuf> {
-    let dir_plural = capability_type.plural_dir(); // "skills", "tools", "hooks", "workflows"
-    let dir_singular = capability_type.as_str(); // "skill", "tool", "hook", "workflow"
+    let dir_plural = capability_type.plural_dir(); // "skills", "tools", "hooks", "mcp-servers"
+    let dir_singular = capability_type.as_str(); // "skill", "tool", "hook", "mcp-server"
 
     let mut matches = Vec::new();
 

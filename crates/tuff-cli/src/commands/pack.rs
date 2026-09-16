@@ -947,7 +947,7 @@ fn collect_install_mutations(
             && let Some(target_entry) = index_entry.targets.get(adapter.id())
         {
             collect_mutation_tree(stage, &stage.join(&target_entry.installed_path), &mut paths)?;
-            // A project that already has a tool, workflow, or MCP server
+            // A project that already has a tool or MCP server
             // already has an index on disk, and it is tracked. The pack's
             // regenerated index replaces it; refusing to overwrite it would
             // make every such project unable to install a pack at all.

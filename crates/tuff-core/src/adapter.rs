@@ -90,9 +90,6 @@ pub enum CapabilityKind {
     Hook {
         hook: HookDefinition,
     },
-    Workflow {
-        workflow: crate::manifest::WorkflowConfig,
-    },
     McpServer {
         server: crate::manifest::McpServerConfig,
     },
@@ -107,7 +104,6 @@ impl CapabilityKind {
             Self::Skill => CapabilityType::Skill,
             Self::Tool { .. } => CapabilityType::Tool,
             Self::Hook { .. } => CapabilityType::Hook,
-            Self::Workflow { .. } => CapabilityType::Workflow,
             Self::McpServer { .. } => CapabilityType::McpServer,
             Self::Policy { .. } => CapabilityType::Policy,
         }
@@ -122,16 +118,6 @@ pub struct ResolvedCapability {
     pub source_files: Vec<(String, Vec<u8>)>,
     pub source_dir: PathBuf,
     pub kind: CapabilityKind,
-}
-
-#[derive(Serialize)]
-struct WorkflowDocument<'a> {
-    id: &'a str,
-    version: &'a str,
-    #[serde(rename = "type")]
-    capability_type: CapabilityType,
-    description: &'a str,
-    workflow: &'a crate::manifest::WorkflowConfig,
 }
 
 pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapability> {
@@ -154,11 +140,6 @@ pub fn resolve_capability(manifest: &CapabilityManifest) -> Result<ResolvedCapab
                     })?),
                 }
             }
-            CapabilityType::Workflow => CapabilityKind::Workflow {
-                workflow: manifest.workflow.clone().ok_or_else(|| {
-                    TuffError::usage("workflow capability requires [workflow] section")
-                })?,
-            },
             CapabilityType::Policy => CapabilityKind::Policy {
                 policy: manifest.policy.clone().ok_or_else(|| {
                     TuffError::usage("policy capability requires a [policy] section")
@@ -559,7 +540,6 @@ pub trait AgentAdapter {
         match capability.capability_type {
             CapabilityType::Tool => self.plan_tool(capability, repo_root),
             CapabilityType::Hook => self.plan_hook(capability, repo_root),
-            CapabilityType::Workflow => self.plan_workflow(capability, repo_root),
             CapabilityType::McpServer => self.plan_mcp_server(capability, repo_root),
             CapabilityType::Policy => self.plan_policy(capability, repo_root),
             CapabilityType::Skill => self.plan_skill(capability, repo_root),
@@ -581,14 +561,7 @@ pub trait AgentAdapter {
         self.remove_hook_settings(repo_root, managed_hooks)?;
         crate::mcp::remove_tool(&repo_root.join(self.mcp_config_relpath()), primitive_id)?;
         let prefix = self.dir_prefix();
-        for kind in &[
-            "skills",
-            "tools",
-            "hooks",
-            "workflows",
-            "mcp-servers",
-            "policies",
-        ] {
+        for kind in &["skills", "tools", "hooks", "mcp-servers", "policies"] {
             self.remove_dir(repo_root, prefix, kind, primitive_id)?;
         }
         Ok(())
@@ -729,31 +702,6 @@ pub trait AgentAdapter {
         Ok(files)
     }
 
-    fn plan_workflow(
-        &self,
-        capability: &ResolvedCapability,
-        repo_root: &Path,
-    ) -> Result<Vec<PlannedFile>> {
-        let CapabilityKind::Workflow { workflow: wf } = &capability.kind else {
-            return Err(TuffError::new(
-                "plan_workflow called on non-workflow capability",
-            ));
-        };
-
-        let target_path = repo_root
-            .join(self.dir_prefix())
-            .join("workflows")
-            .join(&capability.id)
-            .join("workflow.toml");
-
-        let content = serialize_workflow(capability, wf)?;
-
-        Ok(vec![PlannedFile::new(
-            relative_or_absolute_fs(&target_path, repo_root),
-            content,
-        )])
-    }
-
     /// Emit the canonical `server.toml` record. The JSON entry in the
     /// harness's MCP config is the artifact the harness reads; this file is
     /// what gives the capability a tree to hash, so `check`/`diff`/`delete`
@@ -866,24 +814,6 @@ fn shell_single_quote(value: &str) -> Result<String> {
     Ok(format!("'{}'", value.replace('\'', "'\"'\"'")))
 }
 
-fn serialize_workflow(
-    capability: &ResolvedCapability,
-    workflow: &crate::manifest::WorkflowConfig,
-) -> Result<Vec<u8>> {
-    let document = WorkflowDocument {
-        id: &capability.id,
-        version: &capability.version,
-        capability_type: capability.capability_type,
-        description: &capability.description,
-        workflow,
-    };
-    let mut content = toml::to_string_pretty(&document)?;
-    if !content.ends_with('\n') {
-        content.push('\n');
-    }
-    Ok(content.into_bytes())
-}
-
 #[derive(Serialize)]
 struct McpServerDocument<'a> {
     id: &'a str,
@@ -976,7 +906,6 @@ fn relative_or_absolute_fs(path: &Path, repo_root: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{Requirement, WorkflowConfig};
 
     #[cfg(unix)]
     #[test]
@@ -1025,39 +954,5 @@ mod tests {
         };
 
         assert!(render_hook_script(&hook).is_err());
-    }
-
-    #[test]
-    fn workflow_serialization_escapes_manifest_values() {
-        let workflow = WorkflowConfig {
-            requires: vec![Requirement {
-                id: "dependency\"\\name".to_string(),
-                capability_type: CapabilityType::Skill,
-            }],
-        };
-        let capability = ResolvedCapability {
-            id: "workflow\"id".to_string(),
-            capability_type: CapabilityType::Workflow,
-            version: "1.0.0".to_string(),
-            description: "first line\nsecond \"line\" \\ value".to_string(),
-            source_files: Vec::new(),
-            source_dir: PathBuf::new(),
-            kind: CapabilityKind::Workflow {
-                workflow: workflow.clone(),
-            },
-        };
-
-        let bytes = serialize_workflow(&capability, &workflow).expect("serialize workflow");
-        let parsed: toml::Value = toml::from_slice(&bytes).expect("parse emitted workflow");
-
-        assert_eq!(parsed["id"].as_str(), Some("workflow\"id"));
-        assert_eq!(
-            parsed["description"].as_str(),
-            Some("first line\nsecond \"line\" \\ value")
-        );
-        assert_eq!(
-            parsed["workflow"]["requires"][0]["id"].as_str(),
-            Some("dependency\"\\name")
-        );
     }
 }

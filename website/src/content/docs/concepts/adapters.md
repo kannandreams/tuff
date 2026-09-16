@@ -77,15 +77,6 @@ Hooks are where the adapter differences are most visible:
 For Claude, `tuff add hook ... --hook-file settings.json` reads a hooks-only native fragment,
 copies runtime files when needed, and merges the fragment into `.claude/settings.json`.
 
-## Workflows
-
-| Target | Emitted path |
-|---|---|
-| `open-agents` | `.agents/workflows/<id>/workflow.toml` |
-| `claude` | `.claude/workflows/<id>/workflow.toml` |
-| `codex` | `.agents/workflows/<id>/workflow.toml` |
-| `cursor` | `.cursor/workflows/<id>/workflow.toml` |
-
 ## Supported capability types
 
 All four adapters currently support:
@@ -93,7 +84,6 @@ All four adapters currently support:
 - `skill`
 - `tool`
 - `hook`
-- `workflow`
 
 ## Supported hook events
 

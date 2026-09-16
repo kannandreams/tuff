@@ -21,7 +21,7 @@ Container images and Tuff packs use the same registry transport, but they remain
 ```text
 Agent application lane                 Agent capability lane
 ──────────────────────                 ─────────────────────
-application source                     tracked skills, tools, hooks, workflows
+application source                     tracked skills, tools, hooks, MCP servers
         │                                           │
         ▼                                           ▼
 docker build                              tuff pack build --name ...

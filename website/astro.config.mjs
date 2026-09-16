@@ -94,7 +94,6 @@ export default defineConfig({
               ],
             },
             { label: 'Policies', slug: 'primitives/policies' },
-            { label: 'Workflows', slug: 'primitives/workflows' },
           ],
         },
         {

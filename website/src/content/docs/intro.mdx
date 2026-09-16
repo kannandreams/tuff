@@ -6,7 +6,7 @@ description: What Tuff is, the problems it solves, and the capabilities it manag
 import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <strong class="intro-brand">Tuff</strong> is a Rust-powered CLI for managing agent capabilities such as skills, tools, MCP servers,
-hooks, policies, and workflows. It provides lifecycle tracking, drift detection, baseline diffs, and merge-aware
+hooks, and policies. It provides lifecycle tracking, drift detection, baseline diffs, and merge-aware
 updates. It works with Codex, Claude Code, Cursor, GitHub Copilot, and any agent harness that
 follows the open Agents standard.
 
@@ -14,7 +14,7 @@ follows the open Agents standard.
 
 Agent coding tools increasingly depend on capabilities: skills that teach an agent how
 to work in a project, tools and MCP servers it can call, hooks that run at key events,
-policies that limit what it may do, and workflows that compose them together. Together, they define how an agent works.
+and policies that limit what it may do. Together, they define how an agent works.
 
 Today these capabilities are either siloed on one engineer's machine, invisible to the
 rest of the team, or copied by hand across projects and left to drift silently.
@@ -67,11 +67,6 @@ These are common situations teams encounter as capabilities are shared across re
       title="Policies"
       href="/primitives/policies"
       description="Rules that limit what an agent may run, read, edit, or call. Preview."
-    />
-    <LinkCard
-      title="Workflows"
-      href="/primitives/workflows"
-      description="Composable patterns that bundle skills, tools, and hooks. Roadmap."
     />
   </CardGrid>
 </div>

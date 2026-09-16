@@ -13,7 +13,7 @@ From the repository root, run:
 
 ```sh
 tuff add hook ./examples/hooks/claude-session-start \
-  --agent claude \
+  -a claude \
   --hook-file settings.json
 ```
 
@@ -28,7 +28,7 @@ instead of copying them:
 
 ```sh
 tuff add hook .claude/hooks/session-start \
-  --agent claude \
+  -a claude \
   --hook-file settings.json
 ```
 

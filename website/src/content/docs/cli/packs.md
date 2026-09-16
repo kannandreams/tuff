@@ -33,7 +33,7 @@ tuff pack check tuff-packs/crm-integration
 tuff pack build tuff-packs/crm-integration
 ```
 
-Selecting a workflow automatically includes its tracked transitive requirements. Project builds fail when selected capability files or sources differ from the accepted `tuff.lock` baseline; accept intentional changes with `tuff update <capability>` first.
+Project builds fail when selected capability files or sources differ from the accepted `tuff.lock` baseline; accept intentional changes with `tuff update <capability>` first.
 
 Standalone path-based source packs remain supported. Both commands default to the current directory:
 

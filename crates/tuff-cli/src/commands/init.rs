@@ -85,7 +85,7 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
         }
         config::write_config(repo_root, &config)?;
 
-        for dir in &["skills", "tools", "hooks", "workflows"] {
+        for dir in &["skills", "tools", "hooks"] {
             let path = repo_root.join(".agents").join(dir);
             if !path.exists() {
                 std::fs::create_dir_all(&path)?;
@@ -138,7 +138,6 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
                     targets,
                     implementation: None,
                     parameters: None,
-                    workflow: None,
                     server: None,
                 },
             );

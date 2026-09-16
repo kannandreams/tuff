@@ -262,7 +262,7 @@ export interface TypeGroup {
 }
 
 /** Sort order for the type groups: the order the docs introduce them. */
-const TYPE_ORDER = ["skill", "tool", "hook", "workflow", "mcp-server"];
+const TYPE_ORDER = ["skill", "tool", "hook", "mcp-server", "policy"];
 
 export function groupByType(capabilities: readonly Capability[]): TypeGroup[] {
   const byType = new Map<string, Capability[]>();
@@ -390,8 +390,8 @@ export function typeLabel(type: string): string {
       return "Tools";
     case "hook":
       return "Hooks";
-    case "workflow":
-      return "Workflows";
+    case "policy":
+      return "Policies";
     case "mcp-server":
       return "MCP Servers";
     default:

@@ -146,7 +146,7 @@ pub struct PackArtifact {
 /// # Errors
 ///
 /// Returns an error for malformed manifests, unsafe or duplicate paths, invalid capability
-/// manifests, incomplete workflow dependencies, or workflow cycles.
+/// manifests, or duplicate capability ids.
 pub fn load_pack(path: &Path) -> Result<LoadedPack> {
     let (root, manifest) = load_manifest(path)?;
     if manifest.project.is_some() {
@@ -235,7 +235,6 @@ fn load_path_pack(root: PathBuf, manifest: PackManifest) -> Result<LoadedPack> {
         });
     }
     members.sort_by(|left, right| left.manifest.id.cmp(&right.manifest.id));
-    validate_workflow_closure(&members)?;
 
     Ok(LoadedPack {
         root,
@@ -582,73 +581,6 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
             }
         }
     }
-    Ok(())
-}
-
-fn validate_workflow_closure(members: &[LoadedPackMember]) -> Result<()> {
-    let types = members
-        .iter()
-        .map(|member| (member.manifest.id.as_str(), member.manifest.capability_type))
-        .collect::<BTreeMap<_, _>>();
-    let workflows = members
-        .iter()
-        .filter(|member| member.manifest.capability_type == CapabilityType::Workflow)
-        .map(|member| (member.manifest.id.as_str(), &member.manifest))
-        .collect::<BTreeMap<_, _>>();
-
-    for member in members {
-        let Some(workflow) = member.manifest.workflow.as_ref() else {
-            continue;
-        };
-        for requirement in &workflow.requires {
-            let actual = types.get(requirement.id.as_str()).ok_or_else(|| {
-                TuffError::usage(format!(
-                    "workflow '{}' requires missing capability '{}' ({})",
-                    member.manifest.id, requirement.id, requirement.capability_type
-                ))
-            })?;
-            if *actual != requirement.capability_type {
-                return Err(TuffError::usage(format!(
-                    "workflow '{}' requires '{}' as {}, but the pack member is {}",
-                    member.manifest.id, requirement.id, requirement.capability_type, actual
-                )));
-            }
-        }
-    }
-
-    let mut visiting = BTreeSet::new();
-    let mut visited = BTreeSet::new();
-    for id in workflows.keys() {
-        visit_workflow(id, &workflows, &mut visiting, &mut visited)?;
-    }
-    Ok(())
-}
-
-fn visit_workflow<'a>(
-    id: &'a str,
-    workflows: &BTreeMap<&'a str, &'a CapabilityManifest>,
-    visiting: &mut BTreeSet<&'a str>,
-    visited: &mut BTreeSet<&'a str>,
-) -> Result<()> {
-    if visited.contains(id) {
-        return Ok(());
-    }
-    if !visiting.insert(id) {
-        return Err(TuffError::usage(format!(
-            "workflow dependency cycle contains '{id}'"
-        )));
-    }
-    if let Some(workflow) = workflows.get(id).and_then(|item| item.workflow.as_ref()) {
-        for requirement in &workflow.requires {
-            if requirement.capability_type == CapabilityType::Workflow
-                && workflows.contains_key(requirement.id.as_str())
-            {
-                visit_workflow(requirement.id.as_str(), workflows, visiting, visited)?;
-            }
-        }
-    }
-    visiting.remove(id);
-    visited.insert(id);
     Ok(())
 }
 

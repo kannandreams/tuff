@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::error::{Result, TuffError};
-use crate::manifest::{CapabilityType, ImplementationConfig, McpServerConfig, WorkflowConfig};
+use crate::manifest::{CapabilityType, ImplementationConfig, McpServerConfig};
 
 /// Current on-disk schema. Older readable versions are migrated in memory
 /// by `read_lockfile_at`; writers always emit this version.
@@ -89,11 +89,6 @@ pub struct CapabilityLockEntry {
     pub implementation: Option<ImplementationConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameters: Option<serde_json::Value>,
-    /// Same rationale as `implementation`/`parameters`: a workflow's
-    /// `requires` list lives only in its manifest, which isn't copied to the
-    /// installed target directory.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow: Option<WorkflowConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server: Option<McpServerConfig>,
 }
@@ -712,7 +707,6 @@ fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
                     targets: BTreeMap::new(),
                     implementation: item.implementation,
                     parameters: item.parameters,
-                    workflow: item.workflow,
                     server: item.server,
                 },
             }
@@ -723,16 +717,28 @@ fn read_v1_rows(raw: &str) -> Result<Vec<Row>> {
 /// Schema version 2: the current rows, TOML-encoded. Read for migration
 /// only; never written.
 fn read_v2_rows(raw: &str) -> Result<Vec<Row>> {
-    let wire: WireLockfile = toml::from_str(raw)
-        .map_err(|error| TuffError::corrupt(format!("invalid lockfile: {error}")))?;
+    let wire: WireLockfile = toml::from_str(raw).map_err(|error| invalid_lockfile(&error))?;
     Ok(rows_from_wire(wire))
 }
 
 /// Schema version 3: the current rows, JSON-encoded.
 fn read_v3_rows(raw: &str) -> Result<Vec<Row>> {
-    let wire: WireLockfile = serde_json::from_str(raw)
-        .map_err(|error| TuffError::corrupt(format!("invalid lockfile: {error}")))?;
+    let wire: WireLockfile = serde_json::from_str(raw).map_err(|error| invalid_lockfile(&error))?;
     Ok(rows_from_wire(wire))
+}
+
+/// A lockfile that does not parse, with a pointer for the one known cause:
+/// an entry of a capability type Tuff no longer has.
+fn invalid_lockfile(error: &dyn std::fmt::Display) -> TuffError {
+    let message = error.to_string();
+    let corrupt = TuffError::corrupt(format!("invalid lockfile: {message}"));
+    if message.contains("unknown variant `workflow`") {
+        corrupt.with_hint(
+            "Tuff no longer has workflow capabilities; remove the workflow entries from tuff.lock and their workflows/ folders",
+        )
+    } else {
+        corrupt
+    }
 }
 
 fn rows_from_wire(wire: WireLockfile) -> Vec<Row> {
@@ -759,7 +765,6 @@ fn rows_from_wire(wire: WireLockfile) -> Vec<Row> {
                 targets: BTreeMap::new(),
                 implementation: item.implementation,
                 parameters: item.parameters,
-                workflow: item.workflow,
                 server: item.server,
             },
         })
@@ -794,7 +799,6 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
                 unenforced_rules: target_entry.unenforced_rules.clone(),
                 implementation: entry.implementation.clone(),
                 parameters: entry.parameters.clone(),
-                workflow: entry.workflow.clone(),
                 server: entry.server.clone(),
             });
         }
@@ -860,8 +864,6 @@ struct WireCapability {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     parameters: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    workflow: Option<WorkflowConfig>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     server: Option<McpServerConfig>,
 }
 
@@ -904,8 +906,6 @@ struct WireCapabilityV1 {
     implementation: Option<ImplementationConfig>,
     #[serde(default)]
     parameters: Option<serde_json::Value>,
-    #[serde(default)]
-    workflow: Option<WorkflowConfig>,
     #[serde(default)]
     server: Option<McpServerConfig>,
 }
@@ -1040,7 +1040,6 @@ mod tests {
                 )]),
                 implementation: None,
                 parameters: None,
-                workflow: None,
                 server: None,
             },
         );

@@ -93,7 +93,7 @@ for both Claude Code and Open Agents has two entries.
 | Field | What it means |
 |---|---|
 | `name` | The capability's id, such as `release-checklist` or `security/security-review` |
-| `type` | `skill`, `tool`, `hook`, `workflow`, `mcp-server`, or `policy` |
+| `type` | `skill`, `tool`, `hook`, `mcp-server`, or `policy` |
 | `version` | The capability's version |
 | `version_scheme` | Where `version` came from: `semver` for a [release chosen by tag](/cli/add/#install-a-release), `declared` for the version written in `tuff.toml` or `SKILL.md`, or `sha` when there is no version and the commit is used instead |
 | `description` | Copied from the manifest at install time |
@@ -127,7 +127,7 @@ updates the whole pack.
 ## Extra fields for some types
 
 - **Hooks and MCP servers** register entries in shared harness files, such as `.claude/settings.json` or `.mcp.json`. Their entries carry a copy of what Tuff registered, in `managed_hooks` or `managed_mcp_entry`, so an edit made by hand is detected.
-- **Tools, workflows, and MCP servers** keep a copy of their `implementation`, `parameters`, `workflow`, or `server` settings, so `tuff generate index` can describe them without the original `tuff.toml`.
+- **Tools and MCP servers** keep a copy of their `implementation`, `parameters`, or `server` settings, so `tuff generate index` can describe them without the original `tuff.toml`.
 
 ## File format
 

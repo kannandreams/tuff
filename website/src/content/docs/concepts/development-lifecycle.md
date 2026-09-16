@@ -143,7 +143,6 @@ Your repo already has agent files. Bring them under Tuff management without movi
 # 1. Initialize Tuff
 tuff init
 # existing .agents/ directories stay untouched
-# .agents/workflows/ created (new: Tuff introduces this)
 
 # 2. Register your agents
 tuff harness add open-agents
@@ -179,7 +178,6 @@ tuff check
 | `.agents/skills/` | Skill runtime files | `tuff init` scaffolds, you author |
 | `.agents/tools/` | Tool runtime files | Same |
 | `.agents/hooks/` | Hook runtime files | Same |
-| `.agents/workflows/` | Workflow runtime files | Same |
 | `tuff.lock` | Committed capability identity and lifecycle metadata | `tuff init` |
 | `.claude/skills/` etc. | Claude-specific capabilities | `tuff add` or you author |
 

@@ -33,7 +33,6 @@ such as a tool's parameters or an MCP server's launch command.
 | [MCP server](/primitives/mcp-servers) | Required. It declares how to start or reach the server |
 | [Hook](/primitives/hooks) | Required for a Tuff-standard hook. A native hook added with `--hook-file` does not need one |
 | [Policy](/primitives/policies) | Required. It holds the rules |
-| [Workflow](/primitives/workflows) | Required. It lists the capabilities the workflow needs |
 
 Without a `tuff.toml`, Tuff works out the type from the command or the folder:
 
@@ -52,7 +51,7 @@ description = "Steps to follow before tagging a release."
 | Field | What it means | Required |
 |---|---|---|
 | `id` | The capability's name. It becomes the folder it installs into, such as `.agents/skills/release-checklist/` | Yes |
-| `type` | One of `skill`, `tool`, `mcp-server`, `hook`, `policy`, or `workflow` | Yes |
+| `type` | One of `skill`, `tool`, `mcp-server`, `hook`, or `policy` | Yes |
 | `version` | The capability's version, such as `1.0.0` | Yes |
 | `description` | One sentence saying what it does. For a tool, the agent reads this to decide when to call it | Yes |
 | `files` | The files that make up the capability, relative to `tuff.toml` | No |
@@ -72,7 +71,6 @@ Apart from skills, each type adds one section of its own:
 | `mcp-server` | `[server]` | [MCP Servers](/primitives/mcp-servers#manifest) |
 | `hook` | `[hook]` | See below and [Hooks](/primitives/hooks) |
 | `policy` | `[[policy.rules]]` | [Policies](/primitives/policies#format) |
-| `workflow` | `[[workflow.requires]]` | [Workflows](/primitives/workflows#manifest) |
 
 For example, a tool declares what input it takes and what to run:
 
@@ -219,4 +217,4 @@ Tuff does not ship capabilities itself. Keep their sources:
 - in a separate repository that a person, team, or company maintains, installed from Git or bundled as a [pack](/concepts/packs/).
 
 The Tuff repository has runnable examples under `examples/`, such as
-`examples/tools/` and `examples/workflows/`.
+`examples/tools/` and `examples/mcp-servers/`.

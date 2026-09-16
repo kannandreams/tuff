@@ -9,7 +9,6 @@ examples/
   skills/<id>/
   tools/<id>/
   hooks/<id>/
-  workflows/<id>/
   mcp-servers/<id>/
 ```
 

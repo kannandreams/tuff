@@ -16,7 +16,6 @@ Tuff manages these capability types:
 | [mcp-server](/primitives/mcp-servers) | An external MCP server, wired into every agent from one declaration | **Implemented** |
 | [hook](/primitives/hooks) | A command that runs automatically at a moment such as session start | **Implemented** |
 | [policy](/primitives/policies) | Rules that narrow what an agent may do: commands, file reads and edits, MCP tools | Preview |
-| [workflow](/primitives/workflows) | A named set of skills, tools, and hooks meant to be used together | Roadmap |
 
 </div>
 
