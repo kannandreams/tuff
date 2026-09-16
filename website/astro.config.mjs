@@ -109,7 +109,7 @@ export default defineConfig({
             { label: 'Diff and Update', slug: 'cli/diff-update' },
             { label: 'Validate in CI', slug: 'cli/ci' },
             { label: 'Clean Up', slug: 'cli/clean-up' },
-            { label: 'Agents and Scope', slug: 'cli/agents' },
+            { label: 'Harnesses and Scope', slug: 'cli/agents' },
           ],
         },
         {

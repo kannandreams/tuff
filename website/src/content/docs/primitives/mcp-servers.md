@@ -241,7 +241,7 @@ The config entry is what the harness reads. `server.toml` is the canonical
 declaration Tuff hashes, so `tuff check` and `tuff diff` treat the capability
 exactly like a skill or tool.
 
-OpenCode reads MCP servers from `opencode.json`, under `mcp`, in its own shape: `type` is `local` or `remote`, a local server's program and arguments are one `command` array, and its variables sit under `environment`. Tuff writes the entry into `.opencode/opencode.json`, which OpenCode merges over the project's `opencode.json`, so the project's own file is not edited. Add the agent first with `tuff agent add opencode`. OpenCode does not read `.agents/mcp.json`, so a server installed with `-a open-agents` does not start in OpenCode.
+OpenCode reads MCP servers from `opencode.json`, under `mcp`, in its own shape: `type` is `local` or `remote`, a local server's program and arguments are one `command` array, and its variables sit under `environment`. Tuff writes the entry into `.opencode/opencode.json`, which OpenCode merges over the project's `opencode.json`, so the project's own file is not edited. Add the agent first with `tuff harness add opencode`. OpenCode does not read `.agents/mcp.json`, so a server installed with `-a open-agents` does not start in OpenCode.
 
 :::note[Codex]
 Codex reads a project's MCP servers from `.codex/config.toml`, and only in a trusted project. Tuff writes `[mcp_servers.<id>]` there and leaves every other line of the file as it was. Two declarations have no Codex form and are refused at install: a variable the server reads under a different name from the one you export (Codex forwards a variable under its own name through `env_vars`), and a header built from a variable with any format other than `Authorization: Bearer {}` (which becomes `bearer_token_env_var`). A plain header variable becomes `env_http_headers`. Checked against Codex CLI 0.154.0.
@@ -322,7 +322,7 @@ There is no `--header` flag: a one-off token on the command line would put a
 credential in your shell history and would check something other than what
 the harness uses. Export the variable instead.
 
-Flags: `--agent <id>` (repeatable, only check servers wired into a given
+Flags: `-a <id>` (repeatable, only check servers wired into a given
 harness), `--global`, `--json`, `--timeout <seconds>`, and
 `--ignore-failures` (report but exit `0`, useful outside CI).
 `tuff mcp doctor` exits non-zero if any server is unhealthy, so it's safe to

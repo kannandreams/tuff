@@ -673,7 +673,7 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
     }
     const args = ["diff", target.capability.id];
     if (target.installation) {
-      args.push("--agent", target.installation.target);
+      args.push("-a", target.installation.target);
     }
     if (upstream) {
       args.push("--upstream");
@@ -705,7 +705,7 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
     }
     const args = ["update", target.capability.id];
     if (target.installation) {
-      args.push("--agent", target.installation.target);
+      args.push("-a", target.installation.target);
     }
     this.output.appendLine(`$ tuff ${args.join(" ")}`);
     try {
@@ -743,7 +743,7 @@ class CapabilityTreeProvider implements vscode.TreeDataProvider<Node> {
 
   /**
    * The capability a command should act on. A capability node acts on
-   * every agent at once, matching `tuff update <id>` with no `--agent`;
+   * every agent at once, matching `tuff update <id>` with no `-a`;
    * an agent node narrows to that one.
    */
   private resolve(

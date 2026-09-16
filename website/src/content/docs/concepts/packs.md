@@ -60,8 +60,8 @@ tuff pack build \
   --version 1.2.0 \
   --capability crm-operating \
   --capability lead-triage \
-  --agent open-agents \
-  --agent claude
+  -a open-agents \
+  -a claude
 ```
 
 An explicit `--capability tuff-cli-guide` includes the guide; only implicit “select all” builds exclude it. Use `--output <path>` when `tuff-dist/` is not appropriate.
@@ -207,7 +207,7 @@ Use `pack extract` to produce one harness-native filesystem tree without creatin
 
 ```sh frame="terminal"
 tuff pack extract tuff-dist/crm-integration-1.2.0.tuffpack \
-  --agent open-agents \
+  -a open-agents \
   --output runtime-bundle/
 ```
 
@@ -219,7 +219,7 @@ Initialize the destination repository and install every member atomically:
 
 ```sh frame="terminal"
 tuff init
-tuff add pack tuff-dist/crm-integration-1.2.0.tuffpack --agent open-agents
+tuff add pack tuff-dist/crm-integration-1.2.0.tuffpack -a open-agents
 tuff list
 tuff check
 ```
@@ -247,7 +247,7 @@ tuff update crm-skill --pack ./crm-1.2.0.tuffpack
 
 The new release is staged exactly like a fresh installation: the old members are removed from the staging copy the way `tuff delete` removes them, hook registrations and MCP entries included, and the new members are installed on top. The project changes only after every step has succeeded. Files the old release emitted and the new one does not, including a capability index left with nothing to list, are removed afterwards.
 
-Local edits to any member block the update; `tuff diff <member>` shows them and `--force` replaces them. A `--agent` selection narrower than the agents the pack is installed for is refused. An artifact for a different pack name is refused, and a same-version artifact with a different digest is refused without `--force`.
+Local edits to any member block the update; `tuff diff <member>` shows them and `--force` replaces them. A `--harness` selection narrower than the agents the pack is installed for is refused. An artifact for a different pack name is refused, and a same-version artifact with a different digest is refused without `--force`.
 
 When the installed version is already the newest tag, `tuff update` still resolves that tag and compares its digest with the one recorded at install. If the tag was republished with different content, the update stops and says so, with both digests; `--check` reports the same finding without changing anything, and `--force` replaces the installed release with what the tag serves now and records the new digest. A tag the registry has deleted is reported as unreproducible rather than current. `tuff outdated` shows the same findings as `repointed` and `tag missing`.
 

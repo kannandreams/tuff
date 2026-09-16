@@ -32,12 +32,12 @@ tuff init
 
 # Install a real Rust skill directly from a public Git repository.
 tuff add skill https://github.com/pproenca/dot-skills rust-implement \
-  --agent open-agents
+  -a open-agents
 
 # Create your own tracked skill for two harnesses.
 tuff create skill release-checklist \
-  --agent open-agents \
-  --agent claude
+  -a open-agents \
+  -a claude
 
 # Edit .agents/skills/release-checklist/SKILL.md, then review the change.
 tuff list
@@ -93,19 +93,19 @@ Tuff manages the lifecycle around these files; Git remains the source of truth f
 
 ```sh
 # Adopt an existing project skill without moving it.
-tuff add skill .agents/skills/security-review --agent open-agents
+tuff add skill .agents/skills/security-review -a open-agents
 
 # Install a capability from Git into multiple harnesses.
 tuff add skill https://github.com/owner/agent-capabilities security-review \
-  --agent open-agents \
-  --agent claude
+  -a open-agents \
+  -a claude
 
 # Build the project's reviewed capabilities and install the release atomically.
 tuff pack build --name crm-integration --version 1.2.0
 tuff pack verify ./tuff-dist/crm-integration-1.2.0.tuffpack
 tuff pack push ./tuff-dist/crm-integration-1.2.0.tuffpack ghcr.io/yourorg/crm-integration:1.2.0
 tuff pack pull ghcr.io/yourorg/crm-integration:1.2.0 --output ./tuff-dist/downloaded.tuffpack
-tuff add pack ./tuff-dist/downloaded.tuffpack --agent open-agents
+tuff add pack ./tuff-dist/downloaded.tuffpack -a open-agents
 
 # Review and reconcile an upstream change.
 tuff outdated

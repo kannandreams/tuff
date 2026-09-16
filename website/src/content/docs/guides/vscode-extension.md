@@ -71,7 +71,7 @@ Until that has run, the view says `updates not checked` rather than showing ever
 | Initialize Project | `tuff init` |
 | Add from Git URL | `tuff add <url> --name <name>` |
 
-The four row commands appear on a capability's context menu. Acting on a capability row applies to every agent it is installed for; acting on an agent row narrows to that one, exactly as passing `--agent` does. Diffs open as a real diff document rather than as plain text.
+The four row commands appear on a capability's context menu. Acting on a capability row applies to every agent it is installed for; acting on an agent row narrows to that one, exactly as passing `--harness` does. Diffs open as a real diff document rather than as plain text.
 
 Deleting and packing stay in the CLI. The extension is a view with a few safe actions on top of it, not a replacement for it.
 

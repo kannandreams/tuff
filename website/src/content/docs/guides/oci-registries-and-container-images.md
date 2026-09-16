@@ -72,7 +72,7 @@ tuff pack pull \
   --output build/crm-integration-1.2.0.tuffpack
 tuff pack extract \
   build/crm-integration-1.2.0.tuffpack \
-  --agent open-agents \
+  -a open-agents \
   --output build/tuff-runtime
 ```
 
@@ -229,13 +229,13 @@ tuff pack pull \
 
 tuff pack extract \
   build/crm-integration-1.2.0.tuffpack \
-  --agent open-agents \
+  -a open-agents \
   --output build/tuff-runtime
 ```
 
 `pack pull` verifies the OCI manifest, layer size and digest, complete Tuff artifact, stored files, and metadata annotations before it creates the output file. `pack extract` verifies the artifact again and writes the pre-rendered `open-agents` target. Both commands refuse to overwrite existing output, so CI should use a fresh workspace or new paths.
 
-For `open-agents`, the extracted root contains paths such as `.agents/skills/...`, `.agents/tools/...`, and any shared harness configuration emitted by the adapter. Other `--agent` values produce that adapter's native layout.
+For `open-agents`, the extracted root contains paths such as `.agents/skills/...`, `.agents/tools/...`, and any shared harness configuration emitted by the adapter. Other `--harness` values produce that adapter's native layout.
 
 ## Add the extracted target to a container image
 

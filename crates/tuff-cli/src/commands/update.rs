@@ -138,8 +138,8 @@ fn update_local_from_source(
     let mut adapters = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
-            TuffError::usage(format!("unknown agent '{}'", tid,))
-                .with_hint("run 'tuff agent list' to see available agents")
+            TuffError::usage(format!("unknown harness '{}'", tid,))
+                .with_hint("run 'tuff harness list' to see available harnesses")
         })?;
         adapters.push(adapter);
     }

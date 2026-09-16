@@ -55,7 +55,7 @@ Each `[[workflow.requires]]` entry must have:
 ## Installing a workflow
 
 ```sh frame="terminal"
-$ tuff add workflow ./release-prep --agent open-agents
+$ tuff add workflow ./release-prep -a open-agents
 note: workflow 'release-prep' requires 3 capabilities:
   - python-uv-default (skill)
   - security-review (tool)
@@ -64,7 +64,7 @@ installed release-prep (open-agents) -> .agents/workflows/release-prep/workflow.
 ```
 
 Workflows install themselves but do **not** auto-install dependencies. Install the required
-capabilities separately, or use `tuff add <capability-type> <path> --agent <agent>` if they already exist in your
+capabilities separately, or use `tuff add <capability-type> <path> -a <agent>` if they already exist in your
 project.
 
 ## Validation
@@ -131,13 +131,13 @@ type = "tool"
 EOF
 
 # 2. Install the workflow
-tuff add workflow ./feature-build --agent open-agents
+tuff add workflow ./feature-build -a open-agents
 
 # 3. Install the required capabilities
-tuff add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
-tuff add skill https://github.com/pproenca/dot-skills rust-write-tests --agent open-agents
-tuff add hook examples/hooks/pre-commit-lint --agent open-agents
-tuff add tool examples/tools/security-review --agent open-agents
+tuff add skill https://github.com/pproenca/dot-skills rust-implement -a open-agents
+tuff add skill https://github.com/pproenca/dot-skills rust-write-tests -a open-agents
+tuff add hook examples/hooks/pre-commit-lint -a open-agents
+tuff add tool examples/tools/security-review -a open-agents
 
 # 4. Check status
 tuff status

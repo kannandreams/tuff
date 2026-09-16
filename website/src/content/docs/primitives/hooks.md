@@ -57,7 +57,7 @@ To create a new tracked hook scaffold, use `tuff create hook`. For Claude, Tuff 
 runtime command file and registers it in the shared settings file:
 
 ```sh frame="terminal"
-tuff create hook session-start --agent claude
+tuff create hook session-start -a claude
 ```
 
 This produces:
@@ -74,7 +74,7 @@ Edit `run.sh` and the generated `SessionStart` registration in `.claude/settings
 tracks both files in the lockfile. Open Agents follows the same shape:
 
 ```sh frame="terminal"
-tuff create hook review-hook --agent open-agents
+tuff create hook review-hook -a open-agents
 ```
 
 This creates `.agents/hooks/review-hook/run.sh` and registers the `before_finish` event in
@@ -94,7 +94,7 @@ Install that example with:
 
 ```sh frame="terminal"
 tuff add hook ./examples/hooks/claude-session-start \
-  --agent claude \
+  -a claude \
   --hook-file settings.json
 ```
 
@@ -113,7 +113,7 @@ If the source already lives under the selected harness folder, Tuff adopts it in
 of copying it:
 
 ```sh frame="terminal"
-tuff add hook .claude/hooks/session-start --agent claude --hook-file settings.json
+tuff add hook .claude/hooks/session-start -a claude --hook-file settings.json
 ```
 
 The in-place form is useful while developing a hook directly inside `.claude/`, `.cursor/`, or
@@ -124,7 +124,7 @@ repository:
 
 ```sh frame="terminal"
 tuff add hook https://github.com/yourorg/tuff-hooks claude-session-start \
-  --agent claude \
+  -a claude \
   --hook-file settings.json
 ```
 
@@ -159,7 +159,7 @@ canonical event. Native hook fragments fall back to native-event matching and ar
 be portable.
 
 ```sh frame="terminal"
-$ tuff create hook review-hook --agent open-agents
+$ tuff create hook review-hook -a open-agents
 created and tracked hook 'review-hook' (open-agents) -> .agents/hook.json
 ```
 

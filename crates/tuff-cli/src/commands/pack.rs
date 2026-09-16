@@ -55,7 +55,7 @@ pub fn cmd_pack_init(root: &Path, options: PackInitOptions) -> Result<()> {
         || options.description.is_some()
     {
         return Err(TuffError::usage(
-            "--capability, --agent, --version, and --description require --from-project",
+            "--capability, --harness, --version, and --description require --from-project",
         ));
     }
     let manifest_path = root.join(pack::PACK_MANIFEST_FILE);
@@ -135,7 +135,7 @@ pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()>
         || !options.agents.is_empty()
     {
         return Err(TuffError::usage(
-            "--version, --description, --capability, and --agent require --name for a one-shot project build",
+            "--version, --description, --capability, and --harness require --name for a one-shot project build",
         ));
     }
     let path = options.path.as_deref().unwrap_or_else(|| Path::new("."));
@@ -652,7 +652,7 @@ fn validate_pack_targets(loaded: &LoadedPack) -> Result<Vec<AdapterKind>> {
     for target in &loaded.manifest.build.targets {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
             TuffError::usage(format!("unknown pack build target '{target}'"))
-                .with_hint("run 'tuff agent list' to see available agents")
+                .with_hint("run 'tuff harness list' to see available harnesses")
         })?;
         if !canonical.insert(adapter.id()) {
             return Err(TuffError::usage(format!(
@@ -680,7 +680,7 @@ fn canonical_target_ids(targets: &[String]) -> Result<Vec<String>> {
     let mut canonical = BTreeSet::new();
     for target in targets {
         let adapter = AdapterKind::from_id(target)
-            .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
+            .ok_or_else(|| TuffError::usage(format!("unknown harness '{target}'")))?;
         canonical.insert(adapter.id().to_string());
     }
     Ok(canonical.into_iter().collect())
@@ -848,7 +848,7 @@ fn copy_shared_configuration(source: &Path, destination: &Path, targets: &[Strin
 
     for target in targets {
         let adapter = AdapterKind::from_id(target)
-            .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
+            .ok_or_else(|| TuffError::usage(format!("unknown harness '{target}'")))?;
         for relative in [
             adapter.hook_settings_relpath(),
             adapter.mcp_config_relpath(),
@@ -917,7 +917,7 @@ fn collect_install_mutations(
     let mut paths = BTreeMap::<PathBuf, bool>::new();
     for target in targets {
         let adapter = AdapterKind::from_id(target)
-            .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
+            .ok_or_else(|| TuffError::usage(format!("unknown harness '{target}'")))?;
         for capability in &artifact.metadata.capabilities {
             let target_entry = staged_lock
                 .capabilities
@@ -1423,7 +1423,7 @@ fn pack_members(lock: &lockfile::Lockfile, pack_name: &str) -> Vec<String> {
 }
 
 /// The agents a pack update applies to: every agent the pack is installed
-/// for. A narrower `--agent` selection is refused rather than honoured,
+/// for. A narrower `--harness` selection is refused rather than honoured,
 /// because it would leave one agent's copy at the old release with a
 /// lockfile that can only record one pack version per member.
 fn pack_update_targets(
@@ -1448,7 +1448,7 @@ fn pack_update_targets(
             "a pack update applies to every agent the pack is installed for ({})",
             installed.join(", ")
         ))
-        .with_hint("drop --agent"));
+        .with_hint("drop --harness"));
     }
     Ok(installed)
 }
@@ -1608,7 +1608,7 @@ fn apply_pack_update(
                 continue;
             };
             let adapter = AdapterKind::from_id(target)
-                .ok_or_else(|| TuffError::usage(format!("unknown agent '{target}'")))?;
+                .ok_or_else(|| TuffError::usage(format!("unknown harness '{target}'")))?;
             adapter.remove(member, staging.path(), &target_entry.managed_hooks)?;
         }
         staged_lock.capabilities.remove(member);

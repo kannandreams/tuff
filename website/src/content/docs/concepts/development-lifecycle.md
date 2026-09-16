@@ -49,8 +49,8 @@ tuff init
 # → auto-installs tuff-cli-guide; your agent now knows Tuff commands
 
 # Register agent harnesses
-tuff agent add open-agents
-tuff agent add claude
+tuff harness add open-agents
+tuff harness add claude
 
 # Verify
 tuff list
@@ -101,7 +101,7 @@ Install capabilities from shared repos, check for updates, and merge changes.
 
 ```sh frame="terminal"
 # 1. Install a skill from a git repository
-tuff add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
+tuff add skill https://github.com/pproenca/dot-skills rust-implement -a open-agents
 # installed rust-implement (open-agents) → .agents/skills/rust-implement/SKILL.md
 
 # 2. Check installed capabilities
@@ -146,13 +146,13 @@ tuff init
 # .agents/workflows/ created (new: Tuff introduces this)
 
 # 2. Register your agents
-tuff agent add open-agents
-tuff agent add claude
+tuff harness add open-agents
+tuff harness add claude
 
 # 3. Add the existing directories in place
-tuff add --agent open-agents .agents/skills/existing-skill
-tuff add --agent open-agents .agents/tools/scan-tool
-tuff add --agent claude .claude/skills/claude-only
+tuff add -a open-agents .agents/skills/existing-skill
+tuff add -a open-agents .agents/tools/scan-tool
+tuff add -a claude .claude/skills/claude-only
 # added existing-skill (skill, open-agents) -> .agents/skills/existing-skill
 # added scan-tool (tool, open-agents) -> .agents/tools/scan-tool
 # added claude-only (skill, claude) -> .claude/skills/claude-only

@@ -71,7 +71,7 @@ tuff diff my-skill
 ```
 
 Creation initializes tracking automatically. It uses the configured default
-agent; pass `--agent claude` to create
+agent; pass `-a claude` to create
 the scaffold under `.claude/` instead.
 
 If the drift is intentional and should become the new baseline:
@@ -96,7 +96,7 @@ remove Tuff tracking without touching the files:
 tuff untrack my-skill
 ```
 
-Both commands use the configured default agent unless `-a/--agent` is provided.
+Both commands use the configured default agent unless `-a/--harness` is provided.
 `delete` refuses in-place added capabilities and requires `--force` for locally modified generated files. `untrack` removes the
 target lock entry and baseline while preserving the capability files and MCP
 configuration. The original source directory is never

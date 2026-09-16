@@ -78,16 +78,16 @@ Every tool goes through these checks at `tuff add` time:
 
 ```sh frame="terminal"
 # Local directory (type auto-detected from parent directory)
-tuff add --agent claude ./my-tool
+tuff add -a claude ./my-tool
 
 # Local file with explicit type (subcommand)
-tuff add tool ./scripts/deploy.sh --agent open-agents
+tuff add tool ./scripts/deploy.sh -a open-agents
 
 # Git repository
-tuff add tool https://github.com/owner/repo security-review --agent claude
+tuff add tool https://github.com/owner/repo security-review -a claude
 
 # Multiple agents
-tuff add --agent claude --agent open-agents ./my-tool
+tuff add -a claude -a open-agents ./my-tool
 ```
 
 ## Example tools

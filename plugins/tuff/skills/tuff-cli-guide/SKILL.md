@@ -86,8 +86,8 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff untrack <id> -a <agent>` — stop tracking a capability but keep its files; use this for capabilities adopted in place, which `delete` refuses
 - `tuff lock migrate` — rewrite `tuff.lock` in the current schema, changing nothing else
 - `tuff cache clear` — delete Tuff's disposable machine-local cache
-- `tuff agent list` — show available agent harnesses
-- `tuff agent add <id>` — register an agent and initialize its project directory
+- `tuff harness list` — show available harnesses (`tuff agent list` in Tuff 0.11 and earlier)
+- `tuff harness add <id>` — register a harness and initialize its project directory
 - `tuff init --global` — initialize global scope
 
 ### Agents

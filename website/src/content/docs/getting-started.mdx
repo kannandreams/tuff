@@ -24,24 +24,24 @@ learn Tuff commands.
 
 See [`tuff init`](/cli#tuff-init) for project and global initialization.
 
-## 2. Configure another agent (optional)
+## 2. Configure another harness (optional)
 
 `tuff init` is enough for the default `.agents/` workflow. Register another harness when you want
 to emit capabilities into its native directory:
 
 ```sh frame="terminal"
-tuff agent add claude
-tuff agent add codex
-tuff agent add cursor
+tuff harness add claude
+tuff harness add codex
+tuff harness add cursor
 ```
 
 To make that harness the default for later commands, run:
 
 ```sh frame="terminal"
-tuff agent set-default claude
+tuff harness set-default claude
 ```
 
-See [`tuff agent`](/cli/agents/#tuff-agent) for registration, defaults, aliases, and global settings.
+In Tuff 0.11 and earlier, the command is `tuff agent`. See [`tuff harness`](/cli/agents/#tuff-harness) for registration, defaults, aliases, and global settings.
 
 ## 3. Create and track your first capability
 
@@ -55,7 +55,7 @@ starts tracking drift without requiring a separate import.
 To create it for another agent explicitly:
 
 ```sh frame="terminal"
-tuff create skill my-skill --agent claude
+tuff create skill my-skill -a claude
 ```
 
 See [`tuff create`](/cli/add/#tuff-create) for skills, tools, hooks, workflows, and repeated agent
@@ -64,7 +64,7 @@ selection.
 If your project already has a skill under `.agents/skills/`, add it in place:
 
 ```sh frame="terminal"
-tuff add skill .agents/skills/existing-skill --agent open-agents
+tuff add skill .agents/skills/existing-skill -a open-agents
 ```
 
 See [`tuff add`](/cli/add/#tuff-add) for adopting existing files and installing from git.
@@ -96,8 +96,8 @@ If the drift is intentional and should become the new baseline:
 tuff update my-skill
 ```
 
-Commands use the configured default agent when `-a/--agent` is omitted. Pass `-a <agent>` to
-operate on a different agent, or repeat the flag for multiple agents. See
+Commands use the configured default harness when `-a/--harness` is omitted. Pass `-a <harness>` to
+operate on a different harness, or repeat the flag for several harnesses. See
 [`tuff update`](/cli/diff-update/#tuff-update) for source-aware updates and dry runs.
 
 For existing files that were added in place, later edits follow this same drift and update flow.
@@ -105,7 +105,7 @@ For existing files that were added in place, later edits follow this same drift 
 ## 6. Install from git
 
 ```sh frame="terminal"
-tuff add skill https://github.com/pproenca/dot-skills rust-implement --agent open-agents
+tuff add skill https://github.com/pproenca/dot-skills rust-implement -a open-agents
 ```
 
 The command installs the selected capability, tracks the upstream revision, and records
@@ -141,7 +141,7 @@ tuff untrack my-skill
 See [`tuff delete`](/cli/clean-up/#tuff-delete) and [`tuff untrack`](/cli/clean-up/#tuff-untrack) for explicit
 agent selection, global scope, and force behavior.
 
-`tuff agent remove <agent>` only unregisters the agent. It does not remove capabilities.
+`tuff harness remove <harness>` only unregisters the harness. It does not remove capabilities.
 
 ## 9. CI validation
 

@@ -195,8 +195,8 @@ fn blocking_label(blocking: BlockingScope) -> String {
 
 pub fn cmd_hooks_check_portability(repo_root: &Path, hook_id: &str, target: &str) -> Result<()> {
     let target = AdapterKind::from_id(target).ok_or_else(|| {
-        TuffError::usage(format!("unknown agent '{}'", target,))
-            .with_hint("run 'tuff agent list' to see available agents")
+        TuffError::usage(format!("unknown harness '{}'", target,))
+            .with_hint("run 'tuff harness list' to see available harnesses")
     })?;
     ensure_registered(repo_root, target)?;
 
@@ -299,7 +299,7 @@ pub(crate) fn registered_adapters(repo_root: &Path) -> Result<Vec<AdapterKind>> 
     for id in config.agents {
         let adapter = AdapterKind::from_id(&id).ok_or_else(|| {
             TuffError::usage(format!("unknown registered agent '{}'", id))
-                .with_hint("run 'tuff agent list' to inspect config")
+                .with_hint("run 'tuff harness list' to inspect config")
         })?;
         if !adapters.contains(&adapter) {
             adapters.push(adapter);
@@ -317,7 +317,7 @@ fn ensure_registered(repo_root: &Path, adapter: AdapterKind) -> Result<()> {
         "agent '{}' is not registered in this project",
         adapter.id()
     ))
-    .with_hint(format!("run 'tuff agent add {}' first", adapter.id())))
+    .with_hint(format!("run 'tuff harness add {}' first", adapter.id())))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
