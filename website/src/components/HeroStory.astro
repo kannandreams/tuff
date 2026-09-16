@@ -51,13 +51,11 @@ const projects = [
   <div class="tuff-hero-main hs-main">
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
     <div class="hs-headlines">
-      <h2 class="hs-roll" data-hs-headline="e">
-        <span class="hs-roll-slot">
-          <span class="hs-roll-item" data-hs-roll=0>Manage capabilities.</span>
-          <span class="hs-roll-item" data-hs-roll=1>Use them across harnesses.</span>
-          <span class="hs-roll-item" data-hs-roll=2>Ship them with your agent.</span>
-          <span class="hs-roll-item" data-hs-roll=3>Govern them everywhere.</span>
-        </span>
+      <h2 class="hs-stack" data-hs-headline="e">
+        <span class="hs-stack-item" data-hs-roll=0>Manage capabilities<i>.</i></span>
+        <span class="hs-stack-item" data-hs-roll=1>Use them across harnesses<i>.</i></span>
+        <span class="hs-stack-item" data-hs-roll=2>Ship them with your agent<i>.</i></span>
+        <span class="hs-stack-item" data-hs-roll=3>Govern them everywhere<i>.</i></span>
       </h2>
       <h2 class="hs-hl" data-hs-headline="a" hidden>
         <span data-hs-line="0"><b>01</b>Manage capabilities.</span>
@@ -101,7 +99,7 @@ const projects = [
       <div class="hs-bar"><i></i><i></i><i></i><span>support-agent</span><em>github.com/acme/agents · apps/support-agent</em></div>
 
       <div class="hs-stage" data-hs-step="0" style="--d: 0">
-        <div class="hs-label"><b>1</b> manage</div>
+        <div class="hs-label"><b>1</b> manage<span>Gather capabilities from your repo, git, the MCP catalog, and packs.</span></div>
         <div class="hs-caps">
           {caps.map((cap, index) => (
             <button type="button" class="hs-cap" data-hs-cap={index}>
@@ -144,7 +142,7 @@ const projects = [
       <div class="hs-merge" data-hs-step="3" style="--d: 3"><span>tuff dashboard publish</span></div>
 
       <div class="hs-stage hs-govern" data-hs-step="3" style="--d: 4">
-        <div class="hs-label"><b>4</b> govern</div>
+        <div class="hs-label"><b>4</b> govern<span>See what every project runs, what drifted, and which rules are not enforced.</span></div>
         <div class="hs-govern-body">
           <div class="hs-kpis">
             <div><b>12</b><small>projects</small></div>
@@ -154,8 +152,8 @@ const projects = [
           </div>
           <ul class="hs-feed">
             <li><i class="is-add"></i>linear added to <b>support-agent</b><small>3f2c9e1</small></li>
-            <li><i class="is-ver"></i>pack <b>support-agent</b> 1.3.0 → 1.4.0<small>image v42</small></li>
-            <li><i class="is-warn"></i>ticket-triage edited in <b>billing-agent</b><small>drift</small></li>
+            <li><i class="is-ver"></i>pack <b>support-agent</b> 1.3.0 → 1.4.0<small>1m ago</small></li>
+            <li><i class="is-warn"></i>ticket-triage edited in <b>billing-agent</b><small>12m ago</small></li>
           </ul>
         </div>
       </div>
@@ -316,15 +314,14 @@ const projects = [
   .hs-install button:hover { color: #f18453; border-color: #9a4c30; }
   .hs-install-more { display: inline-block; margin-top: .5rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
   .hs-install-more:hover { color: var(--tuff-accent); }
-  .hs-hl[hidden], .hs-roll[hidden] { display: none; }
-  .hs-roll { margin: .35rem 0 0; font-family: 'Geist', system-ui, sans-serif; font-size: clamp(1.3rem, 2.4vw, 2.1rem); font-weight: 600; line-height: 1.25; letter-spacing: -.045em; }
-  /* Every sentence occupies the same grid cell, so the slot is as wide as the longest one and never wraps. */
-  .hs-roll-slot { display: inline-grid; overflow: hidden; padding: .08em 0; white-space: nowrap; vertical-align: top; }
-  .hs-roll-item { grid-area: 1 / 1; color: var(--tuff-text); opacity: 0; transform: translateY(70%); transition: transform .6s cubic-bezier(.65, 0, .25, 1), opacity .45s ease; }
-  .hs-roll-item.is-on { opacity: 1; transform: none; }
-  .hs-roll-item.is-out { opacity: 0; transform: translateY(-70%); }
+  .hs-hl[hidden], .hs-stack[hidden] { display: none; }
+  .hs-stack { display: grid; gap: .35rem; margin: .3rem 0 0; font-family: 'Inter Tight', 'Geist', system-ui, sans-serif; letter-spacing: -.03em; line-height: 1.15; }
+  .hs-stack-item { display: block; color: #aaa49a; font-size: clamp(1.1rem, 1.7vw, 1.55rem); font-weight: 600; white-space: nowrap; transition: font-size .5s cubic-bezier(.65, 0, .25, 1), color .4s ease; }
+  .hs-stack-item i { font-style: normal; color: inherit; transition: color .4s ease; }
+  .hs-stack-item.is-on { color: var(--tuff-text); font-size: clamp(1.6rem, 2.6vw, 2.45rem); font-weight: 700; }
+  .hs-stack-item.is-on i { color: var(--tuff-accent); }
   @media (prefers-reduced-motion: reduce) {
-    .hs-roll-item { transition: none; }
+    .hs-stack-item { transition: none; }
   }
 
   .hs-flow { margin: 0; padding: 0 1rem .8rem; border: 1px solid #343934; border-radius: .5rem; background: #1b1e1b; color: #eeeae2; box-shadow: 0 2rem 5rem rgba(38, 31, 22, .2), 0 0 0 1px rgba(232, 93, 42, .08); font-family: 'JetBrains Mono', monospace; }
@@ -333,8 +330,11 @@ const projects = [
   .hs-bar span { margin-left: .45rem; color: #f18453; }
   .hs-bar em { margin-left: auto; color: #7d8279; font-style: normal; font-size: .6rem; }
   .hs-stage { padding: .65rem .7rem; border: 1px solid #343934; border-radius: .35rem; background: #242824; }
-  .hs-label { margin-bottom: .45rem; color: #989d94; font-size: .6rem; letter-spacing: .07em; text-transform: uppercase; }
-  .hs-label b { display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-right: .35rem; border-radius: 50%; color: #1b1e1b; background: #f18453; font-size: .6rem; }
+  .hs-label { display: flex; align-items: center; gap: .1rem; margin-bottom: .5rem; color: #c9ccc5; font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; transition: color .4s ease; }
+  .hs-label span { margin-left: auto; padding-left: 1rem; color: #7d8279; font-family: 'Geist', system-ui, sans-serif; font-size: .64rem; letter-spacing: 0; text-transform: none; text-align: right; }
+  .is-active > .hs-label { color: #eeeae2; }
+  .hs-label b { display: inline-grid; place-items: center; flex: none; width: 1.2rem; height: 1.2rem; margin-right: .45rem; border-radius: 50%; color: #1b1e1b; background: #6b716a; font-size: .62rem; transition: background .4s ease; }
+  .hs-stage.is-active .hs-label b { background: #f18453; }
 
   .hs-caps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .45rem; }
   .hs-cap { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; min-width: 0; padding: .45rem .5rem; border: 1px dashed #4c544c; border-radius: .3rem; color: inherit; background: #1b1e1b; cursor: pointer; font: inherit; text-align: left; transition: border-color .25s, background .25s, transform .25s; }
@@ -353,7 +353,7 @@ const projects = [
   .hs-lock span { color: #c9ccc5; font-size: .6rem; }
   .hs-fork { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
   .hs-path { display: flex; flex-direction: column; gap: .55rem; }
-  .hs-path:not(.hs-path--ship) .hs-label b, .hs-govern .hs-label b { background: var(--g-dark); }
+  .hs-path:not(.hs-path--ship).is-active .hs-label b, .hs-govern.is-active .hs-label b { background: var(--g-dark); }
   .hs-path:not(.hs-path--ship) .hs-plain code { color: var(--g-dark); }
   .hs-path:not(.hs-path--ship) .hs-lock { border-color: color-mix(in srgb, var(--g-dark) 55%, #343934); background: linear-gradient(90deg, color-mix(in srgb, var(--g-dark) 10%, #242824), #242824); }
   .hs-path:not(.hs-path--ship) .hs-lock strong { color: var(--g-dark); }
