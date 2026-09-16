@@ -203,8 +203,8 @@
             "Write",
             "MCP"
           ],
-          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
-          "source": "https://learn.chatgpt.com/docs/hooks.md",
+          "caveat": "No harness documents a hook mechanism for the shared .agents layout; the registration is kept for tools that adopt it.",
+          "source": null,
           "since_harness_version": null,
           "until_harness_version": null
         },
@@ -222,8 +222,8 @@
             "Write",
             "MCP"
           ],
-          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
-          "source": "https://learn.chatgpt.com/docs/hooks.md",
+          "caveat": "No harness documents a hook mechanism for the shared .agents layout; the registration is kept for tools that adopt it.",
+          "source": null,
           "since_harness_version": null,
           "until_harness_version": null
         },
@@ -383,102 +383,114 @@
       "adapter": "codex",
       "display_name": "Codex",
       "dir_prefix": ".agents",
-      "hook_settings_path": ".agents/hook.json",
+      "hook_settings_path": ".codex/hooks.json",
       "hook_settings_shape": "grouped",
       "hook_command": "sh .agents/hooks/<id>/run.sh",
       "spec_version": "0.2.0",
       "adapter": "codex",
       "events": [
         {
-          "event": "before_finish",
-          "native_event": "before_finish",
-          "aliases": [],
-          "coverage": "full",
-          "scope": [],
-          "caveat": null,
-          "source": null,
-          "since_harness_version": null,
-          "until_harness_version": null
-        },
-        {
-          "event": "after_save",
-          "native_event": "after_save",
-          "aliases": [],
-          "coverage": "full",
-          "scope": [],
-          "caveat": null,
-          "source": null,
-          "since_harness_version": null,
-          "until_harness_version": null
-        },
-        {
-          "event": "pre_tool_use",
-          "native_event": "pre_tool_execution",
-          "aliases": [
-            "pre_tool_execution"
-          ],
-          "coverage": "partial",
-          "scope": [
-            "local function tools",
-            "Bash",
-            "Edit",
-            "Write",
-            "MCP"
-          ],
-          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
-          "source": "https://learn.chatgpt.com/docs/hooks.md",
-          "since_harness_version": null,
-          "until_harness_version": null
-        },
-        {
-          "event": "post_tool_use",
-          "native_event": "post_tool_execution",
-          "aliases": [
-            "post_tool_execution"
-          ],
-          "coverage": "partial",
-          "scope": [
-            "local function tools",
-            "Bash",
-            "Edit",
-            "Write",
-            "MCP"
-          ],
-          "caveat": "Codex hosted tools do not use the local function-tool hook path.",
-          "source": "https://learn.chatgpt.com/docs/hooks.md",
-          "since_harness_version": null,
-          "until_harness_version": null
-        },
-        {
           "event": "session_start",
-          "native_event": null,
-          "aliases": [],
-          "coverage": "unsupported",
-          "scope": [],
-          "caveat": "Codex hook.json does not currently define a session-start event.",
-          "source": null,
+          "native_event": "SessionStart",
+          "aliases": [
+            "SessionStart"
+          ],
+          "coverage": "full",
+          "scope": [
+            "session lifecycle"
+          ],
+          "caveat": null,
+          "source": "https://learn.chatgpt.com/docs/hooks",
           "since_harness_version": null,
           "until_harness_version": null
         },
         {
           "event": "session_end",
+          "native_event": "SessionEnd",
+          "aliases": [
+            "SessionEnd"
+          ],
+          "coverage": "full",
+          "scope": [
+            "session lifecycle"
+          ],
+          "caveat": null,
+          "source": "https://learn.chatgpt.com/docs/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "pre_tool_use",
+          "native_event": "PreToolUse",
+          "aliases": [
+            "PreToolUse",
+            "pre_tool_execution"
+          ],
+          "coverage": "full",
+          "scope": [
+            "tool calls"
+          ],
+          "caveat": null,
+          "source": "https://learn.chatgpt.com/docs/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "post_tool_use",
+          "native_event": "PostToolUse",
+          "aliases": [
+            "PostToolUse",
+            "post_tool_execution"
+          ],
+          "coverage": "full",
+          "scope": [
+            "tool calls"
+          ],
+          "caveat": null,
+          "source": "https://learn.chatgpt.com/docs/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "before_finish",
+          "native_event": "Stop",
+          "aliases": [
+            "before_finish"
+          ],
+          "coverage": "partial",
+          "scope": [
+            "main-agent completion"
+          ],
+          "caveat": "Codex Stop runs after the agent finishes responding and can request continuation; it does not represent every possible pre-finish boundary.",
+          "source": "https://learn.chatgpt.com/docs/hooks",
+          "since_harness_version": null,
+          "until_harness_version": null
+        },
+        {
+          "event": "after_save",
           "native_event": null,
-          "aliases": [],
+          "aliases": [
+            "after_save"
+          ],
           "coverage": "unsupported",
           "scope": [],
-          "caveat": "Codex hook.json does not currently define a session-end event.",
-          "source": null,
+          "caveat": "Codex documents no after-save event; PostToolUse on its edit tools is the closest moment.",
+          "source": "https://learn.chatgpt.com/docs/hooks",
           "since_harness_version": null,
           "until_harness_version": null
         },
         {
           "event": "stop",
-          "native_event": null,
-          "aliases": [],
-          "coverage": "unsupported",
-          "scope": [],
-          "caveat": "Codex hook.json does not currently define a stop event.",
-          "source": null,
+          "native_event": "Stop",
+          "aliases": [
+            "Stop"
+          ],
+          "coverage": "full",
+          "scope": [
+            "main-agent completion"
+          ],
+          "caveat": null,
+          "source": "https://learn.chatgpt.com/docs/hooks",
           "since_harness_version": null,
           "until_harness_version": null
         }

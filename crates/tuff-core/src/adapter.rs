@@ -520,6 +520,25 @@ pub trait AgentAdapter {
         true
     }
 
+    /// `mcp_server_entry`, for a harness whose config cannot express every
+    /// declaration. The default expresses everything; an override refuses
+    /// what its harness would silently get wrong, such as a renamed
+    /// variable, so the install stops before anything is written.
+    fn mcp_server_entry_checked(
+        &self,
+        server: &crate::manifest::McpServerConfig,
+    ) -> Result<serde_json::Value> {
+        Ok(self.mcp_server_entry(server))
+    }
+
+    /// A note `tuff add` prints after installing a capability of this kind,
+    /// for a harness that applies the installed files only under a
+    /// condition the file itself cannot state, such as Codex loading a
+    /// project's `.codex/` layer only once the project is trusted.
+    fn install_note(&self, _kind: CapabilityType) -> Option<&'static str> {
+        None
+    }
+
     fn plan(&self, capability: &ResolvedCapability, repo_root: &Path) -> Result<Vec<PlannedFile>> {
         match capability.capability_type {
             CapabilityType::Tool => self.plan_tool(capability, repo_root),

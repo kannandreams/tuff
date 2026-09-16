@@ -87,6 +87,8 @@ forward_to_implementation! {
     fn mcp_env_reference(&self, var: &str) -> String;
     fn mcp_server_entry(&self, server: &tuff_core::manifest::McpServerConfig) -> serde_json::Value;
     fn mcp_http_declares_type(&self) -> bool;
+    fn mcp_server_entry_checked(&self, server: &tuff_core::manifest::McpServerConfig) -> Result<serde_json::Value>;
+    fn install_note(&self, kind: CapabilityType) -> Option<&'static str>;
     fn supported_agents(&self) -> &[&'static str];
     fn hook_compatibility(&self) -> &'static CompatibilityMatrix;
     fn hook_settings_relpath(&self) -> &'static str;

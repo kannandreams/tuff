@@ -338,6 +338,102 @@ pub(crate) fn mcp_entry_tracked(lockfile: &lockfile::Lockfile, id: &str, target:
         .is_some_and(|entry| entry.targets.contains_key(target))
 }
 
+/// Take a hook's registrations out of a settings file the adapter no longer
+/// writes to, before it registers in the file it reads now.
+///
+/// The Codex adapter registered in `.agents/hook.json` before 0.11.1 and in
+/// `.codex/hooks.json` since, so `tuff update` of a hook installed earlier
+/// would otherwise leave the old registration behind where nothing reads
+/// it. Registrations in the current file are left to the merge, which
+/// replaces them.
+fn remove_registrations_at_previous_settings_path(
+    install_root: &Path,
+    lockfile: &lockfile::Lockfile,
+    capability_id: &str,
+    adapter: AdapterKind,
+) -> Result<()> {
+    let Some(entry) = lockfile.capabilities.get(capability_id) else {
+        return Ok(());
+    };
+    let Some(previous) = entry.targets.get(adapter.id()) else {
+        return Ok(());
+    };
+    let mut by_path: BTreeMap<&str, Vec<lockfile::ManagedHook>> = BTreeMap::new();
+    for hook in &previous.managed_hooks {
+        if hook.settings_path == adapter.hook_settings_relpath() {
+            continue;
+        }
+        // `-a open-agents -a codex` used to record one registration for
+        // both targets. The target that still reads that file keeps it.
+        let shared = entry.targets.iter().any(|(target_id, target)| {
+            target_id != adapter.id()
+                && target.managed_hooks.iter().any(|other| {
+                    other.settings_path == hook.settings_path
+                        && other.event == hook.event
+                        && other.command == hook.command
+                })
+        });
+        if shared {
+            continue;
+        }
+        by_path
+            .entry(hook.settings_path.as_str())
+            .or_default()
+            .push(hook.clone());
+    }
+    for (settings_path, hooks) in by_path {
+        tuff_core::hook_settings::remove_registrations(
+            settings_path,
+            adapter.display_name(),
+            install_root,
+            &hooks,
+        )?;
+    }
+    Ok(())
+}
+
+/// Take an MCP entry out of a config file the adapter no longer writes to,
+/// unless another target of the same capability still records that file.
+///
+/// The Codex adapter registered in `.agents/mcp.json` before 0.11.1, the
+/// file the `open-agents` target still uses, so an entry both recorded is
+/// kept for the target that reads it.
+fn remove_entry_at_previous_config_path(
+    install_root: &Path,
+    lockfile: &lockfile::Lockfile,
+    capability_id: &str,
+    adapter: AdapterKind,
+) -> Result<()> {
+    let Some(entry) = lockfile.capabilities.get(capability_id) else {
+        return Ok(());
+    };
+    let Some(previous) = entry
+        .targets
+        .get(adapter.id())
+        .and_then(|target| target.managed_mcp_entry.as_ref())
+    else {
+        return Ok(());
+    };
+    if previous.config_path == adapter.mcp_config_relpath() {
+        return Ok(());
+    }
+    let shared = entry.targets.iter().any(|(target_id, target)| {
+        target_id != adapter.id()
+            && target
+                .managed_mcp_entry
+                .as_ref()
+                .is_some_and(|managed| managed.config_path == previous.config_path)
+    });
+    if shared {
+        return Ok(());
+    }
+    crate::adapters::mcp_remove_tool(
+        install_root,
+        &install_root.join(&previous.config_path),
+        capability_id,
+    )
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "CLI dispatch passes source and install context"
@@ -1430,6 +1526,12 @@ pub(crate) fn install_capability_accepting(
         let mut managed_hooks = Vec::new();
 
         if let CapabilityKind::Hook { hook } = &capability.kind {
+            remove_registrations_at_previous_settings_path(
+                install_root,
+                &lockfile,
+                &capability.id,
+                *adapter,
+            )?;
             let hook_root = install_root
                 .join(adapter.dir_prefix())
                 .join("hooks")
@@ -1478,6 +1580,10 @@ pub(crate) fn install_capability_accepting(
                     lockfile::relative_or_absolute_fs(&target_path, install_root)
                 );
             }
+        }
+
+        if report && let Some(note) = adapter.install_note(capability.capability_type) {
+            eprintln!("note: {note}");
         }
 
         if let Some(compiled) = compiled_policies.get(adapter.id()) {
@@ -1584,7 +1690,13 @@ pub(crate) fn install_capability_accepting(
         for adapter in &adapters {
             let mcp_path = install_root.join(adapter.mcp_config_relpath());
             let tracked = mcp_entry_tracked(&lockfile, &capability.id, adapter.id());
-            let entry_value = adapter.mcp_server_entry(server);
+            remove_entry_at_previous_config_path(
+                install_root,
+                &lockfile,
+                &capability.id,
+                *adapter,
+            )?;
+            let entry_value = adapter.mcp_server_entry_checked(server)?;
             let baseline = lockfile::managed_mcp_entry_baseline(&entry_value)?;
             crate::adapters::mcp_register_server(
                 install_root,

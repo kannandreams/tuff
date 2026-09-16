@@ -246,7 +246,8 @@ fn update_from_registry(
                 lockfile::managed_mcp_entry_status(scope_root, id, managed) != "clean"
             })
     });
-    if latest == entry.version && !entry_drifted {
+    let entry_relocated = mcp_entry_relocated(entry, target_ids);
+    if latest == entry.version && !entry_drifted && !entry_relocated {
         println!("'{id}' is already up to date ({registry} {latest})");
         return Ok(());
     }
@@ -254,6 +255,10 @@ fn update_from_registry(
         if entry_drifted {
             println!(
                 "'{id}' has a hand-edited MCP config entry; update --force would restore the canonical entry"
+            );
+        } else if entry_relocated {
+            println!(
+                "'{id}' is registered in a file its agent no longer reads; update would move the entry"
             );
         } else {
             println!("'{id}' can be updated: {} → {latest}", entry.version);
@@ -327,7 +332,8 @@ fn update_from_catalog(
             })
     });
 
-    if latest == entry.version && !entry_drifted {
+    let entry_relocated = mcp_entry_relocated(entry, target_ids);
+    if latest == entry.version && !entry_drifted && !entry_relocated {
         println!("'{}' is already up to date (catalog {latest})", id);
         return Ok(());
     }
@@ -352,6 +358,10 @@ fn update_from_catalog(
             println!(
                 "'{}' has a hand-edited MCP config entry — update --force would restore the canonical entry",
                 id
+            );
+        } else if entry_relocated {
+            println!(
+                "'{id}' is registered in a file its agent no longer reads; update would move the entry"
             );
         } else if all_clean {
             println!(
@@ -389,6 +399,24 @@ fn update_from_catalog(
         })),
         true,
     )
+}
+
+/// Whether a target records its MCP entry in a file its adapter no longer
+/// writes to, as a Codex install made before 0.11.1 does. Reinstalling
+/// moves the entry, and needs no `--force`: nothing the user wrote is
+/// replaced, and the old entry is removed unless another target reads it.
+fn mcp_entry_relocated(entry: &lockfile::CapabilityLockEntry, target_ids: &[String]) -> bool {
+    target_ids.iter().any(|target_id| {
+        let Some(adapter) = crate::adapter::AdapterKind::from_id(target_id) else {
+            return false;
+        };
+        let current = crate::adapter::AgentAdapter::mcp_config_relpath(&adapter);
+        entry
+            .targets
+            .get(target_id)
+            .and_then(|target| target.managed_mcp_entry.as_ref())
+            .is_some_and(|managed| managed.config_path != current)
+    })
 }
 
 pub struct UpdateOptions<'a> {

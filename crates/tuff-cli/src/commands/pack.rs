@@ -742,7 +742,7 @@ fn register_mcp_if_needed(
         return tuff_core::mcp::register_server(
             &root.join(adapter.mcp_config_relpath()),
             &capability.id,
-            adapter.mcp_server_entry(server),
+            adapter.mcp_server_entry_checked(server)?,
             tracked,
         );
     }

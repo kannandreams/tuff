@@ -18,7 +18,7 @@ tuff add mcp ./mcp-servers/internal-search
 
 What the install does:
 
-- Each harness gets an entry in its own MCP config (`.mcp.json`, `.cursor/mcp.json`, `.agents/mcp.json`, or `mcp` in `.opencode/opencode.json`) plus a tracked `<prefix>/mcp-servers/<id>/server.toml`.
+- Each harness gets an entry in its own MCP config (`.mcp.json`, `.cursor/mcp.json`, `.agents/mcp.json`, `mcp` in `.opencode/opencode.json`, or `[mcp_servers.<id>]` in `.codex/config.toml`) plus a tracked `<prefix>/mcp-servers/<id>/server.toml`.
 - Secrets are emitted as environment references, and Tuff prints which variables to export.
 - The install is refused before anything is written if the config is malformed or already has an entry Tuff does not track.
 - Installing from the catalog at a real terminal asks, once per required variable, whether to use a different environment variable name than the catalog's default, never the secret's value. Skip with `--yes`, or it's automatic in a non-interactive shell.

@@ -138,7 +138,8 @@ Manifest-style Tuff-standard hooks use canonical event names: `session_start`, `
 
 The full vocabulary, what each event may block, and every harness's compatibility matrix are published in the [Hooks Specification](/spec/hooks/). Those tables are generated from the code Tuff runs, so they cannot drift from what `tuff add` does. The short version:
 
-- **Open Agents** and **Codex** render into `.agents/hook.json` with events such as `before_finish`, `after_save`, `pre_tool_execution`, and `post_tool_execution`.
+- **Open Agents** renders into `.agents/hook.json` with events such as `before_finish`, `after_save`, `pre_tool_execution`, and `post_tool_execution`.
+- **Codex** renders into `.codex/hooks.json`, in the same grouped shape as Claude Code, with Codex's events `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, and `Stop`. Codex runs a project's hooks only in a trusted project, and only after you approve them with `/hooks` in Codex.
 - **Claude** renders into `.claude/settings.json` with Claude Code's case-sensitive names: `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, and `Stop`. `before_finish` is partial through `Stop`, and `after_save` is unsupported because Claude's `FileChanged` needs watched paths the standard hook cannot express.
 - **Cursor** renders into `.cursor/hooks.json` with `sessionStart`, `sessionEnd`, `preToolUse`, `postToolUse`, and `stop`, where a hook group carries a direct `command` field rather than the nested `hooks` array the others use.
 
@@ -168,7 +169,7 @@ created and tracked hook 'review-hook' (open-agents) -> .agents/hook.json
 |---|---|---|
 | `open-agents` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Native JSON (development format) |
 | `claude` | `.claude/hooks/<id>/...` plus `.claude/settings.json` | Native Claude JSON |
-| `codex` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Codex hook JSON |
+| `codex` | `.agents/hooks/<id>/run.sh` plus `.codex/hooks.json` | Codex hooks JSON, grouped |
 | `cursor` | `.cursor/hooks/<id>/run.sh` plus `.cursor/hooks.json` | Cursor Hooks JSON |
 
 ## Filtering
