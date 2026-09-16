@@ -56,7 +56,7 @@ This records a new target and emits the capability into that harness's layout. T
 |---|---|---|
 | `open-agents` | `.agents/tools/<id>/...` | `.agents/mcp.json` |
 | `claude` | `.claude/tools/<id>/...` | `.mcp.json` |
-| `codex` | `.agents/tools/<id>/...` | `.agents/mcp.json` |
+| `codex` | `.agents/tools/<id>/...` | `[mcp_servers.<id>]` in `.codex/config.toml` |
 | `cursor` | `.cursor/tools/<id>/...` | `.cursor/mcp.json` |
 | `opencode` | not supported | `mcp` in `.opencode/opencode.json` (MCP servers only) |
 
@@ -71,7 +71,7 @@ Hooks are where the adapter differences are most visible:
 |---|---|---|
 | `open-agents` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Native JSON (development format) |
 | `claude` | `.claude/hooks/<id>/...` plus `.claude/settings.json` | Native Claude JSON |
-| `codex` | `.agents/hooks/<id>/run.sh` plus `.agents/hook.json` | Codex hook JSON |
+| `codex` | `.agents/hooks/<id>/run.sh` plus `.codex/hooks.json` | Codex hooks JSON, grouped |
 | `cursor` | `.cursor/hooks/<id>/run.sh` plus `.cursor/hooks.json` | Cursor Hooks JSON |
 
 For Claude, `tuff add hook ... --hook-file settings.json` reads a hooks-only native fragment,

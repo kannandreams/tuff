@@ -138,8 +138,8 @@ Hooks install under `.agents/hooks/<id>/`, registered in `.agents/hook.json` (gr
 |---|---|---|---|---|---|
 | `before_finish` | `before_finish` | full |  |  |  |
 | `after_save` | `after_save` | full |  |  |  |
-| `pre_tool_use` | `pre_tool_execution` | partial | `pre_tool_execution` | local function tools, Bash, Edit, Write, MCP | Codex hosted tools do not use the local function-tool hook path. ([source](https://learn.chatgpt.com/docs/hooks.md)) |
-| `post_tool_use` | `post_tool_execution` | partial | `post_tool_execution` | local function tools, Bash, Edit, Write, MCP | Codex hosted tools do not use the local function-tool hook path. ([source](https://learn.chatgpt.com/docs/hooks.md)) |
+| `pre_tool_use` | `pre_tool_execution` | partial | `pre_tool_execution` | local function tools, Bash, Edit, Write, MCP | No harness documents a hook mechanism for the shared .agents layout; the registration is kept for tools that adopt it. |
+| `post_tool_use` | `post_tool_execution` | partial | `post_tool_execution` | local function tools, Bash, Edit, Write, MCP | No harness documents a hook mechanism for the shared .agents layout; the registration is kept for tools that adopt it. |
 | `session_start` | none | unsupported |  |  | Open Agents hook.json does not currently define a session-start event. |
 | `session_end` | none | unsupported |  |  | Open Agents hook.json does not currently define a session-end event. |
 | `stop` | none | unsupported |  |  | Open Agents hook.json does not currently define a stop event. |
@@ -160,17 +160,17 @@ Hooks install under `.claude/hooks/<id>/`, registered in `.claude/settings.json`
 
 ### Codex (`codex`)
 
-Hooks install under `.agents/hooks/<id>/`, registered in `.agents/hook.json` (grouped shape) as `sh .agents/hooks/<id>/run.sh`.
+Hooks install under `.agents/hooks/<id>/`, registered in `.codex/hooks.json` (grouped shape) as `sh .agents/hooks/<id>/run.sh`.
 
 | Canonical | Native | Coverage | Aliases | Scope | Caveat |
 |---|---|---|---|---|---|
-| `before_finish` | `before_finish` | full |  |  |  |
-| `after_save` | `after_save` | full |  |  |  |
-| `pre_tool_use` | `pre_tool_execution` | partial | `pre_tool_execution` | local function tools, Bash, Edit, Write, MCP | Codex hosted tools do not use the local function-tool hook path. ([source](https://learn.chatgpt.com/docs/hooks.md)) |
-| `post_tool_use` | `post_tool_execution` | partial | `post_tool_execution` | local function tools, Bash, Edit, Write, MCP | Codex hosted tools do not use the local function-tool hook path. ([source](https://learn.chatgpt.com/docs/hooks.md)) |
-| `session_start` | none | unsupported |  |  | Codex hook.json does not currently define a session-start event. |
-| `session_end` | none | unsupported |  |  | Codex hook.json does not currently define a session-end event. |
-| `stop` | none | unsupported |  |  | Codex hook.json does not currently define a stop event. |
+| `session_start` | `SessionStart` | full | `SessionStart` | session lifecycle | [source](https://learn.chatgpt.com/docs/hooks) |
+| `session_end` | `SessionEnd` | full | `SessionEnd` | session lifecycle | [source](https://learn.chatgpt.com/docs/hooks) |
+| `pre_tool_use` | `PreToolUse` | full | `PreToolUse`, `pre_tool_execution` | tool calls | [source](https://learn.chatgpt.com/docs/hooks) |
+| `post_tool_use` | `PostToolUse` | full | `PostToolUse`, `post_tool_execution` | tool calls | [source](https://learn.chatgpt.com/docs/hooks) |
+| `before_finish` | `Stop` | partial | `before_finish` | main-agent completion | Codex Stop runs after the agent finishes responding and can request continuation; it does not represent every possible pre-finish boundary. ([source](https://learn.chatgpt.com/docs/hooks)) |
+| `after_save` | none | unsupported | `after_save` |  | Codex documents no after-save event; PostToolUse on its edit tools is the closest moment. ([source](https://learn.chatgpt.com/docs/hooks)) |
+| `stop` | `Stop` | full | `Stop` | main-agent completion | [source](https://learn.chatgpt.com/docs/hooks) |
 
 ### Cursor (`cursor`)
 
@@ -292,5 +292,6 @@ Compatibility matrices are data about harnesses, not part of the vocabulary. A r
 
 ## 10. Changes to this specification
 
+- **Matrix data, 2026-09-16 (Tuff 0.11.1).** The Codex matrix now names the events Codex reads from `.codex/hooks.json` (`SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Stop`; `before_finish` partial through `Stop`; `after_save` unsupported), with the earlier snake_case names kept as aliases; the earlier rows described a file Codex never read. The Open Agents matrix no longer cites Codex's documentation for events no harness documents. Matrices are data about harnesses, so the specification version is unchanged.
 - **0.2.0.** Tested by a clean-room implementation, and every gap it found is closed. New requirements: an implementation MUST refuse an `id` that is not a relative path of plain names, a `files` entry that escapes the manifest's directory or passes through a symbolic link, and a listed file that would replace the wrapper; each closes a way for a hostile capability to write, delete, or run something the user was not shown, and Tuff 0.9.0 and earlier do not meet them. Clarified from Tuff's behaviour: only listed files are installed, and where (4.2); the exact quoting in the wrapper and that its mode is not significant (4.3); the order of installation and that a refusal changes nothing (4.4); that a name matching no row is refused and what the message lists (5); that a flat fragment's `version` is optional (6.2); what counts as an equal group, how corrupt files are treated, and that formatting is not significant (6.3); exactly which object the entry hash covers and how it is computed (6.4); and the removal algorithm step by step (6.5). Section 8 describes the conformance kit. A third pass against the final text settled all but one wording point, which section 5 now states: both kinds of refusal list the usable event names. A second pass of the same clean-room implementation against a draft of 0.2.0 closed its original gaps and found five more, all settled here: that every refusal comes before any write, including a corrupt settings file (4.4); that a repeated `files` entry installs once and two entries colliding on one installed path are refused (4.1, 4.2); which parts of a settings file are inspected (6.3); that removal updates the settings file before deleting files and stops on a corrupt one (6.5); and which empty directories removal prunes, and what counts as whitespace in an id. Three of those were also bugs in Tuff, fixed alongside: colliding files silently kept the last one, a hook could list its own `run.sh` and replace the wrapper, and a delete with a corrupt settings file removed the files before failing.
 - **0.1.0.** First published version. Describes the vocabulary Tuff has shipped since 0.1.2, when the Claude Code matrix was corrected to the harness's real event names and canonical names were given precedence over aliases.

@@ -4565,6 +4565,399 @@ fn an_mcp_server_registers_under_mcp_in_the_opencode_config_beside_the_policy_ru
     tuff().current_dir(&project).arg("check").assert().success();
 }
 
+fn codex_project(root: &Path) -> std::path::PathBuf {
+    let project = root.join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "codex"])
+        .assert()
+        .success();
+    project
+}
+
+#[test]
+fn codex_hooks_register_in_dot_codex_hooks_json_with_codexs_event_names() {
+    let temp = TempDir::new().unwrap();
+    let project = codex_project(temp.path());
+    let hook = make_hook_primitive_with_event(temp.path(), "lint-first", "pre_tool_use");
+
+    let output = tuff()
+        .current_dir(&project)
+        .args(["add", hook.to_str().unwrap(), "-a", "codex"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("Codex runs a project's hooks only in a trusted project"),
+        "the install says what Codex needs: {stderr}"
+    );
+
+    let settings_path = project.join(".codex/hooks.json");
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert_eq!(
+        settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        "sh .agents/hooks/lint-first/run.sh",
+        "{settings}"
+    );
+    assert!(project.join(".agents/hooks/lint-first/run.sh").is_file());
+    assert!(
+        !project.join(".agents/hook.json").exists(),
+        "nothing is written to the file Codex never read"
+    );
+
+    // A manifest written against the old Codex event name still installs,
+    // into the same Codex event.
+    let old_name = temp.path().join("old-name");
+    fs::create_dir_all(&old_name).unwrap();
+    fs::write(
+        old_name.join("tuff.toml"),
+        "id = \"old-name\"\nversion = \"1.0.0\"\ntype = \"hook\"\ndescription = \"d\"\n\n[hook]\nevent = \"pre_tool_execution\"\ncommand = \"true\"\n",
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["add", old_name.to_str().unwrap(), "-a", "codex"])
+        .assert()
+        .success();
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert_eq!(
+        settings["hooks"]["PreToolUse"].as_array().unwrap().len(),
+        2,
+        "{settings}"
+    );
+    assert!(
+        settings["hooks"].get("pre_tool_execution").is_none(),
+        "{settings}"
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "lint-first", "-a", "codex"])
+        .assert()
+        .success();
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+    assert_eq!(
+        settings["hooks"]["PreToolUse"].as_array().unwrap().len(),
+        1,
+        "{settings}"
+    );
+}
+
+#[test]
+fn codex_mcp_servers_register_in_dot_codex_config_toml_and_keep_the_users_lines() {
+    let temp = TempDir::new().unwrap();
+    let project = codex_project(temp.path());
+    fs::create_dir_all(project.join(".codex")).unwrap();
+    let config_path = project.join(".codex/config.toml");
+    fs::write(&config_path, "# team settings\nmodel = \"gpt-5-codex\"\n").unwrap();
+
+    let output = tuff()
+        .current_dir(&project)
+        .args(["add", "mcp", "everything", "github", "-a", "codex"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("registered MCP server everything (codex) -> .codex/config.toml"),
+    );
+    assert!(
+        stderr.contains(
+            "Codex loads a project's MCP servers from .codex/config.toml only in a trusted project"
+        ),
+        "{stderr}"
+    );
+
+    let raw = fs::read_to_string(&config_path).unwrap();
+    assert!(
+        raw.starts_with("# team settings\nmodel = \"gpt-5-codex\"\n"),
+        "{raw}"
+    );
+    assert!(raw.contains("[mcp_servers.everything]\ncommand = \"npx\"\nargs = [\"-y\", \"@modelcontextprotocol/server-everything\"]\n"), "{raw}");
+    assert!(raw.contains("[mcp_servers.github]"), "{raw}");
+    assert!(
+        raw.contains("env_vars = [\"GITHUB_PERSONAL_ACCESS_TOKEN\"]"),
+        "{raw}"
+    );
+    assert!(
+        !raw.contains("${"),
+        "no literal reference Codex would not expand: {raw}"
+    );
+    let agents_mcp = project.join(".agents/mcp.json");
+    assert!(
+        !agents_mcp.exists()
+            || !fs::read_to_string(&agents_mcp)
+                .unwrap()
+                .contains("everything"),
+        "nothing is written to the file Codex never read"
+    );
+    assert!(
+        project
+            .join(".agents/mcp-servers/everything/server.toml")
+            .is_file()
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    // A hand edit to the table is drift, named by file and entry.
+    fs::write(
+        &config_path,
+        raw.replace(
+            "\"@modelcontextprotocol/server-everything\"]",
+            "\"@modelcontextprotocol/server-everything\", \"--verbose\"]",
+        ),
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .arg("check")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(".codex/config.toml#everything"));
+
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "everything", "-a", "codex", "--force"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "github", "-a", "codex"])
+        .assert()
+        .success();
+    let after = fs::read_to_string(&config_path).unwrap();
+    assert!(
+        after.starts_with("# team settings\nmodel = \"gpt-5-codex\"\n"),
+        "{after}"
+    );
+    assert!(!after.contains("mcp_servers"), "{after}");
+}
+
+/// Rewrite one lockfile row's target, to stand in for an install made by a
+/// Tuff whose Codex adapter wrote the shared `.agents/` files.
+fn retarget_lock_row(project: &Path, id: &str, from: &str, to: &str) {
+    let lock_path = project.join("tuff.lock");
+    let mut lock: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&lock_path).unwrap()).unwrap();
+    let row = lock["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|row| row["name"] == id && row["target"] == from)
+        .unwrap_or_else(|| panic!("row {id}/{from}"));
+    row["target"] = serde_json::Value::String(to.to_string());
+    fs::write(&lock_path, serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+}
+
+#[test]
+fn updating_a_codex_hook_moves_its_registration_out_of_the_file_codex_never_read() {
+    // Before 0.11.1 a Codex hook was registered exactly as an Open Agents
+    // hook is, in .agents/hook.json, so an Open Agents install retargeted
+    // to codex in the lockfile is that older install.
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    let hook = make_hook_primitive_with_event(temp.path(), "lint-first", "pre_tool_use");
+    tuff()
+        .current_dir(&project)
+        .args(["add", hook.to_str().unwrap(), "-a", "open-agents"])
+        .assert()
+        .success();
+    let old_settings = project.join(".agents/hook.json");
+    assert!(
+        fs::read_to_string(&old_settings)
+            .unwrap()
+            .contains("sh .agents/hooks/lint-first/run.sh")
+    );
+    retarget_lock_row(&project, "lint-first", "open-agents", "codex");
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "codex"])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(&project)
+        .args(["update", "lint-first", "-a", "codex"])
+        .assert()
+        .success();
+    let settings: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(project.join(".codex/hooks.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        "sh .agents/hooks/lint-first/run.sh",
+        "{settings}"
+    );
+    assert!(
+        !old_settings.exists()
+            || !fs::read_to_string(&old_settings)
+                .unwrap()
+                .contains("lint-first"),
+        "the registration Codex never read is gone"
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+}
+
+#[test]
+fn updating_a_codex_hook_keeps_a_registration_open_agents_still_records() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["agent", "add", "codex"])
+        .assert()
+        .success();
+    let hook = make_hook_primitive_with_event(temp.path(), "lint-first", "pre_tool_use");
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            hook.to_str().unwrap(),
+            "-a",
+            "open-agents",
+            "-a",
+            "codex",
+        ])
+        .assert()
+        .success();
+    // Make the codex row look like the older install: the same registration
+    // as open-agents, in .agents/hook.json, and no .codex/hooks.json.
+    let lock_path = project.join("tuff.lock");
+    let mut lock: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&lock_path).unwrap()).unwrap();
+    let rows = lock["capabilities"].as_array_mut().unwrap();
+    let shared_hooks = rows
+        .iter()
+        .find(|row| row["name"] == "lint-first" && row["target"] == "open-agents")
+        .unwrap()["managed_hooks"]
+        .clone();
+    let codex_row = rows
+        .iter_mut()
+        .find(|row| row["name"] == "lint-first" && row["target"] == "codex")
+        .unwrap();
+    codex_row["managed_hooks"] = shared_hooks;
+    fs::write(&lock_path, serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+    fs::remove_file(project.join(".codex/hooks.json")).unwrap();
+
+    tuff()
+        .current_dir(&project)
+        .args(["update", "lint-first", "-a", "codex"])
+        .assert()
+        .success();
+    assert!(project.join(".codex/hooks.json").is_file());
+    assert!(
+        fs::read_to_string(project.join(".agents/hook.json"))
+            .unwrap()
+            .contains("sh .agents/hooks/lint-first/run.sh"),
+        "open-agents still reads that registration"
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+}
+
+#[test]
+fn updating_a_codex_mcp_server_moves_its_entry_unless_open_agents_shares_it() {
+    let temp = TempDir::new().unwrap();
+
+    // Alone: the entry Codex never read is removed.
+    let alone = temp.path().join("alone");
+    fs::create_dir_all(&alone).unwrap();
+    tuff().current_dir(&alone).arg("init").assert().success();
+    tuff()
+        .current_dir(&alone)
+        .args(["add", "mcp", "everything", "-a", "open-agents"])
+        .assert()
+        .success();
+    retarget_lock_row(&alone, "everything", "open-agents", "codex");
+    tuff()
+        .current_dir(&alone)
+        .args(["agent", "add", "codex"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(&alone)
+        .args(["update", "everything", "-a", "codex", "--force"])
+        .assert()
+        .success();
+    assert!(
+        fs::read_to_string(alone.join(".codex/config.toml"))
+            .unwrap()
+            .contains("[mcp_servers.everything]")
+    );
+    let agents_mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(alone.join(".agents/mcp.json")).unwrap()).unwrap();
+    assert!(
+        agents_mcp["mcpServers"].get("everything").is_none(),
+        "{agents_mcp}"
+    );
+    tuff().current_dir(&alone).arg("check").assert().success();
+
+    // Shared with open-agents: that target still reads .agents/mcp.json.
+    let shared = temp.path().join("shared");
+    fs::create_dir_all(&shared).unwrap();
+    tuff().current_dir(&shared).arg("init").assert().success();
+    tuff()
+        .current_dir(&shared)
+        .args(["agent", "add", "codex"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(&shared)
+        .args([
+            "add",
+            "mcp",
+            "everything",
+            "-a",
+            "open-agents",
+            "-a",
+            "codex",
+        ])
+        .assert()
+        .success();
+    let lock_path = shared.join("tuff.lock");
+    let mut lock: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&lock_path).unwrap()).unwrap();
+    let row = lock["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|row| row["name"] == "everything" && row["target"] == "codex")
+        .unwrap();
+    row["managed_mcp_entry"]["configPath"] = serde_json::Value::String(".agents/mcp.json".into());
+    fs::write(&lock_path, serde_json::to_string_pretty(&lock).unwrap()).unwrap();
+    fs::remove_file(shared.join(".codex/config.toml")).unwrap();
+
+    tuff()
+        .current_dir(&shared)
+        .args(["update", "everything", "-a", "codex", "--force"])
+        .assert()
+        .success();
+    assert!(
+        fs::read_to_string(shared.join(".codex/config.toml"))
+            .unwrap()
+            .contains("[mcp_servers.everything]")
+    );
+    let agents_mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(shared.join(".agents/mcp.json")).unwrap())
+            .unwrap();
+    assert!(
+        agents_mcp["mcpServers"].get("everything").is_some(),
+        "{agents_mcp}"
+    );
+    tuff().current_dir(&shared).arg("check").assert().success();
+}
+
 #[test]
 fn accepting_unenforced_rules_records_nothing_when_every_rule_is_enforced() {
     let temp = TempDir::new().unwrap();

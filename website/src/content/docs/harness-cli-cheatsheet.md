@@ -48,7 +48,8 @@ local settings and user state should stay out of version control.
 | Shared instructions | `AGENTS.md` |
 | Local override | `AGENTS.override.md` in the relevant directory |
 | Skills | `.agents/skills/<name>/SKILL.md` |
-| MCP and runtime config | `~/.codex/config.toml` or `CODEX_HOME` |
+| MCP and runtime config | `~/.codex/config.toml` or `CODEX_HOME`; a trusted project's `.codex/config.toml` adds to it |
+| Hooks and rules | `.codex/hooks.json` and `.codex/rules/`, loaded only in a trusted project |
 
 ### Cursor CLI
 
