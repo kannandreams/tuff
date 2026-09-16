@@ -33,37 +33,34 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
     <SiteNav current="/" />
 
     <main class="tuff-landing tuff-landing--standalone">
-      <HeroStory />
+      <HeroStory part="hero" />
 
-      <section class="tuff-section tuff-section--stats">
-        <div class="tuff-stats">
-          <div class="tuff-stat"><small>//state</small><strong>Everything lives in your repo</strong><p><code>tuff.lock</code> records each capability's source, target, and hash. Commit it and the whole team gets the same setup. No hosted service.</p></div>
-          <div class="tuff-stat"><small>//sources</small><strong>Install from sources you trust</strong><p>A local directory, a Git repository, an OCI registry, or the built-in MCP catalog, with the origin recorded either way.</p></div>
-          <div class="tuff-stat"><small>//scopes</small><strong>Project scope wins</strong><p>Capabilities can be project-scoped or global. When both define the same one, the version checked into the repo takes precedence.</p></div>
+      <section class="tuff-section" id="how-it-works">
+        <div class="tuff-section-head"><div class="tuff-section-label">//how it works</div><h2>The capabilities Tuff manages, and their lifecycle</h2><p>Skills, tools, MCP servers, hooks, and policies are files in your project. Tuff records what is installed, where it came from, and whether it changed.</p></div>
+        <div class="tuff-sub-label">//capabilities</div>
+        <div class="tuff-cap-grid">
+          <a class="tuff-cap-card" href="/primitives/skills"><svg class="tuff-cap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 012-2h12v16H6a2 2 0 00-2 2z"/><path d="M4 21V5"/><path d="M8 7h6M8 11h6"/></svg><strong>Skill</strong><span>Instructions and references an agent can load for a project or task.</span></a>
+          <a class="tuff-cap-card" href="/primitives/mcp-servers"><svg class="tuff-cap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg><strong>MCP Server</strong><span>External servers wired into every harness from one declaration, with secrets kept as references.</span></a>
+          <a class="tuff-cap-card" href="/primitives/tools"><svg class="tuff-cap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 6.5a4 4 0 00-5.3 5L4 16.7V20h3.3l5.2-5.2a4 4 0 005-5.3l-2.6 2.6-2.3-.6-.6-2.3z"/></svg><strong>Tool</strong><span>Callable scripts and functions with a typed contract, including servers you ship yourself.</span></a>
+          <a class="tuff-cap-card" href="/primitives/hooks"><svg class="tuff-cap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z"/></svg><strong>Hook</strong><span>Automation attached to supported lifecycle events in a harness.</span></a>
+          <div class="tuff-cap-card tuff-cap-card--next"><svg class="tuff-cap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 3v4"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/><path d="M1.5 12v3M22.5 12v3"/></svg><strong>Agent <i class="tuff-cap-tag">in formation</i></strong><span>Package capabilities and runtime configuration into a versioned agent definition.</span></div>
+          <a class="tuff-cap-card tuff-cap-card--wide" href="/primitives/policies"><svg class="tuff-cap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 7.7-8 9-4.6-1.3-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><strong>Policy Control</strong><span><em>Governs every capability.</em> Set which capabilities can be installed, from which sources, and for which harnesses, enforced consistently across every agent your team runs.</span></a>
         </div>
-      </section>
-
-      <section class="tuff-section">
-        <div class="tuff-section-head"><div class="tuff-section-label">//how it works</div><h2>The lifecycle Tuff manages</h2><p>Agent capabilities are useful only if a team can tell what is installed, where it came from, and whether it changed.</p></div>
+        <div class="tuff-sub-label tuff-sub-label--gap">//lifecycle</div>
         <div class="tuff-steps-grid tuff-steps-grid--4">
           <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5l11 6v10l-11 6-11-6V11z"/><path d="M5 11l11 6 11-6"/><path d="M16 17v10"/></svg><b>01</b><strong class="tuff-step-title">Create or add</strong><p>Start a new skill, tool, hook, MCP server, or policy, or bring existing agent files under management without rewriting their content.</p></div>
           <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h5l3-9 5 16 3-11 2 4h6"/></svg><b>02</b><strong class="tuff-step-title">Track</strong><p>Record source, version, scope, harness, emitted path, and the clean install baseline in project state.</p></div>
           <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6v8a4 4 0 004 4h8"/><path d="M16 14l4 4-4 4"/></svg><b>03</b><strong class="tuff-step-title">Diff</strong><p>Compare the current files against the baseline so intentional edits are visible and accidental drift is not silent.</p></div>
           <div class="tuff-step-item"><svg class="tuff-step-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4l10 4v8c0 7-4.5 10.5-10 12-5.5-1.5-10-5-10-12V8z"/><path d="M16 12v8"/><path d="M12 16h8"/></svg><b>04</b><strong class="tuff-step-title">Update or check</strong><p>Accept deliberate local changes, merge upstream updates where possible, and fail CI when tracked capabilities are not in the expected state.</p></div>
         </div>
-      </section>
-
-      <section class="tuff-section">
-        <div class="tuff-section-head"><div class="tuff-section-label">//capabilities</div><h2>The things agents load should be first-class project assets</h2><p>Tuff treats these as managed files, not magic settings hidden inside one developer's local harness.</p></div>
-        <div class="tuff-cap-grid">
-          <a class="tuff-cap-card" href="/primitives/skills"><strong>Skill</strong><span>Instructions and references an agent can load for a project or task.</span></a>
-          <a class="tuff-cap-card" href="/primitives/mcp-servers"><strong>MCP Server</strong><span>External servers wired into every harness from one declaration, with secrets kept as references.</span></a>
-          <a class="tuff-cap-card" href="/primitives/tools"><strong>Tool</strong><span>Callable scripts and functions with a typed contract, including servers you ship yourself.</span></a>
-          <a class="tuff-cap-card" href="/primitives/hooks"><strong>Hook</strong><span>Automation attached to supported lifecycle events in a harness.</span></a>
-          <a class="tuff-cap-card tuff-cap-card--next" href="/primitives/format"><strong>Your next kind</strong><span>Tuff is built to take on new capability kinds. Each one gets the same lifecycle: install, track, diff, check, and pack.</span></a>
-          <a class="tuff-cap-card tuff-cap-card--wide" href="/primitives/policies"><strong>Policy Control</strong><span><em>Governs the other four.</em> Set which capabilities can be installed, from which sources, and for which harnesses, enforced consistently across every agent your team runs.</span></a>
+        <div class="tuff-stats tuff-stats--after-steps">
+          <div class="tuff-stat"><small>//state</small><strong>Everything lives in your repo</strong><p>Tuff works like a package manager for agent capabilities, with a lockfile in your repo. Commit it and the whole team gets the same setup. No hosted service.</p></div>
+          <div class="tuff-stat"><small>//sources</small><strong>Install from sources you trust</strong><p>A local directory, a Git repository, an OCI registry, or the built-in MCP catalog, with the origin recorded either way.</p></div>
+          <div class="tuff-stat"><small>//scopes</small><strong>Project scope wins</strong><p>Capabilities can be project-scoped or global. When both define the same one, the version checked into the repo takes precedence.</p></div>
         </div>
       </section>
+
+      <HeroStory part="dashboard" />
 
       <section class="tuff-section" id="packs">
         <div class="tuff-section-head"><div class="tuff-section-label">//tuff packs</div><h2 id="packs-title">Bundle once. Ship as a verified release.</h2><p id="packs-description">Bundle the skills, tools, hooks, and MCP servers behind an integration into one deterministic artifact. Publish it through OCI, pin it by digest, and deploy the same reviewed bundle to every agent runtime.</p></div>

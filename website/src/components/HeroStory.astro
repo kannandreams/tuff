@@ -2,6 +2,9 @@
 // The landing page hero: one support agent's capabilities through the four
 // steps Tuff covers, and the dashboard section below it. The dashboard is
 // in progress (RFC-108), so its section says so and shows sample data.
+// `part` renders one of the two, so the page can place them apart.
+interface Props { part: 'hero' | 'dashboard' }
+const { part } = Astro.props;
 const docs = '/getting-started';
 
 // One support agent, one capability of each kind. `out` is what each harness
@@ -48,6 +51,7 @@ const projects = [
 ];
 ---
 
+{part === 'hero' && (
 <section class="tuff-hero hs">
   <div class="tuff-hero-main hs-main">
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
@@ -62,14 +66,19 @@ const projects = [
       </h2>
     </div>
     <div class="tuff-hero-actions">
-      <a class="tuff-button tuff-button--primary" href={docs}>Get started <span aria-hidden="true">→</span></a>
-      <a class="tuff-button tuff-button--quiet" href="#dashboard">See the dashboard</a>
+      <a class="tuff-button tuff-button--primary" href={docs}>Start managing <span aria-hidden="true">→</span></a>
+      <a class="tuff-button tuff-button--quiet" href="#dashboard">Preview the dashboard</a>
     </div>
     <div class="hs-install">
       <span aria-hidden="true">$</span><code>uv tool install tuffcli</code>
       <button type="button" data-hs-copy="uv tool install tuffcli">copy</button>
     </div>
     <a class="hs-install-more" href="/getting-started/">brew, pip, cargo, and script installs</a>
+    <ul class="hs-facts">
+      <li><a href="https://github.com/kannandreams/tuff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>Open source</a></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>Built in Rust</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>Harness-agnostic</li>
+    </ul>
   </div>
 
   <div class="tuff-hero-demo hs-demo">
@@ -120,7 +129,7 @@ const projects = [
       <div class="hs-merge" data-hs-step="3" style="--d: 3"><span>tuff dashboard publish</span></div>
 
       <div class="hs-stage hs-govern" data-hs-step="3" style="--d: 4">
-        <div class="hs-label"><b>4</b> govern<span>See what every project runs, what drifted, and which rules are not enforced.</span></div>
+        <div class="hs-label"><b>4</b> govern &amp; observe<span>See what every project runs, what drifted, and which rules are not enforced.</span></div>
         <div class="hs-govern-body">
           <div class="hs-kpis">
             <div><b>12</b><small>projects</small></div>
@@ -139,7 +148,9 @@ const projects = [
   </div>
 
 </section>
+)}
 
+{part === 'dashboard' && (
 <section class="tuff-section hs-dash-section" id="dashboard">
   <div class="tuff-section-head">
     <div class="tuff-section-label">//dashboard <span class="hs-soon">in progress</span></div>
@@ -212,6 +223,7 @@ const projects = [
     </div>
   </div>
 </section>
+)}
 
 <script>
   // Walk the flow one step at a time and light the matching headline line.
@@ -276,6 +288,12 @@ const projects = [
   .hs-install button:hover { color: #f18453; border-color: #9a4c30; }
   .hs-install-more { display: inline-block; margin-top: .5rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
   .hs-install-more:hover { color: var(--tuff-accent); }
+  .hs-facts { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .7rem; margin: 0; padding: 1.5rem 0 0; list-style: none; color: var(--tuff-text); font-family: 'Geist', system-ui, sans-serif; font-size: .92rem; font-weight: 500; letter-spacing: -.01em; }
+  .hs-facts li, .hs-facts a { display: inline-flex; align-items: center; gap: .4rem; }
+  .hs-facts li + li::before { content: '·'; margin-right: .3rem; color: var(--tuff-muted); font-weight: 400; }
+  .hs-facts a { color: inherit; }
+  .hs-facts a:hover { color: var(--tuff-accent); }
+  .hs-facts svg { flex: none; width: 1rem; height: 1rem; color: var(--tuff-accent); }
   .hs-roll { margin: .35rem 0 0; font-family: 'Inter Tight', 'Geist', system-ui, sans-serif; font-size: clamp(1.25rem, 2.2vw, 1.95rem); font-weight: 700; line-height: 1.2; letter-spacing: -.03em; }
   /* Every sentence occupies the same grid cell, so the slot is as wide as the longest one and never wraps. */
   .hs-roll-slot { display: inline-grid; overflow: hidden; padding: .08em 0; white-space: nowrap; vertical-align: top; }
@@ -436,6 +454,11 @@ const projects = [
   @media (max-width: 760px) {
       .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hs-fork, .hs-govern-body { grid-template-columns: 1fr; }
+    .hs-label { flex-wrap: wrap; }
+    .hs-facts { gap: .4rem .45rem; font-size: .8rem; }
+    .hs-facts li + li::before { margin-right: .15rem; }
+    .hs-facts svg { width: .85rem; height: .85rem; }
+    .hs-label span { flex-basis: 100%; margin: .35rem 0 0; padding-left: 0; text-align: left; }
     .hs-app-grid { grid-template-columns: 1fr; }
     .hs-app-body { grid-template-columns: 1fr; }
     .hs-app-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--tuff-border); }
