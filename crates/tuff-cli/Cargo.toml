@@ -2,7 +2,7 @@
 name = "tuffcli"
 version.workspace = true
 edition.workspace = true
-description = "Capability lifecycle manager for coding agents."
+description = "Manage and govern agent capabilities."
 license.workspace = true
 authors.workspace = true
 homepage.workspace = true

@@ -62,11 +62,11 @@ fn quick_start_width() -> usize {
 }
 
 fn render_ribbon(colors: &Palette<'_>, width: usize) -> String {
-    let text = "Tuff is a capability lifecycle manager for coding agents.";
+    let text = "Tuff manages and governs agent capabilities.";
     let padding = width.saturating_sub(text.chars().count());
 
     format!(
-        "{ribbon}{tuff}Tuff{white} is a capability lifecycle manager for coding agents.{padding}{reset}",
+        "{ribbon}{tuff}Tuff{white} manages and governs agent capabilities.{padding}{reset}",
         ribbon = colors.ribbon,
         tuff = colors.tuff,
         white = colors.white,
@@ -208,13 +208,13 @@ mod tests {
         let init = render_init_banner(false);
         assert!(welcome.contains("Quick Start"));
         assert!(!init.contains("Quick Start"));
-        assert!(init.contains("capability lifecycle manager"));
+        assert!(init.contains("manages and governs agent capabilities"));
     }
 
     #[test]
     fn tagline_is_first_banner_content() {
         let welcome = render_welcome(false);
-        assert!(welcome.contains("Tuff is a capability lifecycle manager for coding agents."));
+        assert!(welcome.contains("Tuff manages and governs agent capabilities."));
         assert!(!welcome.contains("▄▄"));
         assert!(!welcome.contains("████"));
     }

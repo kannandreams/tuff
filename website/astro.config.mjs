@@ -10,7 +10,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Tuff',
-      description: 'Capability lifecycle management for coding agents.',
+      description: 'Manage and govern agent capabilities.',
       favicon: '/favicon.svg',
       customCss: ['./src/styles/custom.css'],
       components: {
@@ -22,7 +22,7 @@ export default defineConfig({
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://tuffcli.dev/img/tuff-readme-banner.png' } },
         { tag: 'meta', attrs: { property: 'og:image:width', content: '1950' } },
         { tag: 'meta', attrs: { property: 'og:image:height', content: '807' } },
-        { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Tuff: capability lifecycle manager for coding agents' } },
+        { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Tuff - Manage and govern agent capabilities.' } },
         { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://tuffcli.dev/img/tuff-readme-banner.png' } },
       ],
       plugins: [

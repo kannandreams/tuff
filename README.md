@@ -2,7 +2,7 @@
 
 <h1 align="center">Tuff</h1>
 
-<p align="center"><strong>Make your coding-agent playbook reproducible.</strong></p>
+<p align="center"><strong>Manage and govern agent capabilities.</strong></p>
 
 <p align="center">Install, version, diff, and update the skills, tools, hooks, MCP servers, and policies that make your agents useful.</p>
 
