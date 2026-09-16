@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "tuffcli"
 dynamic = ["version"]
-description = "Capability lifecycle manager for coding agents."
+description = "Manage and govern agent capabilities."
 readme = "README-pypi.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }

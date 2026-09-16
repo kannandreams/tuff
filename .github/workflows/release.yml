@@ -106,7 +106,7 @@ jobs:
 
           cat << EOF > formula.rb
           class Tuff < Formula
-            desc "Capability lifecycle manager for coding agents"
+            desc "Manage and govern agent capabilities"
             homepage "https://github.com/kannandreams/tuff"
             license "MIT"
             version "${TAG#v}"

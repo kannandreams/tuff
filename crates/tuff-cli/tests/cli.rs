@@ -343,7 +343,7 @@ fn bare_command_outputs_welcome_menu() {
         .success()
         .stdout(predicate::str::contains("Tuff"))
         .stdout(predicate::str::contains(
-            "is a capability lifecycle manager for coding agents.",
+            "manages and governs agent capabilities.",
         ))
         .stdout(predicate::str::contains("tuff init"))
         .stdout(predicate::str::contains("tuff add"))

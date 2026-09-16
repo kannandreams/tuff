@@ -1,6 +1,6 @@
 {
   "name": "tuff",
-  "description": "Official marketplace for Tuff, the capability lifecycle manager for coding agents.",
+  "description": "Official marketplace for Tuff. Manage and govern agent capabilities.",
   "owner": {
     "name": "Kannan Kalidasan",
     "url": "https://github.com/kannandreams"
@@ -9,7 +9,7 @@
     {
       "name": "tuff",
       "source": "./plugins/tuff",
-      "description": "Drive the Tuff capability lifecycle manager from a Claude Code session. Requires the tuff CLI on PATH.",
+      "description": "Manage and govern agent capabilities with Tuff from a Claude Code session. Requires the tuff CLI on PATH.",
       "category": "development"
     }
   ]
