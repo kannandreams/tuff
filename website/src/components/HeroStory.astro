@@ -51,10 +51,6 @@ const projects = [
   <div class="tuff-hero-main hs-main">
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
     <p class="hs-headline">Build your agent’s capabilities once. Run them in every harness. Govern them everywhere.</p>
-    <p class="hs-copy">
-      Tuff installs skills, tools, MCP servers, hooks, and policies into each harness, records them in one lockfile,
-      packs them with your agent, and shows them on one dashboard.
-    </p>
     <div class="tuff-hero-actions">
       <a class="tuff-button tuff-button--primary" href={docs}>Get started <span aria-hidden="true">→</span></a>
       <a class="tuff-button tuff-button--quiet" href="#hs-dashboard">See the dashboard</a>
@@ -83,25 +79,23 @@ const projects = [
 
       <div class="hs-stage" style="--d: 2">
         <div class="hs-label"><b>2</b> install for every harness, record once</div>
-        <div class="hs-matrix" role="table">
-          <div class="hs-row hs-row--head" role="row">
-            <span role="columnheader"></span>
-            {harnesses.map((harness) => <span role="columnheader">{harness}</span>)}
-          </div>
-          {caps.map((cap, index) => (
-            <div class="hs-row" data-hs-row={index} role="row">
-              <span role="rowheader"><i class={`hs-dot hs-kind--${cap.kind}`}></i>{cap.id}</span>
-              {cap.out.map((path, col) => (
-                <span role="cell" class={`hs-cell hs-cell--${cap.level[col]}`} style={`--c: ${col}; --r: ${index}`}>
-                  {path ? path.replaceAll('/', '/\u200b') : 'not installed'}
-                </span>
-              ))}
+        <div class="hs-harnesses">
+          {harnesses.map((harness, col) => (
+            <div class="hs-harness" style={`--c: ${col}`}>
+              <strong>{harness}</strong>
+              <ul>
+                {caps.map((cap, index) => (
+                  <li class={`hs-pill hs-pill--${cap.level[col]}`} data-hs-pill={index} data-path={cap.out[col] ?? ''} title={cap.out[col] ?? 'not installed'}>
+                    <i class={`hs-dot hs-kind--${cap.kind}`}></i>{cap.id}
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
-          <div class="hs-lock">
-            <strong>tuff.lock</strong>
-            <span>one record for all four harnesses · source · version · hashes · compiled rules</span>
-          </div>
+        </div>
+        <div class="hs-lock">
+          <strong>tuff.lock</strong>
+          <span>one record for all four harnesses</span>
         </div>
         <p class="hs-caption" data-hs-caption aria-live="polite"></p>
       </div>
@@ -237,7 +231,7 @@ const projects = [
   // caption naming the files it became. Stops when the reader picks one.
   document.querySelectorAll<HTMLElement>('[data-hs-flow]').forEach((flow) => {
     const cards = [...flow.querySelectorAll<HTMLButtonElement>('[data-hs-cap]')];
-    const rows = [...flow.querySelectorAll<HTMLElement>('[data-hs-row]')];
+    const pills = [...flow.querySelectorAll<HTMLElement>('[data-hs-pill]')];
     const caption = flow.querySelector<HTMLElement>('[data-hs-caption]');
     const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
     let current = 0;
@@ -246,16 +240,15 @@ const projects = [
     const show = (index: number) => {
       current = index;
       cards.forEach((card, i) => card.classList.toggle('is-on', i === index));
-      rows.forEach((row, i) => row.classList.toggle('is-on', i === index));
-      const row = rows[index];
-      if (!row || !caption) return;
-      const cells = [...row.querySelectorAll<HTMLElement>('.hs-cell')];
+      const mine = pills.filter((pill) => Number(pill.dataset.hsPill) === index);
+      pills.forEach((pill) => pill.classList.toggle('is-on', Number(pill.dataset.hsPill) === index));
+      if (!caption) return;
       const kind = cards[index].querySelector('.hs-kind')?.textContent ?? '';
       const id = cards[index].querySelector('strong')?.textContent ?? '';
-      const written = cells
-        .map((cell, col) => (cell.classList.contains('hs-cell--none') ? null : `${harnesses[col]} ${cell.textContent?.trim()}`))
+      const written = mine
+        .map((pill, col) => (pill.dataset.path ? `<span>${harnesses[col]}</span> ${pill.dataset.path}` : null))
         .filter(Boolean);
-      caption.innerHTML = `<b>${kind} ${id}</b> → ${written.join(' · ')} · recorded in <b>tuff.lock</b>`;
+      caption.innerHTML = `<b>${kind} ${id}</b> → ${written.join(' · ')}`;
     };
 
     cards.forEach((card, index) => card.addEventListener('click', () => { chosen = true; show(index); }));
@@ -269,24 +262,23 @@ const projects = [
 </script>
 
 <style>
-  .hs { grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); column-gap: 2.75rem; align-items: start; }
-  .hs-main { padding-top: 1.5rem; }
-  .hs-headline { max-width: 26rem; margin-top: 1.4rem !important; color: var(--tuff-text); font-size: clamp(1.4rem, 2.6vw, 1.85rem); line-height: 1.2; letter-spacing: -.04em; font-weight: 600; }
-  .hs-copy { max-width: 25rem; margin-top: .9rem !important; color: var(--tuff-dim); font-size: .98rem; line-height: 1.6; }
+  .hs { grid-template-columns: minmax(0, .66fr) minmax(0, 1.34fr); column-gap: 2.5rem; align-items: center; padding-top: 3rem; padding-bottom: 2.75rem; }
+  .hs-main { padding-top: 0; }
+  .hs-headline { max-width: 24rem; margin-top: 1.4rem !important; color: var(--tuff-text); font-size: clamp(1.45rem, 2.7vw, 2rem); line-height: 1.2; letter-spacing: -.04em; font-weight: 600; }
   .hs-install { display: inline-flex; gap: .5rem; margin-top: 1.1rem !important; padding: .45rem .7rem; border: 1px solid var(--tuff-border); border-radius: .3rem; color: var(--tuff-text); background: rgba(255, 255, 255, .7); font-family: 'JetBrains Mono', monospace; font-size: .75rem; }
   .hs-install span { color: var(--tuff-muted); }
 
-  .hs-flow { margin: 0; padding: 0 1rem 1rem; border: 1px solid #343934; border-radius: .5rem; background: #1b1e1b; color: #eeeae2; box-shadow: 0 2rem 5rem rgba(38, 31, 22, .2), 0 0 0 1px rgba(232, 93, 42, .08); font-family: 'JetBrains Mono', monospace; }
-  .hs-bar { display: flex; align-items: center; gap: .4rem; margin: 0 -1rem .9rem; padding: .6rem 1rem; border-bottom: 1px solid #343934; background: #242824; border-radius: .5rem .5rem 0 0; font-size: .68rem; }
+  .hs-flow { margin: 0; padding: 0 1rem .8rem; border: 1px solid #343934; border-radius: .5rem; background: #1b1e1b; color: #eeeae2; box-shadow: 0 2rem 5rem rgba(38, 31, 22, .2), 0 0 0 1px rgba(232, 93, 42, .08); font-family: 'JetBrains Mono', monospace; }
+  .hs-bar { display: flex; align-items: center; gap: .4rem; margin: 0 -1rem .7rem; padding: .6rem 1rem; border-bottom: 1px solid #343934; background: #242824; border-radius: .5rem .5rem 0 0; font-size: .68rem; }
   .hs-bar i { width: .46rem; height: .46rem; border: 1px solid #555c54; border-radius: 50%; }
   .hs-bar span { margin-left: .45rem; color: #f18453; }
   .hs-bar em { margin-left: auto; color: #7d8279; font-style: normal; font-size: .6rem; }
-  .hs-stage { padding: .8rem; border: 1px solid #343934; border-radius: .35rem; background: #242824; }
-  .hs-label { margin-bottom: .6rem; color: #989d94; font-size: .6rem; letter-spacing: .07em; text-transform: uppercase; }
+  .hs-stage { padding: .65rem .7rem; border: 1px solid #343934; border-radius: .35rem; background: #242824; }
+  .hs-label { margin-bottom: .45rem; color: #989d94; font-size: .6rem; letter-spacing: .07em; text-transform: uppercase; }
   .hs-label b { display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-right: .35rem; border-radius: 50%; color: #1b1e1b; background: #f18453; font-size: .6rem; }
 
   .hs-caps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .45rem; }
-  .hs-cap { display: flex; flex-direction: column; align-items: flex-start; gap: .25rem; min-width: 0; padding: .55rem; border: 1px dashed #4c544c; border-radius: .3rem; color: inherit; background: #1b1e1b; cursor: pointer; font: inherit; text-align: left; transition: border-color .25s, background .25s, transform .25s; }
+  .hs-cap { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; min-width: 0; padding: .45rem .5rem; border: 1px dashed #4c544c; border-radius: .3rem; color: inherit; background: #1b1e1b; cursor: pointer; font: inherit; text-align: left; transition: border-color .25s, background .25s, transform .25s; }
   .hs-cap strong { max-width: 100%; color: #eeeae2; font-size: .7rem; font-weight: 500; overflow-wrap: anywhere; }
   .hs-cap small { color: #7d8279; font-size: .56rem; line-height: 1.3; }
   .hs-cap.is-on { border-style: solid; border-color: #f18453; background: #2b2622; transform: translateY(-2px); }
@@ -297,31 +289,32 @@ const projects = [
   .hs-kind--hook { color: #e4b75a; background: rgba(228, 183, 90, .13); }
   .hs-kind--policy { color: #c9a0f0; background: rgba(201, 160, 240, .13); }
 
-  .hs-link { position: relative; display: flex; justify-content: center; height: 1.9rem; }
+  .hs-link { position: relative; display: flex; justify-content: center; height: 1.5rem; }
   .hs-link::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: repeating-linear-gradient(180deg, #f18453 0 4px, transparent 4px 9px); background-size: 2px 9px; opacity: .8; }
   .hs-link span { position: relative; align-self: center; padding: .1rem .5rem; border: 1px solid #343934; border-radius: 999px; color: #c9ccc5; background: #1b1e1b; font-size: .58rem; }
 
-  .hs-matrix { display: grid; gap: .3rem; }
-  .hs-row { display: grid; grid-template-columns: 1.3fr repeat(4, minmax(0, 1fr)); gap: .3rem; align-items: stretch; border-radius: .25rem; transition: background .25s; }
-  .hs-row > span { min-width: 0; padding: .32rem .4rem; font-size: .58rem; line-height: 1.35; overflow-wrap: break-word; }
-  .hs-row--head > span { padding-top: 0; padding-bottom: 0; color: #eeeae2; font-size: .64rem; }
-  .hs-row > span[role='rowheader'] { color: #c9ccc5; display: flex; align-items: center; gap: .35rem; }
-  .hs-dot { width: .45rem; height: .45rem; border-radius: 50%; flex: none; }
+  .hs-harnesses { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
+  .hs-harness { padding: .5rem; border: 1px solid #343934; border-radius: .3rem; background: #1b1e1b; }
+  .hs-harness strong { display: block; margin-bottom: .4rem; color: #eeeae2; font-size: .68rem; font-weight: 500; }
+  .hs-harness ul { display: grid; gap: .22rem; margin: 0; padding: 0; list-style: none; }
+  .hs-pill { display: flex; align-items: center; gap: .35rem; min-width: 0; padding: .22rem .4rem; border: 1px solid transparent; border-radius: .2rem; color: #aeb1aa; font-size: .58rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .25s, border-color .25s; }
+  .hs-pill--partial { color: #e4b75a; }
+  .hs-pill--none { color: #4f554e; text-decoration: line-through; }
+  .hs-pill--none .hs-dot { opacity: .35; }
+  .hs-pill.is-on { border-color: rgba(241, 132, 83, .5); background: rgba(241, 132, 83, .1); color: #eeeae2; }
+  .hs-pill--partial.is-on { color: #e4b75a; }
+  .hs-pill--none.is-on { color: #7d8279; background: transparent; border-color: #4c544c; border-style: dashed; }
+  .hs-dot { width: .42rem; height: .42rem; border-radius: 50%; flex: none; }
   .hs-dot.hs-kind--skill { background: #83b477; }
   .hs-dot.hs-kind--tool { background: #65d6d0; }
   .hs-dot.hs-kind--mcp { background: #f18453; }
   .hs-dot.hs-kind--hook { background: #e4b75a; }
   .hs-dot.hs-kind--policy { background: #c9a0f0; }
-  .hs-cell { border: 1px solid #343934; border-radius: .2rem; background: #1b1e1b; color: #aeb1aa; }
-  .hs-cell--partial { border-color: #6b5a2c; color: #e4b75a; }
-  .hs-cell--none { border-style: dashed; color: #5c625a; }
-  .hs-row.is-on { background: rgba(241, 132, 83, .07); }
-  .hs-row.is-on .hs-cell--full { border-color: #4f7a45; color: #b7dcae; }
-  .hs-row.is-on .hs-cell--partial { background: rgba(228, 183, 90, .08); }
-  .hs-lock { display: flex; align-items: baseline; gap: .7rem; margin-top: .2rem; padding: .55rem .7rem; overflow: hidden; border: 1px solid #9a4c30; border-radius: .25rem; background: linear-gradient(90deg, #2b2622, #242824); position: relative; }
+  .hs-lock { display: flex; align-items: baseline; gap: .7rem; margin-top: .45rem; padding: .45rem .7rem; overflow: hidden; border: 1px solid #9a4c30; border-radius: .25rem; background: linear-gradient(90deg, #2b2622, #242824); position: relative; }
   .hs-lock strong { color: #f18453; font-size: .74rem; font-weight: 600; }
   .hs-lock span { color: #c9ccc5; font-size: .6rem; }
-  .hs-caption { min-height: 2.3em; margin-top: .6rem !important; color: #aeb1aa; font-size: .62rem; line-height: 1.55; }
+  .hs-caption { min-height: 1.6em; margin-top: .5rem !important; color: #aeb1aa; font-size: .6rem; line-height: 1.55; }
+  .hs-caption :global(span) { color: #7d8279; }
   .hs-caption :global(b) { color: #eeeae2; font-weight: 500; }
 
   .hs-split { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: .6rem; }
@@ -406,7 +399,7 @@ const projects = [
   @media (prefers-reduced-motion: no-preference) {
     .hs-flow .hs-stage, .hs-flow .hs-link, .hs-flow .hs-split { animation: hs-rise .5s ease both; animation-delay: calc(.2s + var(--d, 0) * .25s); }
     .hs-split .hs-stage { animation: none; }
-    .hs-cell { animation: hs-pop .35s ease both; animation-delay: calc(.9s + var(--c) * .12s + var(--r) * .06s); }
+    .hs-harness { animation: hs-pop .4s ease both; animation-delay: calc(.9s + var(--c) * .15s); }
     .hs-link::before { animation: hs-flowline 1.1s linear infinite; }
     .hs-lock::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(241, 132, 83, .18) 50%, transparent 70%); transform: translateX(-100%); animation: hs-sweep 3.2s ease-in-out 1.6s infinite; }
     .hs-pack { animation: hs-glow 3s ease-in-out 2s infinite; }
@@ -425,13 +418,11 @@ const projects = [
 
   @media (max-width: 1100px) {
     .hs { grid-template-columns: 1fr; }
-    .hs-headline, .hs-copy { max-width: 36rem; }
+    .hs-headline { max-width: 36rem; }
   }
   @media (max-width: 760px) {
     .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .hs-row { grid-template-columns: 1fr 1fr; }
-    .hs-row--head { display: none; }
-    .hs-row > span[role='rowheader'] { grid-column: 1 / -1; }
+    .hs-harnesses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hs-split, .hs-steps, .hs-app-grid { grid-template-columns: 1fr; }
     .hs-app-body { grid-template-columns: 1fr; }
     .hs-app-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--tuff-border); }
