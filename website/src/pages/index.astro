@@ -3,6 +3,7 @@ import '../styles/custom.css';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteNav from '../components/SiteNav.astro';
 import HeroVariants from '../components/HeroVariants.astro';
+import HeroStory from '../components/HeroStory.astro';
 
 // Hero variations are a local preview only; a production build shows the current hero.
 const heroPreview = import.meta.env.DEV;
@@ -104,6 +105,7 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
       </section>
 
       {heroPreview && <HeroVariants />}
+      {heroPreview && <HeroStory />}
 
       <section class="tuff-section tuff-section--stats">
         <div class="tuff-stats">
@@ -233,6 +235,7 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
           <option value="1">1 · From scattered to governed</option>
           <option value="2">2 · Build an agent's toolkit once</option>
           <option value="3">3 · The lifecycle, told as steps</option>
+          <option value="4">4 · Support agent (1 + 3, with dashboard)</option>
         </select>
       </div>
     )}
@@ -240,7 +243,7 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
 </html>
 
 <style is:global>
-  .tuff-hero[hidden] { display: none !important; }
+  [data-hero-variant][hidden] { display: none !important; }
   .hv-picker { position: fixed; right: 1rem; bottom: 1rem; z-index: 50; display: flex; align-items: center; gap: .55rem; padding: .55rem .7rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, .25); color: #eeeae2; font-family: 'JetBrains Mono', monospace; font-size: .72rem; }
   .hv-picker select { padding: .3rem .4rem; border: 1px solid #4c544c; border-radius: .25rem; color: #eeeae2; background: #242824; font: inherit; }
 </style>
