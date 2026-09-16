@@ -21,7 +21,7 @@ tuff delete <id> -a open-agents --scope global
 tuff delete <id> -a open-agents --force
 ```
 
-When `-a/--agent` is omitted, `delete` uses the configured agent. It removes emitted files, their baselines,
+When `-a/--harness` is omitted, `delete` uses the configured agent. It removes emitted files, their baselines,
 and generated tool MCP entries. It never deletes the original capability source
 directory. Modified generated files require `--force`. In-place added capabilities
 cannot be deleted; use `tuff untrack` instead.

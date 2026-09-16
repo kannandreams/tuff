@@ -1,59 +1,65 @@
 ---
-title: Agents and Scope
-description: Register agent harnesses, set the default agent, and choose between project and global scope.
+title: Harnesses and Scope
+description: Register harnesses, set the default harness, and choose between project and global scope.
 ---
 
-## `tuff agent`
+## `tuff harness`
 
-### Configure the default agent
+A harness is the coding agent product Tuff installs for, such as Claude Code or Codex. Its id, such as `claude`, is what `-a` selects.
+
+:::note[Older names]
+Tuff 0.11 and earlier call this command `tuff agent` and the flag `--agent`. Later versions accept the old names until 1.0 and print a note when they are used. The short flag `-a` works in every version.
+:::
+
+### Configure the default harness
 
 ```sh frame="terminal"
 # Project default
-tuff agent set-default open-agents
+tuff harness set-default open-agents
 
 # Global default
-tuff agent set-default claude --global
+tuff harness set-default claude --global
 ```
 
-Commands that accept `-a/--agent` use this value when the flag is omitted.
-An explicit agent flag always overrides the default, and repeated flags still
-apply an operation to multiple agents.
+Commands that accept `-a/--harness` use this value when the flag is omitted.
+An explicit `-a` always overrides the default, and repeated flags apply an
+operation to several harnesses.
 
-### List available and registered agents
+### List available and registered harnesses
 
 ```sh frame="terminal"
-tuff agent list
+tuff harness list
 
 # Show the global default
-tuff agent list --global
+tuff harness list --global
 ```
 
-The `REGISTERED` column shows which agents are available for Tuff operations in
-the selected config. The `DEFAULT` column shows which registered agent is used
-when `-a/--agent` is omitted.
+The `REGISTERED` column shows which harnesses are available for Tuff operations in
+the selected config. The `DEFAULT` column shows which registered harness is used
+when `-a/--harness` is omitted.
 
-### Register an agent
+### Register a harness
 
 ```sh frame="terminal"
-tuff agent add open-agents
-tuff agent add claude
-tuff agent add codex
-tuff agent add cursor
-tuff agent add opencode
+tuff harness add open-agents
+tuff harness add claude
+tuff harness add codex
+tuff harness add cursor
+tuff harness add opencode
 ```
 
-Registering an agent also creates its project directory (`.agents/` or
+Registering a harness also creates its project directory (`.agents/` or
 `.claude/`) if it does not already exist.
 
 `claude-code` remains an alias for `claude`. `codex`, `cursor`, and `opencode` are dedicated adapter IDs. `opencode` takes policies and MCP servers, and `tuff init` does not register it.
 
-### Remove an agent
+### Remove a harness
 
 ```sh frame="terminal"
-tuff agent remove open-agents
+tuff harness remove open-agents
 ```
 
-Unregisters the agent from the project configuration. It does not delete
+Unregisters the harness from the project configuration. It does not delete
 capabilities, emitted files, baselines, MCP registrations, or lockfile entries.
 Use [`tuff delete <id>`](/cli/clean-up/#tuff-delete) or [`tuff untrack <id>`](/cli/clean-up/#tuff-untrack) for the configured default
 agent. Pass `-a <agent>` when selecting a different agent.

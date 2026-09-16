@@ -38,7 +38,7 @@ The same capability can be emitted differently depending on the agent.
 A capability that is already installed can be emitted for a harness it was not installed for. Point `tuff add` at the directory it already occupies and name the new agent:
 
 ```sh
-tuff add .agents/skills/release-checklist --agent claude
+tuff add .agents/skills/release-checklist -a claude
 ```
 
 This records a new target and emits the capability into that harness's layout. The recorded source, version, and description are left alone, because adding a harness says nothing about where the capability came from. A target that is already recorded is not re-emitted; use `tuff update` for that.
@@ -107,10 +107,10 @@ an installed hook before switching adapters.
 ## Commands
 
 ```sh frame="terminal"
-tuff agent list
-tuff agent add open-agents
-tuff agent add claude
-tuff agent add codex
-tuff agent add cursor
+tuff harness list
+tuff harness add open-agents
+tuff harness add claude
+tuff harness add codex
+tuff harness add cursor
 tuff hooks matrix
 ```

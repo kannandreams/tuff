@@ -20,7 +20,7 @@ The default output is `tuff-dist/crm-integration-0.1.0.tuffpack`. Select capabil
 ```sh frame="terminal"
 tuff pack build --name crm-integration --version 1.2.0 \
   --capability crm-operating --capability lead-triage \
-  --agent open-agents --agent claude \
+  -a open-agents -a claude \
   --output releases/crm-integration-1.2.0.tuffpack
 ```
 
@@ -72,7 +72,7 @@ tuff pack pull ghcr.io/yourorg/crm-integration@sha256:<manifest-digest> --output
 Extract one pre-rendered adapter target without creating project lockfile state:
 
 ```sh frame="terminal"
-tuff pack extract <artifact.tuffpack> --agent <id> --output <directory>
+tuff pack extract <artifact.tuffpack> -a <id> --output <directory>
 ```
 
 The output directory must be missing or empty.
@@ -83,17 +83,17 @@ Install every member of a verified local pack artifact into project scope:
 
 ```sh frame="terminal"
 tuff init
-tuff add pack ./tuff-dist/crm-integration-1.2.0.tuffpack --agent open-agents
+tuff add pack ./tuff-dist/crm-integration-1.2.0.tuffpack -a open-agents
 ```
 
-Pack installation verifies the complete artifact, preflights every member, stages shared hook and MCP configuration, and refuses the entire installation if any member is already tracked or would overwrite an untracked file. `--agent` is optional and repeatable; pack installation does not support `--global`.
+Pack installation verifies the complete artifact, preflights every member, stages shared hook and MCP configuration, and refuses the entire installation if any member is already tracked or would overwrite an untracked file. `--harness` is optional and repeatable; pack installation does not support `--global`.
 
 If the pack came from a registry, pass `--reference` with the reference you
 pulled it from so `tuff outdated` can check for a newer version later:
 
 ```sh frame="terminal"
 tuff pack pull ghcr.io/acme/engineering:1.2.0 --output ./engineering.tuffpack
-tuff add pack ./engineering.tuffpack --agent open-agents \
+tuff add pack ./engineering.tuffpack -a open-agents \
   --reference ghcr.io/acme/engineering:1.2.0
 ```
 
@@ -128,4 +128,4 @@ tuff update <member-id> --pack ./engineering-1.2.0.tuffpack
 tuff update <member-id> --plain-http --ca-file ./registry-ca.pem
 ```
 
-A pack update applies to every agent the pack is installed for; a narrower `--agent` selection is refused rather than leaving one agent on the old release. Local edits to any member block the update unless `--force` is given. Only semver tags are compared when resolving the registry, matching `tuff outdated`; when nothing parses, pass `--pack` with the artifact you mean.
+A pack update applies to every agent the pack is installed for; a narrower `--harness` selection is refused rather than leaving one agent on the old release. Local edits to any member block the update unless `--force` is given. Only semver tags are compared when resolving the registry, matching `tuff outdated`; when nothing parses, pass `--pack` with the artifact you mean.

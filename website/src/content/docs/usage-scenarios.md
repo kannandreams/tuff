@@ -37,8 +37,8 @@ Product teams install the complete pack atomically, while runtime infrastructure
 
 ```sh frame="terminal"
 tuff init
-tuff add pack tuff-dist/company-agent-pack-1.0.0.tuffpack --agent open-agents
-tuff pack extract tuff-dist/company-agent-pack-1.0.0.tuffpack --agent open-agents --output runtime/
+tuff add pack tuff-dist/company-agent-pack-1.0.0.tuffpack -a open-agents
+tuff pack extract tuff-dist/company-agent-pack-1.0.0.tuffpack -a open-agents --output runtime/
 ```
 
 The project owns installed output. If a team customizes a member, Tuff shows that drift instead of hiding it. See [Capability Packs](/concepts/packs/) for the complete authoring and delivery contract.
@@ -68,12 +68,12 @@ repositories, then bring them under Tuff lifecycle tracking.
 The intended flow is:
 
 ```sh frame="terminal"
-tuff add skill https://github.com/owner/repo rust-implement --agent open-agents
+tuff add skill https://github.com/owner/repo rust-implement -a open-agents
 tuff list
 tuff diff rust-implement
 ```
 
-Use `tuff add --agent open-agents .agents/skills/<id>` for local agent assets that
+Use `tuff add -a open-agents .agents/skills/<id>` for local agent assets that
 already exist in a project. Use `tuff add skill <git-url> <id>` for
 capabilities hosted in a git repository.
 
@@ -83,8 +83,8 @@ Different coding agents expect different file layouts. Tuff should keep a
 single managed source model and compile or emit agent-specific output:
 
 ```sh frame="terminal"
-tuff agent add open-agents
-tuff agent add claude
+tuff harness add open-agents
+tuff harness add claude
 ```
 
 Harness adapters make agent output explicit and reproducible. The same

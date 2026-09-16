@@ -30,13 +30,13 @@ A skill can say what version it is. Tuff reads `version` from `tuff.toml` when t
 
 ```sh frame="terminal"
 # Local directory
-tuff add --agent open-agents ./my-skill
+tuff add -a open-agents ./my-skill
 
 # Git repository
-tuff add skill https://github.com/owner/repo <name> --agent open-agents
+tuff add skill https://github.com/owner/repo <name> -a open-agents
 
 # Global scope
-tuff add --agent open-agents --global ./my-skill
+tuff add -a open-agents --global ./my-skill
 ```
 
 Tuff tracks where each skill came from, records a baseline, and reports local drift after

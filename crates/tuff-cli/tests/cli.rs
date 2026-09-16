@@ -245,7 +245,7 @@ fn malformed_manifest_fixture_is_rejected() {
         .args([
             "add",
             test_fixture("malformed-manifest").to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -286,7 +286,7 @@ fn duplicate_files_fixture_installs_one_emitted_file() {
         .args([
             "add",
             test_fixture("duplicate-files").to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -320,7 +320,7 @@ fn invalid_capability_fixture_is_rejected() {
         .args([
             "add",
             test_fixture("invalid-capability").to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -357,7 +357,12 @@ fn cli_lifecycle_reports_clean_modified_and_diff() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -413,7 +418,12 @@ fn add_requires_init() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains("run 'tuff init' first"));
@@ -439,7 +449,12 @@ fn add_refuses_to_overwrite_untracked_skill() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains("refusing to overwrite untracked"));
@@ -458,10 +473,15 @@ fn rejects_unknown_agent() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "nonexistent"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "nonexistent",
+        ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unknown agent"));
+        .stderr(predicate::str::contains("unknown harness"));
 }
 
 #[test]
@@ -498,6 +518,86 @@ fn old_target_flags_are_removed() {
 }
 
 #[test]
+fn the_old_agent_spellings_still_work_and_say_what_replaces_them() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["agent", "add", "claude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("registered harness 'claude'"))
+        .stderr(predicate::str::contains(
+            "note: 'tuff agent' is now 'tuff harness'; the old name stops working in 1.0",
+        ));
+
+    let skill = make_skill_primitive_dir(temp.path(), "old-flag");
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", skill.to_str().unwrap(), "--agent", "claude"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "note: --agent is now --harness (or -a); the old name stops working in 1.0",
+        ));
+    tuff()
+        .current_dir(temp.path())
+        .args(["delete", "old-flag", "--agent=claude"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("note: --agent is now --harness"));
+
+    // The new spellings and the short flag print no note.
+    for args in [
+        vec!["harness", "list"],
+        vec!["add", skill.to_str().unwrap(), "-a", "claude"],
+        vec!["delete", "old-flag", "--harness", "claude"],
+    ] {
+        tuff()
+            .current_dir(temp.path())
+            .args(&args)
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("note:").not());
+    }
+
+    // A --json caller gets one shape on stderr, with no note before it.
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["check", "--json", "--agent", "claude"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(!stderr.contains("note:"), "{stderr}");
+}
+
+#[test]
+fn a_project_config_may_list_harnesses_under_that_name() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    fs::write(
+        temp.path().join("tuff.config.json"),
+        r#"{"harnesses": ["claude"], "defaultAgent": "claude"}"#,
+    )
+    .unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .args(["harness", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_match(r"│ claude +│[^\n]*│ yes +│").unwrap());
+}
+
+#[test]
 fn agent_list_add_remove() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
@@ -511,7 +611,7 @@ fn agent_list_add_remove() {
     // List available adapters
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "list"])
+        .args(["harness", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("REGISTERED"))
@@ -522,17 +622,22 @@ fn agent_list_add_remove() {
     // Register Claude; Open Agents is registered by tuff init.
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "claude"])
+        .args(["harness", "add", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("registered agent 'claude'"));
+        .stdout(predicate::str::contains("registered harness 'claude'"));
 
     assert!(temp.path().join(".claude").is_dir());
 
     // Install a skill to open-agents
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -542,10 +647,12 @@ fn agent_list_add_remove() {
     // Unregister open-agents without changing installed capabilities
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "remove", "open-agents"])
+        .args(["harness", "remove", "open-agents"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("unregistered agent 'open-agents'"));
+        .stdout(predicate::str::contains(
+            "unregistered harness 'open-agents'",
+        ));
 
     assert!(
         temp.path()
@@ -575,10 +682,10 @@ fn agent_add_claude_creates_project_directory() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "claude"])
+        .args(["harness", "add", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("registered agent 'claude'"));
+        .stdout(predicate::str::contains("registered harness 'claude'"));
 
     assert!(temp.path().join(".claude").is_dir());
 }
@@ -595,10 +702,10 @@ fn configured_default_agent_is_used_when_agent_is_omitted() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "set-default", "claude"])
+        .args(["harness", "set-default", "claude"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("set default agent 'claude'"));
+        .stdout(predicate::str::contains("set default harness 'claude'"));
 
     tuff()
         .current_dir(temp.path())
@@ -662,7 +769,7 @@ fn global_default_agent_is_used_for_global_add() {
     tuff()
         .current_dir(project.path())
         .env("HOME", home.path())
-        .args(["agent", "set-default", "claude", "--global"])
+        .args(["harness", "set-default", "claude", "--global"])
         .assert()
         .success();
 
@@ -702,9 +809,9 @@ fn add_to_multiple_agents() {
         .args([
             "add",
             primitive.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
-            "--agent",
+            "--harness",
             "claude",
         ])
         .assert()
@@ -749,14 +856,14 @@ fn add_to_multiple_agents() {
     // Diff with specific agent
     tuff()
         .current_dir(temp.path())
-        .args(["diff", "example", "--agent", "open-agents"])
+        .args(["diff", "example", "--harness", "open-agents"])
         .assert()
         .success();
 
     // Unregistering open-agents should keep all capability files
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "remove", "open-agents"])
+        .args(["harness", "remove", "open-agents"])
         .assert()
         .success();
 
@@ -797,7 +904,7 @@ fn add_git_skill_installs_and_tracks_lifecycle() {
             "skill",
             &repo_url,
             "test-skill",
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -857,11 +964,11 @@ fn typed_add_rejects_parent_level_flags() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", "--agent", "claude", "tool", "./my-tool"])
+        .args(["add", "--harness", "claude", "tool", "./my-tool"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "for typed 'tuff add' commands, put --agent and --global after the capability source",
+            "for typed 'tuff add' commands, put --harness and --global after the capability source",
         ));
 }
 
@@ -879,7 +986,7 @@ fn add_git_requires_skill_flag() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", &repo_url, "--agent", "open-agents"])
+        .args(["add", &repo_url, "--harness", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("--name is required"));
@@ -904,7 +1011,7 @@ fn add_git_missing_skill_reports_error() {
             "skill",
             &repo_url,
             "nonexistent",
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -931,9 +1038,9 @@ fn add_git_skill_multi_agent() {
             "skill",
             &repo_url,
             "test-skill",
-            "--agent",
+            "--harness",
             "open-agents",
-            "--agent",
+            "--harness",
             "claude",
         ])
         .assert()
@@ -1024,7 +1131,7 @@ fn add_git_subfolder_skill() {
             "skill",
             &repo_url,
             "security/security-review",
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -1057,7 +1164,7 @@ fn dedicated_codex_adapter_works() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "codex"])
+        .args(["add", primitive.to_str().unwrap(), "--harness", "codex"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1087,7 +1194,12 @@ fn legacy_alias_claude_code_works() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "claude-code"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "claude-code",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1123,7 +1235,7 @@ fn add_global_creates_lockfile_and_emits_to_home() {
         .args([
             "add",
             primitive.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
             "--global",
         ])
@@ -1157,7 +1269,12 @@ fn check_global_excludes_modified_project_capabilities() {
     tuff()
         .current_dir(project.path())
         .env("HOME", home.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .success();
     tuff()
@@ -1168,7 +1285,7 @@ fn check_global_excludes_modified_project_capabilities() {
             primitive.to_str().unwrap(),
             "--name",
             "global-skill",
-            "--agent",
+            "--harness",
             "open-agents",
             "--global",
         ])
@@ -1212,7 +1329,12 @@ fn list_shows_scope_column() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .success();
 
@@ -1240,7 +1362,12 @@ fn delete_generated_capability_cleans_up() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .success();
 
@@ -1292,7 +1419,7 @@ fn status_shows_override_warning() {
         .args([
             "add",
             primitive_a.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
             "--global",
         ])
@@ -1309,7 +1436,7 @@ fn status_shows_override_warning() {
         .args([
             "add",
             primitive_a.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -1347,7 +1474,7 @@ fn update_git_skill_reports_up_to_date() {
             "skill",
             &repo_url,
             "test-skill",
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -1374,7 +1501,7 @@ fn add_tool_installs_and_emits() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1409,7 +1536,7 @@ fn local_add_name_overrides_manifest_id() {
             primitive.to_str().unwrap(),
             "--name",
             "installed-name",
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -1458,7 +1585,12 @@ entrypoint = "run.sh"
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -1501,7 +1633,12 @@ entrypoint = "../etc/passwd"
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains("path traversal"));
@@ -1520,7 +1657,7 @@ fn add_tool_shows_runtime_deps() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success()
         .stderr(predicate::str::contains(
@@ -1551,7 +1688,7 @@ fn add_mcp_tool_registers_mcp_entry() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -1592,7 +1729,7 @@ fn add_mcp_tool_rejects_malformed_config_before_writing_capability() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid MCP config"))
@@ -1617,12 +1754,12 @@ fn list_filter_by_primitive_kind() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -1671,9 +1808,9 @@ fn add_tool_multi_agent_with_mcp() {
         .args([
             "add",
             tool.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
-            "--agent",
+            "--harness",
             "claude",
         ])
         .assert()
@@ -1883,7 +2020,7 @@ fn capability_index_is_generated_for_a_pack_install() {
             "add",
             "pack",
             artifact.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -2032,7 +2169,7 @@ X-Api-Key = { from_env = "EXAMPLE_KEY" }
     for agent in ["claude", "cursor"] {
         tuff()
             .current_dir(temp.path())
-            .args(["agent", "add", agent])
+            .args(["harness", "add", agent])
             .assert()
             .success();
     }
@@ -2204,7 +2341,7 @@ fn add_mcp_from_catalog_wires_every_selected_harness_in_its_own_dialect() {
     for agent in ["claude", "cursor"] {
         tuff()
             .current_dir(temp.path())
-            .args(["agent", "add", agent])
+            .args(["harness", "add", agent])
             .assert()
             .success();
     }
@@ -2684,7 +2821,7 @@ fn remove_tool_cleans_mcp_entry() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", tool.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", tool.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .success();
 
@@ -2772,7 +2909,7 @@ fn add_hook_installs_and_emits() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -2805,7 +2942,7 @@ fn add_hook_renders_canonical_event_to_native_event() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -2849,7 +2986,7 @@ fn claude_hook_matrix_renders_exact_native_event_names() {
         let hook = make_hook_primitive_with_event(&source_root, id, canonical_event);
         tuff()
             .current_dir(temp.path())
-            .args(["add", hook.to_str().unwrap(), "--agent", "claude"])
+            .args(["add", hook.to_str().unwrap(), "--harness", "claude"])
             .assert()
             .success();
     }
@@ -2891,7 +3028,7 @@ fn cursor_stop_uses_canonical_row_instead_of_before_finish_alias() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "cursor"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "cursor"])
         .assert()
         .success()
         .stderr(predicate::str::contains("partial compatibility").not());
@@ -2915,12 +3052,12 @@ fn add_hook_renders_cursor_hooks_json_shape() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "cursor"])
+        .args(["harness", "add", "cursor"])
         .assert()
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "cursor"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "cursor"])
         .assert()
         .success();
 
@@ -2950,7 +3087,7 @@ fn multifile_hook_diff_uses_directory_tree_and_json_hashes() {
     tuff()
         .current_dir(temp.path())
         .env("HOME", &home)
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -2992,7 +3129,7 @@ fn diff_refetches_baseline_after_cache_is_deleted() {
     tuff()
         .current_dir(temp.path())
         .env("HOME", &home)
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
     fs::write(
@@ -3027,7 +3164,7 @@ fn local_baseline_refetch_verifies_source_and_never_uses_live_tree() {
     tuff()
         .current_dir(temp.path())
         .env("HOME", &home)
-        .args(["add", source.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", source.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -3070,7 +3207,14 @@ fn upstream_diff_refetches_source_after_cache_is_deleted() {
     tuff()
         .current_dir(temp.path())
         .env("HOME", &home)
-        .args(["add", "skill", &url, "test-skill", "--agent", "open-agents"])
+        .args([
+            "add",
+            "skill",
+            &url,
+            "test-skill",
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .success();
     fs::remove_dir_all(home.join(".cache/tuff")).unwrap();
@@ -3108,7 +3252,7 @@ fn cache_clear_is_safe_and_lockfile_is_deterministic() {
     tuff()
         .current_dir(temp.path())
         .env("HOME", &home)
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
     tuff()
@@ -3191,7 +3335,7 @@ fn add_hook_file_merges_claude_settings_and_copies_external_assets() {
             "add",
             "hook",
             hook.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "claude",
             "--hook-file",
             "settings.json",
@@ -3258,7 +3402,7 @@ fn native_hook_file_bypasses_canonical_event_validation() {
             "add",
             "hook",
             hook.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "claude",
             "--hook-file",
             "settings.json",
@@ -3315,7 +3459,7 @@ fn add_hook_file_adopts_assets_already_inside_harness() {
             "add",
             "hook",
             ".claude/hooks/session-start",
-            "--agent",
+            "--harness",
             "claude",
             "--hook-file",
             "settings.json",
@@ -3355,7 +3499,12 @@ command = "echo test"
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "open-agents"])
+        .args([
+            "add",
+            primitive.to_str().unwrap(),
+            "--harness",
+            "open-agents",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -3389,7 +3538,7 @@ command = "echo hello"
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", primitive.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", primitive.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -3459,7 +3608,7 @@ fn a_manifest_file_path_cannot_read_or_write_outside_the_capability() {
             .args([
                 "add",
                 capability.to_str().unwrap(),
-                "--agent",
+                "--harness",
                 "open-agents",
             ])
             .assert()
@@ -3511,7 +3660,7 @@ fn a_listed_file_cannot_replace_the_hook_wrapper() {
             .args([
                 "add",
                 capability.to_str().unwrap(),
-                "--agent",
+                "--harness",
                 "open-agents",
             ])
             .assert()
@@ -3549,7 +3698,7 @@ fn two_listed_files_cannot_install_to_the_same_path() {
         .args([
             "add",
             capability.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -3572,7 +3721,7 @@ fn deleting_a_hook_with_a_corrupt_settings_file_changes_nothing() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
     let hook_dir = temp.path().join(".agents/hooks/fragile-hook");
@@ -3621,7 +3770,7 @@ fn a_capability_id_cannot_aim_install_or_delete_outside_the_project() {
         .args([
             "add",
             capability.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -3632,7 +3781,7 @@ fn a_capability_id_cannot_aim_install_or_delete_outside_the_project() {
         .args([
             "add",
             capability.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
             "--name",
             "..",
@@ -3707,7 +3856,7 @@ fn a_symbolic_link_in_a_capability_source_is_refused_not_followed() {
     .unwrap();
     tuff()
         .current_dir(&project)
-        .args(["add", listed.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", listed.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("symbolic links are not allowed"));
@@ -3728,7 +3877,7 @@ fn a_symbolic_link_in_a_capability_source_is_refused_not_followed() {
             "add",
             "hook",
             native.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
             "--hook-file",
             "hook.json",
@@ -3840,7 +3989,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "cursor"])
+        .args(["harness", "add", "cursor"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
@@ -3851,9 +4000,9 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
         .args([
             "add",
             policy.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
-            "--agent",
+            "--harness",
             "cursor",
         ])
         .output()
@@ -3899,7 +4048,7 @@ fn a_policy_rule_cannot_allow_anything() {
     .unwrap();
     tuff()
         .current_dir(&project)
-        .args(["add", dir.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", dir.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot allow anything"));
@@ -3911,7 +4060,7 @@ fn claude_project_with_user_settings(root: &Path) -> std::path::PathBuf {
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "claude"])
+        .args(["harness", "add", "claude"])
         .assert()
         .success();
     fs::create_dir_all(project.join(".claude")).unwrap();
@@ -3936,7 +4085,7 @@ fn a_policy_compiles_to_claude_code_permission_rules_and_keeps_the_users_own() {
 
     let output = tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "claude"])
         .output()
         .unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
@@ -3982,7 +4131,7 @@ fn a_policy_compiles_to_claude_code_permission_rules_and_keeps_the_users_own() {
     let before = fs::read(project.join(".claude/settings.json")).unwrap();
     tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .success();
     assert_eq!(
@@ -3999,7 +4148,7 @@ fn a_hand_removed_rule_is_drift_and_delete_takes_out_only_the_policys_rules() {
     let policy = write_infra_policy(temp.path());
     tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .success();
 
@@ -4039,7 +4188,13 @@ fn a_hand_removed_rule_is_drift_and_delete_takes_out_only_the_policys_rules() {
 
     tuff()
         .current_dir(&project)
-        .args(["delete", "infra-guardrails", "--agent", "claude", "--force"])
+        .args([
+            "delete",
+            "infra-guardrails",
+            "--harness",
+            "claude",
+            "--force",
+        ])
         .assert()
         .success();
     let settings = claude_settings(&project);
@@ -4067,7 +4222,7 @@ fn updating_a_policy_removes_the_rules_it_no_longer_has() {
     let policy = write_infra_policy(temp.path());
     tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .success();
 
@@ -4080,7 +4235,7 @@ fn updating_a_policy_removes_the_rules_it_no_longer_has() {
     fs::write(policy.join("tuff.toml"), edited).unwrap();
     tuff()
         .current_dir(&project)
-        .args(["update", "infra-guardrails", "--agent", "claude"])
+        .args(["update", "infra-guardrails", "--harness", "claude"])
         .assert()
         .success();
 
@@ -4109,7 +4264,7 @@ fn a_corrupt_claude_settings_file_refuses_the_policy_before_anything_is_written(
     let policy = write_infra_policy(temp.path());
     tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -4137,9 +4292,9 @@ fn a_policy_is_refused_for_every_agent_when_one_selected_agent_cannot_enforce_it
         .args([
             "add",
             policy.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
-            "--agent",
+            "--harness",
             "claude",
         ])
         .output()
@@ -4166,7 +4321,7 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "cursor"])
+        .args(["harness", "add", "cursor"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
@@ -4174,7 +4329,7 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
 
     let refused = tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "cursor"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "cursor"])
         .output()
         .unwrap();
     assert!(!refused.status.success());
@@ -4189,7 +4344,7 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
         .args([
             "add",
             policy.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "cursor",
             "--accept-unenforced",
         ])
@@ -4222,7 +4377,7 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "codex"])
+        .args(["harness", "add", "codex"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
@@ -4230,7 +4385,7 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
     // Codex has no rule for the read and MCP rules, so a plain add is refused.
     tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "codex"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "codex"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -4242,7 +4397,7 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
         .args([
             "add",
             policy.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "codex",
             "--accept-unenforced",
         ])
@@ -4325,7 +4480,13 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
     // Delete takes out the policy's rules, and the file with them.
     tuff()
         .current_dir(&project)
-        .args(["delete", "infra-guardrails", "--agent", "codex", "--force"])
+        .args([
+            "delete",
+            "infra-guardrails",
+            "--harness",
+            "codex",
+            "--force",
+        ])
         .assert()
         .success();
     assert!(!rules_path.exists());
@@ -4353,14 +4514,14 @@ fn a_policy_compiles_into_the_opencode_config_after_the_projects_own_rules() {
     );
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "opencode"])
+        .args(["harness", "add", "opencode"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
 
     let output = tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "opencode"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "opencode"])
         .output()
         .unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
@@ -4436,7 +4597,7 @@ fn a_policy_compiles_into_the_opencode_config_after_the_projects_own_rules() {
         .args([
             "delete",
             "infra-guardrails",
-            "--agent",
+            "--harness",
             "opencode",
             "--force",
         ])
@@ -4471,13 +4632,13 @@ fn an_mcp_server_registers_under_mcp_in_the_opencode_config_beside_the_policy_ru
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "opencode"])
+        .args(["harness", "add", "opencode"])
         .assert()
         .success();
     let policy = write_infra_policy(temp.path());
     tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "opencode"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "opencode"])
         .assert()
         .success();
 
@@ -4571,7 +4732,7 @@ fn codex_project(root: &Path) -> std::path::PathBuf {
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "codex"])
+        .args(["harness", "add", "codex"])
         .assert()
         .success();
     project
@@ -4964,7 +5125,7 @@ fn updating_a_codex_hook_moves_its_registration_out_of_the_file_codex_never_read
     retarget_lock_row(&project, "lint-first", "open-agents", "codex");
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "codex"])
+        .args(["harness", "add", "codex"])
         .assert()
         .success();
 
@@ -4999,7 +5160,7 @@ fn updating_a_codex_hook_keeps_a_registration_open_agents_still_records() {
     tuff().current_dir(&project).arg("init").assert().success();
     tuff()
         .current_dir(&project)
-        .args(["agent", "add", "codex"])
+        .args(["harness", "add", "codex"])
         .assert()
         .success();
     let hook = make_hook_primitive_with_event(temp.path(), "lint-first", "pre_tool_use");
@@ -5065,7 +5226,7 @@ fn updating_a_codex_mcp_server_moves_its_entry_unless_open_agents_shares_it() {
     retarget_lock_row(&alone, "everything", "open-agents", "codex");
     tuff()
         .current_dir(&alone)
-        .args(["agent", "add", "codex"])
+        .args(["harness", "add", "codex"])
         .assert()
         .success();
     tuff()
@@ -5092,7 +5253,7 @@ fn updating_a_codex_mcp_server_moves_its_entry_unless_open_agents_shares_it() {
     tuff().current_dir(&shared).arg("init").assert().success();
     tuff()
         .current_dir(&shared)
-        .args(["agent", "add", "codex"])
+        .args(["harness", "add", "codex"])
         .assert()
         .success();
     tuff()
@@ -5151,7 +5312,7 @@ fn accepting_unenforced_rules_records_nothing_when_every_rule_is_enforced() {
         .args([
             "add",
             policy.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "claude",
             "--accept-unenforced",
         ])
@@ -5193,7 +5354,7 @@ fn check_reports_recorded_unenforced_rules_and_strict_fails_until_they_close() {
     let policy = write_infra_policy(temp.path());
     tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .success();
     let lock_path = project.join("tuff.lock");
@@ -5249,7 +5410,7 @@ fn check_reports_recorded_unenforced_rules_and_strict_fails_until_they_close() {
     // enforces every rule, so none remain.
     tuff()
         .current_dir(&project)
-        .args(["update", "infra-guardrails", "--agent", "claude"])
+        .args(["update", "infra-guardrails", "--harness", "claude"])
         .assert()
         .success();
     assert!(
@@ -5322,7 +5483,7 @@ fn hooks_check_portability_requires_registered_target() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5354,12 +5515,12 @@ fn hooks_check_portability_reports_target_coverage() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "claude"])
+        .args(["harness", "add", "claude"])
         .assert()
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5391,12 +5552,12 @@ fn hooks_check_portability_uses_canonical_event_for_different_native_formats() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "cursor"])
+        .args(["harness", "add", "cursor"])
         .assert()
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5429,7 +5590,7 @@ fn hook_list_and_drift() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5480,7 +5641,7 @@ fn delete_generated_hook_cleans_directory() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", hook.to_str().unwrap(), "--agent", "claude"])
+        .args(["add", hook.to_str().unwrap(), "--harness", "claude"])
         .assert()
         .success();
 
@@ -5521,7 +5682,7 @@ fn outdated_reports_status() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5550,13 +5711,13 @@ fn agent_add_already_registered_shows_message() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "claude"])
+        .args(["harness", "add", "claude"])
         .assert()
         .success();
     fs::remove_dir(temp.path().join(".claude")).unwrap();
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "claude"])
+        .args(["harness", "add", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains("already registered"));
@@ -5578,9 +5739,9 @@ fn delete_with_agent_flag_only_removes_from_specified() {
         .args([
             "add",
             skill.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
-            "--agent",
+            "--harness",
             "claude",
         ])
         .assert()
@@ -5653,7 +5814,7 @@ fn diff_upstream_shows_no_changes_for_current_ref() {
             "skill",
             &repo_url,
             "test-skill",
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -5679,7 +5840,7 @@ fn diff_upstream_error_on_local_primitive() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5705,7 +5866,7 @@ fn check_clean_repo_reports_all_ok() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5731,7 +5892,7 @@ fn check_detects_modified_files() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5766,7 +5927,7 @@ fn check_ignore_failures_exits_zero() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -5800,7 +5961,7 @@ fn check_json_output() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -6001,7 +6162,7 @@ fn generate_index_rejects_unknown_agent() {
         .args(["generate", "index", "-a", "unknown"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unknown agent 'unknown'"));
+        .stderr(predicate::str::contains("unknown harness 'unknown'"));
 }
 
 #[test]
@@ -6137,7 +6298,7 @@ fn create_skill_can_select_claude_agent() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["create", "skill", "my-skill", "--agent", "claude"])
+        .args(["create", "skill", "my-skill", "--harness", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -6396,9 +6557,9 @@ fn create_supports_multiple_agents_and_tracks_each_output() {
             "create",
             "skill",
             "multi-skill",
-            "--agent",
+            "--harness",
             "open-agents",
-            "--agent",
+            "--harness",
             "claude",
         ])
         .assert()
@@ -6422,7 +6583,7 @@ fn create_generates_adapter_specific_hook_files() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["create", "hook", "claude-hook", "--agent", "claude"])
+        .args(["create", "hook", "claude-hook", "--harness", "claude"])
         .assert()
         .success();
 
@@ -6616,7 +6777,12 @@ fn add_gives_a_tracked_capability_another_agent() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", ".agents/skills/tuff-cli-guide", "--agent", "claude"])
+        .args([
+            "add",
+            ".agents/skills/tuff-cli-guide",
+            "--harness",
+            "claude",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -6656,7 +6822,7 @@ fn adding_an_agent_preserves_a_git_source() {
             "skill",
             &repo_url,
             "test-skill",
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -6667,7 +6833,7 @@ fn adding_an_agent_preserves_a_git_source() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", ".agents/skills/test-skill", "--agent", "claude"])
+        .args(["add", ".agents/skills/test-skill", "--harness", "claude"])
         .assert()
         .success();
 
@@ -6790,7 +6956,7 @@ fn add_workflow_installs_and_shows_deps() {
 
     tuff()
         .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", wf.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success()
         .stdout(predicate::str::contains("installed test-wf (open-agents)"))
@@ -6844,7 +7010,7 @@ type = "skill"
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot require itself"));
@@ -6874,7 +7040,7 @@ description = "Bad."
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid capability manifest TOML"));
@@ -6910,7 +7076,7 @@ type = "tool"
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", wf_dir.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("duplicate requirement"));
@@ -6929,12 +7095,12 @@ fn status_shows_workflow_dependency_tree() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", wf.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -6998,7 +7164,7 @@ fn pack_build_is_deterministic_and_extracts_a_verified_target() {
             "pack",
             "extract",
             left.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
             "--output",
             extracted.to_str().unwrap(),
@@ -7164,7 +7330,7 @@ fn project_pack_build_allows_explicit_guide_and_custom_version_and_agent() {
             "tuff-cli-guide",
             "--version",
             "2.4.0",
-            "--agent",
+            "--harness",
             "claude",
         ])
         .assert()
@@ -7456,7 +7622,7 @@ fn add_pack_installs_all_members_and_records_provenance() {
             "add",
             "pack",
             artifact.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -7524,7 +7690,7 @@ fn add_pack_collision_leaves_every_member_uninstalled() {
             "add",
             "pack",
             artifact.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -7576,7 +7742,7 @@ fn add_pack_merges_hook_and_mcp_configuration_without_executing_members() {
             "add",
             "pack",
             artifact.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -7697,7 +7863,7 @@ fn project_with_pack_release(artifact: &Path, home: &Path) -> TempDir {
             "add",
             "pack",
             artifact.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -7948,7 +8114,7 @@ fn update_pack_rejects_another_pack_a_narrower_agent_selection_and_non_pack_use(
         .args([
             "update",
             "pack-skill",
-            "--agent",
+            "--harness",
             "claude",
             "--pack",
             newer.to_str().unwrap(),
@@ -7958,7 +8124,7 @@ fn update_pack_rejects_another_pack_a_narrower_agent_selection_and_non_pack_use(
         .stderr(predicate::str::contains(
             "a pack update applies to every agent the pack is installed for (open-agents)",
         ))
-        .stderr(predicate::str::contains("hint: drop --agent"));
+        .stderr(predicate::str::contains("hint: drop --harness"));
 
     // Without a registry on record and without --pack there is nothing to
     // resolve against, and the message says how to proceed.
@@ -8064,7 +8230,7 @@ fn update_pack_replaces_shared_hook_and_mcp_registrations() {
             "add",
             "pack",
             older.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -8137,7 +8303,7 @@ fn add_pack_into_a_project_that_already_has_a_capability_index() {
     tuff()
         .current_dir(project.path())
         .env("HOME", home.path())
-        .args(["add", tool.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", tool.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
     let index = project
@@ -8157,7 +8323,7 @@ fn add_pack_into_a_project_that_already_has_a_capability_index() {
             "add",
             "pack",
             artifact.to_str().unwrap(),
-            "--agent",
+            "--harness",
             "open-agents",
         ])
         .assert()
@@ -8324,7 +8490,7 @@ fn read_only_commands_leave_an_older_lockfile_alone_and_a_mutating_one_upgrades_
         tuff()
             .current_dir(project.path())
             .env("HOME", home.path())
-            .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+            .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
             .assert()
             .success();
         let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
@@ -8421,7 +8587,7 @@ fn a_project_add_never_writes_to_the_global_lockfile_even_with_xdg_state_home() 
         .current_dir(project.path())
         .env("HOME", home.path())
         .env("XDG_STATE_HOME", &state)
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -9006,7 +9172,7 @@ fn add_mcp_installs_a_remote_registry_entry_that_authenticates_with_a_header() {
             "add",
             "mcp",
             "com.acme/remote-mcp",
-            "--agent",
+            "--harness",
             "open-agents",
             "--yes",
             "--registry",
@@ -9104,7 +9270,7 @@ fn add_mcp_installs_a_server_resolved_from_the_registry() {
             "add",
             "mcp",
             "io.github.acme/stub-mcp",
-            "--agent",
+            "--harness",
             "open-agents",
             "--yes",
             "--registry",
@@ -9201,7 +9367,7 @@ fn an_exact_name_is_required_so_a_search_hit_never_installs_by_surprise() {
             "add",
             "mcp",
             "stub-mcp",
-            "--agent",
+            "--harness",
             "open-agents",
             "--yes",
             "--registry",
@@ -9226,7 +9392,7 @@ fn list_and_outdated_json_share_the_check_field_names() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
 
@@ -9292,7 +9458,7 @@ fn diff_json_flag_is_the_same_as_format_json() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "open-agents"])
+        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
         .assert()
         .success();
     fs::write(
@@ -9337,7 +9503,7 @@ fn add_mcp_linear_from_catalog_wires_the_bearer_header_in_every_dialect() {
     for agent in ["claude", "cursor"] {
         tuff()
             .current_dir(temp.path())
-            .args(["agent", "add", agent])
+            .args(["harness", "add", agent])
             .assert()
             .success();
     }

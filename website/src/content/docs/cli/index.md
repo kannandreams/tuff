@@ -22,7 +22,7 @@ The reference is split by task. Each page covers its commands, their flags, and 
 | [Diff and Update](/cli/diff-update/) | [`tuff diff`](/cli/diff-update/#tuff-diff), [`tuff update`](/cli/diff-update/#tuff-update) |
 | [Validate in CI](/cli/ci/) | [`tuff check`](/cli/ci/#tuff-check), [GitHub Actions](/cli/ci/#ci-with-github-actions) |
 | [Clean Up](/cli/clean-up/) | [`tuff delete`](/cli/clean-up/#tuff-delete), [`tuff untrack`](/cli/clean-up/#tuff-untrack), [`tuff lock migrate`](/cli/clean-up/#tuff-lock-migrate), [`tuff cache clear`](/cli/clean-up/#tuff-cache-clear) |
-| [Agents and Scope](/cli/agents/) | [`tuff agent`](/cli/agents/#tuff-agent), [scope](/cli/agents/#scope) |
+| [Harnesses and Scope](/cli/agents/) | [`tuff harness`](/cli/agents/#tuff-harness), [scope](/cli/agents/#scope) |
 
 ## Start
 

@@ -10,7 +10,7 @@ pub const DEFAULT_AGENT: &str = "open-agents";
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TuffConfig {
-    #[serde(rename = "agents", alias = "targets")]
+    #[serde(rename = "agents", alias = "targets", alias = "harnesses")]
     pub agents: Vec<String>,
     #[serde(rename = "defaultAgent", alias = "default_agent")]
     pub default_agent: String,

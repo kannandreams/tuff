@@ -247,8 +247,8 @@ pub(crate) fn resolve_agent_selection(
     let mut selected = Vec::new();
     for value in values {
         let adapter = AdapterKind::from_id(&value).ok_or_else(|| {
-            TuffError::usage(format!("unknown agent '{}'", value,))
-                .with_hint("run 'tuff agent list' to see available agents")
+            TuffError::usage(format!("unknown harness '{}'", value,))
+                .with_hint("run 'tuff harness list' to see available harnesses")
         })?;
         if !selected.iter().any(|existing| existing == adapter.id()) {
             selected.push(adapter.id().to_string());

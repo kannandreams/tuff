@@ -54,7 +54,7 @@ Tuff rebuilds it by fetching and verifying the sources recorded in `tuff.lock`.
 | `tuff diff` | No | Reads it |
 | `tuff check` | No | Reads it |
 | `tuff generate` | No | Reads it |
-| `tuff agent` | No | Changes `tuff.config.json` only |
+| `tuff harness` | No | Changes `tuff.config.json` only |
 
 Commands that only read the file never rewrite it, so running them in CI
 leaves the checkout clean.
@@ -197,13 +197,13 @@ the changelog will say so first.
 | Field | What it means |
 |---|---|
 | `agents` | The agents registered for this project |
-| `defaultAgent` | The agent a command uses when you do not pass `-a/--agent` |
+| `defaultAgent` | The agent a command uses when you do not pass `-a/--harness` |
 
-`tuff init` creates it. `tuff agent add <id>` and `tuff create` add agents,
-`tuff agent set-default <id>` changes the default, and `tuff agent list` shows
+`tuff init` creates it. `tuff harness add <id>` and `tuff create` add agents,
+`tuff harness set-default <id>` changes the default, and `tuff harness list` shows
 both. Add `--global` to work with the global configuration instead.
 
-Removing an agent with `tuff agent remove` only unregisters it. It does not
+Removing an agent with `tuff harness remove` only unregisters it. It does not
 change `tuff.lock` or delete any files. To remove a capability's files, use
 `tuff delete <id>`; to stop tracking a capability but keep its files, use
-`tuff untrack <id>`. See [Agents and Scope](/cli/agents/).
+`tuff untrack <id>`. See [Harnesses and Scope](/cli/agents/).

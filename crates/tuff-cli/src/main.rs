@@ -58,15 +58,15 @@ enum Command {
         #[arg(short = 'n', long = "name")]
         name: Option<String>,
 
-        /// Agent harness to emit for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to emit for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
 
         /// Install to global scope.
         #[arg(short = 'g', long = "global")]
         global: bool,
 
-        /// For a policy: install the rules each agent enforces and record the
+        /// For a policy: install the rules each harness enforces and record the
         /// rest in tuff.lock, instead of refusing the policy.
         #[arg(long = "accept-unenforced")]
         accept_unenforced: bool,
@@ -140,8 +140,8 @@ enum Command {
         /// Installed capability id.
         capability_id: String,
 
-        /// Agent to diff (defaults to the configured agent).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to diff (defaults to the configured harness).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Option<String>,
 
         /// Diff against latest upstream source instead of baseline.
@@ -170,8 +170,8 @@ enum Command {
         #[arg(long = "check")]
         check: bool,
 
-        /// Agent harness to update (repeatable; defaults to the configured agent).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to update (repeatable; defaults to the configured harness).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
 
         /// Force overwrite local changes with upstream (Git and pack sources).
@@ -208,7 +208,7 @@ enum Command {
         #[arg(long = "global")]
         global: bool,
 
-        /// Also fail while a policy rule is recorded as not enforced for an agent.
+        /// Also fail while a policy rule is recorded as not enforced for a harness.
         #[arg(long = "strict")]
         strict: bool,
     },
@@ -222,8 +222,8 @@ enum Command {
         #[arg(short = 's', long = "scope", default_value = "project")]
         scope: String,
 
-        /// Agent to delete from (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to delete from (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
 
         /// Delete files even when they have local modifications.
@@ -231,7 +231,7 @@ enum Command {
         force: bool,
     },
 
-    /// Stop tracking a capability without deleting its agent files.
+    /// Stop tracking a capability without deleting its harness files.
     Untrack {
         /// Capability id to untrack.
         id: String,
@@ -240,15 +240,16 @@ enum Command {
         #[arg(short = 's', long = "scope", default_value = "project")]
         scope: String,
 
-        /// Agent to untrack (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to untrack (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
     },
 
-    /// Manage agent harnesses.
-    Agent {
+    /// Manage the harnesses this project installs for.
+    #[command(alias = "agent")]
+    Harness {
         #[command(subcommand)]
-        action: AgentCommand,
+        action: HarnessCommand,
     },
 
     /// Inspect hook compatibility and portability.
@@ -257,7 +258,7 @@ enum Command {
         action: HooksCommand,
     },
 
-    /// Inspect what each agent can enforce of a policy.
+    /// Inspect what each harness can enforce of a policy.
     Policy {
         #[command(subcommand)]
         action: PolicyCommand,
@@ -294,8 +295,8 @@ enum McpCommand {
     /// Spawn each installed mcp-server capability, complete the MCP
     /// initialize handshake, and list its tools.
     Doctor {
-        /// Only check servers wired into this agent (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Only check servers wired into this harness (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         /// Check global scope instead of project scope.
         #[arg(short = 'g', long = "global")]
@@ -343,11 +344,11 @@ enum LockCommand {
 enum GenerateCommand {
     /// Generate an agent-facing capability index.
     Index {
-        /// Agent harness to generate an index for (defaults to the configured agent).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to generate an index for (defaults to the configured harness).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Option<String>,
 
-        /// Output path. Defaults to the agent's standard CAPABILITIES.md path.
+        /// Output path. Defaults to the harness's standard CAPABILITIES.md path.
         #[arg(short = 'o', long = "output")]
         output: Option<PathBuf>,
     },
@@ -366,32 +367,32 @@ enum CreateCommand {
     Skill {
         /// Capability id.
         id: String,
-        /// Agent harnesses to scaffold for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
     },
     /// Create and track a tool.
     Tool {
         /// Capability id.
         id: String,
-        /// Agent harnesses to scaffold for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
     },
     /// Create and track a hook.
     Hook {
         /// Capability id.
         id: String,
-        /// Agent harnesses to scaffold for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
     },
     /// Create and track a workflow.
     Workflow {
         /// Capability id.
         id: String,
-        /// Agent harnesses to scaffold for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
     },
     /// MCP servers are not scaffolded; use `tuff add mcp` instead.
@@ -399,8 +400,8 @@ enum CreateCommand {
     McpServer {
         /// Capability id.
         id: String,
-        /// Agent harnesses to scaffold for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harnesses to scaffold for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
     },
 }
@@ -413,8 +414,8 @@ enum AddCommand {
         source: PathBuf,
         /// Override the capability name (default: inferred from source).
         name: Option<String>,
-        /// Agent harness to emit for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to emit for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         /// Install to global scope.
         #[arg(short = 'g', long = "global")]
@@ -424,7 +425,7 @@ enum AddCommand {
     Tool {
         source: PathBuf,
         name: Option<String>,
-        #[arg(short = 'a', long = "agent")]
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         #[arg(short = 'g', long = "global")]
         global: bool,
@@ -436,7 +437,7 @@ enum AddCommand {
         /// Native harness hook fragment to merge, relative to the source directory.
         #[arg(long = "hook-file")]
         hook_file: Option<PathBuf>,
-        #[arg(short = 'a', long = "agent")]
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         #[arg(short = 'g', long = "global")]
         global: bool,
@@ -445,7 +446,7 @@ enum AddCommand {
     Workflow {
         source: PathBuf,
         name: Option<String>,
-        #[arg(short = 'a', long = "agent")]
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         #[arg(short = 'g', long = "global")]
         global: bool,
@@ -453,7 +454,7 @@ enum AddCommand {
     /// Install every capability in a verified pack artifact.
     Pack {
         source: PathBuf,
-        #[arg(short = 'a', long = "agent")]
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         /// OCI reference this pack was pulled from (e.g.
         /// ghcr.io/acme/engineering:1.2.0), recorded so `tuff outdated` can
@@ -472,8 +473,8 @@ enum AddCommand {
         /// Several may be given at once.
         #[arg(required = true)]
         sources: Vec<String>,
-        /// Agent harness to emit for (repeatable).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to emit for (repeatable).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         /// Install to global scope.
         #[arg(short = 'g', long = "global")]
@@ -501,8 +502,8 @@ enum PackCommand {
         /// Tracked capability to include (repeatable; workflows add their requirements).
         #[arg(short = 'c', long = "capability")]
         capability: Vec<String>,
-        /// Agent harness to render (repeatable; defaults to the project default).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to render (repeatable; defaults to the project default).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         /// Initial pack version.
         #[arg(long)]
@@ -532,8 +533,8 @@ enum PackCommand {
         /// Tracked capability to include (repeatable; workflows add their requirements).
         #[arg(short = 'c', long = "capability")]
         capability: Vec<String>,
-        /// Agent harness to render (repeatable; defaults to the project default).
-        #[arg(short = 'a', long = "agent")]
+        /// Harness to render (repeatable; defaults to the project default).
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: Vec<String>,
         /// Artifact output path.
         #[arg(short = 'o', long = "output")]
@@ -592,8 +593,8 @@ enum PackCommand {
     Extract {
         /// Pack artifact path.
         artifact: PathBuf,
-        /// Target agent contained in the artifact.
-        #[arg(short = 'a', long = "agent")]
+        /// Harness contained in the artifact.
+        #[arg(short = 'a', long = "harness", alias = "agent", value_name = "HARNESS")]
         agent: String,
         /// Missing or empty output directory.
         #[arg(short = 'o', long = "output")]
@@ -615,36 +616,36 @@ fn reject_parent_add_options(
     }
     if source.is_some() || name.is_some() || !agent.is_empty() || global {
         return Err(TuffError::usage(
-            "for typed 'tuff add' commands, put --agent and --global after the capability source",
+            "for typed 'tuff add' commands, put --harness and --global after the capability source",
         ));
     }
     Ok(())
 }
 
 #[derive(Subcommand)]
-enum AgentCommand {
-    /// List available and registered agents.
+enum HarnessCommand {
+    /// List available and registered harnesses.
     List {
-        /// Show the global agent configuration.
+        /// Show the global harness configuration.
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
 
-    /// Register an agent for this repo.
+    /// Register a harness for this repo.
     Add {
-        /// Agent adapter id.
+        /// Harness adapter id.
         id: String,
     },
 
-    /// Unregister an agent without changing installed capabilities.
+    /// Unregister a harness without changing installed capabilities.
     Remove {
-        /// Agent adapter id.
+        /// Harness adapter id.
         id: String,
     },
 
-    /// Set the default agent used when --agent is omitted.
+    /// Set the default harness used when --harness is omitted.
     SetDefault {
-        /// Agent adapter id.
+        /// Harness adapter id.
         id: String,
 
         /// Set the default for global operations.
@@ -655,7 +656,7 @@ enum AgentCommand {
 
 #[derive(Subcommand)]
 enum PolicyCommand {
-    /// Print, for every agent, how each kind of policy rule is enforced.
+    /// Print, for every harness, how each kind of policy rule is enforced.
     Matrix {
         /// Output the matrix as JSON.
         #[arg(long = "json")]
@@ -665,17 +666,17 @@ enum PolicyCommand {
 
 #[derive(Subcommand)]
 enum HooksCommand {
-    /// Print hook compatibility for registered agents.
+    /// Print hook compatibility for registered harnesses.
     Matrix,
 
-    /// Print the hook specification this binary implements, for every agent.
+    /// Print the hook specification this binary implements, for every harness.
     Spec {
         /// Output the specification document as JSON.
         #[arg(long = "json")]
         json: bool,
     },
 
-    /// Check whether a tracked hook can render on a target agent.
+    /// Check whether a tracked hook can render on a target harness.
     CheckPortability {
         /// Installed hook capability id.
         id: String,
@@ -702,6 +703,26 @@ fn wants_json() -> bool {
     std::env::args().any(|arg| arg == "--json")
 }
 
+/// Notes for spellings kept as aliases until 1.0 (internal #50): the
+/// `agent` command group and the `--agent` flag. Read from the raw
+/// arguments, since clap does not say which alias matched.
+fn deprecated_spelling_notes(args: &[String]) -> Vec<&'static str> {
+    let mut notes = Vec::new();
+    let command = args.iter().skip(1).find(|arg| !arg.starts_with('-'));
+    if command.is_some_and(|command| command == "agent") {
+        notes.push("'tuff agent' is now 'tuff harness'; the old name stops working in 1.0");
+    }
+    if args
+        .iter()
+        .skip(1)
+        .take_while(|arg| *arg != "--")
+        .any(|arg| arg == "--agent" || arg.starts_with("--agent="))
+    {
+        notes.push("--agent is now --harness (or -a); the old name stops working in 1.0");
+    }
+    notes
+}
+
 fn report_error(error: &TuffError, json: bool) {
     if json {
         let mut envelope = serde_json::json!({
@@ -724,6 +745,12 @@ fn report_error(error: &TuffError, json: bool) {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+    if !wants_json() {
+        let args: Vec<String> = std::env::args().collect();
+        for note in deprecated_spelling_notes(&args) {
+            eprintln!("note: {note}");
+        }
+    }
     let repo_root = std::env::current_dir()?;
 
     match cli.command {
@@ -1038,11 +1065,11 @@ fn run() -> Result<()> {
         }) => cmd_delete(&repo_root, &id, &scope, &agent, force),
         Some(Command::Scan { adopt, paths, json }) => cmd_scan(&repo_root, adopt, &paths, json),
         Some(Command::Untrack { id, scope, agent }) => cmd_untrack(&repo_root, &id, &scope, &agent),
-        Some(Command::Agent { action }) => match action {
-            AgentCommand::List { global } => cmd_agent_list(&repo_root, global),
-            AgentCommand::Add { id } => cmd_agent_add(&repo_root, &id),
-            AgentCommand::Remove { id } => cmd_agent_remove(&repo_root, &id),
-            AgentCommand::SetDefault { id, global } => {
+        Some(Command::Harness { action }) => match action {
+            HarnessCommand::List { global } => cmd_agent_list(&repo_root, global),
+            HarnessCommand::Add { id } => cmd_agent_add(&repo_root, &id),
+            HarnessCommand::Remove { id } => cmd_agent_remove(&repo_root, &id),
+            HarnessCommand::SetDefault { id, global } => {
                 cmd_agent_set_default(&repo_root, &id, global)
             }
         },
@@ -1085,5 +1112,37 @@ fn run() -> Result<()> {
                 json,
             } => cmd_mcp_search(&query, limit, &registry, json),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::deprecated_spelling_notes;
+
+    fn notes(args: &[&str]) -> Vec<&'static str> {
+        let args: Vec<String> = std::iter::once("tuff")
+            .chain(args.iter().copied())
+            .map(str::to_string)
+            .collect();
+        deprecated_spelling_notes(&args)
+    }
+
+    #[test]
+    fn only_the_old_spellings_get_a_note() {
+        assert_eq!(notes(&["agent", "list"]).len(), 1);
+        assert_eq!(notes(&["add", "x", "--agent", "codex"]).len(), 1);
+        assert_eq!(notes(&["add", "x", "--agent=codex"]).len(), 1);
+        assert_eq!(
+            notes(&["agent", "set-default", "codex", "--agent"]).len(),
+            2
+        );
+        assert!(notes(&["harness", "list"]).is_empty());
+        assert!(notes(&["add", "x", "-a", "codex"]).is_empty());
+        assert!(
+            notes(&["add", "agent"]).is_empty(),
+            "a capability named agent"
+        );
+        assert!(notes(&["add", "x", "--", "--agent"]).is_empty());
+        assert!(notes(&["--version"]).is_empty());
     }
 }

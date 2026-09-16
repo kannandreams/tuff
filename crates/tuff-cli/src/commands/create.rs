@@ -25,8 +25,8 @@ pub fn cmd_create(
     let mut adapters = Vec::new();
     for target in &target_ids {
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-            TuffError::usage(format!("unknown agent '{}'", target,))
-                .with_hint("run 'tuff agent list' to see available agents")
+            TuffError::usage(format!("unknown harness '{}'", target,))
+                .with_hint("run 'tuff harness list' to see available harnesses")
         })?;
         if !adapter.supports(kind) {
             return Err(TuffError::unsupported(format!(

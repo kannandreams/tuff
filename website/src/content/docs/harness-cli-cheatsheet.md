@@ -145,14 +145,14 @@ harness-specific capability folders discovered from that repository.
 
 ```sh frame="terminal"
 tuff init
-tuff agent add open-agents
-tuff agent add claude
+tuff harness add open-agents
+tuff harness add claude
 
 # Create a new capability for both harnesses
 tuff create skill release-check -a open-agents -a claude
 
 # Adopt an existing project capability without rewriting its content
-tuff add --agent open-agents .agents/skills/release-check
+tuff add -a open-agents .agents/skills/release-check
 
 # Inspect what is tracked and where it was emitted
 tuff list
@@ -160,12 +160,12 @@ tuff status
 tuff generate report --output docs/tuff-report.md
 ```
 
-Use `tuff add skill <source> --agent <id>` when the source type is known, or
+Use `tuff add skill <source> -a <id>` when the source type is known, or
 the untyped `tuff add <source>` form when Tuff should infer it. For a
 harness-native hook fragment:
 
 ```sh frame="terminal"
-tuff add hook ./claude-session-start --agent claude --hook-file settings.json
+tuff add hook ./claude-session-start -a claude --hook-file settings.json
 ```
 
 ### 3. Detect and reconcile drift
@@ -202,7 +202,7 @@ tuff delete <id> -a claude --force
 tuff untrack <id> -a claude
 
 # Remove an adapter registration only; capabilities remain untouched
-tuff agent remove claude
+tuff harness remove claude
 ```
 
 Use `delete` when Tuff owns the generated files. Use `untrack` when the files
@@ -233,8 +233,8 @@ tuff init                 # project state
 tuff init --global        # user/global state
 tuff add skill ./pack     # project capability
 tuff add skill ./pack --global
-tuff agent set-default claude
-tuff agent set-default claude --global
+tuff harness set-default claude
+tuff harness set-default claude --global
 ```
 
 When project and global capabilities share an id, the project copy wins. Use

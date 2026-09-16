@@ -14,7 +14,7 @@ tuff create hook review-hook -a open-agents -a claude
 tuff create workflow release-flow -a claude
 ```
 
-The capability type and id are positional. `-a, --agent` is optional and
+The capability type and id are positional. `-a, --harness` is optional and
 repeatable. When omitted, Tuff uses the configured default agent. Creation
 initializes Tuff state, registers the selected agents, writes adapter-valid
 files, and records the baseline. Use `-a <agent>` when creating for a
@@ -48,47 +48,47 @@ tuff add ./my-skill
 tuff add <capability-type> ./path/to/capability
 
 # Explicit type with a selected agent
-tuff add <capability-type> ./path/to/capability --agent claude
+tuff add <capability-type> ./path/to/capability -a claude
 
 # Multiple agents
-tuff add <capability-type> ./path/to/capability --agent claude --agent open-agents
+tuff add <capability-type> ./path/to/capability -a claude -a open-agents
 
 # Global scope
 tuff add <capability-type> ./path/to/capability --global
 ```
 
-For typed capability commands, options such as `--agent` and `--global` come
+For typed capability commands, options such as `--harness` and `--global` come
 after the source:
 
 ```sh frame="terminal"
-tuff add tool ./my-tool --agent claude --global
+tuff add tool ./my-tool -a claude --global
 ```
 
 Add existing agent files in place without copying their content:
 
 ```sh frame="terminal"
-tuff add --agent open-agents .agents/skills/my-skill
-tuff add --agent claude .agents/skills/my-skill
+tuff add -a open-agents .agents/skills/my-skill
+tuff add -a claude .agents/skills/my-skill
 ```
 
 Override the installed ID for a local source with `--name`; the overridden ID is used for emitted paths and the lockfile entry:
 
 ```sh frame="terminal"
-tuff add ./path/to/capability --name team-capability --agent open-agents
+tuff add ./path/to/capability --name team-capability -a open-agents
 ```
 
 ### Git sources
 
 ```sh frame="terminal"
-tuff add <capability-type> https://github.com/owner/repo <name> --agent open-agents
-tuff add <capability-type> https://github.com/owner/repo <name> --agent claude
+tuff add <capability-type> https://github.com/owner/repo <name> -a open-agents
+tuff add <capability-type> https://github.com/owner/repo <name> -a claude
 ```
 
 For Git sources, `<name>` is the capability directory name inside the
 repository. For example:
 
 ```sh frame="terminal"
-tuff add skill https://github.com/owner/repo rust-implement --agent open-agents
+tuff add skill https://github.com/owner/repo rust-implement -a open-agents
 ```
 
 Use the same structure for a tool, hook, or workflow by replacing `skill` with
@@ -100,10 +100,10 @@ If a repository tags its releases, you can install a specific one. Add `@` and a
 
 ```sh frame="terminal"
 # Exactly this release
-tuff add skill https://github.com/owner/repo rust-implement@1.2.0 --agent open-agents
+tuff add skill https://github.com/owner/repo rust-implement@1.2.0 -a open-agents
 
 # The newest release in a range
-tuff add skill https://github.com/owner/repo rust-implement@^1.2 --agent open-agents
+tuff add skill https://github.com/owner/repo rust-implement@^1.2 -a open-agents
 ```
 
 Tuff reads the repository's tags (without downloading the repository), picks the newest release that matches what you asked for, and then downloads the repository at that tag.
@@ -172,7 +172,7 @@ A declared version is what the author wrote, not a release: it may not change wh
 For harness-native hooks, pass the hook fragment explicitly:
 
 ```sh frame="terminal"
-tuff add hook ./claude-session-start --agent claude --hook-file settings.json
+tuff add hook ./claude-session-start -a claude --hook-file settings.json
 ```
 
 Tuff-standard manifest hooks are validated against adapter compatibility and rendered to the
@@ -188,7 +188,7 @@ tuff hooks check-portability pre-commit-lint --target claude
 
 | Flag | Description |
 |---|---|
-| `-a, --agent <id>` | Agent harness (optional, repeatable; defaults to configured agent) |
+| `-a, --harness <id>` | Harness to install for (optional, repeatable; defaults to the configured harness). `--agent` is the older name |
 | `-g, --global` | Install to global user scope |
 | `-n, --name <id>` | Override the installed capability ID for an auto-detected local source |
 | `--hook-file <path>` | Hook-only native settings fragment, relative to the hook source directory |
@@ -261,7 +261,7 @@ the baseline recorded at adoption.
 directly, when you already know its path:
 
 ```sh frame="terminal"
-tuff add --agent open-agents .agents/skills/python-uv
+tuff add -a open-agents .agents/skills/python-uv
 ```
 
 ### Before/after
@@ -271,7 +271,7 @@ Before add:
 .agents/skills/python-uv/
   └── SKILL.md                ← existing, unmanaged
 
-After tuff add --agent open-agents .agents/skills/python-uv:
+After tuff add -a open-agents .agents/skills/python-uv:
 .agents/skills/python-uv/
   └── SKILL.md                ← untouched
 tuff.config.json

@@ -48,8 +48,8 @@ pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
         "{}",
         render_table(
             &[
-                "AGENT",
-                "AGENTS SUPPORTED",
+                "HARNESS",
+                "HARNESSES SUPPORTED",
                 "CAPABILITIES",
                 "REGISTERED",
                 "DEFAULT",
@@ -62,7 +62,7 @@ pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
         if global { "global" } else { "project" }
     );
     println!(
-        "  DEFAULT = used when --agent is omitted ({})",
+        "  DEFAULT = used when --harness is omitted ({})",
         if global { "global" } else { "project" }
     );
     Ok(())
@@ -70,21 +70,21 @@ pub fn cmd_agent_list(repo_root: &Path, global: bool) -> Result<()> {
 
 pub fn cmd_agent_add(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
-        crate::error::TuffError::usage(format!("unknown agent '{}'", id,))
-            .with_hint("run 'tuff agent list' to see available agents")
+        crate::error::TuffError::usage(format!("unknown harness '{}'", id,))
+            .with_hint("run 'tuff harness list' to see available harnesses")
     })?;
 
     let mut config = config::read_config(repo_root)?;
     adapter.ensure_project_dir(repo_root)?;
     if config.agents.contains(&adapter.id().to_string()) {
-        println!("agent '{}' is already registered", id);
+        println!("harness '{}' is already registered", id);
         return Ok(());
     }
 
     config.agents.push(adapter.id().to_string());
     config::write_config(repo_root, &config)?;
     println!(
-        "registered agent '{}' ({})",
+        "registered harness '{}' ({})",
         adapter.id(),
         adapter.display_name()
     );
@@ -93,8 +93,8 @@ pub fn cmd_agent_add(repo_root: &Path, id: &str) -> Result<()> {
 
 pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
-        crate::error::TuffError::usage(format!("unknown agent '{}'", id,))
-            .with_hint("run 'tuff agent list' to see available agents")
+        crate::error::TuffError::usage(format!("unknown harness '{}'", id,))
+            .with_hint("run 'tuff harness list' to see available harnesses")
     })?;
 
     let mut config = config::read_config(repo_root)?;
@@ -104,17 +104,17 @@ pub fn cmd_agent_remove(repo_root: &Path, id: &str) -> Result<()> {
     config::write_config(repo_root, &config)?;
 
     if was_registered {
-        println!("unregistered agent '{}'", adapter.id());
+        println!("unregistered harness '{}'", adapter.id());
     } else {
-        println!("removed agent '{}'", adapter.id());
+        println!("removed harness '{}'", adapter.id());
     }
     Ok(())
 }
 
 pub fn cmd_agent_set_default(repo_root: &Path, id: &str, global: bool) -> Result<()> {
     let adapter = AdapterKind::from_id(id).ok_or_else(|| {
-        crate::error::TuffError::usage(format!("unknown agent '{}'", id,))
-            .with_hint("run 'tuff agent list' to see available agents")
+        crate::error::TuffError::usage(format!("unknown harness '{}'", id,))
+            .with_hint("run 'tuff harness list' to see available harnesses")
     })?;
     let config_root = if global {
         home_dir()?
@@ -133,7 +133,7 @@ pub fn cmd_agent_set_default(repo_root: &Path, id: &str, global: bool) -> Result
         config::write_config(&config_root, &config)?;
     }
     println!(
-        "set default agent '{}' ({})",
+        "set default harness '{}' ({})",
         adapter.id(),
         if global { "global" } else { "project" }
     );

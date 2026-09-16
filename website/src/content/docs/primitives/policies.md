@@ -152,7 +152,7 @@ codex execpolicy check --rules .codex/rules/tuff.rules -- git push --force
 
 ## OpenCode
 
-Tuff compiles every kind of rule into OpenCode's `permission` settings, in `.opencode/opencode.json`. Add the `opencode` agent first with `tuff agent add opencode`.
+Tuff compiles every kind of rule into OpenCode's `permission` settings, in `.opencode/opencode.json`. Add the `opencode` agent first with `tuff harness add opencode`.
 
 | Policy rule | OpenCode rule in `permission` |
 |---|---|
@@ -229,7 +229,7 @@ The matrix has one row per agent, effect, and subject, with the same `full`, `pa
 By default, `tuff add` refuses a policy when a selected agent does not enforce one of its rules, and installs nothing. `--accept-unenforced` installs the rules each agent enforces instead, and records the others in `tuff.lock`:
 
 ```sh frame="terminal"
-tuff add ./policies/infra-guardrails --agent <agent> --accept-unenforced
+tuff add ./policies/infra-guardrails -a <agent> --accept-unenforced
 ```
 
 - `tuff add` prints each rule it did not install, with the agent and the reason.

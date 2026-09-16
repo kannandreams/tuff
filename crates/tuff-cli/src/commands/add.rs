@@ -1318,8 +1318,8 @@ fn policy_enforcement(
     let mut enforcing_nothing = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
-            TuffError::usage(format!("unknown agent '{tid}'"))
-                .with_hint("run 'tuff agent list' to see available agents")
+            TuffError::usage(format!("unknown harness '{tid}'"))
+                .with_hint("run 'tuff harness list' to see available harnesses")
         })?;
         let gap = |rule: &tuff_core::policy::PolicyRule| adapter.policy_rule_gap(rule);
         let (enforced, unenforced) =
@@ -1455,8 +1455,8 @@ pub(crate) fn install_capability_accepting(
     let mut adapters = Vec::new();
     for tid in target_ids {
         let adapter = AdapterKind::from_id(tid).ok_or_else(|| {
-            TuffError::usage(format!("unknown agent '{}'", tid,))
-                .with_hint("run 'tuff agent list' to see available agents")
+            TuffError::usage(format!("unknown harness '{}'", tid,))
+                .with_hint("run 'tuff harness list' to see available harnesses")
         })?;
         if !adapter.supports(capability.capability_type) {
             return Err(TuffError::unsupported(format!(

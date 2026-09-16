@@ -40,7 +40,7 @@ fn quick_start_rows() -> [(&'static str, &'static str); 6] {
         ("tuff add skill <path> [name]", "Install a capability"),
         ("tuff list", "Show installed capabilities"),
         ("tuff diff <id>", "Compare local changes to baseline"),
-        ("tuff agent list", "Show configured agent harnesses"),
+        ("tuff harness list", "Show configured harnesses"),
         ("tuff --help", "Show command reference"),
     ]
 }
