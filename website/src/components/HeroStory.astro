@@ -280,10 +280,11 @@ const projects = [
   .hs-main { padding-top: 0; }
   .hs-headlines { margin-top: 1.4rem; }
   .hs-hl { display: grid; gap: .15rem; margin: 0; color: var(--tuff-text); font-family: 'Geist', system-ui, sans-serif; font-size: clamp(1.35rem, 2.5vw, 1.9rem); font-weight: 600; line-height: 1.25; letter-spacing: -.04em; }
-  .hs-hl span { display: flex; align-items: baseline; gap: .6rem; color: #b9b3a9; transition: color .4s ease, transform .4s ease; }
-  .hs-hl span b { min-width: 1.6rem; color: #cfc9bf; font-family: 'JetBrains Mono', monospace; font-size: .62rem; font-weight: 500; letter-spacing: 0; transition: color .4s ease; }
-  .hs-hl span.is-on { color: var(--tuff-text); transform: translateX(.2rem); }
+  .hs-hl span { display: flex; align-items: baseline; gap: .6rem; color: var(--tuff-text); }
+  .hs-hl span b { position: relative; min-width: 1.6rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .62rem; font-weight: 500; letter-spacing: 0; transition: color .4s ease; }
   .hs-hl span.is-on b { color: var(--tuff-accent); }
+  .hs-hl span b::before { content: ''; position: absolute; left: -.7rem; top: 50%; width: .35rem; height: .35rem; border-radius: 50%; background: var(--tuff-accent); opacity: 0; transform: translateY(-50%) scale(.4); transition: opacity .3s ease, transform .3s ease; }
+  .hs-hl span.is-on b::before { opacity: 1; transform: translateY(-50%) scale(1); }
   .hs-hl--compact { gap: .35rem; }
   .hs-hl--compact .hs-hl-lead { display: block; margin-bottom: .6rem; color: var(--tuff-text); }
   .hs-hl--compact span[data-hs-line] { display: inline-flex; font-family: 'JetBrains Mono', monospace; font-size: 1rem; letter-spacing: 0; }
@@ -362,8 +363,6 @@ const projects = [
   i.is-ver { background: #65d6d0; }
 
   .hs-flow > *, .hs-fork > * { transition: opacity .45s ease, border-color .45s ease, box-shadow .45s ease; }
-  .hs-flow.is-stepping [data-hs-step] { opacity: .45; }
-  .hs-flow.is-stepping [data-hs-step].is-active { opacity: 1; }
   .hs-stage.is-active { border-color: #f18453; box-shadow: 0 0 0 3px rgba(241, 132, 83, .12); }
   .hs-stage.is-active .hs-label b { animation: hs-beat 1.2s ease-in-out infinite; }
   @keyframes hs-beat { 50% { box-shadow: 0 0 0 4px rgba(241, 132, 83, .25); } }
