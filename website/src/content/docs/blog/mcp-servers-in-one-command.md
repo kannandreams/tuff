@@ -7,7 +7,7 @@ tags: [mcp, tutorial]
 excerpt: Declare an external MCP server once, and Tuff writes the config entry each harness reads and checks that the server starts. The steps run in a new directory in about ten minutes.
 ---
 
-Each coding harness reads MCP servers from its own file: Claude Code from `.mcp.json`, Cursor from `.cursor/mcp.json`, and Codex and OpenCode from `.agents/mcp.json`. The same server needs one hand edit per file, and the harness does not report a typo in any of them. Since Tuff 0.1.8 an MCP server is a capability: the declaration lives in one place, and Tuff generates the config entries.
+Each coding harness reads MCP servers from its own file: Claude Code from `.mcp.json`, Cursor from `.cursor/mcp.json`, OpenCode from `opencode.json`, and the shared Open Agents layout from `.agents/mcp.json`. The same server needs one hand edit per file, and the harness does not report a typo in any of them. Since Tuff 0.1.8 an MCP server is a capability: the declaration lives in one place, and Tuff generates the config entries.
 
 This walkthrough uses the `everything` server from the built-in catalog. It is the reference server the MCP project publishes for exercising the protocol, and it needs no API key. You need `tuff` and Node's `npx` on your `PATH`.
 

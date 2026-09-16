@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **MCP servers install for OpenCode through the `opencode` target.** OpenCode reads MCP servers from `opencode.json`, under `mcp`, and not from `.agents/mcp.json`, so a server installed with `-a open-agents` never started in OpenCode. `tuff add mcp <server> -a opencode` now writes the entry into `.opencode/opencode.json`, in OpenCode's own shape: `type` is `local` or `remote`, a local server's program and arguments are one `command` array, its variables sit under `environment`, and a variable is referenced as `{env:VAR}`. The file's other keys keep their order, since OpenCode reads the order of `permission` rules as precedence. `tuff check` reports a hand-edited entry, and `tuff delete` removes the entry, the `mcp` object once it is empty, and the file once only `$schema` is left. The docs no longer say OpenCode reads `.agents/mcp.json`.
+
 ## [0.11.0] - 2026-09-16
 
 ### Added

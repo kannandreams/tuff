@@ -6,7 +6,7 @@ use tuff_hooks_spec::{
 
 use tuff_core::adapter::{AgentAdapter, HookSettingsShape};
 use tuff_core::error::Result;
-use tuff_core::manifest::CapabilityType;
+use tuff_core::manifest::{CapabilityType, McpServerConfig, McpTransport};
 use tuff_core::policy::{
     PolicyCoverageEntry, PolicyEffect, PolicyRule, PolicySubject, PolicySubjectKind,
 };
@@ -14,9 +14,10 @@ use tuff_core::policy::{
 pub const ID: &str = "opencode";
 pub const DISPLAY_NAME: &str = "OpenCode";
 
-/// Policies only. Skills reach OpenCode through the `open-agents` layout;
-/// OpenCode MCP servers and hooks are not managed by this adapter yet.
-pub const SUPPORTED_TYPES: &[CapabilityType] = &[CapabilityType::Policy];
+/// Policies and MCP servers, both of which OpenCode reads from
+/// `opencode.json`. Skills reach OpenCode through the `open-agents` layout,
+/// and OpenCode hooks are plugins, which this adapter does not manage.
+pub const SUPPORTED_TYPES: &[CapabilityType] = &[CapabilityType::Policy, CapabilityType::McpServer];
 
 pub const SUPPORTED_AGENTS: &[&str] = &["OpenCode"];
 
@@ -218,8 +219,64 @@ impl AgentAdapter for OpenCode {
         ".opencode"
     }
 
+    /// MCP servers join the policy rules in `.opencode/opencode.json`, which
+    /// OpenCode merges over the project's `opencode.json`, so the project's
+    /// own file is never edited.
     fn mcp_config_relpath(&self) -> &'static str {
-        "opencode.json"
+        CONFIG_RELPATH
+    }
+
+    /// OpenCode expands `{env:VAR}` in its config.
+    fn mcp_env_reference(&self, var: &str) -> String {
+        format!("{{env:{var}}}")
+    }
+
+    /// OpenCode's `mcp.<id>` entry: `type` is `local` or `remote`, a local
+    /// server's program and arguments are one `command` array, and its
+    /// variables sit under `environment`.
+    fn mcp_server_entry(&self, server: &McpServerConfig) -> serde_json::Value {
+        match server.transport {
+            McpTransport::Stdio => {
+                let mut command = vec![server.command.clone().unwrap_or_default()];
+                command.extend(server.args.iter().cloned());
+                let mut entry = serde_json::json!({"type": "local", "command": command});
+                if !server.env.is_empty() {
+                    let environment: serde_json::Map<String, serde_json::Value> = server
+                        .env
+                        .iter()
+                        .map(|(name, reference)| {
+                            (
+                                name.clone(),
+                                serde_json::Value::String(
+                                    self.mcp_env_reference(&reference.from_env),
+                                ),
+                            )
+                        })
+                        .collect();
+                    entry["environment"] = serde_json::Value::Object(environment);
+                }
+                entry
+            }
+            McpTransport::Http => {
+                let mut entry = serde_json::json!({
+                    "type": "remote",
+                    "url": server.url.clone().unwrap_or_default(),
+                });
+                if !server.headers.is_empty() {
+                    let headers: serde_json::Map<String, serde_json::Value> = server
+                        .headers
+                        .iter()
+                        .map(|(name, reference)| {
+                            let value =
+                                reference.render(&self.mcp_env_reference(&reference.from_env));
+                            (name.clone(), serde_json::Value::String(value))
+                        })
+                        .collect();
+                    entry["headers"] = serde_json::Value::Object(headers);
+                }
+                entry
+            }
+        }
     }
 
     fn supported_agents(&self) -> &[&'static str] {
@@ -333,8 +390,66 @@ mod tests {
     }
 
     #[test]
-    fn opencode_is_a_policy_only_target() {
-        assert_eq!(SUPPORTED_TYPES, [CapabilityType::Policy]);
+    fn mcp_entries_take_opencodes_shape_and_env_syntax() {
+        use tuff_core::manifest::{EnvRef, HeaderRef, McpServerConfig, McpTransport};
+        let local = McpServerConfig {
+            transport: McpTransport::Stdio,
+            command: Some("npx".to_string()),
+            args: vec!["-y".to_string(), "pkg".to_string()],
+            url: None,
+            env: [(
+                "GITHUB_PERSONAL_ACCESS_TOKEN".to_string(),
+                EnvRef {
+                    from_env: "GITHUB_PERSONAL_ACCESS_TOKEN".to_string(),
+                },
+            )]
+            .into_iter()
+            .collect(),
+            headers: Default::default(),
+            metadata: None,
+        };
+        assert_eq!(
+            OpenCode.mcp_server_entry(&local),
+            serde_json::json!({
+                "type": "local",
+                "command": ["npx", "-y", "pkg"],
+                "environment": {"GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"},
+            })
+        );
+
+        let remote = McpServerConfig {
+            transport: McpTransport::Http,
+            command: None,
+            args: Vec::new(),
+            url: Some("https://mcp.example.test/mcp".to_string()),
+            env: Default::default(),
+            headers: [(
+                "Authorization".to_string(),
+                HeaderRef {
+                    from_env: "EXAMPLE_TOKEN".to_string(),
+                    format: Some("Bearer {}".to_string()),
+                },
+            )]
+            .into_iter()
+            .collect(),
+            metadata: None,
+        };
+        assert_eq!(
+            OpenCode.mcp_server_entry(&remote),
+            serde_json::json!({
+                "type": "remote",
+                "url": "https://mcp.example.test/mcp",
+                "headers": {"Authorization": "Bearer {env:EXAMPLE_TOKEN}"},
+            })
+        );
+    }
+
+    #[test]
+    fn opencode_takes_policies_and_mcp_servers_only() {
+        assert_eq!(
+            SUPPORTED_TYPES,
+            [CapabilityType::Policy, CapabilityType::McpServer]
+        );
         assert!(
             HOOK_COMPATIBILITY
                 .events

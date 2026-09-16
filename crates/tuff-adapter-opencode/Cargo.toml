@@ -12,3 +12,4 @@ repository.workspace = true
 [dependencies]
 tuff-core.workspace = true
 tuff-hooks-spec.workspace = true
+serde_json = "1.0.145"

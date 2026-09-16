@@ -21,7 +21,7 @@ Tuff currently ships five adapters:
 | Cursor | `cursor` | `.cursor/` |
 | OpenCode | `opencode` | `.opencode/` |
 
-`opencode` takes [policies](/primitives/policies/#opencode) only. OpenCode reads skills from the `.agents/` layout, so install those with `open-agents`.
+`opencode` takes [policies](/primitives/policies/#opencode) and [MCP servers](/primitives/mcp-servers/#what-gets-written), both written to `.opencode/opencode.json`. OpenCode reads skills from the `.agents/` layout, so install those with `open-agents`.
 
 `open-agents` remains the generic shared `.agents/` adapter. Codex now has a dedicated adapter even
 though it currently emits the same directory family, because its hook coverage and native behavior
@@ -58,6 +58,7 @@ This records a new target and emits the capability into that harness's layout. T
 | `claude` | `.claude/tools/<id>/...` | `.mcp.json` |
 | `codex` | `.agents/tools/<id>/...` | `.agents/mcp.json` |
 | `cursor` | `.cursor/tools/<id>/...` | `.cursor/mcp.json` |
+| `opencode` | not supported | `mcp` in `.opencode/opencode.json` (MCP servers only) |
 
 Tuff writes the tool files and also registers the tool in the agent's MCP config so the harness
 can discover it.
