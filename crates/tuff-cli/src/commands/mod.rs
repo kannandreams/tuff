@@ -84,7 +84,6 @@ pub(crate) fn style_capability_type(capability_type: CapabilityType) -> String {
         CapabilityType::Skill => "36",
         CapabilityType::Tool => "35",
         CapabilityType::Hook => "33",
-        CapabilityType::Workflow => "34",
         CapabilityType::Policy => "31",
         CapabilityType::McpServer => "96",
     };
@@ -296,7 +295,6 @@ pub(crate) fn infer_from_path(path: &Path) -> (CapabilityType, String) {
     let ctype = match kind_dir {
         "tools" => CapabilityType::Tool,
         "hooks" => CapabilityType::Hook,
-        "workflows" => CapabilityType::Workflow,
         "mcp-servers" => CapabilityType::McpServer,
         _ => CapabilityType::Skill,
     };

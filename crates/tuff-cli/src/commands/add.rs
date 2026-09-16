@@ -772,7 +772,6 @@ fn synthetic_local_manifest(
         parameters: None,
         implementation: None,
         hook: None,
-        workflow: None,
         server: None,
         policy: None,
         targets: vec![],
@@ -1014,7 +1013,6 @@ fn adopt_capability_in_place(
             targets,
             implementation: manifest.implementation.clone(),
             parameters: manifest.parameters.clone(),
-            workflow: manifest.workflow.clone(),
             server: manifest.server.clone(),
         },
     );
@@ -1115,7 +1113,6 @@ pub(crate) fn add_missing_targets(
         entry.description = existing.description;
         entry.implementation = existing.implementation;
         entry.parameters = existing.parameters;
-        entry.workflow = existing.workflow;
         entry.server = existing.server;
     }
     lockfile::write_scoped_lockfile(install_root, scope, &lockfile)?;
@@ -1801,7 +1798,6 @@ pub(crate) fn install_capability_accepting(
             targets: merged_targets,
             implementation: manifest.implementation.clone(),
             parameters: manifest.parameters.clone(),
-            workflow: manifest.workflow.clone(),
             server: manifest.server.clone(),
         },
     );

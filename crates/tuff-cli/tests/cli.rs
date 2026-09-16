@@ -133,9 +133,9 @@ runtime_deps = ["curl"]
 fn make_pack(root: &Path) -> std::path::PathBuf {
     let pack = root.join("engineering-pack");
     let skill = pack.join("capabilities").join("pack-skill");
-    let workflow = pack.join("capabilities").join("pack-workflow");
+    let tool = pack.join("capabilities").join("pack-tool");
     fs::create_dir_all(&skill).unwrap();
-    fs::create_dir_all(&workflow).unwrap();
+    fs::create_dir_all(&tool).unwrap();
     fs::write(
         pack.join("tuff-pack.toml"),
         r#"schema = 1
@@ -147,7 +147,7 @@ description = "A deterministic test pack."
 targets = ["open-agents"]
 
 [[capabilities]]
-path = "capabilities/pack-workflow"
+path = "capabilities/pack-tool"
 
 [[capabilities]]
 path = "capabilities/pack-skill"
@@ -170,18 +170,26 @@ files = ["SKILL.md"]
     )
     .unwrap();
     fs::write(
-        workflow.join("tuff.toml"),
-        r#"id = "pack-workflow"
+        tool.join("tuff.toml"),
+        r#"id = "pack-tool"
 version = "3.0.0"
-type = "workflow"
-description = "A workflow shipped in a pack."
+type = "tool"
+description = "A tool shipped in a pack."
+files = ["run.sh"]
 
-[[workflow.requires]]
-id = "pack-skill"
-type = "skill"
+[parameters]
+type = "object"
+
+[parameters.properties.target]
+type = "string"
+
+[implementation]
+language = "bash"
+entrypoint = "run.sh"
 "#,
     )
     .unwrap();
+    fs::write(tool.join("run.sh"), "#!/bin/bash\necho packed\n").unwrap();
     pack
 }
 
@@ -518,62 +526,31 @@ fn old_target_flags_are_removed() {
 }
 
 #[test]
-fn the_old_agent_spellings_still_work_and_say_what_replaces_them() {
+fn the_old_agent_spellings_are_gone() {
     let temp = TempDir::new().unwrap();
     tuff()
         .current_dir(temp.path())
         .arg("init")
         .assert()
         .success();
-
     tuff()
         .current_dir(temp.path())
-        .args(["agent", "add", "claude"])
+        .args(["agent", "list"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("registered harness 'claude'"))
-        .stderr(predicate::str::contains(
-            "note: 'tuff agent' is now 'tuff harness'; the old name stops working in 1.0",
-        ));
-
-    let skill = make_skill_primitive_dir(temp.path(), "old-flag");
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'agent'"));
     tuff()
         .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--agent", "claude"])
+        .args(["delete", "anything", "--agent", "claude"])
         .assert()
-        .success()
-        .stderr(predicate::str::contains(
-            "note: --agent is now --harness (or -a); the old name stops working in 1.0",
-        ));
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument '--agent'"));
     tuff()
         .current_dir(temp.path())
-        .args(["delete", "old-flag", "--agent=claude"])
+        .args(["harness", "add", "claude"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("note: --agent is now --harness"));
-
-    // The new spellings and the short flag print no note.
-    for args in [
-        vec!["harness", "list"],
-        vec!["add", skill.to_str().unwrap(), "-a", "claude"],
-        vec!["delete", "old-flag", "--harness", "claude"],
-    ] {
-        tuff()
-            .current_dir(temp.path())
-            .args(&args)
-            .assert()
-            .success()
-            .stderr(predicate::str::contains("note:").not());
-    }
-
-    // A --json caller gets one shape on stderr, with no note before it.
-    let output = tuff()
-        .current_dir(temp.path())
-        .args(["check", "--json", "--agent", "claude"])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(!stderr.contains("note:"), "{stderr}");
+        .stderr(predicate::str::contains("note:").not());
 }
 
 #[test]
@@ -1963,32 +1940,6 @@ fn capability_index_reflects_installed_tool_and_updates_are_regenerated() {
 }
 
 #[test]
-fn capability_index_lists_workflow_steps() {
-    let temp = TempDir::new().unwrap();
-    let workflow = make_workflow_primitive(temp.path(), "release-flow", &[("scan-tool", "tool")]);
-
-    tuff()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
-    tuff()
-        .current_dir(temp.path())
-        .args(["add", workflow.to_str().unwrap()])
-        .assert()
-        .success();
-
-    let content = fs::read_to_string(
-        temp.path()
-            .join(".agents/skills/tuff-capabilities/SKILL.md"),
-    )
-    .unwrap();
-    assert!(content.contains("## Workflows"));
-    assert!(content.contains("### release-flow"));
-    assert!(content.contains("1. scan-tool (tool)"));
-}
-
-#[test]
 fn capability_index_is_generated_for_a_pack_install() {
     let author = TempDir::new().unwrap();
     let project = TempDir::new().unwrap();
@@ -2034,7 +1985,7 @@ fn capability_index_is_generated_for_a_pack_install() {
         .join(".agents/skills/tuff-capabilities/SKILL.md");
     assert!(index_path.is_file());
     let content = fs::read_to_string(&index_path).unwrap();
-    assert!(content.contains("### pack-workflow"));
+    assert!(content.contains("### pack-tool"));
 }
 
 fn make_mcp_server_primitive(root: &Path, id: &str) -> std::path::PathBuf {
@@ -6916,203 +6867,6 @@ fn add_does_not_batch_scan_agent_directories() {
         .stderr(predicate::str::contains("required"));
 }
 
-fn make_workflow_primitive(
-    root: &Path,
-    wf_id: &str,
-    req_ids: &[(&str, &str)],
-) -> std::path::PathBuf {
-    let primitive = root.join("wf-primitive");
-    fs::create_dir_all(&primitive).unwrap();
-    let mut content = format!(
-        r#"id = "{wf_id}"
-version = "1.0.0"
-type = "workflow"
-description = "A test workflow."
-"#
-    );
-    for (rid, rtype) in req_ids {
-        content.push_str(&format!(
-            "[[workflow.requires]]\nid = \"{rid}\"\ntype = \"{rtype}\"\n"
-        ));
-    }
-    fs::write(primitive.join("tuff.toml"), content).unwrap();
-    primitive
-}
-
-#[test]
-fn add_workflow_installs_and_shows_deps() {
-    let temp = TempDir::new().unwrap();
-    let wf = make_workflow_primitive(
-        temp.path(),
-        "test-wf",
-        &[("dep-a", "skill"), ("dep-b", "tool")],
-    );
-
-    tuff()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
-
-    tuff()
-        .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--harness", "open-agents"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("installed test-wf (open-agents)"))
-        .stderr(predicate::str::contains(
-            "workflow 'test-wf' requires 2 capabilities",
-        ))
-        .stderr(predicate::str::contains("dep-a (skill)"))
-        .stderr(predicate::str::contains("dep-b (tool)"));
-
-    assert!(
-        temp.path()
-            .join(".agents")
-            .join("workflows")
-            .join("test-wf")
-            .join("workflow.toml")
-            .exists()
-    );
-
-    tuff()
-        .current_dir(temp.path())
-        .args(["list", "--type", "workflow"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("test-wf"))
-        .stdout(predicate::str::contains("workflow"));
-}
-
-#[test]
-fn add_workflow_rejects_self_reference() {
-    let temp = TempDir::new().unwrap();
-    let wf_dir = temp.path().join("self-wf");
-    fs::create_dir_all(&wf_dir).unwrap();
-    fs::write(
-        wf_dir.join("tuff.toml"),
-        r#"id = "self-wf"
-version = "1.0.0"
-type = "workflow"
-description = "Bad."
-
-[[workflow.requires]]
-id = "self-wf"
-type = "skill"
-"#,
-    )
-    .unwrap();
-
-    tuff()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
-    tuff()
-        .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--harness", "open-agents"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("cannot require itself"));
-}
-
-#[test]
-fn add_workflow_rejects_empty_requires() {
-    let temp = TempDir::new().unwrap();
-    let wf_dir = temp.path().join("empty-wf");
-    fs::create_dir_all(&wf_dir).unwrap();
-    fs::write(
-        wf_dir.join("tuff.toml"),
-        r#"id = "empty-wf"
-version = "1.0.0"
-type = "workflow"
-description = "Bad."
-
-[workflow]
-"#,
-    )
-    .unwrap();
-
-    tuff()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
-    tuff()
-        .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--harness", "open-agents"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("invalid capability manifest TOML"));
-}
-
-#[test]
-fn add_workflow_rejects_duplicate_requires() {
-    let temp = TempDir::new().unwrap();
-    let wf_dir = temp.path().join("dup-wf");
-    fs::create_dir_all(&wf_dir).unwrap();
-    fs::write(
-        wf_dir.join("tuff.toml"),
-        r#"id = "dup-wf"
-version = "1.0.0"
-type = "workflow"
-description = "Bad."
-
-[[workflow.requires]]
-id = "same"
-type = "skill"
-
-[[workflow.requires]]
-id = "same"
-type = "tool"
-"#,
-    )
-    .unwrap();
-
-    tuff()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
-    tuff()
-        .current_dir(temp.path())
-        .args(["add", wf_dir.to_str().unwrap(), "--harness", "open-agents"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("duplicate requirement"));
-}
-
-#[test]
-fn status_shows_workflow_dependency_tree() {
-    let temp = TempDir::new().unwrap();
-    let skill = make_primitive(temp.path(), "dep-skill");
-    let wf = make_workflow_primitive(temp.path(), "parent-wf", &[("dep-skill", "skill")]);
-
-    tuff()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
-    tuff()
-        .current_dir(temp.path())
-        .args(["add", skill.to_str().unwrap(), "--harness", "open-agents"])
-        .assert()
-        .success();
-    tuff()
-        .current_dir(temp.path())
-        .args(["add", wf.to_str().unwrap(), "--harness", "open-agents"])
-        .assert()
-        .success();
-
-    tuff()
-        .current_dir(temp.path())
-        .arg("status")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("parent-wf"))
-        .stdout(predicate::str::contains("dep-skill"));
-}
-
 #[test]
 fn pack_build_is_deterministic_and_extracts_a_verified_target() {
     let temp = TempDir::new().unwrap();
@@ -7222,17 +6976,12 @@ fn project_pack_build_packages_tracked_capabilities_with_simple_defaults() {
 }
 
 #[test]
-fn project_pack_build_packages_skills_tools_hooks_and_workflows() {
+fn project_pack_build_packages_skills_tools_and_hooks() {
     let project = TempDir::new().unwrap();
     let home = TempDir::new().unwrap();
     let skill = make_primitive(project.path(), "review-skill");
     let tool = make_tool_primitive(project.path(), "review-tool");
     let hook = make_hook_primitive(project.path(), "review-hook");
-    let workflow = make_workflow_primitive(
-        project.path(),
-        "review-flow",
-        &[("review-skill", "skill"), ("review-tool", "tool")],
-    );
 
     tuff()
         .current_dir(project.path())
@@ -7240,7 +6989,7 @@ fn project_pack_build_packages_skills_tools_hooks_and_workflows() {
         .arg("init")
         .assert()
         .success();
-    for source in [&skill, &tool, &hook, &workflow] {
+    for source in [&skill, &tool, &hook] {
         tuff()
             .current_dir(project.path())
             .env("HOME", home.path())
@@ -7267,7 +7016,7 @@ fn project_pack_build_packages_skills_tools_hooks_and_workflows() {
         .iter()
         .map(|capability| capability.capability_type.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(types, ["workflow", "hook", "skill", "tool"]);
+    assert_eq!(types, ["hook", "skill", "tool"]);
 }
 
 #[test]
@@ -7373,63 +7122,6 @@ fn project_pack_build_refuses_source_changes_not_accepted_by_update() {
         ))
         .stderr(predicate::str::contains("tuff update code-review"));
     assert!(!project.path().join("tuff-dist").exists());
-}
-
-#[test]
-fn project_pack_init_persists_expanded_workflow_selection_without_copying_sources() {
-    let project = TempDir::new().unwrap();
-    let home = TempDir::new().unwrap();
-    let skill = make_primitive(project.path(), "dep-skill");
-    let workflow =
-        make_workflow_primitive(project.path(), "review-flow", &[("dep-skill", "skill")]);
-
-    tuff()
-        .current_dir(project.path())
-        .env("HOME", home.path())
-        .arg("init")
-        .assert()
-        .success();
-    for source in [&skill, &workflow] {
-        tuff()
-            .current_dir(project.path())
-            .env("HOME", home.path())
-            .args(["add", source.to_str().unwrap()])
-            .assert()
-            .success();
-    }
-    tuff()
-        .current_dir(project.path())
-        .env("HOME", home.path())
-        .args([
-            "pack",
-            "init",
-            "crm-integration",
-            "--from-project",
-            "--capability",
-            "review-flow",
-        ])
-        .assert()
-        .success();
-
-    let pack_root = project.path().join("tuff-packs/crm-integration");
-    let (_, manifest) = tuff_core::pack::load_manifest(&pack_root).unwrap();
-    assert_eq!(
-        manifest.project.unwrap().capabilities,
-        ["dep-skill", "review-flow"]
-    );
-    assert!(!pack_root.join("capabilities").exists());
-    tuff()
-        .current_dir(project.path())
-        .env("HOME", home.path())
-        .args(["pack", "build", pack_root.to_str().unwrap()])
-        .assert()
-        .success();
-    assert!(
-        project
-            .path()
-            .join("tuff-dist/crm-integration-0.1.0.tuffpack")
-            .is_file()
-    );
 }
 
 #[test]
@@ -7565,32 +7257,6 @@ fn pack_pull_refuses_existing_output_before_network_access() {
 }
 
 #[test]
-fn pack_check_rejects_missing_workflow_dependency() {
-    let temp = TempDir::new().unwrap();
-    let pack = make_pack(temp.path());
-    fs::write(
-        pack.join("capabilities/pack-workflow/tuff.toml"),
-        r#"id = "pack-workflow"
-version = "3.0.0"
-type = "workflow"
-description = "A broken workflow."
-
-[[workflow.requires]]
-id = "missing-skill"
-type = "skill"
-"#,
-    )
-    .unwrap();
-
-    tuff()
-        .current_dir(temp.path())
-        .args(["pack", "check", pack.to_str().unwrap()])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("requires missing capability"));
-}
-
-#[test]
 fn add_pack_installs_all_members_and_records_provenance() {
     let author = TempDir::new().unwrap();
     let project = TempDir::new().unwrap();
@@ -7642,7 +7308,7 @@ fn add_pack_installs_all_members_and_records_provenance() {
     assert!(
         project
             .path()
-            .join(".agents/workflows/pack-workflow/workflow.toml")
+            .join(".agents/tools/pack-tool/run.sh")
             .is_file()
     );
     tuff()
@@ -7652,7 +7318,7 @@ fn add_pack_installs_all_members_and_records_provenance() {
         .assert()
         .success()
         .stdout(predicate::str::contains("pack-skill"))
-        .stdout(predicate::str::contains("pack-workflow"));
+        .stdout(predicate::str::contains("pack-tool"));
 }
 
 #[test]
@@ -7697,12 +7363,7 @@ fn add_pack_collision_leaves_every_member_uninstalled() {
         .failure()
         .stderr(predicate::str::contains("all-or-nothing"));
 
-    assert!(
-        !project
-            .path()
-            .join(".agents/workflows/pack-workflow")
-            .exists()
-    );
+    assert!(!project.path().join(".agents/tools/pack-tool").exists());
 }
 
 #[test]
@@ -7765,7 +7426,7 @@ fn make_pack_release(
     root: &Path,
     version: &str,
     skill_body: &str,
-    with_workflow: bool,
+    with_tool: bool,
     with_notes: bool,
 ) -> std::path::PathBuf {
     let pack = root.join(format!("engineering-{version}"));
@@ -7797,23 +7458,31 @@ files = ["SKILL.md"]
     )
     .unwrap();
     fs::write(skill.join("SKILL.md"), skill_body).unwrap();
-    if with_workflow {
-        let workflow = pack.join("capabilities/pack-workflow");
-        fs::create_dir_all(&workflow).unwrap();
+    if with_tool {
+        let tool = pack.join("capabilities/pack-tool");
+        fs::create_dir_all(&tool).unwrap();
         fs::write(
-            workflow.join("tuff.toml"),
-            r#"id = "pack-workflow"
+            tool.join("tuff.toml"),
+            r#"id = "pack-tool"
 version = "1.0.0"
-type = "workflow"
-description = "A workflow shipped in a pack."
+type = "tool"
+description = "A tool shipped in a pack."
+files = ["run.sh"]
 
-[[workflow.requires]]
-id = "pack-skill"
-type = "skill"
+[parameters]
+type = "object"
+
+[parameters.properties.target]
+type = "string"
+
+[implementation]
+language = "bash"
+entrypoint = "run.sh"
 "#,
         )
         .unwrap();
-        manifest.push_str("\n[[capabilities]]\npath = \"capabilities/pack-workflow\"\n");
+        fs::write(tool.join("run.sh"), "#!/bin/bash\necho packed\n").unwrap();
+        manifest.push_str("\n[[capabilities]]\npath = \"capabilities/pack-tool\"\n");
     }
     if with_notes {
         let notes = pack.join("capabilities/pack-notes");
@@ -7847,7 +7516,7 @@ files = ["SKILL.md"]
     artifact
 }
 
-/// A project with the 1.0.0 release (skill + workflow) installed.
+/// A project with the 1.0.0 release (skill + tool) installed.
 fn project_with_pack_release(artifact: &Path, home: &Path) -> TempDir {
     let project = TempDir::new().unwrap();
     tuff()
@@ -7883,14 +7552,14 @@ fn update_pack_from_artifact_moves_every_member_forward() {
             .path()
             .join(".agents/skills/tuff-capabilities/SKILL.md")
             .is_file(),
-        "the workflow gives the 1.0.0 release something to index"
+        "the tool gives the 1.0.0 release something to index"
     );
 
     // Naming any member updates the whole pack.
     tuff()
         .current_dir(project.path())
         .env("HOME", home.path())
-        .args(["update", "pack-workflow", "--pack", newer.to_str().unwrap()])
+        .args(["update", "pack-tool", "--pack", newer.to_str().unwrap()])
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -7898,7 +7567,7 @@ fn update_pack_from_artifact_moves_every_member_forward() {
         ))
         .stdout(predicate::str::contains("added pack-notes 1.0.0"))
         .stdout(predicate::str::contains("updated pack-skill 1.1.0"))
-        .stdout(predicate::str::contains("removed pack-workflow"));
+        .stdout(predicate::str::contains("removed pack-tool"));
 
     assert_eq!(
         fs::read_to_string(project.path().join(".agents/skills/pack-skill/SKILL.md")).unwrap(),
@@ -7911,7 +7580,7 @@ fn update_pack_from_artifact_moves_every_member_forward() {
             .is_file()
     );
     assert!(
-        !project.path().join(".agents/workflows").exists(),
+        !project.path().join(".agents/tools").exists(),
         "a member dropped by the new release is removed, directory included"
     );
     assert!(
@@ -7919,11 +7588,11 @@ fn update_pack_from_artifact_moves_every_member_forward() {
             .path()
             .join(".agents/skills/tuff-capabilities")
             .exists(),
-        "the derived index goes with the last workflow rather than lingering untracked"
+        "the derived index goes with the last tool rather than lingering untracked"
     );
 
     let lock = tuff_core::lockfile::read_lockfile_at(&project.path().join("tuff.lock")).unwrap();
-    assert!(!lock.capabilities.contains_key("pack-workflow"));
+    assert!(!lock.capabilities.contains_key("pack-tool"));
     assert!(lock.capabilities.contains_key("pack-notes"));
     let pack_versions: Vec<&str> = lock
         .capabilities
@@ -7982,7 +7651,7 @@ fn update_pack_check_previews_the_release_without_changing_files() {
         ))
         .stdout(predicate::str::contains("add pack-notes 1.0.0"))
         .stdout(predicate::str::contains("update pack-skill 1.1.0"))
-        .stdout(predicate::str::contains("remove pack-workflow"))
+        .stdout(predicate::str::contains("remove pack-tool"))
         .stdout(predicate::str::contains("would apply cleanly"));
 
     assert_eq!(
@@ -7996,7 +7665,7 @@ fn update_pack_check_previews_the_release_without_changing_files() {
     assert!(
         project
             .path()
-            .join(".agents/workflows/pack-workflow/workflow.toml")
+            .join(".agents/tools/pack-tool/run.sh")
             .is_file()
     );
 }
@@ -8272,7 +7941,7 @@ fn update_pack_replaces_shared_hook_and_mcp_registrations() {
 
 #[test]
 fn add_pack_into_a_project_that_already_has_a_capability_index() {
-    // Any installed tool, workflow, or MCP server gives the project a
+    // Any installed tool or MCP server gives the project a
     // tracked capability index. A pack install regenerates that index in
     // staging and must be allowed to replace the tracked copy; refusing it
     // as an "untracked file" made pack installs impossible for exactly the
@@ -8334,7 +8003,7 @@ fn add_pack_into_a_project_that_already_has_a_capability_index() {
 
     let rendered = fs::read_to_string(&index).unwrap();
     assert!(rendered.contains("existing-tool"), "{rendered}");
-    assert!(rendered.contains("pack-workflow"), "{rendered}");
+    assert!(rendered.contains("pack-tool"), "{rendered}");
     tuff()
         .current_dir(project.path())
         .env("HOME", home.path())

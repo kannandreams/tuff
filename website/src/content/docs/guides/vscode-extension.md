@@ -43,7 +43,7 @@ code --install-extension tuff-0.1.0.vsix
 
 ## What it shows
 
-The **Capabilities** view groups everything installed in the project by kind: skills, tools, hooks, workflows, and MCP servers. Each row carries the version recorded in the lockfile and the agents the capability was installed for. A capability installed for several harnesses is one row that expands into one child per agent.
+The **Capabilities** view groups everything installed in the project by kind: skills, tools, hooks, MCP servers, and policies. Each row carries the version recorded in the lockfile and the agents the capability was installed for. A capability installed for several harnesses is one row that expands into one child per agent.
 
 Rows carry the same drift states [`tuff list`](/cli/inspect/#tuff-list) reports. A capability whose installed files no longer match what was recorded reads as modified; one whose files are gone reads as missing. The status bar carries the counts, so a hand edit is visible before an agent session runs into it.
 

@@ -19,7 +19,7 @@ already shipped the broad skill installation and discovery layer.
 
 Tuff's wedge is broader and more operational:
 
-- model tools, hooks, and workflows as first-class capabilities, not only skills
+- model tools, hooks, MCP servers, and policies as first-class capabilities, not only skills
 - treat installed artifacts as repo-owned files
 - track baselines so local drift is visible
 - build toward real update and merge behavior for customized primitives
@@ -32,7 +32,7 @@ the full product thesis.
 | Area | Vercel Skills | Tuff |
 | --- | --- | --- |
 | Primary scope | Open skill ecosystem for reusable agent context | Lifecycle manager for project-owned agent capabilities |
-| Current model | Skills, typically `SKILL.md` plus supporting files | Starts with skills, designed to expand to tools, hooks, and workflows |
+| Current model | Skills, typically `SKILL.md` plus supporting files | Starts with skills, and also manages tools, hooks, MCP servers, and policies |
 | Distribution | Public git repos, local folders, and ecosystem discovery | Local and Git capability sources plus deterministic multi-capability pack artifacts; registry transport deferred |
 | CLI shape | `npx skills add`, `find`, `list`, `remove`, `update`, `init`, and related commands | `tuff init`, `add`, `list`, and `diff` for the first lifecycle loop |
 | Agents | Broad multi-agent support across many coding assistants | Codex first; multiple-agent support is not the near-term wedge |

@@ -58,26 +58,6 @@ pub(crate) fn prepare_project_pack(
         let capability = materialize_capability(repo_root, &id, entry, &destination)?;
         validate_source_identity(&id, entry, &capability)?;
 
-        if let Some(workflow) = &capability.workflow {
-            for requirement in &workflow.requires {
-                let required = lock.capabilities.get(&requirement.id).ok_or_else(|| {
-                    TuffError::usage(format!(
-                        "workflow '{}' requires '{}', but it is not tracked in this project",
-                        capability.id, requirement.id
-                    ))
-                })?;
-                if required.capability_type != requirement.capability_type {
-                    return Err(TuffError::usage(format!(
-                        "workflow '{}' requires '{}' as {}, but tuff.lock records it as {}",
-                        capability.id,
-                        requirement.id,
-                        requirement.capability_type,
-                        required.capability_type
-                    )));
-                }
-                pending.insert(requirement.id.clone());
-            }
-        }
         selected.insert(id, relative);
     }
 

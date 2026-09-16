@@ -310,7 +310,6 @@ pub fn to_manifest(server: &RegistryServer, id: &str) -> Result<CapabilityManife
         root: std::path::PathBuf::new(),
         implementation: None,
         parameters: None,
-        workflow: None,
         hook: None,
         server: Some(config),
         policy: None,

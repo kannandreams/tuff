@@ -136,7 +136,7 @@ def tuff_project(tuff: str, root: Path, adapter: dict, fixture: Fixture, env: di
     project.mkdir(parents=True)
     run([tuff, "init"], project, env).check_returncode()
     if adapter["adapter"] != "open-agents":
-        run([tuff, "agent", "add", adapter["adapter"]], project, env).check_returncode()
+        run([tuff, "harness", "add", adapter["adapter"]], project, env).check_returncode()
     settings = project / adapter["hook_settings_path"]
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(fixture.settings if fixture.settings is not None else user_settings(adapter))
@@ -152,7 +152,7 @@ def impl_project(root: Path, adapter: dict, fixture: Fixture) -> Path:
 
 
 def tuff_install(tuff: str, project: Path, manifest: Path, adapter: dict, hook_id: str, env) -> Result:
-    proc = run([tuff, "add", str(manifest), "--agent", adapter["adapter"]], project, env)
+    proc = run([tuff, "add", str(manifest), "-a", adapter["adapter"]], project, env)
     files, parsed, raw, tree = snapshot(project, adapter, hook_id)
     registrations = []
     if proc.returncode == 0:
@@ -186,7 +186,7 @@ def impl_install(impl: str, spec: str, project: Path, manifest: Path, adapter: d
 
 
 def tuff_remove(tuff: str, project: Path, adapter: dict, hook_id: str, env) -> bool:
-    proc = run([tuff, "delete", hook_id, "--agent", adapter["adapter"], "--force"], project, env)
+    proc = run([tuff, "delete", hook_id, "-a", adapter["adapter"], "--force"], project, env)
     return proc.returncode == 0
 
 

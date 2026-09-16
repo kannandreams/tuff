@@ -170,7 +170,6 @@ pub fn cmd_create(
             targets: target_entries,
             implementation: None,
             parameters: None,
-            workflow: None,
             server: None,
         },
     );
@@ -185,7 +184,6 @@ fn default_capability_description(kind: CapabilityType) -> &'static str {
         CapabilityType::Skill => "What this skill helps the agent do.",
         CapabilityType::Tool => "What this tool does for the agent.",
         CapabilityType::Hook => "What this hook enforces.",
-        CapabilityType::Workflow => "When the agent should run this workflow.",
         CapabilityType::Policy => "Policy capabilities are not scaffolded yet.",
         CapabilityType::McpServer => "MCP servers are added, not scaffolded.",
     }
@@ -235,12 +233,6 @@ fn create_scaffold_files(
                 })?;
             vec![(file, content)]
         }
-        CapabilityType::Workflow => vec![(
-            "workflow.toml",
-            format!(
-                "id = \"{id}\"\nversion = \"0.1.0\"\ntype = \"workflow\"\ndescription = \"When the agent should run this workflow.\"\n\n[[workflow.requires]]\nid = \"replace-me\"\ntype = \"skill\"\n"
-            ),
-        )],
         CapabilityType::Policy => {
             return Err(TuffError::unsupported(
                 "policy capabilities are not scaffolded yet",

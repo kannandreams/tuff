@@ -1,9 +1,9 @@
 //! RFC-103 tier 1: a generated, per-harness "capability index" skill.
 //!
-//! Tuff installs tools and workflows as real files, but nothing tells the
+//! Tuff installs tools as real files, but nothing tells the
 //! *agent* they exist — no runtime surface mentions them. This module
 //! regenerates `<dir_prefix>/skills/tuff-capabilities/SKILL.md` for every
-//! configured harness, listing installed tools and workflows with their
+//! configured harness, listing installed tools with their
 //! exact invocation command, so the one runtime surface every harness
 //! already reads (skills) carries the hint. It is called at the end of
 //! every install/update/delete path so the index can never go stale.
@@ -28,7 +28,7 @@ use super::hooks::registered_adapters;
 
 pub(crate) const CAPABILITY_INDEX_ID: &str = "tuff-capabilities";
 
-const INDEX_DESCRIPTION: &str = "Index of project tools and workflows installed via Tuff. Consult when a task involves one of the capabilities listed below, to find the exact invocation command.";
+const INDEX_DESCRIPTION: &str = "Index of project tools and MCP servers installed via Tuff. Consult when a task involves one of the capabilities listed below, to find the exact invocation command.";
 
 /// Regenerate the capability-index skill for every harness configured in
 /// this project. Safe to call after any install/update/delete — it derives
@@ -43,10 +43,9 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path, scope: Scope) -> Res
 
     for adapter in &adapters {
         let tools = indexable(&lockfile, CapabilityType::Tool, adapter.id());
-        let workflows = indexable(&lockfile, CapabilityType::Workflow, adapter.id());
         let servers = indexable(&lockfile, CapabilityType::McpServer, adapter.id());
 
-        if tools.is_empty() && workflows.is_empty() && servers.is_empty() {
+        if tools.is_empty() && servers.is_empty() {
             let already_indexed = lockfile
                 .capabilities
                 .get(CAPABILITY_INDEX_ID)
@@ -57,7 +56,7 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path, scope: Scope) -> Res
             continue;
         }
 
-        let content = render_skill(adapter.dir_prefix(), &tools, &workflows, &servers);
+        let content = render_skill(adapter.dir_prefix(), &tools, &servers);
         let content_hash = lockfile::hash_bytes(&content);
 
         let skill_path = repo_root
@@ -133,7 +132,6 @@ pub(crate) fn regenerate_capability_index(repo_root: &Path, scope: Scope) -> Res
             targets: new_targets,
             implementation: None,
             parameters: None,
-            workflow: None,
             server: None,
         },
     );
@@ -161,7 +159,6 @@ fn indexable<'a>(
 fn render_skill(
     dir_prefix: &str,
     tools: &[(&String, &CapabilityLockEntry)],
-    workflows: &[(&String, &CapabilityLockEntry)],
     servers: &[(&String, &CapabilityLockEntry)],
 ) -> Vec<u8> {
     let mut body = String::new();
@@ -171,13 +168,6 @@ fn render_skill(
         body.push_str("\n## Tools\n");
         for (id, entry) in tools {
             render_tool(&mut body, dir_prefix, id, entry);
-        }
-    }
-
-    if !workflows.is_empty() {
-        body.push_str("\n## Workflows\n");
-        for (id, entry) in workflows {
-            render_workflow(&mut body, id, entry);
         }
     }
 
@@ -267,31 +257,6 @@ fn render_arguments(parameters: Option<&serde_json::Value>) -> Option<String> {
     Some(out)
 }
 
-fn render_workflow(body: &mut String, id: &str, entry: &CapabilityLockEntry) {
-    body.push_str(&format!(
-        "\n### {} — {}\n",
-        sanitize_inline(id),
-        sanitize_inline(&entry.description)
-    ));
-
-    match &entry.workflow {
-        Some(workflow) if !workflow.requires.is_empty() => {
-            body.push_str("Steps:\n");
-            for (index, requirement) in workflow.requires.iter().enumerate() {
-                body.push_str(&format!(
-                    "{}. {} ({})\n",
-                    index + 1,
-                    sanitize_inline(&requirement.id),
-                    requirement.capability_type.as_str()
-                ));
-            }
-        }
-        _ => {
-            body.push_str("Steps: unavailable — reinstall this workflow to populate them.\n");
-        }
-    }
-}
-
 fn render_mcp_server(body: &mut String, id: &str, entry: &CapabilityLockEntry) {
     body.push_str(&format!(
         "\n### {} — {}\n",
@@ -343,7 +308,7 @@ fn yaml_quote(text: &str) -> String {
 mod tests {
     use super::*;
     use crate::lockfile::TargetOwnership;
-    use crate::manifest::{ImplementationConfig, Requirement, WorkflowConfig};
+    use crate::manifest::ImplementationConfig;
     use std::collections::BTreeMap as Map;
 
     fn tool_entry(
@@ -380,7 +345,6 @@ mod tests {
                 runtime_deps: Vec::new(),
             }),
             parameters: Some(parameters),
-            workflow: None,
             server: None,
         }
     }
@@ -438,37 +402,6 @@ mod tests {
     }
 
     #[test]
-    fn workflow_steps_render_from_requires() {
-        let mut entry = tool_entry(
-            "Pre-release checks.",
-            "node",
-            "x",
-            serde_json::json!({}),
-            "claude",
-        );
-        entry.capability_type = CapabilityType::Workflow;
-        entry.implementation = None;
-        entry.parameters = None;
-        entry.workflow = Some(WorkflowConfig {
-            requires: vec![
-                Requirement {
-                    id: "security-review".into(),
-                    capability_type: CapabilityType::Tool,
-                },
-                Requirement {
-                    id: "pre-commit-lint".into(),
-                    capability_type: CapabilityType::Hook,
-                },
-            ],
-        });
-        let id = "release-prep".to_string();
-        let mut body = String::new();
-        render_workflow(&mut body, &id, &entry);
-        assert!(body.contains("1. security-review (tool)"));
-        assert!(body.contains("2. pre-commit-lint (hook)"));
-    }
-
-    #[test]
     fn sanitize_inline_strips_newlines_and_caps_length() {
         let malicious = "legit text\n### fake-heading\nmore text";
         let cleaned = sanitize_inline(malicious);
@@ -491,7 +424,7 @@ mod tests {
         );
         let id = "x".to_string();
         let tools = vec![(&id, &entry)];
-        let bytes = render_skill(".claude", &tools, &[], &[]);
+        let bytes = render_skill(".claude", &tools, &[]);
         let content = String::from_utf8(bytes).unwrap();
         let mut parts = content.splitn(3, "---\n");
         assert_eq!(parts.next(), Some(""));

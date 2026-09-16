@@ -5,7 +5,7 @@ description: Reference for using Tuff CLI to manage agent capabilities — creat
 
 # Tuff CLI Guide
 
-Tuff is a capability lifecycle manager. It installs, versions, diffs, and validates the skills, tools, hooks, workflows, and MCP servers a repository gives its coding agents. Use these commands when the user asks about managing any of those, or when they mention "drift", "baseline", or "tuff".
+Tuff is a capability lifecycle manager. It installs, versions, diffs, and validates the skills, tools, hooks, MCP servers, and policies a repository gives its coding agents. Use these commands when the user asks about managing any of those, or when they mention "drift", "baseline", or "tuff".
 
 ## Before You Start
 
@@ -28,12 +28,10 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff add skill <path> [name] -a <agent>` — install a skill
 - `tuff add tool <path> [name] -a <agent>` — install a tool
 - `tuff add hook <path> [name] -a <agent>` — install a hook
-- `tuff add workflow <path> [name] -a <agent>` — install a workflow
 - `tuff add .agents/skills/<id> -a open-agents` — track existing agent files in place
 - `tuff add skill <git-url> <name> -a <agent>` — install a skill from git; `<name>` is its directory in the repository
 - `tuff add tool <git-url> <name> -a <agent>` — install a tool from git
 - `tuff add hook <git-url> <name> -a <agent>` — install a hook from git
-- `tuff add workflow <git-url> <name> -a <agent>` — install a workflow from git
 - `tuff add skill <git-url> <name>@<version|range> -a <agent>` — install a tagged release (`1.2.0`, `^1.2`, `>=1, <2`); the lockfile records the tag, the requirement, and the commit
 - without `@`, a git install records the version the source declares (`version` in `tuff.toml`, or `version:`/`metadata.version:` in `SKILL.md` frontmatter), shown as `1.2.0 (declared)` since it is weaker than a release; a source declaring nothing records the commit SHA
 - `tuff create <type> <id> -a <agent>` — create and track a capability
@@ -86,7 +84,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff untrack <id> -a <agent>` — stop tracking a capability but keep its files; use this for capabilities adopted in place, which `delete` refuses
 - `tuff lock migrate` — rewrite `tuff.lock` in the current schema, changing nothing else
 - `tuff cache clear` — delete Tuff's disposable machine-local cache
-- `tuff harness list` — show available harnesses (`tuff agent list` in Tuff 0.11 and earlier)
+- `tuff harness list` — show available harnesses (Tuff 0.11 and earlier: `tuff agent list`)
 - `tuff harness add <id>` — register a harness and initialize its project directory
 - `tuff init --global` — initialize global scope
 
@@ -105,7 +103,6 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `.agents/skills/` — create and edit skills here (single source of truth)
 - `.agents/tools/` — create and edit tools here
 - `.agents/hooks/` — create and edit hooks here
-- `.agents/workflows/` — create and edit workflows here
 - `.agents/mcp-servers/` — generated `server.toml` records for external MCP servers (edit the manifest, not these)
 - `tuff.lock` — committed capability identity and lifecycle metadata
 - `tuff.config.json` — project preferences; `tuff.lock` remains the project source of truth

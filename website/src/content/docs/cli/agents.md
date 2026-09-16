@@ -8,7 +8,7 @@ description: Register harnesses, set the default harness, and choose between pro
 A harness is the coding agent product Tuff installs for, such as Claude Code or Codex. Its id, such as `claude`, is what `-a` selects.
 
 :::note[Older names]
-Tuff 0.11 and earlier call this command `tuff agent` and the flag `--agent`. Later versions accept the old names until 1.0 and print a note when they are used. The short flag `-a` works in every version.
+Tuff 0.11 and earlier call this command `tuff agent` and the flag `--agent`. Later versions accept only the new names. The short flag `-a` works in every version.
 :::
 
 ### Configure the default harness

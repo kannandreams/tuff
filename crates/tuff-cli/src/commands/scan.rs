@@ -165,7 +165,6 @@ const KINDS: &[CapabilityType] = &[
     CapabilityType::Skill,
     CapabilityType::Tool,
     CapabilityType::Hook,
-    CapabilityType::Workflow,
     CapabilityType::McpServer,
 ];
 
@@ -291,10 +290,6 @@ fn missing_declaration(
                  'tuff add hook <path> --hook-file <fragment>'"
                     .to_string(),
             ),
-        },
-        CapabilityType::Workflow => match manifest {
-            Some(m) if m.workflow.is_some() => None,
-            _ => missing("workflow"),
         },
         CapabilityType::McpServer => match manifest {
             Some(m) if m.server.is_some() => None,
