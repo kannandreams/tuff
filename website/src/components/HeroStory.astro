@@ -52,10 +52,10 @@ const projects = [
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
     <div class="hs-headlines">
       <h2 class="hs-hl" data-hs-headline="a">
-        <span data-hs-line="0"><b>01</b>Collect once.</span>
-        <span data-hs-line="1"><b>02</b>Code with it anywhere.</span>
-        <span data-hs-line="2"><b>03</b>Ship it with your agent.</span>
-        <span data-hs-line="3"><b>04</b>Govern it everywhere.</span>
+        <span data-hs-line="0"><b>01</b>Bring your capabilities together.</span>
+        <span data-hs-line="1"><b>02</b>Use them across harnesses.</span>
+        <span data-hs-line="2"><b>03</b>Ship them with your agent.</span>
+        <span data-hs-line="3"><b>04</b>Govern them everywhere.</span>
       </h2>
       <h2 class="hs-hl" data-hs-headline="b" hidden>
         <span data-hs-line="0"><b>01</b>One set of capabilities.</span>
@@ -283,8 +283,8 @@ const projects = [
   .hs { grid-template-columns: minmax(0, .66fr) minmax(0, 1.34fr); column-gap: 2.5rem; align-items: center; padding-top: 3rem; padding-bottom: 2.75rem; }
   .hs-main { padding-top: 0; }
   .hs-headlines { margin-top: 1.4rem; }
-  .hs-hl { display: grid; gap: .15rem; margin: 0; color: var(--tuff-text); font-family: 'Geist', system-ui, sans-serif; font-size: clamp(1.35rem, 2.5vw, 1.9rem); font-weight: 600; line-height: 1.25; letter-spacing: -.04em; }
-  .hs-hl span { display: flex; align-items: baseline; gap: .6rem; color: var(--tuff-text); }
+  .hs-hl { display: grid; gap: .15rem; margin: 0; color: var(--tuff-text); font-family: 'Geist', system-ui, sans-serif; font-size: clamp(1.25rem, 2.1vw, 1.7rem); font-weight: 600; line-height: 1.3; letter-spacing: -.04em; }
+  .hs-hl span { display: flex; align-items: baseline; gap: .6rem; color: var(--tuff-text); white-space: nowrap; }
   .hs-hl span b { position: relative; min-width: 1.6rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .62rem; font-weight: 500; letter-spacing: 0; transition: color .4s ease; }
   .hs-hl span.is-on b { color: var(--tuff-accent); }
   .hs-hl span:is([data-hs-line='1'], [data-hs-line='3']).is-on b { color: var(--g); }
@@ -449,6 +449,7 @@ const projects = [
     .hs { grid-template-columns: 1fr; }
   }
   @media (max-width: 760px) {
+    .hs-hl span { white-space: normal; }
     .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hs-fork, .hs-govern-body { grid-template-columns: 1fr; }
     .hs-app-grid { grid-template-columns: 1fr; }
