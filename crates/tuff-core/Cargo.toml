@@ -20,6 +20,7 @@ indexmap = { version = "2", features = ["serde"] }
 sha2 = "0.10.9"
 git2 = { version = "0.20", features = ["vendored-libgit2", "vendored-openssl"] }
 semver = "1.0.27"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 tempfile = "3.23.0"
 toml = "0.9.8"
 # Format-preserving edits to a harness TOML config a user also hand-edits

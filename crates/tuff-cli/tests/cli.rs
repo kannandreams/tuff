@@ -10504,3 +10504,163 @@ fn scan_adopts_a_cursor_skill_in_place_for_cursor() {
         "a cursor skill is not copied into the open-agents layout"
     );
 }
+
+// ── dashboard reports ────────────────────────────────────────────────
+
+fn git(dir: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args(["-c", "user.name=t", "-c", "user.email=t@example.test"])
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "git {args:?}");
+}
+
+#[test]
+fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
+    let temp = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let repo = temp.path().join("agents");
+    for app in ["apps/support-agent", "apps/billing-agent"] {
+        let dir = repo.join(app);
+        fs::create_dir_all(&dir).unwrap();
+        tuff()
+            .current_dir(&dir)
+            .env("HOME", home.path())
+            .arg("init")
+            .assert()
+            .success();
+    }
+    let skill = make_primitive(temp.path(), "review-skill");
+    tuff()
+        .current_dir(repo.join("apps/support-agent"))
+        .env("HOME", home.path())
+        .args(["add", skill.to_str().unwrap()])
+        .assert()
+        .success();
+    // A global install must not appear in a project's report.
+    tuff()
+        .current_dir(temp.path())
+        .env("HOME", home.path())
+        .args(["init", "--global"])
+        .assert()
+        .success();
+    git(&repo, &["init", "-q"]);
+    git(
+        &repo,
+        &["remote", "add", "origin", "git@github.com:acme/agents.git"],
+    );
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-qm", "init"]);
+
+    let output = tuff()
+        .current_dir(&repo)
+        .env("HOME", home.path())
+        .args(["dashboard", "publish", "--dry-run", "--all"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let reports: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout).unwrap();
+    let identities: Vec<(String, String)> = reports
+        .iter()
+        .map(|report| {
+            (
+                report["project"]["repository"]
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+                report["project"]["path"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        identities,
+        [
+            (
+                "github.com/acme/agents".to_string(),
+                "apps/billing-agent".to_string()
+            ),
+            (
+                "github.com/acme/agents".to_string(),
+                "apps/support-agent".to_string()
+            ),
+        ]
+    );
+    let support = &reports[1];
+    assert_eq!(support["schema"], 1);
+    assert_eq!(support["lockfile"]["version"], 3);
+    assert_eq!(support["project"]["dirty"], false);
+    assert!(support["project"]["commit"].as_str().unwrap().len() == 40);
+    assert!(support["outdated"].is_null());
+    let checked: Vec<&str> = support["check"]["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect();
+    assert!(checked.contains(&"review-skill"), "{checked:?}");
+    let named: Vec<&str> = support["lockfile"]["capabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["name"].as_str().unwrap())
+        .collect();
+    assert!(named.contains(&"review-skill"), "{named:?}");
+    assert_eq!(
+        checked.len(),
+        named.len(),
+        "the report checks the project's lockfile only"
+    );
+
+    // One project, printed as one object.
+    let output = tuff()
+        .current_dir(repo.join("apps/billing-agent"))
+        .env("HOME", home.path())
+        .args(["dashboard", "publish", "--dry-run"])
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["project"]["name"], "billing-agent");
+}
+
+#[test]
+fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
+    let temp = TempDir::new().unwrap();
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    tuff()
+        .current_dir(temp.path())
+        .args(["dashboard", "publish", "--dry-run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("pass --project <name>"));
+    let output = tuff()
+        .current_dir(temp.path())
+        .args(["dashboard", "publish", "--dry-run", "--project", "local"])
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["project"]["repository"], "local");
+    assert_eq!(report["project"]["path"], ".");
+    tuff()
+        .current_dir(temp.path())
+        .args(["dashboard", "publish", "--project", "local"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("pass --dry-run"));
+    let empty = TempDir::new().unwrap();
+    tuff()
+        .current_dir(empty.path())
+        .args(["dashboard", "publish", "--dry-run", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no tuff.lock under"));
+}

@@ -42,6 +42,8 @@ pub struct CheckOutcome {
 pub enum CheckScope {
     ProjectAndGlobal,
     Global,
+    /// The project's lockfile only, as a dashboard report describes it.
+    Project,
 }
 
 pub fn run_checks(repo_root: &Path, scope: CheckScope) -> Result<CheckOutcome> {
@@ -54,7 +56,15 @@ pub fn run_checks(repo_root: &Path, scope: CheckScope) -> Result<CheckOutcome> {
         check_lockfile(repo_root, &lf, &mut results, &mut gaps);
     }
 
-    if let Some(home) = home_dir() {
+    if scope == CheckScope::Project
+        && let Some(lf) = lockfile::read_optional_lockfile(&lockfile::project_lockfile(repo_root))?
+    {
+        check_lockfile(repo_root, &lf, &mut results, &mut gaps);
+    }
+
+    if scope != CheckScope::Project
+        && let Some(home) = home_dir()
+    {
         let lock_path = crate::paths::global_lockfile(&home);
         if let Some(lf) = lockfile::read_optional_lockfile(&lock_path)? {
             check_lockfile(&home, &lf, &mut results, &mut gaps);

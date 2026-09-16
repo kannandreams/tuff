@@ -779,6 +779,13 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    std::fs::write(path, render_lockfile(lockfile)?)?;
+    Ok(())
+}
+
+/// The bytes `write_lockfile_at` writes: the current schema, whatever
+/// schema the lockfile was read from.
+pub fn render_lockfile(lockfile: &Lockfile) -> Result<String> {
     let mut capabilities = Vec::new();
     for (name, entry) in &lockfile.capabilities {
         for (target, target_entry) in &entry.targets {
@@ -819,8 +826,7 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
     // `LOCKFILE_VERSION` for why this layout and no other.
     let mut content = serde_json::to_string_pretty(&wire)?;
     content.push('\n');
-    std::fs::write(path, content)?;
-    Ok(())
+    Ok(content)
 }
 
 /// The current rows (RFC-105 D1): one per capability per target. Written

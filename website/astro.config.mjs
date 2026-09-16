@@ -109,6 +109,7 @@ export default defineConfig({
             { label: 'Validate in CI', slug: 'cli/ci' },
             { label: 'Clean Up', slug: 'cli/clean-up' },
             { label: 'Harnesses and Scope', slug: 'cli/agents' },
+            { label: 'Dashboard', slug: 'cli/dashboard' },
           ],
         },
         {

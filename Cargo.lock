@@ -2268,6 +2268,7 @@ dependencies = [
 name = "tuff-core"
 version = "0.11.0"
 dependencies = [
+ "chrono",
  "docker_credential",
  "git2",
  "indexmap",
