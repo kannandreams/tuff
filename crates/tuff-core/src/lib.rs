@@ -17,6 +17,7 @@ pub mod paths;
 pub mod policy;
 pub mod registry;
 pub mod release;
+pub mod report;
 pub mod resolver;
 pub mod tool;
 pub mod tree_diff;

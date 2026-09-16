@@ -17,9 +17,9 @@ use clap::{Parser, Subcommand};
 use commands::{
     PackBuildOptions, PackInitOptions, cmd_add, cmd_add_accepting, cmd_add_mcp, cmd_add_pack,
     cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear,
-    cmd_check, cmd_create, cmd_delete, cmd_diff, cmd_generate_index, cmd_generate_report,
-    cmd_hooks_check_portability, cmd_hooks_matrix, cmd_hooks_spec, cmd_init, cmd_list,
-    cmd_lock_migrate, cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated,
+    cmd_check, cmd_create, cmd_dashboard_publish, cmd_delete, cmd_diff, cmd_generate_index,
+    cmd_generate_report, cmd_hooks_check_portability, cmd_hooks_matrix, cmd_hooks_spec, cmd_init,
+    cmd_list, cmd_lock_migrate, cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated,
     cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
     cmd_pack_pull, cmd_pack_push, cmd_pack_verify, cmd_policy_matrix, cmd_scan, cmd_status,
     cmd_untrack, cmd_update,
@@ -279,6 +279,34 @@ enum Command {
     Mcp {
         #[command(subcommand)]
         action: McpCommand,
+    },
+
+    /// Report this project's capabilities to a dashboard server.
+    Dashboard {
+        #[command(subcommand)]
+        action: DashboardCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum DashboardCommand {
+    /// Build this project's report for a dashboard server.
+    Publish {
+        /// Report every project with a tuff.lock under this folder.
+        #[arg(long = "all")]
+        all: bool,
+
+        /// Also report newer versions (needs the network).
+        #[arg(long = "outdated")]
+        outdated: bool,
+
+        /// Name the project's repository, required outside git or without an origin remote.
+        #[arg(long = "project", value_name = "NAME")]
+        project: Option<String>,
+
+        /// Print the report and send nothing.
+        #[arg(long = "dry-run")]
+        dry_run: bool,
     },
 }
 
@@ -1019,6 +1047,22 @@ fn run() -> Result<()> {
         Some(Command::Lock {
             action: LockCommand::Migrate,
         }) => cmd_lock_migrate(&repo_root),
+        Some(Command::Dashboard { action }) => match action {
+            DashboardCommand::Publish {
+                all,
+                outdated,
+                project,
+                dry_run,
+            } => cmd_dashboard_publish(
+                &repo_root,
+                commands::PublishOptions {
+                    all,
+                    outdated,
+                    project: project.as_deref(),
+                    dry_run,
+                },
+            ),
+        },
         Some(Command::Mcp { action }) => match action {
             McpCommand::Catalog { json } => cmd_mcp_catalog(json),
             McpCommand::Doctor {
