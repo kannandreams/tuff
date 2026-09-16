@@ -2,6 +2,8 @@
 import '../styles/custom.css';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteNav from '../components/SiteNav.astro';
+import HeroStory from '../components/HeroStory.astro';
+
 
 const docs = '/getting-started';
 const description = 'Manage project-owned skills, tools, hooks, MCP servers, and policies for coding agents.';
@@ -31,73 +33,7 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
     <SiteNav current="/" />
 
     <main class="tuff-landing tuff-landing--standalone">
-      <section class="tuff-hero">
-        <div class="tuff-hero-main">
-          <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
-          <p class="tuff-tagline">Capability lifecycle manager for coding agents.</p>
-          <p class="tuff-hero-copy">
-            A CLI for teams that keep agent capabilities in the repo: install one, record where it came from,
-            catch drift before it causes a bad run, and emit exactly what each harness expects.
-          </p>
-          <ul class="tuff-badges" aria-label="Project facts">
-            <li class="tuff-badge tuff-badge--rust">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l1.6 2.1 2.5-.9.4 2.6 2.6.4-.9 2.5 2.1 1.6-2.1 1.6.9 2.5-2.6.4-.4 2.6-2.5-.9L12 21.5l-1.6-2.1-2.5.9-.4-2.6-2.6-.4.9-2.5L3.7 12l2.1-1.6-.9-2.5 2.6-.4.4-2.6 2.5.9z"/><circle cx="12" cy="12" r="3.2"/></svg>
-              Built in Rust <span aria-hidden="true">·</span> single binary
-            </li>
-          </ul>
-          <div class="tuff-install" data-install-tabs>
-            <div class="tuff-install-tabs" role="tablist" aria-label="Install Tuff">
-              <button class="is-active" type="button" role="tab" aria-selected="true" data-install-tab="uv">uv</button>
-              <button type="button" role="tab" aria-selected="false" data-install-tab="pip">pip</button>
-              <button type="button" role="tab" aria-selected="false" data-install-tab="brew">brew</button>
-              <button type="button" role="tab" aria-selected="false" data-install-tab="cargo">cargo</button>
-              <button type="button" role="tab" aria-selected="false" data-install-tab="install">install</button>
-            </div>
-            <div class="tuff-install-command"><span>$</span><code data-install-command>uv tool install tuffcli</code><button type="button" aria-label="Copy install command" data-copy-command>copy</button></div>
-          </div>
-          <div class="tuff-hero-actions">
-            <a class="tuff-button tuff-button--primary" href={docs}>Read the docs <span aria-hidden="true">→</span></a>
-            <a class="tuff-hero-link" href="/intro/#why-tuff-exists">Why Tuff exists</a>
-          </div>
-        </div>
-
-        <div class="tuff-hero-demo">
-          <div class="tuff-terminal" aria-label="Example Tuff CLI session">
-            <div class="tuff-term-bar"><i></i><i></i><i></i><span>~/tuff</span></div>
-            <div class="tuff-term-body">
-              <div style="--i: 0"><b>$</b> tuff init</div>
-              <div style="--i: 1" class="tuff-output">created tuff.lock</div>
-              <div style="--i: 2" class="tuff-output">registered <mark>open-agents</mark> as the default harness</div>
-              <div style="--i: 3" class="tuff-output tuff-output--ok">installed tuff-cli-guide</div>
-              <div style="--i: 4" class="tuff-spacer"></div>
-              <div style="--i: 5"><b>$</b> tuff create skill project-review</div>
-              <div style="--i: 6" class="tuff-output">tracked .agents/skills/project-review/SKILL.md</div>
-              <div style="--i: 7"><b>$</b> tuff diff project-review</div>
-              <div style="--i: 8" class="tuff-output">modified since baseline</div>
-              <div style="--i: 9"><b>$</b> tuff check</div>
-              <div style="--i: 10" class="tuff-output tuff-output--ok">project-review  skill  open-agents  ok</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="tuff-harness-strip">
-          <span class="tuff-harness-strip-label">works with</span>
-          <ul aria-label="Supported agent harnesses">
-            <li class="tuff-chip tuff-chip--adapter" title="Dedicated adapter">Claude Code</li>
-            <li class="tuff-chip tuff-chip--adapter" title="Dedicated adapter">Codex</li>
-            <li class="tuff-chip tuff-chip--adapter" title="Dedicated adapter">Cursor</li>
-            <!-- Agents below read skills from .agents/skills/, checked against each tool's docs on 2026-09-13. -->
-            <li class="tuff-chip" title="Skills via .agents/skills">GitHub Copilot</li>
-            <li class="tuff-chip" title="Skills via .agents/skills">Gemini CLI</li>
-            <li class="tuff-chip" title="Skills via .agents/skills">OpenCode</li>
-            <li class="tuff-chip" title="Skills via .agents/skills">Windsurf</li>
-            <li class="tuff-chip" title="Skills via .agents/skills">Amp</li>
-            <li class="tuff-chip" title="Skills via .agents/skills">Goose</li>
-            <li class="tuff-chip" title="Skills via .agents/skills">Junie</li>
-          </ul>
-          <span class="tuff-harness-strip-note"><i aria-hidden="true"></i> dedicated adapter · others via .agents/skills</span>
-        </div>
-      </section>
+      <HeroStory />
 
       <section class="tuff-section tuff-section--stats">
         <div class="tuff-stats">
@@ -124,6 +60,7 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
           <a class="tuff-cap-card" href="/primitives/mcp-servers"><strong>MCP Server</strong><span>External servers wired into every harness from one declaration, with secrets kept as references.</span></a>
           <a class="tuff-cap-card" href="/primitives/tools"><strong>Tool</strong><span>Callable scripts and functions with a typed contract, including servers you ship yourself.</span></a>
           <a class="tuff-cap-card" href="/primitives/hooks"><strong>Hook</strong><span>Automation attached to supported lifecycle events in a harness.</span></a>
+          <a class="tuff-cap-card tuff-cap-card--next" href="/primitives/format"><strong>Your next kind</strong><span>Tuff is built to take on new capability kinds. Each one gets the same lifecycle: install, track, diff, check, and pack.</span></a>
           <a class="tuff-cap-card tuff-cap-card--wide" href="/primitives/policies"><strong>Policy Control</strong><span><em>Governs the other four.</em> Set which capabilities can be installed, from which sources, and for which harnesses, enforced consistently across every agent your team runs.</span></a>
         </div>
       </section>
@@ -222,39 +159,8 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
   </body>
 </html>
 
+
 <script>
-  const commands = {
-    uv: 'uv tool install tuffcli',
-    pip: 'pip install tuffcli',
-    brew: 'brew tap kannandreams/homebrew-tuff && brew install tuff',
-    cargo: 'cargo install tuffcli',
-    install: 'curl -fsSL https://tuff.dev/install.sh | sh',
-  } as const;
-
-  type InstallMethod = keyof typeof commands;
-
-  document.querySelectorAll<HTMLElement>('[data-install-tabs]').forEach((group) => {
-    const command = group.querySelector<HTMLElement>('[data-install-command]');
-    const copy = group.querySelector<HTMLButtonElement>('[data-copy-command]');
-    if (!command || !copy) return;
-
-    group.querySelectorAll<HTMLElement>('[data-install-tab]').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        group.querySelectorAll('[data-install-tab]').forEach((item) => {
-          item.classList.toggle('is-active', item === tab);
-          item.setAttribute('aria-selected', String(item === tab));
-        });
-        const method = tab.dataset.installTab as InstallMethod | undefined;
-        if (method && method in commands) command.textContent = commands[method];
-      });
-    });
-    copy.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(command.textContent ?? '');
-      copy.textContent = 'copied';
-      setTimeout(() => { copy.textContent = 'copy'; }, 1200);
-    });
-  });
-
   // The harness example: switch between the hook and policy panels. While the
   // section is on screen the panels alternate, until the reader picks one,
   // hovers or focuses the example, or prefers reduced motion.

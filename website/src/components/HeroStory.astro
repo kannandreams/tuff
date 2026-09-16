@@ -1,0 +1,446 @@
+---
+// The landing page hero: one support agent's capabilities through the four
+// steps Tuff covers, and the dashboard section below it. The dashboard is
+// in progress (RFC-108), so its section says so and shows sample data.
+const docs = '/getting-started';
+
+// One support agent, one capability of each kind. `out` is what each harness
+// gets; null where Tuff installs nothing for that harness.
+const caps = [
+  {
+    kind: 'skill', id: 'ticket-triage', from: 'written in the repo',
+    what: 'how to classify, prioritise, and escalate a ticket',
+    out: ['.claude/skills/', '.agents/skills/', '.cursor/skills/', 'reads .agents/skills/'],
+    level: ['full', 'full', 'full', 'full'],
+  },
+  {
+    kind: 'tool', id: 'order-lookup', from: 'scripts/ in the repo',
+    what: 'returns an order’s status from the orders API',
+    out: ['.claude/tools/', '.agents/tools/', '.cursor/tools/', null],
+    level: ['full', 'full', 'full', 'none'],
+  },
+  {
+    kind: 'mcp', id: 'linear', from: 'Tuff MCP catalog',
+    what: 'files a bug for engineering when a ticket is a defect',
+    out: ['.mcp.json', '.codex/config.toml', '.cursor/mcp.json', '.opencode/opencode.json'],
+    level: ['full', 'full', 'full', 'full'],
+  },
+  {
+    kind: 'hook', id: 'pii-guard', from: 'platform team, git',
+    what: 'checks tool input for customer data before it runs',
+    out: ['.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json', null],
+    level: ['full', 'full', 'full', 'none'],
+  },
+  {
+    kind: 'policy', id: 'support-guardrails', from: 'security team, pack',
+    what: 'no reading .env, no deleting Linear issues, ask before git push',
+    out: ['.claude/settings.json', '.codex/rules/tuff.rules', null, '.opencode/opencode.json'],
+    level: ['full', 'partial', 'none', 'full'],
+  },
+];
+const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
+
+const projects = [
+  { name: 'support-agent', repo: 'acme/agents · apps/support-agent', harnesses: 'claude · codex · opencode', caps: 5, pack: '1.4.0', status: 'ok' },
+  { name: 'billing-agent', repo: 'acme/agents · apps/billing-agent', harnesses: 'claude · opencode', caps: 7, pack: '2.1.0', status: 'drift' },
+  { name: 'onboarding-agent', repo: 'acme/onboarding', harnesses: 'codex · cursor', caps: 4, pack: '0.9.2', status: 'gap' },
+  { name: 'infra-agent', repo: 'acme/infra', harnesses: 'claude · codex', caps: 9, pack: '3.0.0', status: 'ok' },
+];
+---
+
+<section class="tuff-hero hs">
+  <div class="tuff-hero-main hs-main">
+    <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
+    <div class="hs-headlines">
+      <h2 class="hs-roll">
+        <span class="hs-roll-slot">
+          <span class="hs-roll-item" data-hs-roll=0>Manage capabilities<i>.</i></span>
+          <span class="hs-roll-item" data-hs-roll=1>Use them across harnesses<i>.</i></span>
+          <span class="hs-roll-item" data-hs-roll=2>Ship them with your agent<i>.</i></span>
+          <span class="hs-roll-item" data-hs-roll=3>Govern them everywhere<i>.</i></span>
+        </span>
+      </h2>
+    </div>
+    <div class="tuff-hero-actions">
+      <a class="tuff-button tuff-button--primary" href={docs}>Get started <span aria-hidden="true">→</span></a>
+      <a class="tuff-button tuff-button--quiet" href="#dashboard">See the dashboard</a>
+    </div>
+    <div class="hs-install">
+      <span aria-hidden="true">$</span><code>uv tool install tuffcli</code>
+      <button type="button" data-hs-copy="uv tool install tuffcli">copy</button>
+    </div>
+    <a class="hs-install-more" href="/getting-started/">brew, pip, cargo, and script installs</a>
+  </div>
+
+  <div class="tuff-hero-demo hs-demo">
+    <figure class="hs-flow" data-hs-flow aria-label="A support agent's capabilities, from source to dashboard">
+      <div class="hs-bar"><i></i><i></i><i></i><span>support-agent</span><em>github.com/acme/agents · apps/support-agent</em></div>
+
+      <div class="hs-stage" data-hs-step="0" style="--d: 0">
+        <div class="hs-label"><b>1</b> manage<span>Gather capabilities from your repo, git, the MCP catalog, and packs.</span></div>
+        <div class="hs-caps">
+          {caps.map((cap, index) => (
+            <button type="button" class="hs-cap" data-hs-cap={index}>
+              <span class={`hs-kind hs-kind--${cap.kind}`}>{cap.kind}</span>
+              <strong>{cap.id}</strong>
+              <small>{cap.from}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div class="hs-link" data-hs-step="0" style="--d: 1"><span>tuff add</span></div>
+
+      <div class="hs-fork" style="--d: 2">
+        <div class="hs-stage hs-path" data-hs-step="1">
+          <div class="hs-label"><b>2</b> use across harnesses</div>
+          <p class="hs-plain">Tuff writes each capability in the format each coding agent reads, and records it once in <code>tuff.lock</code>.</p>
+          <ul class="hs-chips">
+            {['Claude Code', 'Codex', 'Cursor', 'OpenCode'].map((product, col) => <li style={`--c: ${col}`}><i></i>{product}</li>)}
+          </ul>
+          <div class="hs-lock"><strong>tuff.lock</strong><span>one record for all of them</span></div>
+        </div>
+        <div class="hs-stage hs-path hs-path--ship" data-hs-step="2">
+          <div class="hs-label"><b>3</b> ship with your agent</div>
+          <p class="hs-plain">Tuff packs them into one versioned bundle that goes into the agent’s image and runs on an agent SDK.</p>
+          <div class="hs-packline">
+            <div class="hs-packbox">
+              <strong>support-agent 1.4.0</strong>
+              <code>sha256:9f2c…e41a</code>
+            </div>
+            <span class="hs-arrow" aria-hidden="true"></span>
+            <ul class="hs-chips hs-chips--runtime">
+              <li style="--c: 0"><i></i>Claude Agent SDK</li>
+              <li style="--c: 1"><i></i>your own runtime</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="hs-merge" data-hs-step="3" style="--d: 3"><span>tuff dashboard publish</span></div>
+
+      <div class="hs-stage hs-govern" data-hs-step="3" style="--d: 4">
+        <div class="hs-label"><b>4</b> govern<span>See what every project runs, what drifted, and which rules are not enforced.</span></div>
+        <div class="hs-govern-body">
+          <div class="hs-kpis">
+            <div><b>12</b><small>projects</small></div>
+            <div><b>86</b><small>capabilities</small></div>
+            <div><b class="is-warn">2</b><small>drifted</small></div>
+            <div><b class="is-gap">1</b><small>policy gap</small></div>
+          </div>
+          <ul class="hs-feed">
+            <li><i class="is-add"></i>linear added to <b>support-agent</b><small>3f2c9e1</small></li>
+            <li><i class="is-ver"></i>pack <b>support-agent</b> 1.3.0 → 1.4.0<small>1m ago</small></li>
+            <li><i class="is-warn"></i>ticket-triage edited in <b>billing-agent</b><small>12m ago</small></li>
+          </ul>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+</section>
+
+<section class="tuff-section hs-dash-section" id="dashboard">
+  <div class="tuff-section-head">
+    <div class="tuff-section-label">//dashboard <span class="hs-soon">in progress</span></div>
+    <h2>Every agent’s capabilities, across the organisation</h2>
+    <p>Projects publish a report from CI. The dashboard shows each agent’s skills, tools, MCP servers, hooks, and policies, which harness runs them, what changed, and when. It is being built now; the view below uses sample data.</p>
+  </div>
+
+  <div class="hs-app" aria-label="Dashboard preview with sample data">
+    <div class="hs-app-bar"><i></i><i></i><i></i><span>tuff dashboard</span><em>tuff.acme.internal</em></div>
+    <div class="hs-app-body">
+      <nav class="hs-app-nav" aria-label="Dashboard sections (sample)">
+        <span class="is-active">Overview</span>
+        <span>Projects</span>
+        <span>Capabilities</span>
+        <span>Harnesses</span>
+        <span>Policies</span>
+        <span>Audit</span>
+      </nav>
+      <div class="hs-app-main">
+        <div class="hs-app-kpis">
+          <div><small>projects</small><b>12</b><em>3 repositories</em></div>
+          <div><small>capabilities</small><b>86</b><em>5 kinds</em></div>
+          <div><small>drifted</small><b class="is-warn">2</b><em>since last report</em></div>
+          <div><small>policy gaps</small><b class="is-gap">1</b><em>rule not enforced</em></div>
+        </div>
+
+        <div class="hs-app-grid">
+          <div class="hs-card">
+            <div class="hs-card-head">Projects</div>
+            <div class="hs-ptable">
+              <div class="hs-prow hs-prow--head"><span>agent</span><span>harnesses</span><span>caps</span><span>pack</span><span>status</span></div>
+              {projects.map((project) => (
+                <div class="hs-prow">
+                  <span><strong>{project.name}</strong><small>{project.repo}</small></span>
+                  <span>{project.harnesses}</span>
+                  <span>{project.caps}</span>
+                  <span>{project.pack}</span>
+                  <span class={`hs-status hs-status--${project.status}`}>{project.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div class="hs-card">
+            <div class="hs-card-head">Capability: <b>linear</b> <span class="hs-kind hs-kind--mcp">mcp</span></div>
+            <div class="hs-usage">
+              <div><span>used by</span><b>6 projects</b></div>
+              <div><span>versions</span><b>1.0.0 ×5 · 0.9.0 ×1</b></div>
+              <div><span>harnesses</span><b>claude · codex · opencode</b></div>
+            </div>
+            <div class="hs-bars" aria-hidden="true">
+              <div style="--w: 100%"><span>claude</span></div>
+              <div style="--w: 67%"><span>codex</span></div>
+              <div style="--w: 50%"><span>opencode</span></div>
+              <div style="--w: 17%"><span>cursor</span></div>
+            </div>
+          </div>
+
+          <div class="hs-card hs-card--wide">
+            <div class="hs-card-head">Audit trail</div>
+            <ol class="hs-audit">
+              <li><time>09:12</time><i class="is-add"></i><span><b>support-agent</b> added mcp <b>linear</b> for claude, codex, opencode</span><code>3f2c9e1</code></li>
+              <li><time>08:47</time><i class="is-ver"></i><span><b>infra-agent</b> moved pack <b>platform-base</b> 2.0.0 → 3.0.0</span><code>a91d0c4</code></li>
+              <li><time>08:30</time><i class="is-warn"></i><span><b>billing-agent</b> skill <b>ticket-triage</b> no longer matches its baseline</span><code>77be210</code></li>
+              <li><time>Tue</time><i class="is-gap"></i><span><b>onboarding-agent</b> policy <b>support-guardrails</b> rule 2 not enforced in cursor</span><code>c03f5aa</code></li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Walk the flow one step at a time and light the matching headline line.
+  // Hovering the flow holds the current step.
+  document.querySelectorAll<HTMLElement>('.hs').forEach((hero) => {
+    const flow = hero.querySelector<HTMLElement>('[data-hs-flow]');
+    if (!flow) return;
+    const parts = [...hero.querySelectorAll<HTMLElement>('[data-hs-step]')];
+    const lines = [...hero.querySelectorAll<HTMLElement>('[data-hs-line]')];
+    const rolls = [...hero.querySelectorAll<HTMLElement>('[data-hs-roll]')];
+    const steps = 4;
+    let current = 0;
+    let paused = false;
+    const show = (step: number) => {
+      current = step;
+      hero.style.setProperty('--hs-step', String(step));
+      flow.classList.add('is-stepping');
+      parts.forEach((part) => part.classList.toggle('is-active', Number(part.dataset.hsStep) === step));
+      lines.forEach((line) => line.classList.toggle('is-on', Number(line.dataset.hsLine) === step));
+      rolls.forEach((item) => {
+        const index = Number(item.dataset.hsRoll);
+        item.classList.toggle('is-out', item.classList.contains('is-on') && index !== step);
+        item.classList.toggle('is-on', index === step);
+      });
+    };
+    rolls[0]?.classList.add('is-on');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      lines.forEach((line) => line.classList.add('is-on'));
+      return;
+    }
+    flow.addEventListener('mouseenter', () => { paused = true; });
+    flow.addEventListener('mouseleave', () => { paused = false; });
+    setTimeout(() => {
+      show(0);
+      setInterval(() => {
+        if (!paused && !document.hidden) show((current + 1) % steps);
+      }, 2400);
+    }, 1600);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-hs-copy]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(button.dataset.hsCopy ?? '');
+      button.textContent = 'copied';
+      setTimeout(() => { button.textContent = 'copy'; }, 1200);
+    });
+  });
+</script>
+
+<style>
+  /* Moss green, the second tone: orange marks Tuff's actions, green marks capabilities in use and the view over them. */
+  .hs, .hs-dash-section { --g: #4a7a5e; --g-dark: #83b477; --g-soft: rgba(131, 180, 119, .14); }
+  .hs { grid-template-columns: minmax(0, .66fr) minmax(0, 1.34fr); column-gap: 2.5rem; align-items: center; padding-top: 3rem; padding-bottom: 2.75rem; }
+  .hs-main { padding-top: 0; }
+  .hs-headlines { margin-top: 1.4rem; }
+  .hs :global(.tuff-button--quiet:hover) { border-color: var(--g); color: var(--g); }
+  .hs-soon { margin-left: .5rem; padding: .12rem .45rem; border: 1px solid color-mix(in srgb, var(--g) 45%, transparent); border-radius: 999px; color: var(--g); background: color-mix(in srgb, var(--g) 8%, transparent); font-size: .62rem; letter-spacing: .02em; }
+  .hs-install { display: flex; align-items: center; gap: .6rem; max-width: 22rem; margin-top: 1.4rem; padding: .75rem .9rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; box-shadow: 0 1rem 2.5rem rgba(38, 31, 22, .1); font-family: 'JetBrains Mono', monospace; font-size: .85rem; }
+  .hs-install > span { color: var(--g-dark); }
+  .hs-install code { flex: 1; color: #eeeae2; font-family: inherit; white-space: nowrap; }
+  .hs-install button { padding: .2rem .4rem; border: 1px solid #343934; border-radius: .2rem; color: #989d94; background: transparent; cursor: pointer; font: inherit; font-size: .64rem; }
+  .hs-install button:hover { color: #f18453; border-color: #9a4c30; }
+  .hs-install-more { display: inline-block; margin-top: .5rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
+  .hs-install-more:hover { color: var(--tuff-accent); }
+  .hs-roll { margin: .35rem 0 0; font-family: 'Inter Tight', 'Geist', system-ui, sans-serif; font-size: clamp(1.25rem, 2.2vw, 1.95rem); font-weight: 700; line-height: 1.2; letter-spacing: -.03em; }
+  /* Every sentence occupies the same grid cell, so the slot is as wide as the longest one and never wraps. */
+  .hs-roll-slot { display: inline-grid; overflow: hidden; padding: .08em 0; white-space: nowrap; vertical-align: top; }
+  .hs-roll-item { grid-area: 1 / 1; color: var(--tuff-text); opacity: 0; transform: translateY(70%); transition: transform .6s cubic-bezier(.65, 0, .25, 1), opacity .45s ease; }
+  .hs-roll-item i { font-style: normal; color: var(--tuff-accent); }
+  .hs-roll-item.is-on { opacity: 1; transform: none; }
+  .hs-roll-item.is-out { opacity: 0; transform: translateY(-70%); }
+  @media (prefers-reduced-motion: reduce) {
+    .hs-roll-item { transition: none; }
+  }
+
+  .hs-flow { margin: 0; padding: 0 1rem .8rem; border: 1px solid #343934; border-radius: .5rem; background: #1b1e1b; color: #eeeae2; box-shadow: 0 2rem 5rem rgba(38, 31, 22, .2), 0 0 0 1px rgba(232, 93, 42, .08); font-family: 'JetBrains Mono', monospace; }
+  .hs-bar { display: flex; align-items: center; gap: .4rem; margin: 0 -1rem .7rem; padding: .6rem 1rem; border-bottom: 1px solid #343934; background: #242824; border-radius: .5rem .5rem 0 0; font-size: .68rem; }
+  .hs-bar i { width: .46rem; height: .46rem; border: 1px solid #555c54; border-radius: 50%; }
+  .hs-bar span { margin-left: .45rem; color: #f18453; }
+  .hs-bar em { margin-left: auto; color: #7d8279; font-style: normal; font-size: .6rem; }
+  .hs-stage { padding: .65rem .7rem; border: 1px solid #343934; border-radius: .35rem; background: #242824; }
+  .hs-label { display: flex; align-items: center; gap: .1rem; margin-bottom: .5rem; color: #c9ccc5; font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; transition: color .4s ease; }
+  .hs-label span { margin-left: auto; padding-left: 1rem; color: #7d8279; font-family: 'Geist', system-ui, sans-serif; font-size: .64rem; letter-spacing: 0; text-transform: none; text-align: right; }
+  .is-active > .hs-label { color: #eeeae2; }
+  .hs-label b { display: inline-grid; place-items: center; flex: none; width: 1.2rem; height: 1.2rem; margin-right: .45rem; border-radius: 50%; color: #1b1e1b; background: #6b716a; font-size: .62rem; transition: background .4s ease; }
+  .hs-stage.is-active .hs-label b { background: #f18453; }
+
+  .hs-caps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .45rem; }
+  .hs-cap { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; min-width: 0; padding: .45rem .5rem; border: 1px dashed #4c544c; border-radius: .3rem; color: inherit; background: #1b1e1b; cursor: pointer; font: inherit; text-align: left; transition: border-color .25s, background .25s, transform .25s; }
+  .hs-cap strong { max-width: 100%; color: #eeeae2; font-size: .7rem; font-weight: 500; overflow-wrap: anywhere; }
+  .hs-cap small { color: #7d8279; font-size: .56rem; line-height: 1.3; }
+  .hs-cap.is-on { border-style: solid; border-color: #f18453; background: #2b2622; transform: translateY(-2px); }
+  .hs-kind { padding: .08rem .32rem; border-radius: .18rem; font-size: .55rem; letter-spacing: .03em; }
+  .hs-kind { color: #c9ccc5; background: #2e332e; }
+
+  .hs-link { position: relative; display: flex; justify-content: center; height: 1.5rem; }
+  .hs-link::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: repeating-linear-gradient(180deg, #f18453 0 4px, transparent 4px 9px); background-size: 2px 9px; opacity: .8; }
+  .hs-link span { position: relative; align-self: center; padding: .1rem .5rem; border: 1px solid #343934; border-radius: 999px; color: #c9ccc5; background: #1b1e1b; font-size: .58rem; }
+
+  .hs-lock { display: flex; align-items: baseline; gap: .7rem; margin-top: .45rem; padding: .45rem .7rem; overflow: hidden; border: 1px solid #9a4c30; border-radius: .25rem; background: linear-gradient(90deg, #2b2622, #242824); position: relative; }
+  .hs-lock strong { color: #f18453; font-size: .74rem; font-weight: 600; }
+  .hs-lock span { color: #c9ccc5; font-size: .6rem; }
+  .hs-fork { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .hs-path { display: flex; flex-direction: column; gap: .55rem; }
+  .hs-path:not(.hs-path--ship).is-active .hs-label b, .hs-govern.is-active .hs-label b { background: var(--g-dark); }
+  .hs-path:not(.hs-path--ship) .hs-plain code { color: var(--g-dark); }
+  .hs-path:not(.hs-path--ship) .hs-lock { border-color: color-mix(in srgb, var(--g-dark) 55%, #343934); background: linear-gradient(90deg, color-mix(in srgb, var(--g-dark) 10%, #242824), #242824); }
+  .hs-path:not(.hs-path--ship) .hs-lock strong { color: var(--g-dark); }
+  .hs-plain { color: #c9ccc5; font-family: 'Geist', system-ui, sans-serif; font-size: .8rem; line-height: 1.5; }
+  .hs-plain code { color: #f18453; font-family: 'JetBrains Mono', monospace; font-size: .74rem; }
+  .hs-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+  .hs-chips li { display: inline-flex; align-items: center; gap: .35rem; padding: .28rem .55rem; border: 1px solid #343934; border-radius: 999px; color: #eeeae2; background: #1b1e1b; font-size: .64rem; }
+  .hs-chips i { width: .4rem; height: .4rem; border-radius: 50%; background: var(--g-dark); }
+  .hs-chips--runtime li i { background: #f18453; }
+  .hs-path .hs-lock { margin-top: auto; }
+  .hs-packline { display: flex; align-items: center; gap: .55rem; margin-top: auto; }
+  .hs-packbox { padding: .45rem .6rem; border: 1px solid #9a4c30; border-radius: .25rem; background: #1b1e1b; }
+  .hs-packbox strong { display: block; color: #f18453; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .hs-packbox code { color: #989d94; font-size: .55rem; }
+  .hs-arrow { position: relative; flex: 1; min-width: 1rem; height: 2px; background: repeating-linear-gradient(90deg, #f18453 0 4px, transparent 4px 9px); background-size: 9px 2px; }
+  .hs-arrow::after { content: '›'; position: absolute; top: -.62rem; right: -.1rem; color: #f18453; font-size: 1rem; }
+  .hs-chips--runtime { flex-direction: column; flex-wrap: nowrap; }
+  .hs-merge { position: relative; height: 1.9rem; display: flex; justify-content: center; }
+  .hs-merge::before { content: ''; position: absolute; top: 0; left: 25%; right: 25%; height: .7rem; border: 2px dashed rgba(241, 132, 83, .7); border-top: 0; border-radius: 0 0 .5rem .5rem; }
+  .hs-merge span { position: relative; align-self: flex-end; padding: .1rem .5rem; border: 1px solid #343934; border-radius: 999px; color: #c9ccc5; background: #1b1e1b; font-size: .58rem; }
+  .hs-govern-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .7rem; align-items: center; }
+  .hs-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; }
+  .hs-kpis div { padding: .4rem; border: 1px solid #343934; border-radius: .22rem; background: #1b1e1b; }
+  .hs-kpis b { display: block; color: #eeeae2; font-size: 1rem; }
+  .hs-kpis b.is-warn { color: #e4b75a; }
+  .hs-kpis b.is-gap { color: #f18453; }
+  .hs-kpis small { color: #7d8279; font-size: .52rem; }
+  .hs-feed { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
+  .hs-feed li { display: flex; align-items: center; gap: .35rem; color: #aeb1aa; font-size: .58rem; }
+  .hs-feed b { color: #eeeae2; font-weight: 500; }
+  .hs-feed small { margin-left: auto; color: #7d8279; }
+  .hs-feed i, .hs-audit i { width: .42rem; height: .42rem; border-radius: 50%; flex: none; }
+  i.is-add { background: var(--g-dark); }
+  i.is-warn { background: #e4b75a; }
+  i.is-gap { background: #f18453; }
+  i.is-ver { background: #989d94; }
+
+  .hs-flow > *, .hs-fork > * { transition: opacity .45s ease, border-color .45s ease, box-shadow .45s ease, background .45s ease; }
+  .hs-stage.is-active { border-color: #f18453; background: linear-gradient(145deg, #2b2622, #242824); box-shadow: 0 0 0 3px rgba(241, 132, 83, .12); }
+  .hs-path:not(.hs-path--ship).is-active, .hs-govern.is-active { border-color: var(--g-dark); background: linear-gradient(145deg, color-mix(in srgb, var(--g-dark) 9%, #242824), #242824); box-shadow: 0 0 0 3px var(--g-soft); }
+  .hs-stage.is-active .hs-label b { animation: hs-beat 1.2s ease-in-out infinite; }
+  @keyframes hs-beat { 50% { box-shadow: 0 0 0 4px rgba(241, 132, 83, .25); } }
+
+  /* Dashboard section */
+  .hs-app { margin-top: 1.6rem; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .5rem; background: var(--tuff-bg); box-shadow: 0 2rem 5rem rgba(38, 31, 22, .14); }
+  .hs-app-bar { display: flex; align-items: center; gap: .4rem; padding: .6rem .9rem; border-bottom: 1px solid var(--tuff-border); color: var(--tuff-text); background: var(--tuff-panel-2); font-family: 'JetBrains Mono', monospace; font-size: .7rem; }
+  .hs-app-bar i { width: .46rem; height: .46rem; border: 1px solid #c9c3b9; border-radius: 50%; }
+  .hs-app-bar span { margin-left: .45rem; color: var(--tuff-accent); }
+  .hs-app-bar em { margin-left: auto; color: var(--tuff-muted); font-style: normal; font-size: .64rem; }
+  .hs-app-body { display: grid; grid-template-columns: 11rem minmax(0, 1fr); min-height: 26rem; }
+  .hs-app-nav { display: flex; flex-direction: column; gap: .15rem; padding: .9rem .6rem; border-right: 1px solid var(--tuff-border); background: var(--tuff-panel); font-family: 'JetBrains Mono', monospace; font-size: .74rem; }
+  .hs-app-nav span { padding: .45rem .6rem; border-radius: .25rem; color: var(--tuff-dim); }
+  .hs-app-nav span.is-active { color: var(--tuff-text); background: color-mix(in srgb, var(--g) 10%, transparent); box-shadow: inset 2px 0 0 var(--g); }
+  .hs-app-main { display: grid; align-content: start; gap: .9rem; padding: 1rem; }
+  .hs-app-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
+  .hs-app-kpis div { padding: .7rem .8rem; border: 1px solid var(--tuff-border); border-radius: .35rem; background: var(--tuff-panel); }
+  .hs-app-kpis small, .hs-app-kpis em { display: block; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .6rem; font-style: normal; }
+  .hs-app-kpis b { display: block; margin: .2rem 0; color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; }
+  .hs-app-kpis b.is-warn { color: #a86a12; }
+  .hs-app-kpis b.is-gap { color: var(--tuff-accent); }
+  .hs-app-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: .9rem; }
+  .hs-card { overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .35rem; background: var(--tuff-panel); }
+  .hs-card--wide { grid-column: 1 / -1; }
+  .hs-card-head { display: flex; align-items: center; gap: .4rem; padding: .55rem .8rem; border-bottom: 1px solid var(--tuff-border); color: var(--tuff-dim); background: var(--tuff-panel-2); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
+  .hs-card-head b { color: var(--tuff-text); }
+  .hs-ptable { font-family: 'JetBrains Mono', monospace; font-size: .64rem; }
+  .hs-prow { display: grid; grid-template-columns: 1.7fr 1.3fr .5fr .6fr .6fr; gap: .5rem; align-items: center; padding: .5rem .8rem; border-top: 1px solid var(--tuff-border); color: var(--tuff-text); }
+  .hs-prow--head { border-top: 0; color: var(--tuff-muted); font-size: .56rem; letter-spacing: .05em; text-transform: uppercase; }
+  .hs-prow strong { display: block; font-weight: 600; }
+  .hs-prow small { display: block; color: var(--tuff-muted); font-size: .56rem; }
+  .hs-status { justify-self: start; padding: .08rem .35rem; border-radius: .2rem; font-size: .58rem; }
+  .hs-status--ok { color: var(--g); background: color-mix(in srgb, var(--g) 12%, transparent); }
+  .hs-status--drift { color: #a86a12; background: rgba(214, 150, 40, .14); }
+  .hs-status--gap { color: var(--tuff-accent); background: rgba(195, 90, 53, .1); }
+  .hs-card .hs-kind { color: var(--tuff-dim); background: var(--tuff-panel-2); font-family: 'JetBrains Mono', monospace; }
+  .hs-usage { display: grid; gap: .35rem; padding: .7rem .8rem; font-family: 'JetBrains Mono', monospace; font-size: .64rem; }
+  .hs-usage div { display: flex; justify-content: space-between; gap: .5rem; }
+  .hs-usage span { color: var(--tuff-muted); }
+  .hs-usage b { color: var(--tuff-text); font-weight: 500; text-align: right; }
+  .hs-bars { display: grid; gap: .35rem; padding: 0 .8rem .8rem; }
+  .hs-bars div { position: relative; height: 1.15rem; border-radius: .2rem; background: var(--tuff-panel-2); overflow: hidden; }
+  .hs-bars div::before { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--w); background: linear-gradient(90deg, rgba(195, 90, 53, .35), rgba(195, 90, 53, .18)); transform-origin: left; }
+  .hs-bars span { position: relative; padding-left: .45rem; color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: .58rem; line-height: 1.15rem; }
+  .hs-audit { display: grid; margin: 0; padding: 0; list-style: none; }
+  .hs-audit li { display: grid; grid-template-columns: 3rem .6rem minmax(0, 1fr) auto; gap: .5rem; align-items: center; padding: .5rem .8rem; border-top: 1px solid var(--tuff-border); color: var(--tuff-dim); font-size: .78rem; }
+  .hs-audit li:first-child { border-top: 0; }
+  .hs-audit time, .hs-audit code { color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .6rem; }
+  .hs-audit b { color: var(--tuff-text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hs-flow > .hs-stage, .hs-flow > .hs-link, .hs-flow > .hs-fork, .hs-flow > .hs-merge { animation: hs-rise .5s ease backwards; animation-delay: calc(.2s + var(--d, 0) * .25s); }
+    .hs-chips li { animation: hs-pop .35s ease both; animation-delay: calc(1s + var(--c) * .12s); }
+    .hs-arrow { animation: hs-flowx 1s linear infinite; }
+    .hs-merge::before { animation: hs-dash 2.4s ease-in-out infinite; }
+    .hs-packbox { animation: hs-glow 3s ease-in-out 2s infinite; }
+    @keyframes hs-flowx { to { background-position: 9px 0; } }
+    @keyframes hs-dash { 50% { border-color: rgba(241, 132, 83, .3); } }
+    .hs-link::before { animation: hs-flowline 1.1s linear infinite; }
+    .hs-lock::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(241, 132, 83, .18) 50%, transparent 70%); transform: translateX(-100%); animation: hs-sweep 3.2s ease-in-out 1.6s infinite; }
+    .hs-path:not(.hs-path--ship) .hs-lock::after { background: linear-gradient(100deg, transparent 30%, var(--g-soft) 50%, transparent 70%); }
+    .hs-feed li { animation: hs-rise .4s ease both; }
+    .hs-feed li:nth-child(1) { animation-delay: 1.8s; }
+    .hs-feed li:nth-child(2) { animation-delay: 2.1s; }
+    .hs-feed li:nth-child(3) { animation-delay: 2.4s; }
+    .hs-bars div::before { animation: hs-grow 1s ease both .3s; }
+    @keyframes hs-rise { from { opacity: 0; transform: translateY(.4rem); } to { opacity: 1; transform: none; } }
+    @keyframes hs-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+    @keyframes hs-flowline { to { background-position: 0 9px; } }
+    @keyframes hs-sweep { 0% { transform: translateX(-100%); } 60%, 100% { transform: translateX(100%); } }
+    @keyframes hs-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(241, 132, 83, 0); } 50% { box-shadow: 0 0 0 3px rgba(241, 132, 83, .14); } }
+    @keyframes hs-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  }
+
+  @media (max-width: 1100px) {
+    .hs { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 760px) {
+      .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hs-fork, .hs-govern-body { grid-template-columns: 1fr; }
+    .hs-app-grid { grid-template-columns: 1fr; }
+    .hs-app-body { grid-template-columns: 1fr; }
+    .hs-app-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--tuff-border); }
+    .hs-app-kpis { grid-template-columns: repeat(2, 1fr); }
+    .hs-prow { grid-template-columns: 1.6fr .6fr; }
+    .hs-prow > span:nth-child(2), .hs-prow > span:nth-child(3), .hs-prow > span:nth-child(4) { display: none; }
+  }
+</style>
