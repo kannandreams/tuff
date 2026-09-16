@@ -240,7 +240,8 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
         </select>
         <label for="hv-headline">Headline</label>
         <select id="hv-headline">
-          <option value="a">a · Bring together / Use / Ship / Govern</option>
+          <option value="e">e · One rolling line</option>
+          <option value="a">a · Four lines: Bring together / Use / Ship / Govern</option>
           <option value="b">b · One set of capabilities / Every …</option>
           <option value="c">c · Managed like code · write code ship govern</option>
           <option value="d">d · Build it once / Run / Pack / See</option>
@@ -292,7 +293,7 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
     }
     const headlineSelect = document.querySelector<HTMLSelectElement>('#hv-headline');
     if (headlineSelect) {
-      headlineSelect.value = new URL(location.href).searchParams.get('headline') ?? 'a';
+      headlineSelect.value = new URL(location.href).searchParams.get('headline') ?? 'e';
       headlineSelect.addEventListener('change', () => {
         const url = new URL(location.href);
         url.searchParams.set('headline', headlineSelect.value);

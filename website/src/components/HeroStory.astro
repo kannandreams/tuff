@@ -51,7 +51,23 @@ const projects = [
   <div class="tuff-hero-main hs-main">
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
     <div class="hs-headlines">
-      <h2 class="hs-hl" data-hs-headline="a">
+      <div class="hs-roll" data-hs-headline="e">
+        <h2 class="hs-roll-window" aria-live="polite">
+          <span class="hs-roll-track">
+            <span class="hs-roll-item" data-hs-line="0"><b>01</b><em>Bring your capabilities together.</em></span>
+            <span class="hs-roll-item" data-hs-line="1"><b>02</b><em>Use them across harnesses.</em></span>
+            <span class="hs-roll-item" data-hs-line="2"><b>03</b><em>Ship them with your agent.</em></span>
+            <span class="hs-roll-item" data-hs-line="3"><b>04</b><em>Govern them everywhere.</em></span>
+          </span>
+        </h2>
+        <ol class="hs-roll-steps" aria-hidden="true">
+          <li data-hs-line="0"><i></i>bring</li>
+          <li data-hs-line="1"><i></i>use</li>
+          <li data-hs-line="2"><i></i>ship</li>
+          <li data-hs-line="3"><i></i>govern</li>
+        </ol>
+      </div>
+      <h2 class="hs-hl" data-hs-headline="a" hidden>
         <span data-hs-line="0"><b>01</b>Bring your capabilities together.</span>
         <span data-hs-line="1"><b>02</b>Use them across harnesses.</span>
         <span data-hs-line="2"><b>03</b>Ship them with your agent.</span>
@@ -242,6 +258,7 @@ const projects = [
     let paused = false;
     const show = (step: number) => {
       current = step;
+      hero.style.setProperty('--hs-step', String(step));
       flow.classList.add('is-stepping');
       parts.forEach((part) => part.classList.toggle('is-active', Number(part.dataset.hsStep) === step));
       lines.forEach((line) => line.classList.toggle('is-on', Number(line.dataset.hsLine) === step));
@@ -269,7 +286,7 @@ const projects = [
   });
 
   // Preview only: pick a headline with ?headline=a|b|c|d.
-  const headline = new URL(location.href).searchParams.get('headline') ?? 'a';
+  const headline = new URL(location.href).searchParams.get('headline') ?? 'e';
   document.querySelectorAll<HTMLElement>('[data-hs-headline]').forEach((block) => {
     block.hidden = block.dataset.hsHeadline !== headline;
   });
@@ -302,7 +319,29 @@ const projects = [
   .hs-install button:hover { color: #f18453; border-color: #9a4c30; }
   .hs-install-more { display: inline-block; margin-top: .5rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
   .hs-install-more:hover { color: var(--tuff-accent); }
-  .hs-hl[hidden] { display: none; }
+  .hs-hl[hidden], .hs-roll[hidden] { display: none; }
+  .hs-roll { --hs-line: 2.5em; margin-top: .2rem; }
+  .hs-roll-window { height: var(--hs-line); margin: 0; overflow: hidden; font-family: 'Geist', system-ui, sans-serif; font-size: clamp(1.6rem, 2.9vw, 2.35rem); font-weight: 600; line-height: 1.2; letter-spacing: -.045em; }
+  .hs-roll-track { display: block; transform: translateY(calc(var(--hs-step, 0) * var(--hs-line) * -1)); transition: transform .7s cubic-bezier(.65, 0, .25, 1); }
+  .hs-roll-item { display: flex; align-items: flex-start; gap: .55rem; height: var(--hs-line); color: var(--tuff-text); opacity: .15; transition: opacity .5s ease; }
+  .hs-roll-item.is-on { opacity: 1; }
+  .hs-roll-item b { flex: none; margin-top: .55em; color: var(--tuff-accent); font-family: 'JetBrains Mono', monospace; font-size: .32em; font-weight: 500; letter-spacing: 0; }
+  .hs-roll-item:is([data-hs-line='1'], [data-hs-line='3']) b { color: var(--g); }
+  .hs-roll-item em { max-width: 11.5em; font-style: normal; }
+  .hs-roll-steps { display: flex; gap: .35rem; margin: .9rem 0 0; padding: 0; list-style: none; font-family: 'JetBrains Mono', monospace; font-size: .64rem; }
+  .hs-roll-steps li { display: flex; flex-direction: column; gap: .35rem; width: 4.6rem; color: var(--tuff-muted); transition: color .4s ease; }
+  .hs-roll-steps i { height: 3px; border-radius: 2px; background: var(--tuff-border); overflow: hidden; position: relative; }
+  .hs-roll-steps i::after { content: ''; position: absolute; inset: 0; background: var(--tuff-accent); transform: scaleX(0); transform-origin: left; }
+  .hs-roll-steps li:is([data-hs-line='1'], [data-hs-line='3']) i::after { background: var(--g); }
+  .hs-roll-steps li.is-on { color: var(--tuff-text); }
+  .hs-roll-steps li.is-on i::after { animation: hs-fill 2.4s linear forwards; }
+  @keyframes hs-fill { to { transform: scaleX(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .hs-roll-window { height: auto; }
+    .hs-roll-track { transform: none; }
+    .hs-roll-item { opacity: 1; height: auto; }
+    .hs-roll-steps { display: none; }
+  }
 
   .hs-flow { margin: 0; padding: 0 1rem .8rem; border: 1px solid #343934; border-radius: .5rem; background: #1b1e1b; color: #eeeae2; box-shadow: 0 2rem 5rem rgba(38, 31, 22, .2), 0 0 0 1px rgba(232, 93, 42, .08); font-family: 'JetBrains Mono', monospace; }
   .hs-bar { display: flex; align-items: center; gap: .4rem; margin: 0 -1rem .7rem; padding: .6rem 1rem; border-bottom: 1px solid #343934; background: #242824; border-radius: .5rem .5rem 0 0; font-size: .68rem; }
