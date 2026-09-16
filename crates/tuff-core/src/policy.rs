@@ -370,11 +370,23 @@ pub struct RuleVerdict<'a> {
     pub entry: PolicyCoverageEntry,
 }
 
+/// Why a harness cannot enforce one rule even though its matrix row for the
+/// rule's effect and subject says it can, such as a pattern its native
+/// setting has no form for; `None` when the row applies.
+pub type RuleGap<'g> = &'g dyn Fn(&PolicyRule) -> Result<Option<String>>;
+
+/// A `RuleGap` for a harness whose matrix rows apply to every rule.
+pub fn no_gaps(_rule: &PolicyRule) -> Result<Option<String>> {
+    Ok(None)
+}
+
 /// Look up every rule in a harness's matrix. A matrix missing a row for a
-/// rule's effect and subject is treated as `unsupported`, never as enforced.
+/// rule's effect and subject is treated as `unsupported`, never as enforced,
+/// and so is a rule `gap` names a reason for.
 pub fn verdicts<'a>(
     policy: &'a PolicyConfig,
     matrix: &[PolicyCoverageEntry],
+    gap: RuleGap<'_>,
 ) -> Result<Vec<RuleVerdict<'a>>> {
     policy
         .rules
@@ -383,7 +395,7 @@ pub fn verdicts<'a>(
         .map(|(index, rule)| {
             let effect = rule.effect()?;
             let subject = rule.subject()?.kind();
-            let entry = matrix
+            let mut entry = matrix
                 .iter()
                 .find(|entry| entry.effect == effect && entry.subject == subject)
                 .cloned()
@@ -395,6 +407,13 @@ pub fn verdicts<'a>(
                     caveat: Some("this agent declares nothing for this kind of rule".to_string()),
                     source: None,
                 });
+            if entry.coverage != CoverageLevel::Unsupported
+                && let Some(reason) = gap(rule)?
+            {
+                entry.coverage = CoverageLevel::Unsupported;
+                entry.mechanism = None;
+                entry.caveat = Some(reason);
+            }
             Ok(RuleVerdict { index, rule, entry })
         })
         .collect()
@@ -407,10 +426,11 @@ pub fn verdicts<'a>(
 pub fn enforcement(
     policy: &PolicyConfig,
     matrix: &[PolicyCoverageEntry],
+    gap: RuleGap<'_>,
 ) -> Result<(Vec<usize>, Vec<UnenforcedRule>)> {
     let mut enforced = Vec::new();
     let mut unenforced = Vec::new();
-    for verdict in verdicts(policy, matrix)? {
+    for verdict in verdicts(policy, matrix, gap)? {
         if verdict.entry.coverage == CoverageLevel::Unsupported {
             unenforced.push(UnenforcedRule {
                 rule: verdict.index + 1,
@@ -485,12 +505,43 @@ pub fn is_opencode_config(relpath: &str) -> bool {
         .is_some_and(|name| name == "opencode.json")
 }
 
+/// Whether a native permissions file is a Codex `config.toml`, where an MCP
+/// tool rule sits on the server's `[mcp_servers.<id>]` table.
+pub fn is_codex_config(relpath: &str) -> bool {
+    relpath.ends_with(".toml")
+}
+
+/// A Codex MCP tool rule as Tuff records it: `<server>:<tool>`.
+fn codex_mcp_rule<'r>(relpath: &str, rule: &'r str) -> Result<(&'r str, &'r str)> {
+    rule.split_once(':').ok_or_else(|| {
+        TuffError::corrupt(format!(
+            "recorded rule '{}' for {relpath} is not <server>:<tool>",
+            rule.escape_debug()
+        ))
+    })
+}
+
 /// Where `tuff check` reports a compiled rule that is missing: the file for
-/// a rules file, the permission for an OpenCode config, and the list for a
-/// JSON settings file.
+/// a rules file, the permission for an OpenCode config, the server setting
+/// for a Codex config, and the list for a JSON settings file.
 pub fn permission_location(permission: &ManagedPermission) -> String {
     if is_rules_file(&permission.settings_path) {
         permission.settings_path.clone()
+    } else if is_codex_config(&permission.settings_path) {
+        let (server, tool) = permission
+            .rule
+            .split_once(':')
+            .unwrap_or((permission.rule.as_str(), ""));
+        match PolicyEffect::parse(&permission.list) {
+            Some(PolicyEffect::Ask) => format!(
+                "{}#mcp_servers.{server}.tools.{tool}.approval_mode",
+                permission.settings_path
+            ),
+            _ => format!(
+                "{}#mcp_servers.{server}.disabled_tools",
+                permission.settings_path
+            ),
+        }
     } else if is_opencode_config(&permission.settings_path) {
         let (name, _) = opencode_rule(&permission.rule);
         format!("{}#permission.{name}", permission.settings_path)
@@ -680,6 +731,174 @@ fn render_opencode_config(root: &OrderedJson, empty: bool) -> Result<Vec<u8>> {
     Ok(text.into_bytes())
 }
 
+/// `merge_permissions` for a Codex `config.toml`.
+///
+/// A `deny` rule adds the tool to `disabled_tools` on the server's
+/// `[mcp_servers.<server>]` table, and an `ask` rule sets
+/// `approval_mode = "prompt"` on `[mcp_servers.<server>.tools.<tool>]`.
+/// Every other line of the file is kept. The server must already be in the
+/// file: a table holding only these settings is not a server Codex can load.
+/// A tool whose `approval_mode` the file already sets to something else is
+/// refused rather than overwritten.
+fn merge_codex_config(
+    relpath: &str,
+    existing: Option<&[u8]>,
+    remove: &[(PolicyEffect, String)],
+    add: &[(PolicyEffect, String)],
+) -> Result<Vec<u8>> {
+    use toml_edit::{Array, InlineTable, Item, Table, TableLike, Value};
+
+    let corrupt = |detail: &str| TuffError::corrupt(format!("{relpath} {detail}"));
+    let text = match existing {
+        Some(bytes) => std::str::from_utf8(bytes).map_err(|_| corrupt("is not valid UTF-8"))?,
+        None => "",
+    };
+    let mut document: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|error| corrupt(&format!("is not valid TOML: {error}")))?;
+    if document
+        .get("mcp_servers")
+        .is_some_and(|servers| !servers.is_table_like())
+    {
+        return Err(corrupt("field 'mcp_servers' must be a table"));
+    }
+
+    fn server<'d>(
+        document: &'d mut toml_edit::DocumentMut,
+        name: &str,
+    ) -> Option<&'d mut dyn TableLike> {
+        document
+            .get_mut("mcp_servers")?
+            .as_table_like_mut()?
+            .get_mut(name)?
+            .as_table_like_mut()
+    }
+    // A child table in the style of its parent: a `[header]` table under a
+    // header table, an inline table under an inline one.
+    fn child<'t>(
+        parent: &'t mut dyn TableLike,
+        key: &str,
+        inline: bool,
+        corrupt: &dyn Fn(&str) -> TuffError,
+        path: &str,
+    ) -> Result<&'t mut dyn TableLike> {
+        if !parent.contains_key(key) {
+            let item = if inline {
+                Item::Value(Value::InlineTable(InlineTable::new()))
+            } else {
+                let mut table = Table::new();
+                table.set_implicit(true);
+                Item::Table(table)
+            };
+            parent.insert(key, item);
+        }
+        parent
+            .get_mut(key)
+            .and_then(Item::as_table_like_mut)
+            .ok_or_else(|| corrupt(&format!("field '{path}' must be a table")))
+    }
+
+    for (effect, rule) in remove {
+        let (name, tool) = codex_mcp_rule(relpath, rule)?;
+        let Some(table) = server(&mut document, name) else {
+            continue;
+        };
+        match effect {
+            PolicyEffect::Deny => {
+                let emptied = match table.get_mut("disabled_tools").and_then(Item::as_array_mut) {
+                    Some(list) => {
+                        list.retain(|entry| entry.as_str() != Some(tool));
+                        list.is_empty()
+                    }
+                    None => false,
+                };
+                if emptied {
+                    table.remove("disabled_tools");
+                }
+            }
+            PolicyEffect::Ask => {
+                let Some(tools) = table.get_mut("tools").and_then(Item::as_table_like_mut) else {
+                    continue;
+                };
+                let emptied = match tools.get_mut(tool).and_then(Item::as_table_like_mut) {
+                    Some(settings)
+                        if settings.get("approval_mode").and_then(Item::as_str)
+                            == Some("prompt") =>
+                    {
+                        settings.remove("approval_mode");
+                        settings.is_empty()
+                    }
+                    _ => false,
+                };
+                if emptied {
+                    tools.remove(tool);
+                }
+                if tools.is_empty() {
+                    table.remove("tools");
+                }
+            }
+        }
+    }
+
+    for (effect, rule) in add {
+        let (name, tool) = codex_mcp_rule(relpath, rule)?;
+        let inline = document
+            .get("mcp_servers")
+            .and_then(|servers| servers.get(name))
+            .is_some_and(Item::is_inline_table);
+        let Some(table) = server(&mut document, name) else {
+            return Err(TuffError::refused(format!(
+                "policy rule mcp \"{rule}\" needs the MCP server '{name}' in {relpath}, where Codex reads the tools it disables and asks about, so the policy was not installed"
+            ))
+            .with_hint(format!(
+                "install the server for Codex first ('tuff add <source> -a codex'), or add [mcp_servers.{name}] to {relpath}"
+            )));
+        };
+        match effect {
+            PolicyEffect::Deny => {
+                if !table.contains_key("disabled_tools") {
+                    table.insert("disabled_tools", Item::Value(Value::Array(Array::new())));
+                }
+                let list = table
+                    .get_mut("disabled_tools")
+                    .and_then(Item::as_array_mut)
+                    .ok_or_else(|| {
+                        corrupt(&format!(
+                            "field 'mcp_servers.{name}.disabled_tools' must be an array"
+                        ))
+                    })?;
+                if !list.iter().any(|entry| entry.as_str() == Some(tool)) {
+                    list.push(tool);
+                }
+            }
+            PolicyEffect::Ask => {
+                let tools_path = format!("mcp_servers.{name}.tools");
+                let tools = child(table, "tools", inline, &corrupt, &tools_path)?;
+                let settings = child(
+                    tools,
+                    tool,
+                    inline,
+                    &corrupt,
+                    &format!("{tools_path}.{tool}"),
+                )?;
+                match settings.get("approval_mode").map(Item::as_str) {
+                    None => {
+                        settings.insert("approval_mode", toml_edit::value("prompt"));
+                    }
+                    Some(Some("prompt")) => {}
+                    Some(_) => {
+                        return Err(TuffError::refused(format!(
+                            "{relpath} already sets its own approval_mode for {tools_path}.{tool}, so the policy was not installed"
+                        ))
+                        .with_hint("remove or change that setting in the file, or change the policy"));
+                    }
+                }
+            }
+        }
+    }
+    Ok(document.to_string().into_bytes())
+}
+
 /// Add and remove native permission rules in a harness settings file, given
 /// the bytes it holds now, and return the bytes it should hold next.
 ///
@@ -703,6 +922,9 @@ pub fn merge_permissions(
     }
     if is_opencode_config(settings_relpath) {
         return merge_opencode_config(settings_relpath, existing, remove, add);
+    }
+    if is_codex_config(settings_relpath) {
+        return merge_codex_config(settings_relpath, existing, remove, add);
     }
     let mut settings: serde_json::Value = match existing {
         Some(bytes) if !bytes.is_empty() => serde_json::from_slice(bytes).map_err(|error| {
@@ -794,6 +1016,13 @@ pub fn remove_permissions(
         let mut merged = merge_permissions(relpath, Some(&bytes), &removals, &[])?;
         // A rules file and an OpenCode config both come back empty once
         // nothing Tuff or the user wrote is left in them.
+        if is_codex_config(relpath) {
+            // The server tables stay, so the file never ends up empty.
+            if merged != bytes {
+                std::fs::write(&path, merged)?;
+            }
+            continue;
+        }
         if is_rules_file(relpath) || is_opencode_config(relpath) {
             // The rules file exists only to hold compiled rules.
             if merged.is_empty() {
@@ -838,6 +1067,33 @@ pub fn managed_permission_status(
         } else {
             "missing"
         };
+    }
+    if is_codex_config(&permission.settings_path) {
+        let Ok(document) = toml::from_str::<toml::Value>(&raw) else {
+            return "modified";
+        };
+        let Some((name, tool)) = permission.rule.split_once(':') else {
+            return "missing";
+        };
+        let server = document
+            .get("mcp_servers")
+            .and_then(|servers| servers.get(name));
+        let present = match PolicyEffect::parse(&permission.list) {
+            Some(PolicyEffect::Deny) => server
+                .and_then(|server| server.get("disabled_tools"))
+                .and_then(toml::Value::as_array)
+                .is_some_and(|list| list.iter().any(|entry| entry.as_str() == Some(tool))),
+            Some(PolicyEffect::Ask) => {
+                server
+                    .and_then(|server| server.get("tools"))
+                    .and_then(|tools| tools.get(tool))
+                    .and_then(|settings| settings.get("approval_mode"))
+                    .and_then(toml::Value::as_str)
+                    == Some("prompt")
+            }
+            None => false,
+        };
+        return if present { "clean" } else { "missing" };
     }
     if is_rules_file(&permission.settings_path) {
         return if raw.lines().any(|line| line == permission.rule) {
@@ -1143,6 +1399,128 @@ mod tests {
     }
 
     #[test]
+    fn a_codex_config_takes_mcp_tool_rules_on_the_servers_table_and_gives_them_back() {
+        const RELPATH: &str = ".codex/config.toml";
+        let original = "# team settings\nmodel = \"gpt-5-codex\"\n\n[mcp_servers.github]\ncommand = \"github-mcp\"\ndisabled_tools = [\"fork_repo\"]\n\n[mcp_servers.docs]\nurl = \"https://docs.example.test/mcp\"\n";
+        let add = [
+            deny("github:delete_repo"),
+            ask("github:merge_pull_request"),
+            deny("docs:purge"),
+        ];
+        let once = merge_permissions(RELPATH, Some(original.as_bytes()), &[], &add).unwrap();
+        let twice = merge_permissions(RELPATH, Some(&once), &[], &add).unwrap();
+        assert_eq!(once, twice, "a redundant merge leaves the file unchanged");
+        let text = String::from_utf8(once.clone()).unwrap();
+        assert!(
+            text.starts_with("# team settings\nmodel = \"gpt-5-codex\"\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("disabled_tools = [\"fork_repo\", \"delete_repo\"]"),
+            "the user's entry stays first: {text}"
+        );
+        assert!(
+            text.contains(
+                "[mcp_servers.github.tools.merge_pull_request]\napproval_mode = \"prompt\"\n"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("[mcp_servers.github.tools]\n"), "{text}");
+        let parsed: toml::Value = toml::from_str(&text).unwrap();
+        assert_eq!(
+            parsed["mcp_servers"]["docs"]["disabled_tools"],
+            toml::Value::Array(vec![toml::Value::String("purge".to_string())])
+        );
+
+        let removed = merge_permissions(RELPATH, Some(&once), &add, &[]).unwrap();
+        let removed: toml::Value = toml::from_str(std::str::from_utf8(&removed).unwrap()).unwrap();
+        let original: toml::Value = toml::from_str(original).unwrap();
+        assert_eq!(removed, original, "only what Tuff added is taken out");
+    }
+
+    #[test]
+    fn a_codex_config_writes_inline_server_tables_inline() {
+        let original = "mcp_servers.github = { command = \"github-mcp\" }\n";
+        let merged = merge_permissions(
+            ".codex/config.toml",
+            Some(original.as_bytes()),
+            &[],
+            &[deny("github:delete_repo"), ask("github:merge_pull_request")],
+        )
+        .unwrap();
+        let text = String::from_utf8(merged).unwrap();
+        let parsed: toml::Value = toml::from_str(&text).unwrap();
+        let github = &parsed["mcp_servers"]["github"];
+        assert_eq!(github["command"].as_str(), Some("github-mcp"), "{text}");
+        assert_eq!(
+            github["tools"]["merge_pull_request"]["approval_mode"].as_str(),
+            Some("prompt"),
+            "{text}"
+        );
+        assert_eq!(text.lines().count(), 1, "still one inline table: {text}");
+    }
+
+    #[test]
+    fn a_codex_config_refuses_a_rule_for_an_undeclared_server_or_a_conflicting_approval_mode() {
+        const RELPATH: &str = ".codex/config.toml";
+        let error = merge_permissions(
+            RELPATH,
+            Some(b"model = \"o3\"\n"),
+            &[],
+            &[deny("github:delete_repo")],
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Refused, "{error}");
+        assert!(
+            error.to_string().contains("needs the MCP server 'github'"),
+            "{error}"
+        );
+        let error =
+            merge_permissions(RELPATH, None, &[], &[deny("github:delete_repo")]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Refused, "{error}");
+
+        let approved = b"[mcp_servers.github]\ncommand = \"github-mcp\"\n\n[mcp_servers.github.tools.merge_pull_request]\napproval_mode = \"approve\"\n";
+        let error = merge_permissions(
+            RELPATH,
+            Some(approved),
+            &[],
+            &[ask("github:merge_pull_request")],
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Refused, "{error}");
+
+        let error = merge_permissions(RELPATH, Some(b"mcp_servers = 3\n"), &[], &[deny("a:b")])
+            .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Corrupt, "{error}");
+    }
+
+    #[test]
+    fn a_gap_makes_a_covered_rule_unenforced() {
+        let policy = parse(INFRA);
+        let matrix: Vec<_> = PolicyEffect::ALL
+            .into_iter()
+            .flat_map(|effect| {
+                PolicySubjectKind::ALL.map(|subject| PolicyCoverageEntry {
+                    effect,
+                    subject,
+                    coverage: CoverageLevel::Full,
+                    mechanism: Some("native".to_string()),
+                    caveat: None,
+                    source: None,
+                })
+            })
+            .collect();
+        let gap = |rule: &PolicyRule| -> Result<Option<String>> {
+            Ok(rule.mcp.as_ref().map(|_| "no patterns".to_string()))
+        };
+        let (enforced, unenforced) = enforcement(&policy, &matrix, &gap).unwrap();
+        assert_eq!(enforced, vec![0, 1, 2]);
+        assert_eq!(unenforced.len(), 1);
+        assert_eq!(unenforced[0].rule, 4);
+        assert_eq!(unenforced[0].reason, "no patterns");
+    }
+
+    #[test]
     fn a_command_argument_cannot_be_a_pattern() {
         let policy =
             parse("[[policy.rules]]\neffect = \"deny\"\ncommand = [\"git\", \"push\", \"*\"]\n");
@@ -1329,7 +1707,7 @@ mcp = "github:delete_*"
                 });
             }
         }
-        let (enforced, unenforced) = enforcement(&policy, &matrix).unwrap();
+        let (enforced, unenforced) = enforcement(&policy, &matrix, &no_gaps).unwrap();
         assert_eq!(enforced, vec![0, 2, 3]);
         assert_eq!(
             unenforced,
@@ -1340,7 +1718,8 @@ mcp = "github:delete_*"
             }]
         );
 
-        let (enforced, unenforced) = enforcement(&policy, &not_implemented_matrix()).unwrap();
+        let (enforced, unenforced) =
+            enforcement(&policy, &not_implemented_matrix(), &no_gaps).unwrap();
         assert!(enforced.is_empty());
         assert_eq!(unenforced.len(), 4);
         assert_eq!(
@@ -1360,7 +1739,7 @@ mcp = "github:delete_*"
             caveat: None,
             source: None,
         }];
-        let verdicts = verdicts(&policy, &matrix).unwrap();
+        let verdicts = verdicts(&policy, &matrix, &no_gaps).unwrap();
         let coverage: Vec<_> = verdicts
             .iter()
             .map(|verdict| verdict.entry.coverage)

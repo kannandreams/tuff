@@ -25,10 +25,15 @@ pub fn is_toml(mcp_config_path: &Path) -> bool {
         .is_some_and(|extension| extension == "toml")
 }
 
+/// Settings on a Codex `[mcp_servers.<id>]` table that policy rules own
+/// (`crate::policy`): a server entry never writes them, a rewrite of the
+/// entry keeps them, and the entry's hash leaves them out.
+const POLICY_KEYS: [&str; 2] = ["disabled_tools", "tools"];
+
 /// The `mcp_servers.<id>` table of a TOML config as a JSON value, for the
 /// same hash `managed_mcp_entry_baseline` computes from the adapter's
-/// entry. `Ok(None)` when the file or the entry is absent; an error when
-/// the file is not TOML.
+/// entry, without the settings policy rules own. `Ok(None)` when the file
+/// or the entry is absent; an error when the file is not TOML.
 pub fn toml_entry(mcp_config_path: &Path, server_id: &str) -> Result<Option<serde_json::Value>> {
     if !mcp_config_path.is_file() {
         return Ok(None);
@@ -42,7 +47,13 @@ pub fn toml_entry(mcp_config_path: &Path, server_id: &str) -> Result<Option<serd
     else {
         return Ok(None);
     };
-    Ok(Some(serde_json::to_value(entry)?))
+    let mut entry = serde_json::to_value(entry)?;
+    if let Some(table) = entry.as_object_mut() {
+        for key in POLICY_KEYS {
+            table.remove(key);
+        }
+    }
+    Ok(Some(entry))
 }
 
 fn read_toml_document(mcp_config_path: &Path) -> Result<toml_edit::DocumentMut> {
@@ -147,7 +158,7 @@ fn register_server_toml(
     allow_overwrite: bool,
 ) -> Result<()> {
     let mut document = read_toml_document(mcp_config_path)?;
-    let table = toml_table_from_json(&entry, mcp_config_path)?;
+    let mut table = toml_table_from_json(&entry, mcp_config_path)?;
     let servers = document
         .entry("mcp_servers")
         .or_insert_with(|| {
@@ -159,6 +170,16 @@ fn register_server_toml(
         .expect("read_toml_document validates mcp_servers");
     if !allow_overwrite && servers.contains_key(server_id) {
         return Err(untracked_server(mcp_config_path, server_id));
+    }
+    if let Some(previous) = servers
+        .get(server_id)
+        .and_then(toml_edit::Item::as_table_like)
+    {
+        for key in POLICY_KEYS {
+            if let Some(item) = previous.get(key) {
+                table.insert(key, item.clone());
+            }
+        }
     }
     servers.insert(server_id, toml_edit::Item::Table(table));
     if let Some(parent) = mcp_config_path.parent() {
@@ -496,6 +517,40 @@ mod tests {
 
         assert!(error.to_string().contains("invalid MCP config"));
         assert_eq!(std::fs::read(&path).expect("read config"), original);
+    }
+
+    #[test]
+    fn rewriting_a_toml_server_keeps_the_settings_policy_rules_own() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("config.toml");
+        register_server(
+            &path,
+            "github",
+            serde_json::json!({"command": "old"}),
+            false,
+        )
+        .unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(
+            &path,
+            format!("{raw}disabled_tools = [\"delete_repo\"]\n\n[mcp_servers.github.tools.merge]\napproval_mode = \"prompt\"\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            toml_entry(&path, "github").unwrap(),
+            Some(serde_json::json!({"command": "old"})),
+            "the entry's hash leaves policy settings out"
+        );
+
+        register_server(&path, "github", serde_json::json!({"command": "new"}), true).unwrap();
+        let parsed: toml::Value = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let github = &parsed["mcp_servers"]["github"];
+        assert_eq!(github["command"].as_str(), Some("new"));
+        assert_eq!(github["disabled_tools"][0].as_str(), Some("delete_repo"));
+        assert_eq!(
+            github["tools"]["merge"]["approval_mode"].as_str(),
+            Some("prompt")
+        );
     }
 
     #[test]

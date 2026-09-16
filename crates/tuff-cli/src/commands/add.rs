@@ -1148,8 +1148,10 @@ pub(crate) fn add_targets_from_installed_dir(
 
 /// A policy compiled for one agent, ready to write once nothing can refuse.
 struct CompiledPolicy {
-    settings_path: std::path::PathBuf,
-    merged: Vec<u8>,
+    /// Each settings file the agent's rules touch, relative to the install
+    /// root, with the bytes it should hold. Empty bytes mean a file Tuff
+    /// owns and no longer needs.
+    files: Vec<(String, Vec<u8>)>,
     managed: Vec<lockfile::ManagedPermission>,
 }
 
@@ -1162,7 +1164,8 @@ fn warn_partially_enforced_policy(
         let Some(adapter) = AdapterKind::from_id(tid) else {
             continue;
         };
-        for verdict in tuff_core::policy::verdicts(policy, &adapter.policy_compatibility())? {
+        let gap = |rule: &tuff_core::policy::PolicyRule| adapter.policy_rule_gap(rule);
+        for verdict in tuff_core::policy::verdicts(policy, &adapter.policy_compatibility(), &gap)? {
             if verdict.entry.coverage == tuff_hooks_spec::CoverageLevel::Partial {
                 let why = verdict
                     .entry
@@ -1182,7 +1185,7 @@ fn warn_partially_enforced_policy(
 }
 
 /// Compile a policy into each agent's native permission rules and compute
-/// the settings file each will hold, removing rules a previous install of
+/// the settings files they will be in, removing rules a previous install of
 /// the same policy recorded and this one no longer has. Everything here can
 /// refuse, a corrupt settings file included, and nothing here writes.
 fn compile_policy(
@@ -1195,12 +1198,12 @@ fn compile_policy(
 ) -> Result<BTreeMap<String, CompiledPolicy>> {
     let mut compiled = BTreeMap::new();
     for adapter in adapters {
-        let settings_relpath = adapter.permissions_settings_relpath().ok_or_else(|| {
-            TuffError::unsupported(format!(
+        if adapter.permissions_settings_relpath().is_none() {
+            return Err(TuffError::unsupported(format!(
                 "{} has no native permission rules for policy '{capability_id}'",
                 adapter.display_name()
-            ))
-        })?;
+            )));
+        }
         let mut managed: Vec<lockfile::ManagedPermission> = Vec::new();
         let enforced = enforcement
             .get(adapter.id())
@@ -1211,13 +1214,19 @@ fn compile_policy(
                 continue;
             }
             let effect = rule.effect()?;
-            let native = adapter.native_permission_rules(rule)?.ok_or_else(|| {
+            let cannot_compile = || {
                 TuffError::unsupported(format!(
                     "{} cannot compile policy rule ({}) natively",
                     adapter.display_name(),
                     rule.describe()
                 ))
-            })?;
+            };
+            let settings_relpath = adapter
+                .permission_relpath_for(rule.subject()?.kind())
+                .ok_or_else(cannot_compile)?;
+            let native = adapter
+                .native_permission_rules(rule)?
+                .ok_or_else(cannot_compile)?;
             for native_rule in native {
                 let permission = lockfile::ManagedPermission {
                     settings_path: settings_relpath.to_string(),
@@ -1243,30 +1252,41 @@ fn compile_policy(
             .and_then(|entry| entry.targets.get(adapter.id()))
             .map(|target| target.managed_permissions.clone())
             .unwrap_or_default();
-        let stale = as_pairs(&mut previous.iter().filter(|permission| {
-            permission.settings_path == settings_relpath && !managed.contains(permission)
-        }));
-        let additions = as_pairs(&mut managed.iter());
-        let settings_path = install_root.join(settings_relpath);
-        let existing = if settings_path.is_file() {
-            Some(fs::read(&settings_path)?)
-        } else {
-            None
-        };
-        let merged = tuff_core::policy::merge_permissions(
-            settings_relpath,
-            existing.as_deref(),
-            &stale,
-            &additions,
-        )?;
-        compiled.insert(
-            adapter.id().to_string(),
-            CompiledPolicy {
-                settings_path,
-                merged,
-                managed,
-            },
-        );
+        let relpaths: std::collections::BTreeSet<&str> = managed
+            .iter()
+            .chain(&previous)
+            .map(|permission| permission.settings_path.as_str())
+            .collect();
+        let mut files = Vec::new();
+        for settings_relpath in relpaths {
+            let stale = as_pairs(&mut previous.iter().filter(|permission| {
+                permission.settings_path == settings_relpath && !managed.contains(permission)
+            }));
+            let additions = as_pairs(
+                &mut managed
+                    .iter()
+                    .filter(|permission| permission.settings_path == settings_relpath),
+            );
+            if stale.is_empty() && additions.is_empty() {
+                continue;
+            }
+            let settings_path = install_root.join(settings_relpath);
+            let existing = if settings_path.is_file() {
+                Some(fs::read(&settings_path)?)
+            } else if additions.is_empty() {
+                continue;
+            } else {
+                None
+            };
+            let merged = tuff_core::policy::merge_permissions(
+                settings_relpath,
+                existing.as_deref(),
+                &stale,
+                &additions,
+            )?;
+            files.push((settings_relpath.to_string(), merged));
+        }
+        compiled.insert(adapter.id().to_string(), CompiledPolicy { files, managed });
     }
     Ok(compiled)
 }
@@ -1301,8 +1321,9 @@ fn policy_enforcement(
             TuffError::usage(format!("unknown agent '{tid}'"))
                 .with_hint("run 'tuff agent list' to see available agents")
         })?;
+        let gap = |rule: &tuff_core::policy::PolicyRule| adapter.policy_rule_gap(rule);
         let (enforced, unenforced) =
-            tuff_core::policy::enforcement(policy, &adapter.policy_compatibility())?;
+            tuff_core::policy::enforcement(policy, &adapter.policy_compatibility(), &gap)?;
         for rule in &unenforced {
             unenforced_lines.push(format!(
                 "  {}: rule {} ({}) is not enforced: {}",
@@ -1587,18 +1608,33 @@ pub(crate) fn install_capability_accepting(
         }
 
         if let Some(compiled) = compiled_policies.get(adapter.id()) {
-            if let Some(parent) = compiled.settings_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&compiled.settings_path, &compiled.merged)?;
-            if report {
-                println!(
-                    "compiled {} permission rule(s) for {} ({}) -> {}",
-                    compiled.managed.len(),
-                    capability.id,
-                    adapter.id(),
-                    lockfile::relative_or_absolute_fs(&compiled.settings_path, install_root)
-                );
+            for (settings_relpath, merged) in &compiled.files {
+                let settings_path = install_root.join(settings_relpath);
+                let owned = tuff_core::policy::is_rules_file(settings_relpath)
+                    || tuff_core::policy::is_opencode_config(settings_relpath);
+                if merged.is_empty() && owned {
+                    if settings_path.is_file() {
+                        fs::remove_file(&settings_path)?;
+                    }
+                    continue;
+                }
+                if let Some(parent) = settings_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::write(&settings_path, merged)?;
+                let count = compiled
+                    .managed
+                    .iter()
+                    .filter(|permission| &permission.settings_path == settings_relpath)
+                    .count();
+                if report && count > 0 {
+                    println!(
+                        "compiled {count} permission rule(s) for {} ({}) -> {}",
+                        capability.id,
+                        adapter.id(),
+                        lockfile::relative_or_absolute_fs(&settings_path, install_root)
+                    );
+                }
             }
         }
 
