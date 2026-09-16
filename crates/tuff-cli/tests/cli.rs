@@ -3807,7 +3807,7 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
         for rule in rules {
             let expected = match (agent, rule["subject"].as_str().unwrap()) {
                 ("claude" | "opencode", "mcp") => "full",
-                ("claude" | "opencode", _) | ("codex", "command") => "partial",
+                ("claude" | "opencode", _) | ("codex", "command" | "mcp") => "partial",
                 _ => "unsupported",
             };
             assert_eq!(rule["coverage"], expected, "{agent}: {rule}");
@@ -4648,6 +4648,189 @@ fn codex_hooks_register_in_dot_codex_hooks_json_with_codexs_event_names() {
         1,
         "{settings}"
     );
+}
+
+fn write_mcp_policy(root: &Path, rules: &str) -> std::path::PathBuf {
+    let dir = root.join("mcp-guardrails");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("tuff.toml"),
+        format!(
+            "id = \"mcp-guardrails\"\ntype = \"policy\"\nversion = \"1.0.0\"\ndescription = \"MCP tool rules.\"\n\n{rules}"
+        ),
+    )
+    .unwrap();
+    dir
+}
+
+#[test]
+fn codex_mcp_policy_rules_sit_on_the_servers_table_in_dot_codex_config_toml() {
+    let temp = TempDir::new().unwrap();
+    let project = codex_project(temp.path());
+    let config_path = project.join(".codex/config.toml");
+    let policy = write_mcp_policy(
+        temp.path(),
+        "[[policy.rules]]\neffect = \"deny\"\nmcp = \"everything:echo\"\n\n[[policy.rules]]\neffect = \"ask\"\nmcp = \"everything:add\"\n\n[[policy.rules]]\neffect = \"deny\"\ncommand = [\"git\", \"push\", \"--force\"]\n",
+    );
+
+    // No server table yet: nothing for the rule to sit on.
+    let output = tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "-a", "codex"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("needs the MCP server 'everything' in .codex/config.toml"),
+        "{stderr}"
+    );
+    assert!(!project.join(".codex/rules/tuff.rules").exists());
+
+    tuff()
+        .current_dir(&project)
+        .args(["add", "mcp", "everything", "-a", "codex"])
+        .assert()
+        .success();
+    let output = tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "-a", "codex"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stdout.contains(
+            "compiled 2 permission rule(s) for mcp-guardrails (codex) -> .codex/config.toml"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            "compiled 1 permission rule(s) for mcp-guardrails (codex) -> .codex/rules/tuff.rules"
+        ),
+        "{stdout}"
+    );
+    let raw = fs::read_to_string(&config_path).unwrap();
+    assert!(raw.contains("disabled_tools = [\"echo\"]"), "{raw}");
+    assert!(
+        raw.contains("[mcp_servers.everything.tools.add]\napproval_mode = \"prompt\"\n"),
+        "{raw}"
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    // Updating the server rewrites its table and keeps the policy's settings.
+    tuff()
+        .current_dir(&project)
+        .args(["update", "everything", "-a", "codex", "--force"])
+        .assert()
+        .success();
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), raw);
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    // A setting removed by hand is drift on the policy, not on the server.
+    fs::write(
+        &config_path,
+        raw.replace("disabled_tools = [\"echo\"]\n", ""),
+    )
+    .unwrap();
+    let output = tuff()
+        .current_dir(&project)
+        .args(["check", "--json"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let status = |id: &str| {
+        report["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == id)
+            .map(|row| row["status"].clone())
+            .unwrap()
+    };
+    assert_eq!(status("mcp-guardrails"), "modified", "{report}");
+    assert_eq!(status("everything"), "ok", "{report}");
+    let output = tuff().current_dir(&project).arg("check").output().unwrap();
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains(".codex/config.toml#mcp_servers.everything.disabled_tools"),
+    );
+    tuff()
+        .current_dir(&project)
+        .args(["update", "mcp-guardrails", "-a", "codex", "--force"])
+        .assert()
+        .success();
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), raw);
+
+    // The server cannot go while the policy's rules sit on its table.
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "everything", "-a", "codex", "--force"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "'everything' has rules from policy 'mcp-guardrails' on its table in .codex/config.toml",
+        ));
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), raw);
+
+    // Delete takes out the policy's settings and leaves the server.
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "mcp-guardrails", "-a", "codex"])
+        .assert()
+        .success();
+    let after = fs::read_to_string(&config_path).unwrap();
+    assert!(after.contains("[mcp_servers.everything]"), "{after}");
+    assert!(!after.contains("disabled_tools"), "{after}");
+    assert!(!after.contains("approval_mode"), "{after}");
+    assert!(!project.join(".codex/rules/tuff.rules").exists());
+    tuff().current_dir(&project).arg("check").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "everything", "-a", "codex"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn a_codex_mcp_rule_with_a_pattern_is_not_enforced() {
+    let temp = TempDir::new().unwrap();
+    let project = codex_project(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", "mcp", "everything", "-a", "codex"])
+        .assert()
+        .success();
+    let policy = write_mcp_policy(
+        temp.path(),
+        "[[policy.rules]]\neffect = \"deny\"\nmcp = \"everything:*\"\n\n[[policy.rules]]\neffect = \"deny\"\nmcp = \"everything:echo\"\n",
+    );
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "-a", "codex"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Codex: rule 1 (deny mcp \"everything:*\") is not enforced: Codex names MCP servers and tools exactly",
+        ));
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            policy.to_str().unwrap(),
+            "-a",
+            "codex",
+            "--accept-unenforced",
+        ])
+        .assert()
+        .success();
+    let raw = fs::read_to_string(project.join(".codex/config.toml")).unwrap();
+    assert!(raw.contains("disabled_tools = [\"echo\"]"), "{raw}");
+    assert!(!raw.contains('*'), "{raw}");
 }
 
 #[test]

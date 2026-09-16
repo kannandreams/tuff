@@ -41,14 +41,16 @@ pub const MCP_CONFIG_RELPATH: &str = ".codex/config.toml";
 /// every `.rules` file under `<repo>/.codex/rules/` in a trusted project.
 pub const RULES_RELPATH: &str = ".codex/rules/tuff.rules";
 const CODEX_RULES_DOCS: &str = "https://developers.openai.com/codex/rules";
+const CODEX_MCP_DOCS: &str = "https://developers.openai.com/codex/mcp";
 
-/// How Codex enforces each kind of policy rule, from its rules documentation
-/// and checked against Codex CLI 0.154.0 on 2026-09-15. Command rules
-/// compile to `prefix_rule` entries; Codex rules match commands only.
+/// How Codex enforces each kind of policy rule, from its rules and MCP
+/// documentation and checked against Codex CLI 0.154.0 on 2026-09-15 and
+/// 16. Command rules compile to `prefix_rule` entries, and MCP tool rules
+/// to settings on the server's table in `.codex/config.toml`.
 pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
     const COMMAND: &str = "matches the command's leading words, and each command of a simple chain joined by &&, ||, ; or |; a script with redirection, $(...), a variable assignment, a wildcard, or control flow is matched as one command and not caught, and a program run by absolute path such as /usr/bin/git may not be matched; Codex loads project rules only in a trusted project and labels rules experimental";
     const FILES: &str = "Codex rules match commands, not file paths, and Tuff does not compile Codex's sandbox permission profiles";
-    const MCP: &str = "Tuff does not compile MCP tool rules for Codex yet";
+    const MCP: &str = "the server and tool must be exact names, since Codex has no pattern form for them, and the server must be declared in .codex/config.toml, which Codex loads only in a trusted project";
     let row =
         |effect, subject, coverage, mechanism: Option<&str>, caveat: String| PolicyCoverageEntry {
             effect,
@@ -56,7 +58,14 @@ pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
             coverage,
             mechanism: mechanism.map(str::to_string),
             caveat: Some(caveat),
-            source: Some(CODEX_RULES_DOCS.to_string()),
+            source: Some(
+                if subject == Mcp {
+                    CODEX_MCP_DOCS
+                } else {
+                    CODEX_RULES_DOCS
+                }
+                .to_string(),
+            ),
         };
     use PolicyEffect::{Ask, Deny};
     use PolicySubjectKind::{Command, Edit, Mcp, Read};
@@ -71,7 +80,13 @@ pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
         ),
         row(Deny, Read, Unsupported, None, FILES.to_string()),
         row(Deny, Edit, Unsupported, None, FILES.to_string()),
-        row(Deny, Mcp, Unsupported, None, MCP.to_string()),
+        row(
+            Deny,
+            Mcp,
+            Partial,
+            Some(".codex/config.toml [mcp_servers.<server>] disabled_tools"),
+            format!("{MCP}; Codex removes the tool from the session"),
+        ),
         row(
             Ask,
             Command,
@@ -83,19 +98,63 @@ pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
         ),
         row(Ask, Read, Unsupported, None, FILES.to_string()),
         row(Ask, Edit, Unsupported, None, FILES.to_string()),
-        row(Ask, Mcp, Unsupported, None, MCP.to_string()),
+        row(
+            Ask,
+            Mcp,
+            Partial,
+            Some(
+                ".codex/config.toml [mcp_servers.<server>.tools.<tool>] approval_mode = \"prompt\"",
+            ),
+            format!(
+                "{MCP}; Codex approves the call without asking when its approval policy is never and the sandbox allows full disk access or is off"
+            ),
+        ),
     ]
 }
 
-/// The Codex rules file entry one policy rule compiles to, or `None` for a
-/// kind of rule Codex rules cannot express.
+/// The settings file a rule of one subject compiles into: command rules go
+/// to the rules file, MCP tool rules to the config that declares servers.
+pub fn permission_relpath(subject: PolicySubjectKind) -> Option<&'static str> {
+    match subject {
+        PolicySubjectKind::Command => Some(RULES_RELPATH),
+        PolicySubjectKind::Mcp => Some(MCP_CONFIG_RELPATH),
+        PolicySubjectKind::Read | PolicySubjectKind::Edit => None,
+    }
+}
+
+/// Why Codex cannot enforce a rule its matrix covers: an MCP rule with a
+/// `*`, since `disabled_tools` and a tool's `approval_mode` take exact
+/// names (`ToolFilter` in codex-rs 0.154.0 compares names as a set).
+pub fn rule_gap(rule: &PolicyRule) -> Result<Option<String>> {
+    Ok(match rule.subject()? {
+        PolicySubject::Mcp { server, tool } if server.contains('*') || tool.contains('*') => {
+            Some(
+                "Codex names MCP servers and tools exactly in disabled_tools and approval_mode, so a pattern with '*' has no Codex form"
+                    .to_string(),
+            )
+        }
+        _ => None,
+    })
+}
+
+/// The native rule one policy rule compiles to, or `None` for a kind of
+/// rule Codex cannot express.
 ///
-/// `deny` becomes `decision = "forbidden"` and `ask` becomes
-/// `decision = "prompt"`. The rule's `reason`, when given, becomes the
-/// `justification` Codex shows when it refuses the command.
+/// A command rule becomes a rules file entry: `deny` becomes
+/// `decision = "forbidden"` and `ask` becomes `decision = "prompt"`, and the
+/// rule's `reason`, when given, becomes the `justification` Codex shows when
+/// it refuses the command. An MCP tool rule becomes `<server>:<tool>`, which
+/// the policy module writes into `.codex/config.toml`.
 pub fn permission_rules(rule: &PolicyRule) -> Result<Option<Vec<String>>> {
-    let PolicySubject::Command(arguments) = rule.subject()? else {
-        return Ok(None);
+    let arguments = match rule.subject()? {
+        PolicySubject::Command(arguments) => arguments,
+        PolicySubject::Mcp { server, tool } => {
+            if rule_gap(rule)?.is_some() {
+                return Ok(None);
+            }
+            return Ok(Some(vec![format!("{server}:{tool}")]));
+        }
+        PolicySubject::Read(_) | PolicySubject::Edit(_) => return Ok(None),
     };
     let decision = match rule.effect()? {
         PolicyEffect::Deny => "forbidden",
@@ -359,6 +418,14 @@ impl AgentAdapter for Codex {
         Some(RULES_RELPATH)
     }
 
+    fn permission_relpath_for(&self, subject: PolicySubjectKind) -> Option<&'static str> {
+        permission_relpath(subject)
+    }
+
+    fn policy_rule_gap(&self, rule: &PolicyRule) -> Result<Option<String>> {
+        rule_gap(rule)
+    }
+
     fn native_permission_rules(&self, rule: &PolicyRule) -> Result<Option<Vec<String>>> {
         permission_rules(rule)
     }
@@ -537,6 +604,14 @@ mod tests {
                 mcp: Some("github:delete_*".to_string()),
                 ..rule("deny")
             },
+            PolicyRule {
+                mcp: Some("github:delete_repo".to_string()),
+                ..rule("deny")
+            },
+            PolicyRule {
+                mcp: Some("github:merge_pull_request".to_string()),
+                ..rule("ask")
+            },
         ];
         let compiled: Vec<_> = rules
             .iter()
@@ -555,16 +630,35 @@ mod tests {
                 ]),
                 None,
                 None,
+                Some(vec!["github:delete_repo".to_string()]),
+                Some(vec!["github:merge_pull_request".to_string()]),
             ]
         );
+        let gaps: Vec<_> = rules
+            .iter()
+            .map(|rule| rule_gap(rule).unwrap().is_some())
+            .collect();
+        assert_eq!(gaps, vec![false, false, false, true, false, false]);
+        assert_eq!(
+            permission_relpath(PolicySubjectKind::Mcp),
+            Some(MCP_CONFIG_RELPATH)
+        );
+        assert_eq!(
+            permission_relpath(PolicySubjectKind::Command),
+            Some(RULES_RELPATH)
+        );
+        assert_eq!(permission_relpath(PolicySubjectKind::Read), None);
     }
 
     #[test]
-    fn the_policy_matrix_enforces_command_rules_only() {
+    fn the_policy_matrix_enforces_command_and_mcp_rules() {
         let matrix = Codex.policy_compatibility();
         assert_eq!(matrix.len(), 8);
         for entry in &matrix {
-            let expected = if entry.subject == PolicySubjectKind::Command {
+            let expected = if matches!(
+                entry.subject,
+                PolicySubjectKind::Command | PolicySubjectKind::Mcp
+            ) {
                 tuff_hooks_spec::CoverageLevel::Partial
             } else {
                 tuff_hooks_spec::CoverageLevel::Unsupported

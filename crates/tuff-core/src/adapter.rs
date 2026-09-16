@@ -382,6 +382,22 @@ pub trait AgentAdapter {
         None
     }
 
+    /// The settings file rules of one subject compile into, for a harness
+    /// that keeps different kinds of rule in different files. The default is
+    /// `permissions_settings_relpath`.
+    fn permission_relpath_for(
+        &self,
+        _subject: crate::policy::PolicySubjectKind,
+    ) -> Option<&'static str> {
+        self.permissions_settings_relpath()
+    }
+
+    /// Why this harness cannot enforce one rule that its matrix row covers,
+    /// such as a pattern its native setting has no form for, or `None`.
+    fn policy_rule_gap(&self, _rule: &crate::policy::PolicyRule) -> Result<Option<String>> {
+        Ok(None)
+    }
+
     /// The native permission rules one policy rule compiles to on this
     /// harness, or `None` when the harness has no such rules. The list the
     /// rules go in follows the policy rule's effect.

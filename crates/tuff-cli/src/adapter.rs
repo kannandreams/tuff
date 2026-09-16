@@ -103,5 +103,7 @@ forward_to_implementation! {
     fn kinds_supported(&self) -> &[CapabilityType];
     fn policy_compatibility(&self) -> Vec<tuff_core::policy::PolicyCoverageEntry>;
     fn permissions_settings_relpath(&self) -> Option<&'static str>;
+    fn permission_relpath_for(&self, subject: tuff_core::policy::PolicySubjectKind) -> Option<&'static str>;
+    fn policy_rule_gap(&self, rule: &tuff_core::policy::PolicyRule) -> Result<Option<String>>;
     fn native_permission_rules(&self, rule: &tuff_core::policy::PolicyRule) -> Result<Option<Vec<String>>>;
 }

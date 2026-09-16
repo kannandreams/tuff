@@ -6,7 +6,7 @@ description: Policies declare what an agent must never do, or must ask before do
 A policy capability is a list of rules that narrow what a coding agent may do in a project: commands it must not run, files it must not read or edit, MCP tools it must not call, and actions it must ask a person about first. It is written once, and each agent the project uses enforces it in its own way, or Tuff says plainly that it cannot.
 
 :::caution[Preview: Claude Code, OpenCode, and Codex]
-Claude Code and OpenCode enforce every kind of policy rule. Codex enforces `command` rules only. Tuff turns each rule into the agent's own rules.
+Claude Code and OpenCode enforce every kind of policy rule. Codex enforces `command` and `mcp` rules. Tuff turns each rule into the agent's own rules.
 
 If you install a policy for an agent that does not enforce one of its rules, such as Cursor, or Codex for a `read` rule, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
 
@@ -126,12 +126,14 @@ controls it.
 
 ## Codex
 
-Tuff compiles `command` rules into Codex's command rules, in a file Tuff owns at `.codex/rules/tuff.rules`:
+Tuff compiles `command` rules into Codex's command rules, in a file Tuff owns at `.codex/rules/tuff.rules`, and `mcp` rules into settings on the server's table in `.codex/config.toml`:
 
 | Policy rule | Codex rule |
 |---|---|
 | `effect = "deny"`, `command = ["git", "push", "--force"]` | `prefix_rule(pattern = ["git", "push", "--force"], decision = "forbidden")` |
 | `effect = "ask"`, `command = ["terraform", "apply"]` | `prefix_rule(pattern = ["terraform", "apply"], decision = "prompt")` |
+| `effect = "deny"`, `mcp = "github:delete_repo"` | `disabled_tools = ["delete_repo"]` in `[mcp_servers.github]` |
+| `effect = "ask"`, `mcp = "github:merge_pull_request"` | `approval_mode = "prompt"` in `[mcp_servers.github.tools.merge_pull_request]` |
 
 A rule's `reason` becomes the rule's `justification`, which Codex shows when it refuses the command. These mappings were checked against Codex CLI 0.154.0.
 
@@ -139,9 +141,10 @@ A rule's `reason` becomes the rule's `justification`, which Codex shows when it 
 - **Experimental.** Codex's documentation labels rules experimental.
 - **Matching.** Codex matches a command's leading words, and splits a simple chain such as `git add . && git push --force` to check each command. A script with redirection, `$(...)`, a variable assignment, a wildcard, or control flow is checked as one command, so `git push --force > push.log` is not matched. A program run by absolute path, such as `/usr/bin/git`, may not be matched.
 - **Ask without approvals.** Where Codex never asks for approval, as in `codex exec` by default, a `prompt` rule refuses the command.
-- **Other rules.** Codex rules match commands, not file paths or MCP tools, so `read`, `edit`, and `mcp` rules are not enforced in Codex. A policy with such rules installs for Codex only with [`--accept-unenforced`](#rules-an-agent-does-not-enforce).
+- **MCP tools.** Codex removes a tool in `disabled_tools` from the session, and asks before calling a tool whose `approval_mode` is `prompt`. Both settings take exact names, so an `mcp` rule with `*`, such as `github:delete_*`, is not enforced in Codex. The server must already be in `.codex/config.toml`, installed with `tuff add mcp <server> -a codex` or written by hand, or `tuff add` refuses the policy. Codex calls a `prompt` tool without asking when its approval policy is `never` and the sandbox allows full disk access or is off, as with `--dangerously-bypass-approvals-and-sandbox`; in `codex exec` with its default sandbox, the call is refused.
+- **Other rules.** Codex has no project setting for file paths, so `read` and `edit` rules are not enforced in Codex. A policy with such rules installs for Codex only with [`--accept-unenforced`](#rules-an-agent-does-not-enforce).
 
-`tuff check` reports a compiled rule removed from the file by hand, and `tuff delete` removes the policy's rules and the file once no rules remain. To see how Codex reads a rule:
+`tuff update` of a server keeps the policy's settings on its table, and `tuff delete` refuses to remove a server while an installed policy has settings on it. `tuff check` reports a compiled rule removed from either file by hand, and `tuff delete` of the policy removes its rules, and the rules file once no rules remain. To see how Codex reads a command rule:
 
 ```sh frame="terminal"
 codex execpolicy check --rules .codex/rules/tuff.rules -- git push --force
@@ -179,7 +182,7 @@ tuff policy matrix --json
 
 Example output, showing Claude Code and Cursor. The full output also lists
 Open Agents, whose rows read `unsupported` like Cursor's, Codex, whose
-`command` rows read `partial`, and OpenCode, whose rows read like Claude Code's:
+`command` and `mcp` rows read `partial`, and OpenCode, whose rows read like Claude Code's:
 
 ```text
 ┌─────────────┬────────┬─────────┬─────────────┬────────────────────────────────────────┐
@@ -219,7 +222,7 @@ How to read it:
 | `COVERAGE` | `full` (always enforced), `partial` (enforced with the limits in the notes), or `unsupported` (not enforced, so `tuff add` refuses the policy) |
 | `MECHANISM` | What Tuff writes for that agent, such as a Claude Code permission rule |
 
-The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor and Open Agents enforce nothing yet, Codex enforces `command` rules only, and OpenCode enforces every kind of rule.
+The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor and Open Agents enforce nothing yet, Codex enforces `command` and `mcp` rules, and OpenCode enforces every kind of rule.
 
 ## Rules an agent does not enforce
 

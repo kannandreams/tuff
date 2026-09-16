@@ -4,6 +4,7 @@ use crate::adapter::{AdapterKind, AgentAdapter};
 use crate::error::{Result, TuffError};
 use crate::lockfile;
 use crate::resolver::{self, Scope};
+use tuff_core::manifest::CapabilityType;
 
 use super::{capability_index, home_dir, resolve_agent_selection};
 
@@ -77,6 +78,32 @@ pub(crate) fn local_modifications(
     LocalModifications { files, managed }
 }
 
+/// The installed policies with rules on an MCP server's own table for one
+/// agent, as Codex's `disabled_tools` and tool `approval_mode` are. Removing
+/// the server would take those rules with it.
+fn policies_on_server_table(lf: &lockfile::Lockfile, server_id: &str, target: &str) -> Vec<String> {
+    let Some(adapter) = AdapterKind::from_id(target) else {
+        return Vec::new();
+    };
+    let config = adapter.mcp_config_relpath();
+    if !tuff_core::policy::is_codex_config(config) {
+        return Vec::new();
+    }
+    let prefix = format!("{server_id}:");
+    lf.capabilities
+        .iter()
+        .filter(|(_, entry)| entry.capability_type == CapabilityType::Policy)
+        .filter(|(_, entry)| {
+            entry.targets.get(target).is_some_and(|target_entry| {
+                target_entry.managed_permissions.iter().any(|permission| {
+                    permission.settings_path == config && permission.rule.starts_with(&prefix)
+                })
+            })
+        })
+        .map(|(id, _)| id.clone())
+        .collect()
+}
+
 pub fn cmd_delete(
     repo_root: &Path,
     id: &str,
@@ -108,6 +135,30 @@ pub fn cmd_delete(
                 id, target
             ))
             .with_hint(format!("use 'tuff untrack {id} -a {target}' instead")));
+        }
+
+        if matches!(
+            entry.capability_type,
+            CapabilityType::McpServer | CapabilityType::Tool
+        ) {
+            let policies = policies_on_server_table(&lf, id, target);
+            if !policies.is_empty() {
+                let config = AdapterKind::from_id(target)
+                    .map(|adapter| adapter.mcp_config_relpath())
+                    .unwrap_or_default();
+                return Err(TuffError::refused(format!(
+                    "'{id}' has rules from policy {} on its table in {config}, so it was not deleted for agent '{target}'",
+                    policies
+                        .iter()
+                        .map(|policy| format!("'{policy}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .with_hint(format!(
+                    "delete the policy first ('tuff delete {} -a {target}'), or drop its rules for '{id}' and run 'tuff update'",
+                    policies[0]
+                )));
+            }
         }
 
         let LocalModifications {
