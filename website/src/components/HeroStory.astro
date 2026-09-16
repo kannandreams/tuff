@@ -50,19 +50,49 @@ const projects = [
 <section class="tuff-hero hs" data-hero-variant="4" hidden>
   <div class="tuff-hero-main hs-main">
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
-    <p class="hs-headline">Build your agent’s capabilities once. Run them in every harness. Govern them everywhere.</p>
+    <div class="hs-headlines">
+      <h2 class="hs-hl" data-hs-headline="a">
+        <span data-hs-line="0"><b>01</b>Collect once.</span>
+        <span data-hs-line="1"><b>02</b>Code with it anywhere.</span>
+        <span data-hs-line="2"><b>03</b>Ship it with your agent.</span>
+        <span data-hs-line="3"><b>04</b>Govern it everywhere.</span>
+      </h2>
+      <h2 class="hs-hl" data-hs-headline="b" hidden>
+        <span data-hs-line="0"><b>01</b>One set of capabilities.</span>
+        <span data-hs-line="1"><b>02</b>Every coding agent.</span>
+        <span data-hs-line="2"><b>03</b>Every agent you ship.</span>
+        <span data-hs-line="3"><b>04</b>One view of all of it.</span>
+      </h2>
+      <h2 class="hs-hl hs-hl--compact" data-hs-headline="c" hidden>
+        <span class="hs-hl-lead">Your agents’ capabilities, managed like code.</span>
+        <span data-hs-line="0"><b>01</b>write</span>
+        <span data-hs-line="1"><b>02</b>code</span>
+        <span data-hs-line="2"><b>03</b>ship</span>
+        <span data-hs-line="3"><b>04</b>govern</span>
+      </h2>
+      <h2 class="hs-hl" data-hs-headline="d" hidden>
+        <span data-hs-line="0"><b>01</b>Build it once.</span>
+        <span data-hs-line="1"><b>02</b>Run it in every harness.</span>
+        <span data-hs-line="2"><b>03</b>Pack it with the agent.</span>
+        <span data-hs-line="3"><b>04</b>See it across the organisation.</span>
+      </h2>
+    </div>
     <div class="tuff-hero-actions">
       <a class="tuff-button tuff-button--primary" href={docs}>Get started <span aria-hidden="true">→</span></a>
       <a class="tuff-button tuff-button--quiet" href="#hs-dashboard">See the dashboard</a>
     </div>
-    <p class="hs-install"><span>$</span> uv tool install tuffcli</p>
+    <div class="hs-install">
+      <span aria-hidden="true">$</span><code>uv tool install tuffcli</code>
+      <button type="button" data-hs-copy="uv tool install tuffcli">copy</button>
+    </div>
+    <a class="hs-install-more" href="/getting-started/">brew, pip, cargo, and script installs</a>
   </div>
 
   <div class="tuff-hero-demo hs-demo">
     <figure class="hs-flow" data-hs-flow aria-label="A support agent's capabilities, from source to dashboard">
       <div class="hs-bar"><i></i><i></i><i></i><span>support-agent</span><em>github.com/acme/agents · apps/support-agent</em></div>
 
-      <div class="hs-stage" style="--d: 0">
+      <div class="hs-stage" data-hs-step="0" style="--d: 0">
         <div class="hs-label"><b>1</b> collect</div>
         <div class="hs-caps">
           {caps.map((cap, index) => (
@@ -75,10 +105,10 @@ const projects = [
         </div>
       </div>
 
-      <div class="hs-link" style="--d: 1"><span>tuff add</span></div>
+      <div class="hs-link" data-hs-step="0" style="--d: 1"><span>tuff add</span></div>
 
       <div class="hs-fork" style="--d: 2">
-        <div class="hs-stage hs-path">
+        <div class="hs-stage hs-path" data-hs-step="1">
           <div class="hs-label"><b>2</b> use while coding</div>
           <p class="hs-plain">Tuff writes each capability in the format each coding agent reads, and records it once in <code>tuff.lock</code>.</p>
           <ul class="hs-chips">
@@ -86,7 +116,7 @@ const projects = [
           </ul>
           <div class="hs-lock"><strong>tuff.lock</strong><span>one record for all of them</span></div>
         </div>
-        <div class="hs-stage hs-path hs-path--ship">
+        <div class="hs-stage hs-path hs-path--ship" data-hs-step="2">
           <div class="hs-label"><b>3</b> ship with your agent</div>
           <p class="hs-plain">Tuff packs them into one versioned bundle that goes into the agent’s image and runs on an agent SDK.</p>
           <div class="hs-packline">
@@ -103,9 +133,9 @@ const projects = [
         </div>
       </div>
 
-      <div class="hs-merge" style="--d: 3"><span>tuff dashboard publish</span></div>
+      <div class="hs-merge" data-hs-step="3" style="--d: 3"><span>tuff dashboard publish</span></div>
 
-      <div class="hs-stage hs-govern" style="--d: 4">
+      <div class="hs-stage hs-govern" data-hs-step="3" style="--d: 4">
         <div class="hs-label"><b>4</b> govern</div>
         <div class="hs-govern-body">
           <div class="hs-kpis">
@@ -124,28 +154,6 @@ const projects = [
     </figure>
   </div>
 
-  <ol class="hs-steps">
-    <li>
-      <b>01</b><strong>Collect</strong>
-      <p>Write capabilities in the repo, or add them from git, the MCP catalog, or a pack.</p>
-      <div class="hs-tags"><span>skill</span><span>tool</span><span>mcp</span><span>hook</span><span>policy</span></div>
-    </li>
-    <li>
-      <b>02</b><strong>Use while coding</strong>
-      <p>Every coding agent on the team gets the same capabilities in its own format, tracked in one lockfile.</p>
-      <div class="hs-tags"><span>Claude Code</span><span>Codex</span><span>Cursor</span><span>OpenCode</span></div>
-    </li>
-    <li class="is-pack">
-      <b>03</b><strong>Ship with your agent</strong>
-      <p>Pack them into a versioned, verified bundle that travels in the agent’s image to any runtime.</p>
-      <div class="hs-tags"><span>support-agent 1.4.0</span><span>sha256 pinned</span></div>
-    </li>
-    <li>
-      <b>04</b><strong>Govern</strong>
-      <p>Every project reports in. One dashboard shows what runs where, what drifted, and what changed.</p>
-      <div class="hs-tags"><span>12 projects</span><span>audit trail</span></div>
-    </li>
-  </ol>
 </section>
 
 <section class="tuff-section hs-dash-section" id="hs-dashboard" data-hero-variant="4" hidden>
@@ -222,30 +230,71 @@ const projects = [
 </section>
 
 <script>
-  // Highlight each capability in turn; a click holds one.
-  document.querySelectorAll<HTMLElement>('[data-hs-flow]').forEach((flow) => {
-    const cards = [...flow.querySelectorAll<HTMLButtonElement>('[data-hs-cap]')];
+  // Walk the flow one step at a time and light the matching headline line.
+  // Hovering the flow holds the current step.
+  document.querySelectorAll<HTMLElement>('.hs').forEach((hero) => {
+    const flow = hero.querySelector<HTMLElement>('[data-hs-flow]');
+    if (!flow) return;
+    const parts = [...hero.querySelectorAll<HTMLElement>('[data-hs-step]')];
+    const lines = [...hero.querySelectorAll<HTMLElement>('[data-hs-line]')];
+    const steps = 4;
     let current = 0;
-    let chosen = false;
-    const show = (index: number) => {
-      current = index;
-      cards.forEach((card, i) => card.classList.toggle('is-on', i === index));
+    let paused = false;
+    const show = (step: number) => {
+      current = step;
+      flow.classList.add('is-stepping');
+      parts.forEach((part) => part.classList.toggle('is-active', Number(part.dataset.hsStep) === step));
+      lines.forEach((line) => line.classList.toggle('is-on', Number(line.dataset.hsLine) === step));
     };
-    cards.forEach((card, index) => card.addEventListener('click', () => { chosen = true; show(index); }));
-    show(0);
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    setInterval(() => {
-      if (!chosen && !document.hidden) show((current + 1) % cards.length);
-    }, 2200);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      lines.forEach((line) => line.classList.add('is-on'));
+      return;
+    }
+    flow.addEventListener('mouseenter', () => { paused = true; });
+    flow.addEventListener('mouseleave', () => { paused = false; });
+    setTimeout(() => {
+      show(0);
+      setInterval(() => {
+        if (!paused && !document.hidden) show((current + 1) % steps);
+      }, 2400);
+    }, 1600);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-hs-copy]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(button.dataset.hsCopy ?? '');
+      button.textContent = 'copied';
+      setTimeout(() => { button.textContent = 'copy'; }, 1200);
+    });
+  });
+
+  // Preview only: pick a headline with ?headline=a|b|c|d.
+  const headline = new URL(location.href).searchParams.get('headline') ?? 'a';
+  document.querySelectorAll<HTMLElement>('[data-hs-headline]').forEach((block) => {
+    block.hidden = block.dataset.hsHeadline !== headline;
   });
 </script>
 
 <style>
   .hs { grid-template-columns: minmax(0, .66fr) minmax(0, 1.34fr); column-gap: 2.5rem; align-items: center; padding-top: 3rem; padding-bottom: 2.75rem; }
   .hs-main { padding-top: 0; }
-  .hs-headline { max-width: 24rem; margin-top: 1.4rem !important; color: var(--tuff-text); font-size: clamp(1.45rem, 2.7vw, 2rem); line-height: 1.2; letter-spacing: -.04em; font-weight: 600; }
-  .hs-install { display: inline-flex; gap: .5rem; margin-top: 1.1rem !important; padding: .45rem .7rem; border: 1px solid var(--tuff-border); border-radius: .3rem; color: var(--tuff-text); background: rgba(255, 255, 255, .7); font-family: 'JetBrains Mono', monospace; font-size: .75rem; }
-  .hs-install span { color: var(--tuff-muted); }
+  .hs-headlines { margin-top: 1.4rem; }
+  .hs-hl { display: grid; gap: .15rem; margin: 0; color: var(--tuff-text); font-family: 'Geist', system-ui, sans-serif; font-size: clamp(1.35rem, 2.5vw, 1.9rem); font-weight: 600; line-height: 1.25; letter-spacing: -.04em; }
+  .hs-hl span { display: flex; align-items: baseline; gap: .6rem; color: #b9b3a9; transition: color .4s ease, transform .4s ease; }
+  .hs-hl span b { min-width: 1.6rem; color: #cfc9bf; font-family: 'JetBrains Mono', monospace; font-size: .62rem; font-weight: 500; letter-spacing: 0; transition: color .4s ease; }
+  .hs-hl span.is-on { color: var(--tuff-text); transform: translateX(.2rem); }
+  .hs-hl span.is-on b { color: var(--tuff-accent); }
+  .hs-hl--compact { gap: .35rem; }
+  .hs-hl--compact .hs-hl-lead { display: block; margin-bottom: .6rem; color: var(--tuff-text); }
+  .hs-hl--compact span[data-hs-line] { display: inline-flex; font-family: 'JetBrains Mono', monospace; font-size: 1rem; letter-spacing: 0; }
+  .hs-install { display: flex; align-items: center; gap: .6rem; max-width: 22rem; margin-top: 1.4rem; padding: .75rem .9rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; box-shadow: 0 1rem 2.5rem rgba(38, 31, 22, .1); font-family: 'JetBrains Mono', monospace; font-size: .85rem; }
+  .hs-install > span { color: #989d94; }
+  .hs-install code { flex: 1; color: #eeeae2; font-family: inherit; white-space: nowrap; }
+  .hs-install button { padding: .2rem .4rem; border: 1px solid #343934; border-radius: .2rem; color: #989d94; background: transparent; cursor: pointer; font: inherit; font-size: .64rem; }
+  .hs-install button:hover { color: #f18453; border-color: #9a4c30; }
+  .hs-install-more { display: inline-block; margin-top: .5rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
+  .hs-install-more:hover { color: var(--tuff-accent); }
+  .hs-hl[hidden] { display: none; }
 
   .hs-flow { margin: 0; padding: 0 1rem .8rem; border: 1px solid #343934; border-radius: .5rem; background: #1b1e1b; color: #eeeae2; box-shadow: 0 2rem 5rem rgba(38, 31, 22, .2), 0 0 0 1px rgba(232, 93, 42, .08); font-family: 'JetBrains Mono', monospace; }
   .hs-bar { display: flex; align-items: center; gap: .4rem; margin: 0 -1rem .7rem; padding: .6rem 1rem; border-bottom: 1px solid #343934; background: #242824; border-radius: .5rem .5rem 0 0; font-size: .68rem; }
@@ -312,16 +361,12 @@ const projects = [
   i.is-gap { background: #f18453; }
   i.is-ver { background: #65d6d0; }
 
-  .hs-steps { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .4rem; background: var(--tuff-border); list-style: none; }
-  .hs-steps li { position: relative; padding: 1.1rem 1.1rem 1.2rem; background: var(--tuff-panel); }
-  .hs-steps li:not(:last-child)::after { content: '›'; position: absolute; top: 1rem; right: .6rem; color: var(--tuff-accent); font-size: 1.1rem; }
-  .hs-steps li.is-pack { background: linear-gradient(160deg, rgba(232, 93, 42, .07), var(--tuff-panel) 60%); }
-  .hs-steps b { color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; font-weight: 400; }
-  .hs-steps strong { display: block; margin-top: .35rem; color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: 1rem; }
-  .hs-steps p { margin-top: .45rem !important; color: var(--tuff-dim); font-size: .82rem; line-height: 1.55; }
-  .hs-steps code { color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: .74rem; }
-  .hs-tags { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .7rem; }
-  .hs-tags span { padding: .18rem .4rem; border: 1px solid var(--tuff-border); border-radius: .2rem; color: var(--tuff-dim); background: var(--tuff-bg); font-family: 'JetBrains Mono', monospace; font-size: .58rem; }
+  .hs-flow > *, .hs-fork > * { transition: opacity .45s ease, border-color .45s ease, box-shadow .45s ease; }
+  .hs-flow.is-stepping [data-hs-step] { opacity: .45; }
+  .hs-flow.is-stepping [data-hs-step].is-active { opacity: 1; }
+  .hs-stage.is-active { border-color: #f18453; box-shadow: 0 0 0 3px rgba(241, 132, 83, .12); }
+  .hs-stage.is-active .hs-label b { animation: hs-beat 1.2s ease-in-out infinite; }
+  @keyframes hs-beat { 50% { box-shadow: 0 0 0 4px rgba(241, 132, 83, .25); } }
 
   /* Dashboard section */
   .hs-app { margin-top: 1.6rem; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .5rem; background: var(--tuff-bg); box-shadow: 0 2rem 5rem rgba(38, 31, 22, .14); }
@@ -370,7 +415,7 @@ const projects = [
   .hs-audit b { color: var(--tuff-text); font-weight: 600; }
 
   @media (prefers-reduced-motion: no-preference) {
-    .hs-flow > .hs-stage, .hs-flow > .hs-link, .hs-flow > .hs-fork, .hs-flow > .hs-merge { animation: hs-rise .5s ease both; animation-delay: calc(.2s + var(--d, 0) * .25s); }
+    .hs-flow > .hs-stage, .hs-flow > .hs-link, .hs-flow > .hs-fork, .hs-flow > .hs-merge { animation: hs-rise .5s ease backwards; animation-delay: calc(.2s + var(--d, 0) * .25s); }
     .hs-chips li { animation: hs-pop .35s ease both; animation-delay: calc(1s + var(--c) * .12s); }
     .hs-arrow { animation: hs-flowx 1s linear infinite; }
     .hs-merge::before { animation: hs-dash 2.4s ease-in-out infinite; }
@@ -394,12 +439,11 @@ const projects = [
 
   @media (max-width: 1100px) {
     .hs { grid-template-columns: 1fr; }
-    .hs-headline { max-width: 36rem; }
   }
   @media (max-width: 760px) {
     .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hs-fork, .hs-govern-body { grid-template-columns: 1fr; }
-    .hs-steps, .hs-app-grid { grid-template-columns: 1fr; }
+    .hs-app-grid { grid-template-columns: 1fr; }
     .hs-app-body { grid-template-columns: 1fr; }
     .hs-app-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--tuff-border); }
     .hs-app-kpis { grid-template-columns: repeat(2, 1fr); }
