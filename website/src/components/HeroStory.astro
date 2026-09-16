@@ -101,7 +101,7 @@ const projects = [
       <div class="hs-bar"><i></i><i></i><i></i><span>support-agent</span><em>github.com/acme/agents · apps/support-agent</em></div>
 
       <div class="hs-stage" data-hs-step="0" style="--d: 0">
-        <div class="hs-label"><b>1</b> collect</div>
+        <div class="hs-label"><b>1</b> manage</div>
         <div class="hs-caps">
           {caps.map((cap, index) => (
             <button type="button" class="hs-cap" data-hs-cap={index}>
@@ -117,7 +117,7 @@ const projects = [
 
       <div class="hs-fork" style="--d: 2">
         <div class="hs-stage hs-path" data-hs-step="1">
-          <div class="hs-label"><b>2</b> use while coding</div>
+          <div class="hs-label"><b>2</b> use across harnesses</div>
           <p class="hs-plain">Tuff writes each capability in the format each coding agent reads, and records it once in <code>tuff.lock</code>.</p>
           <ul class="hs-chips">
             {['Claude Code', 'Codex', 'Cursor', 'OpenCode'].map((product, col) => <li style={`--c: ${col}`}><i></i>{product}</li>)}
