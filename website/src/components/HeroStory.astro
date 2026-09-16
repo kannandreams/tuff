@@ -51,11 +51,13 @@ const projects = [
   <div class="tuff-hero-main hs-main">
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
     <div class="hs-headlines">
-      <h2 class="hs-stack" data-hs-headline="e">
-        <span class="hs-stack-item" data-hs-roll=0>Manage capabilities<i>.</i></span>
-        <span class="hs-stack-item" data-hs-roll=1>Use them across harnesses<i>.</i></span>
-        <span class="hs-stack-item" data-hs-roll=2>Ship them with your agent<i>.</i></span>
-        <span class="hs-stack-item" data-hs-roll=3>Govern them everywhere<i>.</i></span>
+      <h2 class="hs-roll" data-hs-headline="e">
+        <span class="hs-roll-slot">
+          <span class="hs-roll-item" data-hs-roll=0>Manage capabilities<i>.</i></span>
+          <span class="hs-roll-item" data-hs-roll=1>Use them across harnesses<i>.</i></span>
+          <span class="hs-roll-item" data-hs-roll=2>Ship them with your agent<i>.</i></span>
+          <span class="hs-roll-item" data-hs-roll=3>Govern them everywhere<i>.</i></span>
+        </span>
       </h2>
       <h2 class="hs-hl" data-hs-headline="a" hidden>
         <span data-hs-line="0"><b>01</b>Manage capabilities.</span>
@@ -314,14 +316,16 @@ const projects = [
   .hs-install button:hover { color: #f18453; border-color: #9a4c30; }
   .hs-install-more { display: inline-block; margin-top: .5rem; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
   .hs-install-more:hover { color: var(--tuff-accent); }
-  .hs-hl[hidden], .hs-stack[hidden] { display: none; }
-  .hs-stack { display: grid; gap: .35rem; margin: .3rem 0 0; font-family: 'Inter Tight', 'Geist', system-ui, sans-serif; letter-spacing: -.03em; line-height: 1.15; }
-  .hs-stack-item { display: block; color: #aaa49a; font-size: clamp(1.1rem, 1.7vw, 1.55rem); font-weight: 600; white-space: nowrap; transition: font-size .5s cubic-bezier(.65, 0, .25, 1), color .4s ease; }
-  .hs-stack-item i { font-style: normal; color: inherit; transition: color .4s ease; }
-  .hs-stack-item.is-on { color: var(--tuff-text); font-size: clamp(1.6rem, 2.6vw, 2.45rem); font-weight: 700; }
-  .hs-stack-item.is-on i { color: var(--tuff-accent); }
+  .hs-hl[hidden], .hs-roll[hidden] { display: none; }
+  .hs-roll { margin: .35rem 0 0; font-family: 'Inter Tight', 'Geist', system-ui, sans-serif; font-size: clamp(1.4rem, 2.6vw, 2.3rem); font-weight: 700; line-height: 1.2; letter-spacing: -.03em; }
+  /* Every sentence occupies the same grid cell, so the slot is as wide as the longest one and never wraps. */
+  .hs-roll-slot { display: inline-grid; overflow: hidden; padding: .08em 0; white-space: nowrap; vertical-align: top; }
+  .hs-roll-item { grid-area: 1 / 1; color: var(--tuff-text); opacity: 0; transform: translateY(70%); transition: transform .6s cubic-bezier(.65, 0, .25, 1), opacity .45s ease; }
+  .hs-roll-item i { font-style: normal; color: var(--tuff-accent); }
+  .hs-roll-item.is-on { opacity: 1; transform: none; }
+  .hs-roll-item.is-out { opacity: 0; transform: translateY(-70%); }
   @media (prefers-reduced-motion: reduce) {
-    .hs-stack-item { transition: none; }
+    .hs-roll-item { transition: none; }
   }
 
   .hs-flow { margin: 0; padding: 0 1rem .8rem; border: 1px solid #343934; border-radius: .5rem; background: #1b1e1b; color: #eeeae2; box-shadow: 0 2rem 5rem rgba(38, 31, 22, .2), 0 0 0 1px rgba(232, 93, 42, .08); font-family: 'JetBrains Mono', monospace; }
