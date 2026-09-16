@@ -77,52 +77,47 @@ const projects = [
 
       <div class="hs-link" style="--d: 1"><span>tuff add</span></div>
 
-      <div class="hs-stage" style="--d: 2">
-        <div class="hs-label"><b>2</b> install for every harness, record once</div>
-        <div class="hs-harnesses">
-          {harnesses.map((harness, col) => (
-            <div class="hs-harness" style={`--c: ${col}`}>
-              <strong>{harness}</strong>
-              <ul>
-                {caps.map((cap, index) => (
-                  <li class={`hs-pill hs-pill--${cap.level[col]}`} data-hs-pill={index} data-path={cap.out[col] ?? ''} title={cap.out[col] ?? 'not installed'}>
-                    <i class={`hs-dot hs-kind--${cap.kind}`}></i>{cap.id}
-                  </li>
-                ))}
-              </ul>
+      <div class="hs-fork" style="--d: 2">
+        <div class="hs-stage hs-path">
+          <div class="hs-label"><b>2</b> use while coding</div>
+          <p class="hs-plain">Tuff writes each capability in the format each coding agent reads, and records it once in <code>tuff.lock</code>.</p>
+          <ul class="hs-chips">
+            {['Claude Code', 'Codex', 'Cursor', 'OpenCode'].map((product, col) => <li style={`--c: ${col}`}><i></i>{product}</li>)}
+          </ul>
+          <div class="hs-lock"><strong>tuff.lock</strong><span>one record for all of them</span></div>
+        </div>
+        <div class="hs-stage hs-path hs-path--ship">
+          <div class="hs-label"><b>3</b> ship with your agent</div>
+          <p class="hs-plain">Tuff packs them into one versioned bundle that goes into the agent’s image and runs on an agent SDK.</p>
+          <div class="hs-packline">
+            <div class="hs-packbox">
+              <strong>support-agent 1.4.0</strong>
+              <code>sha256:9f2c…e41a</code>
             </div>
-          ))}
+            <span class="hs-arrow" aria-hidden="true"></span>
+            <ul class="hs-chips hs-chips--runtime">
+              <li style="--c: 0"><i></i>Claude Agent SDK</li>
+              <li style="--c: 1"><i></i>your own runtime</li>
+            </ul>
+          </div>
         </div>
-        <div class="hs-lock">
-          <strong>tuff.lock</strong>
-          <span>one record for all four harnesses</span>
-        </div>
-        <p class="hs-caption" data-hs-caption aria-live="polite"></p>
       </div>
 
-      <div class="hs-link" style="--d: 3"><span>tuff pack build · tuff dashboard publish</span></div>
+      <div class="hs-merge" style="--d: 3"><span>tuff dashboard publish</span></div>
 
-      <div class="hs-split" style="--d: 4">
-        <div class="hs-stage hs-pack">
-          <div class="hs-label"><b>3</b> pack</div>
-          <strong>support-agent 1.4.0</strong>
-          <span>5 capabilities · 4 harnesses</span>
-          <code>ghcr.io/acme/packs/support-agent:1.4.0</code>
-          <code>sha256:9f2c…e41a</code>
-          <small>ships with the agent’s image</small>
-        </div>
-        <div class="hs-stage hs-govern">
-          <div class="hs-label"><b>4</b> govern</div>
+      <div class="hs-stage hs-govern" style="--d: 4">
+        <div class="hs-label"><b>4</b> govern</div>
+        <div class="hs-govern-body">
           <div class="hs-kpis">
-            <div><b data-hs-count="12">12</b><small>projects</small></div>
-            <div><b data-hs-count="86">86</b><small>capabilities</small></div>
+            <div><b>12</b><small>projects</small></div>
+            <div><b>86</b><small>capabilities</small></div>
             <div><b class="is-warn">2</b><small>drifted</small></div>
             <div><b class="is-gap">1</b><small>policy gap</small></div>
           </div>
           <ul class="hs-feed">
             <li><i class="is-add"></i>linear added to <b>support-agent</b><small>3f2c9e1</small></li>
+            <li><i class="is-ver"></i>pack <b>support-agent</b> 1.3.0 → 1.4.0<small>image v42</small></li>
             <li><i class="is-warn"></i>ticket-triage edited in <b>billing-agent</b><small>drift</small></li>
-            <li><i class="is-gap"></i>support-guardrails not enforced in <b>cursor</b><small>gap</small></li>
           </ul>
         </div>
       </div>
@@ -136,13 +131,13 @@ const projects = [
       <div class="hs-tags"><span>skill</span><span>tool</span><span>mcp</span><span>hook</span><span>policy</span></div>
     </li>
     <li>
-      <b>02</b><strong>Install and record</strong>
-      <p>Each harness gets its own native files. <code>tuff.lock</code> records all of them in one place.</p>
-      <div class="hs-tags"><span>.claude/</span><span>.codex/</span><span>.cursor/</span><span>.opencode/</span></div>
+      <b>02</b><strong>Use while coding</strong>
+      <p>Every coding agent on the team gets the same capabilities in its own format, tracked in one lockfile.</p>
+      <div class="hs-tags"><span>Claude Code</span><span>Codex</span><span>Cursor</span><span>OpenCode</span></div>
     </li>
     <li class="is-pack">
-      <b>03</b><strong>Pack</strong>
-      <p>Bundle the agent’s capabilities into a versioned, verified pack that ships with the agent.</p>
+      <b>03</b><strong>Ship with your agent</strong>
+      <p>Pack them into a versioned, verified bundle that travels in the agent’s image to any runtime.</p>
       <div class="hs-tags"><span>support-agent 1.4.0</span><span>sha256 pinned</span></div>
     </li>
     <li>
@@ -227,37 +222,21 @@ const projects = [
 </section>
 
 <script>
-  // Walk through the capabilities one at a time: the card, its row, and a
-  // caption naming the files it became. Stops when the reader picks one.
+  // Highlight each capability in turn; a click holds one.
   document.querySelectorAll<HTMLElement>('[data-hs-flow]').forEach((flow) => {
     const cards = [...flow.querySelectorAll<HTMLButtonElement>('[data-hs-cap]')];
-    const pills = [...flow.querySelectorAll<HTMLElement>('[data-hs-pill]')];
-    const caption = flow.querySelector<HTMLElement>('[data-hs-caption]');
-    const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
     let current = 0;
     let chosen = false;
-
     const show = (index: number) => {
       current = index;
       cards.forEach((card, i) => card.classList.toggle('is-on', i === index));
-      const mine = pills.filter((pill) => Number(pill.dataset.hsPill) === index);
-      pills.forEach((pill) => pill.classList.toggle('is-on', Number(pill.dataset.hsPill) === index));
-      if (!caption) return;
-      const kind = cards[index].querySelector('.hs-kind')?.textContent ?? '';
-      const id = cards[index].querySelector('strong')?.textContent ?? '';
-      const written = mine
-        .map((pill, col) => (pill.dataset.path ? `<span>${harnesses[col]}</span> ${pill.dataset.path}` : null))
-        .filter(Boolean);
-      caption.innerHTML = `<b>${kind} ${id}</b> → ${written.join(' · ')}`;
     };
-
     cards.forEach((card, index) => card.addEventListener('click', () => { chosen = true; show(index); }));
     show(0);
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     setInterval(() => {
-      if (chosen || document.hidden) return;
-      show((current + 1) % cards.length);
-    }, 2600);
+      if (!chosen && !document.hidden) show((current + 1) % cards.length);
+    }, 2200);
   });
 </script>
 
@@ -293,43 +272,37 @@ const projects = [
   .hs-link::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: repeating-linear-gradient(180deg, #f18453 0 4px, transparent 4px 9px); background-size: 2px 9px; opacity: .8; }
   .hs-link span { position: relative; align-self: center; padding: .1rem .5rem; border: 1px solid #343934; border-radius: 999px; color: #c9ccc5; background: #1b1e1b; font-size: .58rem; }
 
-  .hs-harnesses { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
-  .hs-harness { padding: .5rem; border: 1px solid #343934; border-radius: .3rem; background: #1b1e1b; }
-  .hs-harness strong { display: block; margin-bottom: .4rem; color: #eeeae2; font-size: .68rem; font-weight: 500; }
-  .hs-harness ul { display: grid; gap: .22rem; margin: 0; padding: 0; list-style: none; }
-  .hs-pill { display: flex; align-items: center; gap: .35rem; min-width: 0; padding: .22rem .4rem; border: 1px solid transparent; border-radius: .2rem; color: #aeb1aa; font-size: .58rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .25s, border-color .25s; }
-  .hs-pill--partial { color: #e4b75a; }
-  .hs-pill--none { color: #4f554e; text-decoration: line-through; }
-  .hs-pill--none .hs-dot { opacity: .35; }
-  .hs-pill.is-on { border-color: rgba(241, 132, 83, .5); background: rgba(241, 132, 83, .1); color: #eeeae2; }
-  .hs-pill--partial.is-on { color: #e4b75a; }
-  .hs-pill--none.is-on { color: #7d8279; background: transparent; border-color: #4c544c; border-style: dashed; }
-  .hs-dot { width: .42rem; height: .42rem; border-radius: 50%; flex: none; }
-  .hs-dot.hs-kind--skill { background: #83b477; }
-  .hs-dot.hs-kind--tool { background: #65d6d0; }
-  .hs-dot.hs-kind--mcp { background: #f18453; }
-  .hs-dot.hs-kind--hook { background: #e4b75a; }
-  .hs-dot.hs-kind--policy { background: #c9a0f0; }
   .hs-lock { display: flex; align-items: baseline; gap: .7rem; margin-top: .45rem; padding: .45rem .7rem; overflow: hidden; border: 1px solid #9a4c30; border-radius: .25rem; background: linear-gradient(90deg, #2b2622, #242824); position: relative; }
   .hs-lock strong { color: #f18453; font-size: .74rem; font-weight: 600; }
   .hs-lock span { color: #c9ccc5; font-size: .6rem; }
-  .hs-caption { min-height: 1.6em; margin-top: .5rem !important; color: #aeb1aa; font-size: .6rem; line-height: 1.55; }
-  .hs-caption :global(span) { color: #7d8279; }
-  .hs-caption :global(b) { color: #eeeae2; font-weight: 500; }
-
-  .hs-split { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: .6rem; }
-  .hs-pack { display: flex; flex-direction: column; gap: .3rem; border-color: #9a4c30; background: linear-gradient(145deg, #2b2925, #242824); }
-  .hs-pack strong { color: #f18453; font-size: .82rem; font-weight: 600; }
-  .hs-pack span { color: #c9ccc5; font-size: .62rem; }
-  .hs-pack code { overflow: hidden; color: #989d94; font-size: .56rem; text-overflow: ellipsis; white-space: nowrap; }
-  .hs-pack small { margin-top: auto; color: #83b477; font-size: .58rem; }
+  .hs-fork { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .hs-path { display: flex; flex-direction: column; gap: .55rem; }
+  .hs-path--ship { border-color: #9a4c30; background: linear-gradient(145deg, #2b2925, #242824); }
+  .hs-plain { color: #c9ccc5; font-family: 'Geist', system-ui, sans-serif; font-size: .8rem; line-height: 1.5; }
+  .hs-plain code { color: #f18453; font-family: 'JetBrains Mono', monospace; font-size: .74rem; }
+  .hs-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+  .hs-chips li { display: inline-flex; align-items: center; gap: .35rem; padding: .28rem .55rem; border: 1px solid #343934; border-radius: 999px; color: #eeeae2; background: #1b1e1b; font-size: .64rem; }
+  .hs-chips i { width: .4rem; height: .4rem; border-radius: 50%; background: #83b477; }
+  .hs-chips--runtime li i { background: #65d6d0; }
+  .hs-path .hs-lock { margin-top: auto; }
+  .hs-packline { display: flex; align-items: center; gap: .55rem; margin-top: auto; }
+  .hs-packbox { padding: .45rem .6rem; border: 1px solid #9a4c30; border-radius: .25rem; background: #1b1e1b; }
+  .hs-packbox strong { display: block; color: #f18453; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .hs-packbox code { color: #989d94; font-size: .55rem; }
+  .hs-arrow { position: relative; flex: 1; min-width: 1rem; height: 2px; background: repeating-linear-gradient(90deg, #f18453 0 4px, transparent 4px 9px); background-size: 9px 2px; }
+  .hs-arrow::after { content: '›'; position: absolute; top: -.62rem; right: -.1rem; color: #f18453; font-size: 1rem; }
+  .hs-chips--runtime { flex-direction: column; flex-wrap: nowrap; }
+  .hs-merge { position: relative; height: 1.9rem; display: flex; justify-content: center; }
+  .hs-merge::before { content: ''; position: absolute; top: 0; left: 25%; right: 25%; height: .7rem; border: 2px dashed rgba(241, 132, 83, .7); border-top: 0; border-radius: 0 0 .5rem .5rem; }
+  .hs-merge span { position: relative; align-self: flex-end; padding: .1rem .5rem; border: 1px solid #343934; border-radius: 999px; color: #c9ccc5; background: #1b1e1b; font-size: .58rem; }
+  .hs-govern-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .7rem; align-items: center; }
   .hs-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; }
   .hs-kpis div { padding: .4rem; border: 1px solid #343934; border-radius: .22rem; background: #1b1e1b; }
   .hs-kpis b { display: block; color: #eeeae2; font-size: 1rem; }
   .hs-kpis b.is-warn { color: #e4b75a; }
   .hs-kpis b.is-gap { color: #f18453; }
   .hs-kpis small { color: #7d8279; font-size: .52rem; }
-  .hs-feed { display: grid; gap: .25rem; margin: .55rem 0 0; padding: 0; list-style: none; }
+  .hs-feed { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
   .hs-feed li { display: flex; align-items: center; gap: .35rem; color: #aeb1aa; font-size: .58rem; }
   .hs-feed b { color: #eeeae2; font-weight: 500; }
   .hs-feed small { margin-left: auto; color: #7d8279; }
@@ -397,12 +370,15 @@ const projects = [
   .hs-audit b { color: var(--tuff-text); font-weight: 600; }
 
   @media (prefers-reduced-motion: no-preference) {
-    .hs-flow .hs-stage, .hs-flow .hs-link, .hs-flow .hs-split { animation: hs-rise .5s ease both; animation-delay: calc(.2s + var(--d, 0) * .25s); }
-    .hs-split .hs-stage { animation: none; }
-    .hs-harness { animation: hs-pop .4s ease both; animation-delay: calc(.9s + var(--c) * .15s); }
+    .hs-flow > .hs-stage, .hs-flow > .hs-link, .hs-flow > .hs-fork, .hs-flow > .hs-merge { animation: hs-rise .5s ease both; animation-delay: calc(.2s + var(--d, 0) * .25s); }
+    .hs-chips li { animation: hs-pop .35s ease both; animation-delay: calc(1s + var(--c) * .12s); }
+    .hs-arrow { animation: hs-flowx 1s linear infinite; }
+    .hs-merge::before { animation: hs-dash 2.4s ease-in-out infinite; }
+    .hs-packbox { animation: hs-glow 3s ease-in-out 2s infinite; }
+    @keyframes hs-flowx { to { background-position: 9px 0; } }
+    @keyframes hs-dash { 50% { border-color: rgba(241, 132, 83, .3); } }
     .hs-link::before { animation: hs-flowline 1.1s linear infinite; }
     .hs-lock::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(241, 132, 83, .18) 50%, transparent 70%); transform: translateX(-100%); animation: hs-sweep 3.2s ease-in-out 1.6s infinite; }
-    .hs-pack { animation: hs-glow 3s ease-in-out 2s infinite; }
     .hs-feed li { animation: hs-rise .4s ease both; }
     .hs-feed li:nth-child(1) { animation-delay: 1.8s; }
     .hs-feed li:nth-child(2) { animation-delay: 2.1s; }
@@ -422,8 +398,8 @@ const projects = [
   }
   @media (max-width: 760px) {
     .hs-caps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .hs-harnesses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .hs-split, .hs-steps, .hs-app-grid { grid-template-columns: 1fr; }
+    .hs-fork, .hs-govern-body { grid-template-columns: 1fr; }
+    .hs-steps, .hs-app-grid { grid-template-columns: 1fr; }
     .hs-app-body { grid-template-columns: 1fr; }
     .hs-app-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--tuff-border); }
     .hs-app-kpis { grid-template-columns: repeat(2, 1fr); }
