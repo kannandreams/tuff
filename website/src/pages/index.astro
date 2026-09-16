@@ -245,6 +245,13 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
           <option value="c">c · Managed like code · write code ship govern</option>
           <option value="d">d · Build it once / Run / Pack / See</option>
         </select>
+        <label for="hv-green">Green</label>
+        <select id="hv-green">
+          <option value="moss">moss (current status green)</option>
+          <option value="sage">sage (lighter)</option>
+          <option value="pine">pine (deeper, cooler)</option>
+          <option value="off">off (orange only)</option>
+        </select>
       </div>
     )}
   </body>
@@ -271,6 +278,18 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
     };
     show(new URL(location.href).searchParams.get('hero') ?? 'current');
     heroSelect.addEventListener('change', () => show(heroSelect.value));
+    const greenSelect = document.querySelector<HTMLSelectElement>('#hv-green');
+    if (greenSelect) {
+      const applyGreen = (value: string) => {
+        document.documentElement.dataset.green = value;
+        greenSelect.value = value;
+        const url = new URL(location.href);
+        url.searchParams.set('green', value);
+        history.replaceState(null, '', url);
+      };
+      applyGreen(new URL(location.href).searchParams.get('green') ?? 'moss');
+      greenSelect.addEventListener('change', () => applyGreen(greenSelect.value));
+    }
     const headlineSelect = document.querySelector<HTMLSelectElement>('#hv-headline');
     if (headlineSelect) {
       headlineSelect.value = new URL(location.href).searchParams.get('headline') ?? 'a';
