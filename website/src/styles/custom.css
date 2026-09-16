@@ -531,6 +531,10 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
 .tuff-cap-card strong::before { content: ''; width: .45rem; height: .45rem; border-radius: .1rem; background: #83b477; }
 .tuff-cap-card span { color: #aeb1aa; font-size: .8rem; line-height: 1.6; }
 .tuff-cap-card span em { color: #eeeae2; font-style: normal; font-weight: 500; }
+.tuff-cap-card--next { background: repeating-linear-gradient(135deg, #1b1e1b 0 10px, #1f221f 10px 20px); }
+.tuff-cap-card--next strong { color: #c9ccc5; }
+.tuff-cap-card--next strong::before { box-sizing: border-box; border: 1px dashed #989d94; background: transparent; }
+.tuff-cap-card--next:hover strong::before { border-color: #f18453; }
 .tuff-pack-showcase { display: grid; grid-template-columns: minmax(0, .9fr) 3.2rem minmax(0, 1.25fr) 3.2rem minmax(0, .95fr) 3.2rem minmax(0, .9fr); align-items: stretch; gap: .65rem; margin: 0; padding: 1.25rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; box-shadow: 0 1.5rem 4rem rgba(38, 31, 22, .1); color: #eeeae2; }
 .tuff-pack-stage { min-width: 0; box-sizing: border-box; padding: 1rem; border: 1px solid #343934; border-radius: .3rem; background: #242824; }
 .tuff-pack-stage-label { margin-bottom: .85rem; color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; }
@@ -667,7 +671,6 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
   .tuff-standalone-footer { flex-wrap: wrap; justify-content: center; row-gap: 1.25rem; padding-left: 1.25rem; padding-right: 1.25rem; }
   .tuff-stats { grid-template-columns: 1fr; }
   .tuff-cap-grid { grid-template-columns: repeat(2, 1fr); }
-  .tuff-cap-card:nth-child(5) { grid-column: span 2; }
   .tuff-steps-grid { grid-template-columns: repeat(2, 1fr); }
   .tuff-pack-showcase { grid-template-columns: 1fr; }
   .tuff-pack-flow { min-height: 2.8rem; }
@@ -685,7 +688,6 @@ body:has(.tuff-landing) > .page > .main-frame main > .content-panel:first-child 
   .tuff-section { padding-top: 2.5rem; padding-bottom: 2.5rem; }
   .tuff-section--stats { padding-top: 0; padding-bottom: 0; }
   .tuff-cap-grid, .tuff-why-grid { grid-template-columns: 1fr; }
-  .tuff-cap-card:nth-child(5) { grid-column: auto; }
   .tuff-steps-grid { grid-template-columns: 1fr 1fr; gap: 1.4rem 1rem; }
   .tuff-cap-card { min-height: auto; }
   .tuff-terminal { font-size: .65rem; }
