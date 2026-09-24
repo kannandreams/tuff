@@ -654,9 +654,6 @@ div.tuff-cap-card--next:hover .tuff-cap-icon { border-color: #3d423d; color: #d9
 .tuff-footer-links { display: flex; gap: 1.5rem; }
 .tuff-standalone-footer a { color: inherit; text-decoration: none; }
 .tuff-standalone-footer a:hover { color: #6d6861; }
-.tuff-altern-badge { display: block; flex: 0 0 auto; line-height: 0; }
-/* The badge is 430×151; size by width and let the height follow so it is never squashed. */
-.tuff-altern-badge img { display: block; width: 120px; height: auto; }
 /* A link to the creator's other project, highlighted with the site accent. */
 .tuff-standalone-footer .tuff-footer-promo { display: inline-flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: .2rem .5rem; padding: .5rem .8rem; border: 1px solid rgba(232, 93, 42, .35); border-radius: .3rem; background: #fdf0e9; color: #6d6861; transition: border-color .15s ease, background-color .15s ease; }
 .tuff-standalone-footer .tuff-footer-promo:hover { border-color: #c35a35; background: #fbe4d8; color: #1a1918; }
