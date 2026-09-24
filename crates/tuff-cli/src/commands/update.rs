@@ -402,7 +402,7 @@ fn update_from_catalog(
 }
 
 /// Whether a target records its MCP entry in a file its adapter no longer
-/// writes to, as a Codex install made before 0.11.1 does. Reinstalling
+/// writes to, as a Codex install made before 0.12.0 does. Reinstalling
 /// moves the entry, and needs no `--force`: nothing the user wrote is
 /// replaced, and the old entry is removed unless another target reads it.
 fn mcp_entry_relocated(entry: &lockfile::CapabilityLockEntry, target_ids: &[String]) -> bool {

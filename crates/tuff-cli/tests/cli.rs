@@ -235,7 +235,7 @@ fn version_outputs_current_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("tuff 0.11.0"));
+        .stdout(predicate::str::contains("tuff 0.12.0"));
 }
 
 #[test]
@@ -5054,7 +5054,7 @@ fn retarget_lock_row(project: &Path, id: &str, from: &str, to: &str) {
 
 #[test]
 fn updating_a_codex_hook_moves_its_registration_out_of_the_file_codex_never_read() {
-    // Before 0.11.1 a Codex hook was registered exactly as an Open Agents
+    // Before 0.12.0 a Codex hook was registered exactly as an Open Agents
     // hook is, in .agents/hook.json, so an Open Agents install retargeted
     // to codex in the lockfile is that older install.
     let temp = TempDir::new().unwrap();
