@@ -341,7 +341,7 @@ pub(crate) fn mcp_entry_tracked(lockfile: &lockfile::Lockfile, id: &str, target:
 /// Take a hook's registrations out of a settings file the adapter no longer
 /// writes to, before it registers in the file it reads now.
 ///
-/// The Codex adapter registered in `.agents/hook.json` before 0.11.1 and in
+/// The Codex adapter registered in `.agents/hook.json` before 0.12.0 and in
 /// `.codex/hooks.json` since, so `tuff update` of a hook installed earlier
 /// would otherwise leave the old registration behind where nothing reads
 /// it. Registrations in the current file are left to the merge, which
@@ -395,7 +395,7 @@ fn remove_registrations_at_previous_settings_path(
 /// Take an MCP entry out of a config file the adapter no longer writes to,
 /// unless another target of the same capability still records that file.
 ///
-/// The Codex adapter registered in `.agents/mcp.json` before 0.11.1, the
+/// The Codex adapter registered in `.agents/mcp.json` before 0.12.0, the
 /// file the `open-agents` target still uses, so an entry both recorded is
 /// kept for the target that reads it.
 fn remove_entry_at_previous_config_path(

@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-24
+
 ### Added
 
 - **`tuff dashboard publish --dry-run` builds a project report for a dashboard server.** A report holds the project's `tuff.lock`, `tuff check` for the project alone, and the project's place in git: the `origin` remote as one stable name (`github.com/acme/agents` for both the SSH and the HTTPS form, without credentials), the folder within the repository, the commit, the branch, and whether the folder has uncommitted changes. `--all` reports every folder with a `tuff.lock` under the current one, so each app in a monorepo is its own project. `--outdated` adds `tuff outdated --json` for the project. Outside git, `--project <name>` names the repository. The dashboard server that receives reports is in progress (RFC-108), so the command prints the report and sends nothing.
@@ -319,7 +321,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/kannandreams/tuff/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/kannandreams/tuff/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/kannandreams/tuff/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/kannandreams/tuff/compare/v0.10.0...v0.10.1

@@ -195,7 +195,7 @@ fn starlark_string(text: &str) -> String {
 pub struct Codex;
 
 /// Codex's hook events, from its hooks documentation. The old snake_case
-/// names Tuff wrote before 0.11.1 (`pre_tool_execution`, `before_finish`,
+/// names Tuff wrote before 0.12.0 (`pre_tool_execution`, `before_finish`,
 /// `after_save`) stay as aliases, so a manifest that names one still
 /// resolves.
 pub const HOOK_COMPATIBILITY: CompatibilityMatrix = CompatibilityMatrix {
