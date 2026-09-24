@@ -2,7 +2,7 @@
 title: Managing centralised guardrail policies for coding agents
 description: How coding harnesses enforce permission rules, and how Tuff compiles one policy into the native rules of Claude Code, Codex, and OpenCode, records what an agent cannot enforce, and detects drift.
 date: 2026-09-14
-lastUpdated: 2026-09-16
+lastUpdated: 2026-09-24
 authors: kannan
 tags: [policy, security]
 excerpt: Each coding harness has its own permission system. A Tuff policy declares deny and ask rules once, compiles them into the native rules of Claude Code, Codex, and OpenCode, records the rules an agent cannot enforce, and fails tuff check when a compiled rule is removed.
@@ -10,7 +10,7 @@ excerpt: Each coding harness has its own permission system. A Tuff policy declar
 
 A coding agent in a repository can run shell commands, read files, and call the tools its MCP servers expose. Teams usually have a short list of actions an agent must not take on its own, such as force-pushing to a shared branch, reading `.env`, running `terraform apply` without approval, or calling an MCP tool that deletes data.
 
-Every command and file below is from tuffcli 0.11.0, which enforces policies in Claude Code, Codex, and OpenCode.
+Every command and file below is from tuffcli 0.12.0, which enforces policies in Claude Code, Codex, and OpenCode.
 
 ## Where teams put guardrails today
 
@@ -116,7 +116,7 @@ Each rule has an effect, `deny` or `ask`, and exactly one subject: a command, fi
     <div class="tuff-harness-list">
       <div style="--i: 3"><strong>claude</strong><small>.claude/settings.json</small><code>{'deny → Bash(git push '}<em class="tuff-nowrap">{'--force *)'}</em></code><code>{'deny → Read(/**/.env)'}</code><code>{'ask  → Bash(terraform apply *)'}</code><code>{'deny → mcp__github__delete_*'}</code></div>
       <div style="--i: 4"><strong>opencode</strong><small>.opencode/opencode.json</small><code>{'permission.bash → "git push --force *": "deny"'}</code><code>{'permission.read → ".env": "deny"'}</code><code>{'permission → "github_delete_*": "deny"'}</code></div>
-      <div style="--i: 5"><strong>codex</strong><small>.codex/rules/tuff.rules</small><code>{'prefix_rule(["git", "push", "--force"], "forbidden")'}</code><code>{'read and mcp rules: recorded, not enforced'}</code></div>
+      <div style="--i: 5"><strong>codex</strong><small>.codex/rules/tuff.rules</small><code>{'prefix_rule(["git", "push", "--force"], "forbidden")'}</code><code>{'read rule and mcp pattern: recorded, not enforced'}</code></div>
       <div class="is-muted" style="--i: 6"><strong>cursor</strong><small>not enforced yet</small><code>install refused, so no rule is assumed</code></div>
     </div>
   </div>
@@ -158,7 +158,7 @@ The `read` rule lists two paths, so the four policy rules compile to five Claude
 
 ### Compiling to Codex
 
-Codex reads command rules from `.codex/rules/`. Tuff owns one file there and compiles the policy's `command` rules into it. Codex has no project rule for file paths or MCP tools, so two of the four rules have nowhere to go, and `tuff add` refuses the policy rather than installing half of it:
+Codex reads command rules from `.codex/rules/`. Tuff owns one file there and compiles the policy's `command` rules into it. Codex has no project rule for file paths. It can disable an MCP tool or require approval for it in `.codex/config.toml`, but only by exact server and tool name, and this policy's `github:delete_*` is a pattern. Two of the four rules have no Codex form, so `tuff add` refuses the policy rather than installing half of it:
 
 ```sh frame="terminal"
 tuff add ./policies/infra-guardrails -a codex
@@ -167,7 +167,7 @@ tuff add ./policies/infra-guardrails -a codex
 ```text
 error: policy 'infra-guardrails' would not be enforced as written, so it was not installed:
   Codex: rule 2 (deny read ".env", "secrets/**") is not enforced: Codex rules match commands, not file paths, and Tuff does not compile Codex's sandbox permission profiles
-  Codex: rule 4 (deny mcp "github:delete_*") is not enforced: Tuff does not compile MCP tool rules for Codex yet
+  Codex: rule 4 (deny mcp "github:delete_*") is not enforced: Codex names MCP servers and tools exactly in disabled_tools and approval_mode, so a pattern with '*' has no Codex form
 hint: run 'tuff policy matrix' to see what each agent can enforce, or pass --accept-unenforced to install the rules each agent enforces and record the rest in tuff.lock
 ```
 
@@ -179,8 +179,9 @@ tuff add ./policies/infra-guardrails -a codex --accept-unenforced
 
 ```text
 Codex: rule 1 (deny command "git push --force") is enforced partially: matches the command's leading words, and each command of a simple chain joined by &&, ||, ; or |; a script with redirection, $(...), a variable assignment, a wildcard, or control flow is matched as one command and not caught, and a program run by absolute path such as /usr/bin/git may not be matched; Codex loads project rules only in a trusted project and labels rules experimental
+Codex: rule 3 (ask command "terraform apply") is enforced partially: matches the command's leading words, and each command of a simple chain joined by &&, ||, ; or |; a script with redirection, $(...), a variable assignment, a wildcard, or control flow is matched as one command and not caught, and a program run by absolute path such as /usr/bin/git may not be matched; Codex loads project rules only in a trusted project and labels rules experimental; where Codex never asks for approval, as in codex exec by default, the command is refused
 Codex: rule 2 (deny read ".env", "secrets/**") is not enforced, so it was not installed: Codex rules match commands, not file paths, and Tuff does not compile Codex's sandbox permission profiles; recorded in tuff.lock
-Codex: rule 4 (deny mcp "github:delete_*") is not enforced, so it was not installed: Tuff does not compile MCP tool rules for Codex yet; recorded in tuff.lock
+Codex: rule 4 (deny mcp "github:delete_*") is not enforced, so it was not installed: Codex names MCP servers and tools exactly in disabled_tools and approval_mode, so a pattern with '*' has no Codex form; recorded in tuff.lock
 installed infra-guardrails (codex) -> .agents/policies/infra-guardrails/policy.toml
 compiled 2 permission rule(s) for infra-guardrails (codex) -> .codex/rules/tuff.rules
 ```
@@ -202,7 +203,7 @@ tuff check
 ```text
 ✓ infra-guardrails         policy codex        ok
 ! infra-guardrails         policy codex        rule 2 (deny read ".env", "secrets/**") is not enforced: Codex rules match commands, not file paths, and Tuff does not compile Codex's sandbox permission profiles
-! infra-guardrails         policy codex        rule 4 (deny mcp "github:delete_*") is not enforced: Tuff does not compile MCP tool rules for Codex yet
+! infra-guardrails         policy codex        rule 4 (deny mcp "github:delete_*") is not enforced: Codex names MCP servers and tools exactly in disabled_tools and approval_mode, so a pattern with '*' has no Codex form
 ```
 
 ### Compiling to OpenCode
@@ -214,6 +215,8 @@ tuff add ./policies/infra-guardrails -a opencode
 ```
 
 ```text
+OpenCode: rule 1 (deny command "git push --force") is enforced partially: matches each command OpenCode parses from the shell input, including one with a redirection; the same program run through sh -c, by absolute path, or with options before the subcommand is not matched; OpenCode loads .opencode/opencode.json after the project's opencode.json, but inline OPENCODE_CONFIG_CONTENT, managed config, and an agent's own permission settings are applied after it
+OpenCode: rule 2 (deny read ".env", "secrets/**") is enforced partially: covers OpenCode's read tool; grep, glob, list, and shell commands are separate permissions and are not covered; OpenCode loads .opencode/opencode.json after the project's opencode.json, but inline OPENCODE_CONFIG_CONTENT, managed config, and an agent's own permission settings are applied after it
 OpenCode: rule 3 (ask command "terraform apply") is enforced partially: matches each command OpenCode parses from the shell input, including one with a redirection; the same program run through sh -c, by absolute path, or with options before the subcommand is not matched; opencode run rejects the request, and opencode --auto approves it; OpenCode loads .opencode/opencode.json after the project's opencode.json, but inline OPENCODE_CONFIG_CONTENT, managed config, and an agent's own permission settings are applied after it
 installed infra-guardrails (opencode) -> .opencode/policies/infra-guardrails/policy.toml
 compiled 6 permission rule(s) for infra-guardrails (opencode) -> .opencode/opencode.json
@@ -247,53 +250,53 @@ In OpenCode 1.18.15, in a project whose own `opencode.json` allowed everything, 
 
 ```text frame="terminal" title="tuff policy matrix"
 $ tuff policy matrix
-┌─────────────┬────────┬─────────┬─────────────┬───────────────────────────────────────────────────────────────┐
-│ ADAPTER     │ EFFECT │ SUBJECT │ COVERAGE    │ MECHANISM                                                     │
-├─────────────┼────────┼─────────┼─────────────┼───────────────────────────────────────────────────────────────┤
-│ open-agents │ deny   │ command │ unsupported │                                                               │
-│ open-agents │ deny   │ read    │ unsupported │                                                               │
-│ open-agents │ deny   │ edit    │ unsupported │                                                               │
-│ open-agents │ deny   │ mcp     │ unsupported │                                                               │
-│ open-agents │ ask    │ command │ unsupported │                                                               │
-│ open-agents │ ask    │ read    │ unsupported │                                                               │
-│ open-agents │ ask    │ edit    │ unsupported │                                                               │
-│ open-agents │ ask    │ mcp     │ unsupported │                                                               │
-│ claude      │ deny   │ command │ partial     │ permissions.deny Bash(<command> *)                            │
-│ claude      │ deny   │ read    │ partial     │ permissions.deny Read(<path>)                                 │
-│ claude      │ deny   │ edit    │ partial     │ permissions.deny Edit(<path>)                                 │
-│ claude      │ deny   │ mcp     │ full        │ permissions.deny mcp__<server>__<tool>                        │
-│ claude      │ ask    │ command │ partial     │ permissions.ask Bash(<command> *)                             │
-│ claude      │ ask    │ read    │ partial     │ permissions.ask Read(<path>)                                  │
-│ claude      │ ask    │ edit    │ partial     │ permissions.ask Edit(<path>)                                  │
-│ claude      │ ask    │ mcp     │ full        │ permissions.ask mcp__<server>__<tool>                         │
-│ codex       │ deny   │ command │ partial     │ .codex/rules/tuff.rules prefix_rule(decision = "forbidden")   │
-│ codex       │ deny   │ read    │ unsupported │                                                               │
-│ codex       │ deny   │ edit    │ unsupported │                                                               │
-│ codex       │ deny   │ mcp     │ unsupported │                                                               │
-│ codex       │ ask    │ command │ partial     │ .codex/rules/tuff.rules prefix_rule(decision = "prompt")      │
-│ codex       │ ask    │ read    │ unsupported │                                                               │
-│ codex       │ ask    │ edit    │ unsupported │                                                               │
-│ codex       │ ask    │ mcp     │ unsupported │                                                               │
-│ cursor      │ deny   │ command │ unsupported │                                                               │
-│ cursor      │ deny   │ read    │ unsupported │                                                               │
-│ cursor      │ deny   │ edit    │ unsupported │                                                               │
-│ cursor      │ deny   │ mcp     │ unsupported │                                                               │
-│ cursor      │ ask    │ command │ unsupported │                                                               │
-│ cursor      │ ask    │ read    │ unsupported │                                                               │
-│ cursor      │ ask    │ edit    │ unsupported │                                                               │
-│ cursor      │ ask    │ mcp     │ unsupported │                                                               │
-│ opencode    │ deny   │ command │ partial     │ .opencode/opencode.json permission.bash "<command> *": "deny" │
-│ opencode    │ deny   │ read    │ partial     │ .opencode/opencode.json permission.read "<path>": "deny"      │
-│ opencode    │ deny   │ edit    │ partial     │ .opencode/opencode.json permission.edit "<path>": "deny"      │
-│ opencode    │ deny   │ mcp     │ full        │ .opencode/opencode.json permission "<server>_<tool>": "deny"  │
-│ opencode    │ ask    │ command │ partial     │ .opencode/opencode.json permission.bash "<command> *": "ask"  │
-│ opencode    │ ask    │ read    │ partial     │ .opencode/opencode.json permission.read "<path>": "ask"       │
-│ opencode    │ ask    │ edit    │ partial     │ .opencode/opencode.json permission.edit "<path>": "ask"       │
-│ opencode    │ ask    │ mcp     │ full        │ .opencode/opencode.json permission "<server>_<tool>": "ask"   │
-└─────────────┴────────┴─────────┴─────────────┴───────────────────────────────────────────────────────────────┘
+┌─────────────┬────────┬─────────┬─────────────┬─────────────────────────────────────────────────────────────────────────────────┐
+│ ADAPTER     │ EFFECT │ SUBJECT │ COVERAGE    │ MECHANISM                                                                       │
+├─────────────┼────────┼─────────┼─────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│ open-agents │ deny   │ command │ unsupported │                                                                                 │
+│ open-agents │ deny   │ read    │ unsupported │                                                                                 │
+│ open-agents │ deny   │ edit    │ unsupported │                                                                                 │
+│ open-agents │ deny   │ mcp     │ unsupported │                                                                                 │
+│ open-agents │ ask    │ command │ unsupported │                                                                                 │
+│ open-agents │ ask    │ read    │ unsupported │                                                                                 │
+│ open-agents │ ask    │ edit    │ unsupported │                                                                                 │
+│ open-agents │ ask    │ mcp     │ unsupported │                                                                                 │
+│ claude      │ deny   │ command │ partial     │ permissions.deny Bash(<command> *)                                              │
+│ claude      │ deny   │ read    │ partial     │ permissions.deny Read(<path>)                                                   │
+│ claude      │ deny   │ edit    │ partial     │ permissions.deny Edit(<path>)                                                   │
+│ claude      │ deny   │ mcp     │ full        │ permissions.deny mcp__<server>__<tool>                                          │
+│ claude      │ ask    │ command │ partial     │ permissions.ask Bash(<command> *)                                               │
+│ claude      │ ask    │ read    │ partial     │ permissions.ask Read(<path>)                                                    │
+│ claude      │ ask    │ edit    │ partial     │ permissions.ask Edit(<path>)                                                    │
+│ claude      │ ask    │ mcp     │ full        │ permissions.ask mcp__<server>__<tool>                                           │
+│ codex       │ deny   │ command │ partial     │ .codex/rules/tuff.rules prefix_rule(decision = "forbidden")                     │
+│ codex       │ deny   │ read    │ unsupported │                                                                                 │
+│ codex       │ deny   │ edit    │ unsupported │                                                                                 │
+│ codex       │ deny   │ mcp     │ partial     │ .codex/config.toml [mcp_servers.<server>] disabled_tools                        │
+│ codex       │ ask    │ command │ partial     │ .codex/rules/tuff.rules prefix_rule(decision = "prompt")                        │
+│ codex       │ ask    │ read    │ unsupported │                                                                                 │
+│ codex       │ ask    │ edit    │ unsupported │                                                                                 │
+│ codex       │ ask    │ mcp     │ partial     │ .codex/config.toml [mcp_servers.<server>.tools.<tool>] approval_mode = "prompt" │
+│ cursor      │ deny   │ command │ unsupported │                                                                                 │
+│ cursor      │ deny   │ read    │ unsupported │                                                                                 │
+│ cursor      │ deny   │ edit    │ unsupported │                                                                                 │
+│ cursor      │ deny   │ mcp     │ unsupported │                                                                                 │
+│ cursor      │ ask    │ command │ unsupported │                                                                                 │
+│ cursor      │ ask    │ read    │ unsupported │                                                                                 │
+│ cursor      │ ask    │ edit    │ unsupported │                                                                                 │
+│ cursor      │ ask    │ mcp     │ unsupported │                                                                                 │
+│ opencode    │ deny   │ command │ partial     │ .opencode/opencode.json permission.bash "<command> *": "deny"                   │
+│ opencode    │ deny   │ read    │ partial     │ .opencode/opencode.json permission.read "<path>": "deny"                        │
+│ opencode    │ deny   │ edit    │ partial     │ .opencode/opencode.json permission.edit "<path>": "deny"                        │
+│ opencode    │ deny   │ mcp     │ full        │ .opencode/opencode.json permission "<server>_<tool>": "deny"                    │
+│ opencode    │ ask    │ command │ partial     │ .opencode/opencode.json permission.bash "<command> *": "ask"                    │
+│ opencode    │ ask    │ read    │ partial     │ .opencode/opencode.json permission.read "<path>": "ask"                         │
+│ opencode    │ ask    │ edit    │ partial     │ .opencode/opencode.json permission.edit "<path>": "ask"                         │
+│ opencode    │ ask    │ mcp     │ full        │ .opencode/opencode.json permission "<server>_<tool>": "ask"                     │
+└─────────────┴────────┴─────────┴─────────────┴─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The command then prints a note for every `partial` and `unsupported` row. The notes are where the limits live. Four of them, out of the sixteen it prints:
+The command then prints a note for every `partial` and `unsupported` row. The notes are where the limits live. Four of them, out of the eighteen it prints:
 
 ```text
 - claude: matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched
@@ -332,6 +335,9 @@ hint: run 'tuff policy matrix' to see what each agent can enforce, or pass --acc
 error: policy 'infra-guardrails' was not installed: Cursor enforces none of its rules:
   Cursor: rule 1 (deny command "git push --force") is not enforced: Tuff does not compile policy rules for this agent yet
   Cursor: rule 2 (deny read ".env", "secrets/**") is not enforced: Tuff does not compile policy rules for this agent yet
+  Cursor: rule 3 (ask command "terraform apply") is not enforced: Tuff does not compile policy rules for this agent yet
+  Cursor: rule 4 (deny mcp "github:delete_*") is not enforced: Tuff does not compile policy rules for this agent yet
+hint: run 'tuff policy matrix' to see what each agent can enforce
 ```
 
 ### No allow rules
@@ -364,6 +370,10 @@ tuff check
 ```
 
 ```text
+Claude: rule 1 (deny command "git push --force") is enforced partially: matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched
+Claude: rule 2 (deny read ".env", "secrets/**") is enforced partially: covers Claude's file tools and the shell commands Claude Code recognises, such as cat and sed, not a script or program that opens the file itself
+Claude: rule 3 (ask command "terraform apply") is enforced partially: matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched
+installed infra-guardrails (claude) -> .claude/policies/infra-guardrails/policy.toml
 compiled 5 permission rule(s) for infra-guardrails (claude) -> .claude/settings.json
 ✓ infra-guardrails         policy claude       ok
 ```
