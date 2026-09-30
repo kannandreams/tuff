@@ -318,6 +318,10 @@ enum ConsoleCommand {
         /// The URL publishers use to reach this console, which OIDC tokens name as their audience (default: http://<addr>).
         #[arg(long = "public-url", value_name = "URL")]
         public_url: Option<String>,
+
+        /// Serve generated sample projects from a temporary database, for trying the UI.
+        #[arg(long = "demo", conflicts_with = "data")]
+        demo: bool,
     },
 
     /// Manage the keys that authorise publishing.
@@ -1172,12 +1176,14 @@ fn run() -> Result<()> {
                 public_read,
                 trust,
                 public_url,
+                demo,
             } => cmd_console_serve(
                 addr,
                 data.as_deref(),
                 public_read,
                 &trust,
                 public_url.as_deref(),
+                demo,
             ),
             ConsoleCommand::Key { action } => match action {
                 ConsoleKeyCommand::Create {

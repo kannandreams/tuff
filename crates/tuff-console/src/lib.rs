@@ -5,13 +5,18 @@
 //! deduplication, the audit events and inventory computed on ingest, and
 //! publish keys. [`oidc`] verifies the GitHub Actions tokens that publish
 //! without a secret. [`server`] owns the HTTP API and the rules for which
-//! address the server may bind. The `tuff` binary wires them to
+//! address the server may bind, and [`ui`] embeds the web pages it serves
+//! at `/`. [`views`] shapes stored reports for those pages and [`demo`]
+//! generates the sample data of `--demo`. The `tuff` binary wires them to
 //! `tuff console serve` and `tuff console key`.
 
+pub mod demo;
 pub mod events;
 pub mod oidc;
 pub mod server;
 pub mod store;
+pub mod ui;
+pub mod views;
 
 pub use oidc::{Trust, Verifier};
 pub use server::{ServeConfig, ServerOptions, check_bind, router, run, serve};

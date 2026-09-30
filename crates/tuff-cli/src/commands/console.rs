@@ -27,6 +27,7 @@ pub fn cmd_console_serve(
     public_read: bool,
     trusts: &[String],
     public_url: Option<&str>,
+    demo: bool,
 ) -> Result<()> {
     let data_dir = data_dir(data)?;
     let shown_dir = data_dir.clone();
@@ -50,10 +51,15 @@ pub fn cmd_console_serve(
             public_read,
             trusts,
             public_url,
+            demo,
         },
         move |bound| {
             println!("Console listening on http://{bound}");
-            println!("Data: {}", shown_dir.display());
+            if demo {
+                println!("Data: generated sample data in memory");
+            } else {
+                println!("Data: {}", shown_dir.display());
+            }
             if !shown_trusts.is_empty() {
                 let audience = shown_url.unwrap_or_else(|| format!("http://{bound}"));
                 let names: Vec<String> = shown_trusts.iter().map(ToString::to_string).collect();

@@ -19,7 +19,7 @@ impl Running {
     async fn start(require_key: bool) -> Self {
         Self::start_with(ServerOptions {
             require_key,
-            oidc: None,
+            ..Default::default()
         })
         .await
     }
