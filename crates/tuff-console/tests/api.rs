@@ -343,11 +343,34 @@ async fn events_filter_by_project_capability_kind_and_time() {
     let limited = console.ok("/api/v1/events?limit=2").await;
     assert_eq!(limited["events"].as_array().unwrap().len(), 2);
 
+    // A full page names the id to page back from, and the next page
+    // continues with the events right after it.
+    let before = limited["nextBefore"]
+        .as_i64()
+        .expect("a full page has nextBefore");
+    assert_eq!(Some(before), limited["events"][1]["id"].as_i64());
+    let older = console
+        .ok(&format!("/api/v1/events?limit=2&before={before}"))
+        .await;
+    let expected: Vec<&serde_json::Value> = events[2..4].iter().map(|e| &e["id"]).collect();
+    let got: Vec<&serde_json::Value> = older["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| &e["id"])
+        .collect();
+    assert_eq!(got, expected);
+    assert!(
+        all["nextBefore"].is_null(),
+        "the last page has no nextBefore"
+    );
+
     for bad in [
         "/api/v1/events?project=abc",
         "/api/v1/events?kind=nonsense",
         "/api/v1/events?since=yesterday",
         "/api/v1/events?limit=many",
+        "/api/v1/events?before=last",
     ] {
         let (status, error) = console.get(bad).await;
         assert_eq!(status, 400, "{bad}");

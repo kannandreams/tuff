@@ -536,7 +536,7 @@ async fn list_events(
     let text = |key: &str| query.get(key).filter(|value| !value.is_empty()).cloned();
     let usage = |message: String| {
         ApiError::new(StatusCode::BAD_REQUEST, "usage", message).hint(
-            "filters are project (an id), capability, kind, since (a date or time), and limit",
+            "filters are project (an id), capability, kind, since (a date or time), before (an event id), and limit",
         )
     };
     let project_id = match text("project") {
@@ -553,6 +553,14 @@ async fn list_events(
             .map_err(|_| usage(format!("limit '{value}' is not a number")))?
             .clamp(1, MAX_EVENTS),
         None => 200,
+    };
+    let before = match text("before") {
+        Some(value) => Some(
+            value
+                .parse::<i64>()
+                .map_err(|_| usage(format!("before '{value}' is not an event id")))?,
+        ),
+        None => None,
     };
     let kind = text("kind");
     if let Some(kind) = &kind
@@ -571,6 +579,7 @@ async fn list_events(
         capability: text("capability"),
         kind,
         since,
+        before,
         limit: Some(limit),
     };
     let (events, projects) = blocking(&state.store, move |store| {
@@ -589,8 +598,12 @@ async fn list_events(
             value
         })
         .collect();
+    // A full page may have more behind it: the id to pass as `before`.
+    let next_before = (events.len() == limit as usize)
+        .then(|| events.last().and_then(|event| event["id"].as_i64()))
+        .flatten();
     Ok(Json(
-        json!({ "events": events, "kinds": crate::events::kind::ALL }),
+        json!({ "events": events, "kinds": crate::events::kind::ALL, "nextBefore": next_before }),
     ))
 }
 

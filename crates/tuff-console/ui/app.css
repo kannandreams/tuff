@@ -107,7 +107,9 @@ tbody tr.clickable:hover td { background: var(--panel-2); }
 .rowlink:hover { color: var(--accent); }
 .plain-link { text-decoration: none; }
 .plain-link:hover { color: var(--accent); }
-.path { color: var(--dim); font-family: var(--f-mono); font-size: 12px; overflow-wrap: anywhere; }
+.path { color: var(--dim); font-family: var(--f-mono); font-size: 12px; overflow-wrap: break-word; }
+.nowrap { white-space: nowrap; }
+.pager { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .dim { color: var(--dim); }
 
@@ -185,6 +187,13 @@ pre.cmd .p { color: var(--muted); user-select: none; }
   .stat:nth-child(-n+2) { border-top: 0; }
   .stat:nth-child(even) { border-left: 1px solid var(--border) !important; }
   .hide-sm { display: none; }
+  table.cards thead { display: none; }
+  table.cards, table.cards tbody, table.cards tr { display: block; }
+  table.cards tr { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  table.cards tr:last-child { border-bottom: 0; }
+  table.cards td { display: flex; gap: 12px; align-items: baseline; padding: 3px 0; border: 0; }
+  table.cards td[data-label]::before { content: attr(data-label); flex: 0 0 84px; color: var(--muted); font-size: 12px; }
+  table.cards td.card-title { padding-bottom: 6px; }
 }
 @media (prefers-reduced-motion: no-preference) { .view { animation: fade .18s ease-out; } }
 @keyframes fade { from { opacity: .6; } to { opacity: 1; } }

@@ -165,6 +165,8 @@ pub struct EventFilter {
     pub kind: Option<String>,
     /// RFC 3339 time or a date; events from then on.
     pub since: Option<String>,
+    /// Only events older than this event id, for paging back.
+    pub before: Option<i64>,
     pub limit: Option<u32>,
 }
 
@@ -684,6 +686,7 @@ impl Store {
                    AND (?2 IS NULL OR e.capability_id = ?2)
                    AND (?3 IS NULL OR e.kind = ?3)
                    AND (?4 IS NULL OR e.occurred_at >= ?4)
+                   AND (?6 IS NULL OR e.id < ?6)
                  ORDER BY e.id DESC
                  LIMIT ?5",
             )
@@ -695,7 +698,8 @@ impl Store {
                     filter.capability,
                     filter.kind,
                     filter.since,
-                    i64::from(filter.limit.unwrap_or(500))
+                    i64::from(filter.limit.unwrap_or(500)),
+                    filter.before
                 ],
                 |row| {
                     Ok(EventRow {

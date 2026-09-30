@@ -52,7 +52,9 @@ const projectLink = (id, label) => link(`#/projects/${id}`, label, "rowlink");
 const capabilityHash = (type, id) => `#/capabilities/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
 
 const tags = (list) => list.map((item) => h`<span class="tag">${hname(item)}</span>`);
-const projectPath = (p) => (p.path && p.path !== "." ? `${p.repository} · ${p.path}` : p.repository);
+/* A path may wrap after each "/" and nowhere inside a name. */
+const breakable = (text) => raw(toHtml(text).replace(/\//g, "/<wbr>"));
+const projectPath = (p) => breakable(p.path && p.path !== "." ? `${p.repository} · ${p.path}` : p.repository);
 
 function projectPill(status) {
   const map = {
@@ -75,6 +77,9 @@ function panel(title, meta, body) {
   return h`<section class="panel"><div class="panel-h"><h2>${title}</h2>${meta ? h`<span class="meta">${meta}</span>` : ""}</div>${body}</section>`;
 }
 const scrollTable = (inner) => h`<div class="scroll"><table>${inner}</table></div>`;
+/* A table whose rows become stacked cards at phone width; each cell
+   carries its column name in data-label. */
+const cardTable = (inner) => h`<div class="scroll"><table class="cards">${inner}</table></div>`;
 const note = (text) => h`<p class="note">${text}</p>`;
 const heading = (title, sub, aside) => h`<div class="head"><div><h1>${title}</h1>${sub ? h`<p class="sub">${sub}</p>` : ""}</div>${aside || ""}</div>`;
 
@@ -189,11 +194,11 @@ async function projectView(ctx, segments) {
   <div><div class="crumb">${link("#/projects", "Projects")} / ${p.name}</div>
   <div class="head"><div><h1>${p.name}</h1><p class="sub mono">${projectPath(p)}</p></div>${projectPill(p.status)}</div></div>
   <div class="grid2">
-    ${panel("Capabilities", `from tuff.lock${p.commit ? " at " + short(p.commit) : ""}`, scrollTable(h`
+    ${panel("Capabilities", `from tuff.lock${p.commit ? " at " + short(p.commit) : ""}`, cardTable(h`
       <thead><tr><th>Capability</th><th>Type</th><th>Version</th><th>Harnesses</th><th>Status</th></tr></thead>
-      <tbody>${rows.map((r) => h`<tr><td>${link(capabilityHash(r.type, r.id), r.id, "rowlink")}</td><td><span class="kind">${r.type}</span></td>
-        <td class="tabnum">${r.version}${r.outdated && r.latest ? h`<div class="path">newest ${r.latest}</div>` : ""}</td>
-        <td>${tags(r.targets)}</td><td>${rowPills(r)}</td></tr>`)}</tbody>`))}
+      <tbody>${rows.map((r) => h`<tr><td class="card-title">${link(capabilityHash(r.type, r.id), r.id, "rowlink nowrap")}</td><td data-label="Type"><span class="kind">${r.type}</span></td>
+        <td data-label="Version" class="tabnum">${r.version}${r.outdated && r.latest ? h`<div class="path">newest ${r.latest}</div>` : ""}</td>
+        <td data-label="Harnesses">${tags(r.targets)}</td><td data-label="Status">${rowPills(r)}</td></tr>`)}</tbody>`))}
     <div class="stack">
       ${panel("Latest report", "", h`<dl class="kv">
         <dt>Received</dt><dd>${when(p.lastReportAt)}</dd>
@@ -247,7 +252,7 @@ async function capabilityView(ctx, segments) {
     ${panel("Where it is used", "", scrollTable(h`
       <thead><tr><th>Project</th><th>Harness</th><th>Version</th><th>Status</th></tr></thead>
       <tbody>${detail.usage.map((u) => h`<tr><td>${projectLink(u.projectId, u.name)}<div class="path">${projectPath(u)}</div></td>
-        <td>${hname(u.target)}</td><td class="tabnum">${u.version}${u.outdated && u.latest ? h`<div class="path">newest ${u.latest}</div>` : ""}<div class="path">${u.source}</div></td><td>${rowPills(u)}</td></tr>`)}</tbody>`))}
+        <td>${hname(u.target)}</td><td class="tabnum">${u.version}${u.outdated && u.latest ? h`<div class="path">newest ${u.latest}</div>` : ""}<div class="path">${breakable(u.source)}</div></td><td>${rowPills(u)}</td></tr>`)}</tbody>`))}
     ${panel("History", "", eventList(events))}
   </div>`;
 }
@@ -296,11 +301,24 @@ function policiesView(ctx, segments, query, data) {
   <div class="grid2">${carriers}${missing}</div>`;
 }
 
+/* Events per Audit page; "Older events" pages back by event id. */
+const AUDIT_PAGE = 50;
+
 async function auditView(ctx, segments, query) {
   const params = new URLSearchParams();
   for (const key of ["project", "capability", "kind", "since"]) if (query.get(key)) params.set(key, query.get(key));
-  params.set("limit", "200");
-  const { events, kinds } = await api(`/events?${params}`);
+  if (query.get("before")) params.set("before", query.get("before"));
+  params.set("limit", String(AUDIT_PAGE));
+  const { events, kinds, nextBefore } = await api(`/events?${params}`);
+  const pageHash = (before) => {
+    const next = new URLSearchParams(query);
+    if (before) next.set("before", before); else next.delete("before");
+    const text = next.toString();
+    return `#/audit${text ? "?" + text : ""}`;
+  };
+  const pager = query.get("before") || nextBefore
+    ? h`<div class="pager">${query.get("before") ? link(pageHash(null), "Newest events", "iconbtn") : ""}${nextBefore ? link(pageHash(nextBefore), "Older events", "iconbtn") : ""}</div>`
+    : "";
   const { projects } = ctx.projects;
   const selected = (key, value) => (query.get(key) === String(value) ? "selected" : "");
   return h`${heading("Audit", "Computed from consecutive reports of each project. Every event names the commit it came from.")}
@@ -312,6 +330,7 @@ async function auditView(ctx, segments, query) {
       <label class="field">Since<input type="date" data-filter="since" value="${query.get("since") || ""}"></label>
     </div>
     ${events.length ? eventList(events) : note("No events match these filters.")}
+    ${pager}
   </section>`;
 }
 
@@ -334,7 +353,7 @@ function settingsView(ctx) {
       ${s.server.audience ? panel("OIDC audience", "", h`<p class="note mono">${s.server.audience}</p>`) : ""}
       ${panel("API keys", "names only", s.keys.length
         ? scrollTable(h`<thead><tr><th>Name</th><th>Repository</th><th>Created</th><th>Last used</th></tr></thead><tbody>${s.keys.map((k) => h`
-          <tr><td class="mono">${k.name}</td><td class="path">${k.repository || "any"}</td><td>${when(k.createdAt)}</td><td>${k.lastUsedAt ? when(k.lastUsedAt) : "never"}</td></tr>`)}</tbody>`)
+          <tr><td class="mono">${k.name}</td><td class="path">${k.repository ? breakable(k.repository) : "any"}</td><td>${when(k.createdAt)}</td><td>${k.lastUsedAt ? when(k.lastUsedAt) : "never"}</td></tr>`)}</tbody>`)
         : note("None. Create one with tuff console key create <name>."))}
     </div>
   </div>`;
@@ -433,6 +452,7 @@ document.addEventListener("change", (event) => {
   if (!control) return;
   const { query } = parseRoute();
   if (control.value) query.set(control.dataset.filter, control.value); else query.delete(control.dataset.filter);
+  query.delete("before");
   const text = query.toString();
   location.hash = `#/audit${text ? "?" + text : ""}`;
 });
