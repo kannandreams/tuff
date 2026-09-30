@@ -3,13 +3,9 @@ title: Console
 description: Run a Tuff console server with its web UI, publish project reports to it with GitHub Actions or an API key, and manage its publish credentials.
 ---
 
-:::caution[In progress]
-The server stores the reports that projects publish, records what changed between them, and serves a web UI and a read API. The self-hosting guide (systemd, containers, a reverse proxy) is still to come. The console is excluded from the [1.0 stability promise](/concepts/stability).
-:::
-
 ## `tuff console serve`
 
-Tuff Console is the self-hosted server that collects project reports. Its overview page is called the Dashboard.
+Tuff Console is the self-hosted server that collects project reports. Its overview page is called the Dashboard. The console is excluded from the [1.0 stability promise](/concepts/stability), so its commands, API, and storage can change in any release. [Self-Hosting the Console](/guides/self-hosting-console/) covers running it on a server, in a container, and behind a reverse proxy.
 
 Starts the console server. It stores the reports that projects publish in one SQLite file and serves them over HTTP.
 
@@ -74,6 +70,8 @@ Open the server's address in a browser. The pages are embedded in the `tuff` bin
 | Audit | `#/audit` | The event log, filtered by project, event kind, capability, and date |
 | Settings | `#/settings` | The trusts and the API key names with their creation and last use, read only |
 
+`tuff console serve --demo` fills the views with generated sample projects, including a monorepo, drift, outdated versions, policy gaps, and a history of reports. The data lives in memory and is gone when the server stops, and the UI shows a Sample data chip.
+
 The top bar shows the server's address. On a loopback address it reads "local, only this machine can connect". On any other address it says whether publishing requires authentication. A console with no reports explains `tuff console publish` and links this page.
 
 ### HTTP API
@@ -90,9 +88,9 @@ Errors use the same JSON shape as the CLI's `--json` errors: `{"error": {"kind",
 | `GET /api/v1/capabilities/{type}/{id}` | Where one capability is used. The id may contain `/` |
 | `GET /api/v1/harnesses` | The project by harness matrix |
 | `GET /api/v1/policies` | Policies, recorded gaps, and projects without a policy |
-| `GET /api/v1/events` | The audit log, newest first. Filters: `project` (an id), `capability`, `kind`, `since` (a date or time), and `limit` (default 200, at most 1000) |
+| `GET /api/v1/events` | The audit log, newest first. Filters: `project` (an id), `capability`, `kind`, `since` (a date or time), `before` (an event id, to read the next page), and `limit` (default 200, at most 1000) |
 | `GET /api/v1/settings` | The server's address and access mode, the trusts, and the key names. Key secrets are never returned |
-| `GET /healthz` | Liveness. Returns `{"status": "ok"}` |
+| `GET /healthz` | Liveness. Returns `{"status": "ok", "version": "<tuff version>"}`. `GET /api/v1/healthz` answers the same |
 
 Status codes of `POST /api/v1/reports`:
 
@@ -115,7 +113,7 @@ The shapes the UI reads, with field names as returned:
 - `GET /capabilities/{type}/{id}` returns `type`, `id`, `versions`, `mixed`, `projectCount`, and `usage`, one entry per project and harness with `projectId`, `name`, `repository`, `path`, `target`, `version`, `source`, `status`, `outdated`, and `latest`. A capability nobody uses is `404`.
 - `GET /harnesses` returns `{"harnesses": [...], "projects": [{"id", "name", "repository", "path", "counts": {"claude": 4}}], "totals": {...}}`, where a count is the capabilities installed for that harness.
 - `GET /policies` returns `policies` (each with `id`, `projectCount`, `versions`, `mixed`, and `usage`), `projectsWithoutPolicy`, and `gaps` (`projectId`, `name`, `repository`, `path`, `policy`, `target`, `rule`, `description`, `reason`).
-- `GET /events` returns `{"events": [...], "kinds": [...]}`. Each event has `id`, `projectId`, `reportId`, `kind`, `capabilityType`, `capabilityId`, `target`, `detail`, `commit`, `occurredAt`, `projectName`, `repository`, and `path`. A malformed filter is `400`.
+- `GET /events` returns `{"events": [...], "kinds": [...], "nextBefore": ...}`, where `nextBefore` is the id to pass as `before` for the next page, or `null` on the last one. Each event has `id`, `projectId`, `reportId`, `kind`, `capabilityType`, `capabilityId`, `target`, `detail`, `commit`, `occurredAt`, `projectName`, `repository`, and `path`. A malformed filter is `400`.
 - `GET /settings` returns `server` (`version`, `address`, `loopback`, `publicRead`, `publishRequiresAuth`, `demo`, `audience`), `trusts` (`provider`, `owner`), and `keys` (`name`, `repository`, `createdAt`, `lastUsedAt`).
 
 The response to a stored or unchanged report holds `projectId`, `reportId`, `deduplicated`, and `projectFirstSeen`. A report is the same as the previous one when everything except `generatedAt` is equal. It then adds no row and only moves the project's last report time, so a CI job that publishes on every push does not grow the database. A report that differs is stored, including one that returns to an earlier state.
@@ -189,37 +187,73 @@ A refused project shows the status and the console's reason, such as `refused   
 
 ### Publishing from GitHub Actions
 
-With `--trust github:<owner>` on the console, a workflow publishes with no secret. The job needs `permissions: id-token: write`, which lets the runner issue it an OIDC token:
+With `--trust github:<owner>` on the console, a workflow publishes with no secret. The job needs `permissions: id-token: write`, which lets the runner issue it an OIDC token. This workflow publishes after `tuff check` passes on the default branch:
 
-```yaml
+```yaml title=".github/workflows/tuff-console.yml"
+name: Tuff Console
+on:
+  push:
+    branches: [main]
+
 permissions:
   id-token: write
   contents: read
-steps:
-  - uses: actions/checkout@v4
-  - run: tuff check
-  - run: tuff console publish --all
-    env:
-      TUFF_CONSOLE_URL: https://tuff.internal.acme.dev
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build and install tuff
+        run: cargo install tuffcli
+
+      - name: Validate capabilities
+        run: tuff check
+
+      - name: Publish to the console
+        run: tuff console publish --all
+        env:
+          TUFF_CONSOLE_URL: https://tuff.internal.acme.dev
 ```
 
-When no key is given and the runner has set `ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, `publish` requests a token with the console's URL as its audience and sends it as the bearer. `TUFF_CONSOLE_URL` must be the same address the console was given with `--public-url`, apart from a trailing slash. A key given with `--key` or `TUFF_CONSOLE_KEY` is used instead of the runner token.
+The install steps are the ones on [Validate in CI](/cli/ci/#ci-with-github-actions). Any other way of installing `tuff` works, such as the curl installer or `pip install tuffcli`. The workflow needs a `tuff` release that includes the console.
+
+When no key is given and the runner has set `ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, `publish` requests a token with the console's URL as its audience and sends it as the bearer. `TUFF_CONSOLE_URL` must be the same address the console was given with `--public-url`, apart from a trailing slash. A key given with `--key` or `TUFF_CONSOLE_KEY` is used instead of the runner token. The job publishes as its own repository only, so a repository needs its own workflow.
+
+`--all` reports every folder under the checkout that has a `tuff.lock`, which is the form for a monorepo. Without it, `publish` reports the project in the current folder. Put `working-directory` on the step, or run the command from that folder, to publish one app of a monorepo.
 
 ### Publishing from other CI systems
 
-Create a key on the console host and store it in the CI system's secret store:
+Create a key on the console host and store it in the CI system's secret store as `TUFF_CONSOLE_KEY`:
 
 ```sh frame="terminal"
 tuff console key create billing-ci --repository github.com/acme/agents
 ```
 
-```yaml
-steps:
-  - run: tuff console publish --all
-    env:
-      TUFF_CONSOLE_URL: https://tuff.internal.acme.dev
-      TUFF_CONSOLE_KEY: ${{ secrets.TUFF_CONSOLE_KEY }}
+`publish` reads `TUFF_CONSOLE_URL` and `TUFF_CONSOLE_KEY` from the environment. A GitLab CI job that publishes the default branch:
+
+```yaml title=".gitlab-ci.yml"
+tuff-console:
+  image: rust:1
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  variables:
+    TUFF_CONSOLE_URL: https://tuff.internal.acme.dev
+  script:
+    - cargo install tuffcli
+    - tuff check
+    - tuff console publish --all
 ```
+
+Add `TUFF_CONSOLE_KEY` under Settings, CI/CD, Variables, masked. Jenkins, CircleCI, and other systems run the same `tuff check` and `tuff console publish --all` commands with the two variables set from their secret store. A project outside GitHub has an `origin` remote that names its own host, so its reports carry that host in `project.repository`. Pass `--project <name>` when the checkout has no `origin` remote.
+
+The key's `--repository` value must equal the repository the report names, such as `gitlab.com/acme/agents` for a GitLab project, or the console answers `403`. Leave it out for a key that publishes for several repositories.
 
 `publish` warns when it would send a key or token over plain `http://` to a host other than loopback. Use an `https://` address for any console that is not on the same machine.
 
