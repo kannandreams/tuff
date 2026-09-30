@@ -2419,9 +2419,12 @@ dependencies = [
 name = "tuff-console"
 version = "0.13.0"
 dependencies = [
+ "aws-lc-rs",
  "axum",
+ "base64",
  "chrono",
  "getrandom 0.3.4",
+ "jsonwebtoken",
  "reqwest",
  "rusqlite",
  "serde",

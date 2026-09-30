@@ -14,9 +14,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde_json::json;
 use tuff_core::error::{ErrorKind, Result, TuffError};
-use tuff_core::report::{REPORT_SCHEMA, Report};
+use tuff_core::report::{REPORT_SCHEMA, Report, normalize_remote};
 
-use crate::store::Store;
+use crate::oidc::{OidcError, Trust, Verifier};
+use crate::store::{KeyGrant, Store};
 
 /// Largest report body the server reads.
 const MAX_REPORT_BYTES: usize = 16 * 1024 * 1024;
@@ -29,12 +30,27 @@ pub struct ServeConfig {
     /// Acknowledges that viewing is not authenticated on a non-loopback
     /// address (D5).
     pub public_read: bool,
+    /// Sources of OIDC tokens the console accepts for publishing.
+    pub trusts: Vec<Trust>,
+    /// The URL publishers reach the console at, which OIDC tokens name as
+    /// their audience. `http://<bound address>` when unset.
+    pub public_url: Option<String>,
+}
+
+/// How the running server decides who may publish.
+#[derive(Clone, Default)]
+pub struct ServerOptions {
+    /// Publishing always needs a credential, even with no key created yet.
+    pub require_key: bool,
+    /// Verifies OIDC tokens when a trust is configured.
+    pub oidc: Option<Arc<Verifier>>,
 }
 
 /// The bind rules of D5. A loopback address needs nothing. Any other
 /// address needs `--public-read`, because viewing is not authenticated, and
-/// at least one publish key, because publishing is.
-pub fn check_bind(addr: SocketAddr, public_read: bool, key_count: u64) -> Result<()> {
+/// at least one publish credential (a key or a trust), because publishing
+/// is authenticated.
+pub fn check_bind(addr: SocketAddr, public_read: bool, credential_count: u64) -> Result<()> {
     if addr.ip().is_loopback() {
         return Ok(());
     }
@@ -46,11 +62,11 @@ pub fn check_bind(addr: SocketAddr, public_read: bool, key_count: u64) -> Result
             "put the server behind a reverse proxy that authenticates viewers and pass --public-read, or bind 127.0.0.1",
         ));
     }
-    if key_count == 0 {
+    if credential_count == 0 {
         return Err(TuffError::refused(format!(
-            "{addr} is not a loopback address, and no publish key exists"
+            "{addr} is not a loopback address, and no publish key or trust exists"
         ))
-        .with_hint("run 'tuff console key create <name>' first"));
+        .with_hint("run 'tuff console key create <name>' first, or pass --trust github:<owner>"));
     }
     Ok(())
 }
@@ -60,7 +76,11 @@ pub fn check_bind(addr: SocketAddr, public_read: bool, key_count: u64) -> Result
 /// connections.
 pub fn run(config: ServeConfig, on_ready: impl FnOnce(SocketAddr)) -> Result<()> {
     let store = Arc::new(Store::open(&config.data_dir)?);
-    check_bind(config.addr, config.public_read, store.key_count()?)?;
+    check_bind(
+        config.addr,
+        config.public_read,
+        store.key_count()? + config.trusts.len() as u64,
+    )?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -74,11 +94,24 @@ pub fn run(config: ServeConfig, on_ready: impl FnOnce(SocketAddr)) -> Result<()>
                 )
                 .with_hint("pass --addr with a free address, for example 127.0.0.1:7475")
             })?;
-        on_ready(listener.local_addr()?);
+        let bound = listener.local_addr()?;
+        let public_url = config
+            .public_url
+            .clone()
+            .unwrap_or_else(|| format!("http://{bound}"));
+        let oidc = if config.trusts.is_empty() {
+            None
+        } else {
+            Some(Arc::new(Verifier::new(config.trusts.clone(), &public_url)?))
+        };
+        on_ready(bound);
         serve(
             store,
             listener,
-            !config.addr.ip().is_loopback(),
+            ServerOptions {
+                require_key: !config.addr.ip().is_loopback(),
+                oidc,
+            },
             shutdown_signal(),
         )
         .await
@@ -107,15 +140,14 @@ async fn shutdown_signal() {
     }
 }
 
-/// Serve `router(store, require_key)` on `listener` until `shutdown`
-/// completes.
+/// Serve `router(store, options)` on `listener` until `shutdown` completes.
 pub async fn serve(
     store: Arc<Store>,
     listener: tokio::net::TcpListener,
-    require_key: bool,
+    options: ServerOptions,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<()> {
-    axum::serve(listener, router(store, require_key))
+    axum::serve(listener, router(store, options))
         .with_graceful_shutdown(shutdown)
         .await?;
     Ok(())
@@ -124,15 +156,15 @@ pub async fn serve(
 #[derive(Clone)]
 struct AppState {
     store: Arc<Store>,
-    require_key: bool,
+    options: ServerOptions,
 }
 
-/// The API routes. Publishing needs a live key in `Authorization: Bearer`
-/// when `require_key` is set, and also whenever at least one key exists, on
-/// any address. With no key and `require_key` unset, anyone who can connect
-/// may publish.
-pub fn router(store: Arc<Store>, require_key: bool) -> Router {
-    let state = AppState { store, require_key };
+/// The API routes. Publishing needs a live key or a verified OIDC token in
+/// `Authorization: Bearer` when `require_key` is set, when a trust is
+/// configured, and whenever at least one key exists, on any address. With
+/// none of those, anyone who can connect may publish.
+pub fn router(store: Arc<Store>, options: ServerOptions) -> Router {
+    let state = AppState { store, options };
     Router::new()
         .route("/healthz", get(healthz))
         .route("/api/v1/healthz", get(healthz))
@@ -219,35 +251,99 @@ async fn healthz() -> Json<serde_json::Value> {
     Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))
 }
 
-async fn authorize(state: &AppState, headers: &HeaderMap) -> std::result::Result<(), ApiError> {
-    if !state.require_key && blocking(&state.store, Store::key_count).await? == 0 {
-        return Ok(());
+/// Who is publishing.
+enum Principal {
+    /// Nothing is configured, so nobody is asked.
+    Anonymous,
+    Key(KeyGrant),
+    /// A verified token, bound to the repository it names.
+    Oidc {
+        report_repository: String,
+    },
+}
+
+fn unauthorized(message: impl Into<String>) -> ApiError {
+    ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", message)
+}
+
+async fn authorize(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> std::result::Result<Principal, ApiError> {
+    let configured = state.options.require_key
+        || state.options.oidc.is_some()
+        || blocking(&state.store, Store::key_count).await? > 0;
+    if !configured {
+        return Ok(Principal::Anonymous);
     }
     let presented = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
         .map(str::trim)
-        .filter(|key| !key.is_empty());
-    let Some(key) = presented else {
-        return Err(ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "unauthorized",
-            "publishing to this console needs a key",
-        )
-        .hint("send 'Authorization: Bearer <key>', or set TUFF_CONSOLE_KEY for 'tuff console publish'"));
+        .filter(|token| !token.is_empty());
+    let Some(token) = presented else {
+        return Err(unauthorized("publishing to this console needs a credential")
+            .hint("send 'Authorization: Bearer <key>', set TUFF_CONSOLE_KEY for 'tuff console publish', or publish from a trusted GitHub Actions job"));
     };
-    let key = key.to_string();
-    if blocking(&state.store, move |store| store.verify_key(&key)).await? {
-        Ok(())
-    } else {
-        Err(ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "unauthorized",
-            "the key is not valid or was revoked",
-        )
-        .hint("create one with 'tuff console key create <name>' on the server"))
+
+    let verifier = match state.options.oidc.as_ref() {
+        Some(verifier) if !token.starts_with(crate::store::KEY_PREFIX) => verifier,
+        _ => {
+            let key = token.to_string();
+            return match blocking(&state.store, move |store| store.verify_key(&key)).await? {
+                Some(grant) => Ok(Principal::Key(grant)),
+                None => Err(unauthorized("the key is not valid or was revoked")
+                    .hint("create one with 'tuff console key create <name>' on the server")),
+            };
+        }
+    };
+    match verifier.verify(token).await {
+        Ok(verified) => Ok(Principal::Oidc {
+            report_repository: verified.report_repository,
+        }),
+        Err(OidcError::Invalid(reason)) => Err(unauthorized(reason).hint(format!(
+            "the token's audience must be {}, and the job needs 'permissions: id-token: write'",
+            verifier.audience()
+        ))),
+        Err(OidcError::Untrusted(reason)) => {
+            Err(ApiError::new(StatusCode::FORBIDDEN, "refused", reason)
+                .hint("start the console with --trust github:<owner> for this owner"))
+        }
+        Err(OidcError::Unavailable(reason)) => {
+            Err(
+                ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "source_failed", reason)
+                    .hint("the console must reach the token issuer; retry later"),
+            )
+        }
     }
+}
+
+/// A scoped credential publishes only for its own repository (D5).
+fn check_binding(principal: &Principal, repository: &str) -> std::result::Result<(), ApiError> {
+    let bound = match principal {
+        Principal::Anonymous
+        | Principal::Key(KeyGrant {
+            repository: None, ..
+        }) => return Ok(()),
+        Principal::Key(KeyGrant {
+            repository: Some(bound),
+            ..
+        })
+        | Principal::Oidc {
+            report_repository: bound,
+        } => bound,
+    };
+    let reported = normalize_remote(repository);
+    if normalize_remote(bound).eq_ignore_ascii_case(&reported) {
+        return Ok(());
+    }
+    Err(ApiError::new(
+        StatusCode::FORBIDDEN,
+        "refused",
+        format!("this credential may publish only for {bound}, and the report is for {reported}"),
+    )
+    .hint("publish each repository with its own credential"))
 }
 
 async fn post_report(
@@ -255,7 +351,7 @@ async fn post_report(
     headers: HeaderMap,
     body: Bytes,
 ) -> std::result::Result<Response, ApiError> {
-    authorize(&state, &headers).await?;
+    let principal = authorize(&state, &headers).await?;
 
     let raw: serde_json::Value = serde_json::from_slice(&body).map_err(|error| {
         ApiError::new(
@@ -292,6 +388,8 @@ async fn post_report(
             "the report's project needs a repository and a path",
         ));
     }
+
+    check_binding(&principal, &report.project.repository)?;
 
     let outcome = blocking(&state.store, move |store| store.ingest(&report, &raw)).await?;
     let status = if outcome.deduplicated {

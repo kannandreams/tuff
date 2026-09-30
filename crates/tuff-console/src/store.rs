@@ -7,7 +7,9 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tuff_core::error::{ErrorKind, Result, TuffError};
-use tuff_core::report::Report;
+use tuff_core::report::{Report, normalize_remote};
+
+use crate::events::{self, Snapshot};
 
 /// File name of the database inside the data directory.
 pub const DATABASE_FILE: &str = "console.sqlite";
@@ -73,6 +75,8 @@ const MIGRATIONS: &[&str] = &[
         last_used_at TEXT
     );
     ",
+    // 2: a key may be bound to one repository (D5).
+    "ALTER TABLE keys ADD COLUMN repository TEXT;",
 ];
 
 /// The data directory when `--data` is not given:
@@ -110,8 +114,45 @@ pub struct ProjectRow {
 #[serde(rename_all = "camelCase")]
 pub struct KeyInfo {
     pub name: String,
+    /// The one repository the key may publish for, when it is scoped.
+    pub repository: Option<String>,
     pub created_at: String,
     pub last_used_at: Option<String>,
+}
+
+/// What a live key allows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyGrant {
+    pub name: String,
+    /// The repository the key is bound to, normalised; `None` for any.
+    pub repository: Option<String>,
+}
+
+/// One change recorded between two consecutive reports of a project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventRow {
+    pub id: i64,
+    pub project_id: i64,
+    pub report_id: i64,
+    pub kind: String,
+    pub capability_type: Option<String>,
+    pub capability_id: Option<String>,
+    pub target: Option<String>,
+    pub detail: Option<String>,
+    pub commit: Option<String>,
+    pub occurred_at: String,
+}
+
+/// Which events to list. Empty fields match everything.
+#[derive(Debug, Clone, Default)]
+pub struct EventFilter {
+    pub project_id: Option<i64>,
+    pub capability: Option<String>,
+    pub kind: Option<String>,
+    /// RFC 3339 time or a date; events from then on.
+    pub since: Option<String>,
+    pub limit: Option<u32>,
 }
 
 pub struct Store {
@@ -290,17 +331,17 @@ impl Store {
             }
         };
 
-        let previous: Option<(i64, String)> = tx
+        let previous: Option<(i64, String, String)> = tx
             .query_row(
-                "SELECT id, digest FROM reports WHERE project_id = ?1 ORDER BY id DESC LIMIT 1",
+                "SELECT id, digest, body FROM reports WHERE project_id = ?1 ORDER BY id DESC LIMIT 1",
                 params![project_id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .optional()
             .map_err(db_error)?;
 
         let outcome = match previous {
-            Some((report_id, previous_digest)) if previous_digest == digest => {
+            Some((report_id, previous_digest, _)) if previous_digest == digest => {
                 tx.execute(
                     "UPDATE projects SET last_report_at = ?2 WHERE id = ?1",
                     params![project_id, received_at],
@@ -313,7 +354,7 @@ impl Store {
                     project_first_seen,
                 }
             }
-            _ => {
+            previous => {
                 tx.execute(
                     "INSERT INTO reports (project_id, received_at, generated_at, commit_sha, branch,
                                           tuff_version, digest, body)
@@ -336,6 +377,52 @@ impl Store {
                     params![project_id, report.project.name, received_at],
                 )
                 .map_err(db_error)?;
+
+                let current = Snapshot::from_report(raw);
+                let before = previous
+                    .and_then(|(_, _, body)| serde_json::from_str::<serde_json::Value>(&body).ok())
+                    .map(|body| Snapshot::from_report(&body));
+                for event in events::diff(before.as_ref(), &current) {
+                    tx.execute(
+                        "INSERT INTO events (project_id, report_id, kind, capability_type,
+                                             capability_id, target, detail, commit_sha, occurred_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                        params![
+                            project_id,
+                            report_id,
+                            event.kind,
+                            event.capability_type,
+                            event.capability_id,
+                            event.target,
+                            event.detail,
+                            report.project.commit,
+                            received_at
+                        ],
+                    )
+                    .map_err(db_error)?;
+                }
+                tx.execute(
+                    "DELETE FROM inventory WHERE project_id = ?1",
+                    params![project_id],
+                )
+                .map_err(db_error)?;
+                for row in &current.rows {
+                    tx.execute(
+                        "INSERT OR REPLACE INTO inventory (project_id, capability_type, capability_id,
+                                                          target, version, source, status)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![
+                            project_id,
+                            row.capability_type,
+                            row.capability_id,
+                            row.target,
+                            row.version,
+                            row.source,
+                            row.status
+                        ],
+                    )
+                    .map_err(db_error)?;
+                }
                 IngestOutcome {
                     project_id,
                     report_id,
@@ -391,13 +478,27 @@ impl Store {
 
     /// Create a publish key and return its secret. Only the SHA-256 of the
     /// secret is stored, so this is the one time the secret exists in full.
-    pub fn create_key(&self, name: &str) -> Result<String> {
+    /// With `repository`, the key may publish for that repository only.
+    pub fn create_key(&self, name: &str, repository: Option<&str>) -> Result<String> {
         if !valid_key_name(name) {
             return Err(
                 TuffError::usage(format!("'{name}' is not a valid key name"))
                     .with_hint("use 1 to 64 letters, digits, '-', '_' or '.'"),
             );
         }
+        let repository = match repository {
+            Some(text) => {
+                let normalized = normalize_remote(text);
+                if !normalized.contains('/') {
+                    return Err(
+                        TuffError::usage(format!("'{text}' does not name a repository"))
+                            .with_hint("use host/owner/name, such as github.com/acme/web"),
+                    );
+                }
+                Some(normalized)
+            }
+            None => None,
+        };
         let mut bytes = [0u8; 32];
         getrandom::fill(&mut bytes).map_err(|error| {
             TuffError::of(
@@ -407,8 +508,8 @@ impl Store {
         })?;
         let secret = format!("{KEY_PREFIX}{}", hex(&bytes));
         let inserted = self.conn().execute(
-            "INSERT INTO keys (name, sha256, created_at) VALUES (?1, ?2, ?3)",
-            params![name, sha256_hex(secret.as_bytes()), now()],
+            "INSERT INTO keys (name, sha256, created_at, repository) VALUES (?1, ?2, ?3, ?4)",
+            params![name, sha256_hex(secret.as_bytes()), now(), repository],
         );
         match inserted {
             Ok(_) => Ok(secret),
@@ -429,14 +530,18 @@ impl Store {
     pub fn keys(&self) -> Result<Vec<KeyInfo>> {
         let conn = self.conn();
         let mut statement = conn
-            .prepare("SELECT name, created_at, last_used_at FROM keys ORDER BY created_at, name")
+            .prepare(
+                "SELECT name, repository, created_at, last_used_at FROM keys
+                 ORDER BY created_at, name",
+            )
             .map_err(db_error)?;
         statement
             .query_map([], |row| {
                 Ok(KeyInfo {
                     name: row.get(0)?,
-                    created_at: row.get(1)?,
-                    last_used_at: row.get(2)?,
+                    repository: row.get(1)?,
+                    created_at: row.get(2)?,
+                    last_used_at: row.get(3)?,
                 })
             })
             .map_err(db_error)?
@@ -462,16 +567,76 @@ impl Store {
         Ok(())
     }
 
-    /// Whether `secret` is a live key. A match records its use.
-    pub fn verify_key(&self, secret: &str) -> Result<bool> {
-        let updated = self
-            .conn()
-            .execute(
+    /// The grant of `secret` when it is a live key. A match records its use.
+    pub fn verify_key(&self, secret: &str) -> Result<Option<KeyGrant>> {
+        let hash = sha256_hex(secret.as_bytes());
+        let conn = self.conn();
+        let grant = conn
+            .query_row(
+                "SELECT name, repository FROM keys WHERE sha256 = ?1",
+                params![hash],
+                |row| {
+                    Ok(KeyGrant {
+                        name: row.get(0)?,
+                        repository: row.get(1)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(db_error)?;
+        if grant.is_some() {
+            conn.execute(
                 "UPDATE keys SET last_used_at = ?2 WHERE sha256 = ?1",
-                params![sha256_hex(secret.as_bytes()), now()],
+                params![hash, now()],
             )
             .map_err(db_error)?;
-        Ok(updated > 0)
+        }
+        Ok(grant)
+    }
+
+    /// Recorded events, newest first.
+    pub fn events(&self, filter: &EventFilter) -> Result<Vec<EventRow>> {
+        let conn = self.conn();
+        let mut statement = conn
+            .prepare(
+                "SELECT e.id, e.project_id, e.report_id, e.kind, e.capability_type,
+                        e.capability_id, e.target, e.detail, e.commit_sha, e.occurred_at
+                 FROM events e
+                 WHERE (?1 IS NULL OR e.project_id = ?1)
+                   AND (?2 IS NULL OR e.capability_id = ?2)
+                   AND (?3 IS NULL OR e.kind = ?3)
+                   AND (?4 IS NULL OR e.occurred_at >= ?4)
+                 ORDER BY e.id DESC
+                 LIMIT ?5",
+            )
+            .map_err(db_error)?;
+        statement
+            .query_map(
+                params![
+                    filter.project_id,
+                    filter.capability,
+                    filter.kind,
+                    filter.since,
+                    i64::from(filter.limit.unwrap_or(500))
+                ],
+                |row| {
+                    Ok(EventRow {
+                        id: row.get(0)?,
+                        project_id: row.get(1)?,
+                        report_id: row.get(2)?,
+                        kind: row.get(3)?,
+                        capability_type: row.get(4)?,
+                        capability_id: row.get(5)?,
+                        target: row.get(6)?,
+                        detail: row.get(7)?,
+                        commit: row.get(8)?,
+                        occurred_at: row.get(9)?,
+                    })
+                },
+            )
+            .map_err(db_error)?
+            .collect::<std::result::Result<_, _>>()
+            .map_err(db_error)
     }
 }
 
@@ -565,7 +730,10 @@ mod tests {
     #[test]
     fn reopening_keeps_the_data() {
         let temp = tempfile::tempdir().unwrap();
-        Store::open(temp.path()).unwrap().create_key("ci").unwrap();
+        Store::open(temp.path())
+            .unwrap()
+            .create_key("ci", None)
+            .unwrap();
         assert_eq!(Store::open(temp.path()).unwrap().key_count().unwrap(), 1);
     }
 
@@ -668,7 +836,7 @@ mod tests {
     #[test]
     fn a_key_secret_is_shown_once_and_only_its_hash_is_stored() {
         let store = Store::open_in_memory().unwrap();
-        let secret = store.create_key("ci").unwrap();
+        let secret = store.create_key("ci", None).unwrap();
         assert!(secret.starts_with(KEY_PREFIX));
         assert_eq!(secret.len(), KEY_PREFIX.len() + 64);
 
@@ -681,9 +849,9 @@ mod tests {
         assert_eq!(stored, sha256_hex(secret.as_bytes()));
         assert!(!stored.contains(&secret));
 
-        assert!(store.verify_key(&secret).unwrap());
-        assert!(!store.verify_key("tuffc_wrong").unwrap());
-        assert!(!store.verify_key("").unwrap());
+        assert!(store.verify_key(&secret).unwrap().is_some());
+        assert!(store.verify_key("tuffc_wrong").unwrap().is_none());
+        assert!(store.verify_key("").unwrap().is_none());
         let keys = store.keys().unwrap();
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].name, "ci");
@@ -693,16 +861,16 @@ mod tests {
     #[test]
     fn a_key_is_unused_until_it_authenticates() {
         let store = Store::open_in_memory().unwrap();
-        store.create_key("ci").unwrap();
+        store.create_key("ci", None).unwrap();
         assert!(store.keys().unwrap()[0].last_used_at.is_none());
     }
 
     #[test]
     fn a_revoked_key_stops_working() {
         let store = Store::open_in_memory().unwrap();
-        let secret = store.create_key("ci").unwrap();
+        let secret = store.create_key("ci", None).unwrap();
         store.revoke_key("ci").unwrap();
-        assert!(!store.verify_key(&secret).unwrap());
+        assert!(store.verify_key(&secret).unwrap().is_none());
         assert_eq!(store.key_count().unwrap(), 0);
         let error = store.revoke_key("ci").unwrap_err();
         assert_eq!(error.kind(), ErrorKind::NotFound);
@@ -711,20 +879,255 @@ mod tests {
     #[test]
     fn key_names_are_unique_and_validated() {
         let store = Store::open_in_memory().unwrap();
-        store.create_key("ci").unwrap();
+        store.create_key("ci", None).unwrap();
         assert_eq!(
-            store.create_key("ci").unwrap_err().kind(),
+            store.create_key("ci", None).unwrap_err().kind(),
             ErrorKind::Refused
         );
         for bad in ["", "has space", "a/b", &"x".repeat(65)] {
             assert_eq!(
-                store.create_key(bad).unwrap_err().kind(),
+                store.create_key(bad, None).unwrap_err().kind(),
                 ErrorKind::Usage,
                 "{bad:?}"
             );
         }
-        let one = store.create_key("one").unwrap();
-        let two = store.create_key("two").unwrap();
+        let one = store.create_key("one", None).unwrap();
+        let two = store.create_key("two", None).unwrap();
         assert_ne!(one, two);
+    }
+
+    fn carrying(
+        commit: &str,
+        version: &str,
+        status: &str,
+        gap: bool,
+    ) -> (Report, serde_json::Value) {
+        let mut policy = json!({
+            "name": "guard", "type": "policy", "target": "codex", "version": "1",
+            "source": { "kind": "local", "path": "guard" },
+        });
+        if gap {
+            policy["unenforced_rules"] =
+                json!([{ "rule": 2, "description": "deny read", "reason": "none" }]);
+        }
+        let report = Report {
+            schema: 1,
+            tuff_version: "0.12.0".into(),
+            generated_at: "2026-09-30T10:00:00Z".into(),
+            project: ProjectIdentity {
+                repository: "github.com/acme/agents".into(),
+                path: ".".into(),
+                name: "agents".into(),
+                commit: Some(commit.into()),
+                branch: None,
+                dirty: false,
+            },
+            lockfile: json!({ "version": 3, "capabilities": [
+                { "name": "lint", "type": "skill", "target": "claude", "version": version,
+                  "source": { "kind": "local", "path": "lint" } },
+                policy,
+            ] }),
+            check: json!({ "valid": true, "results": [
+                { "id": "lint", "type": "skill", "target": "claude", "status": status },
+            ] }),
+            outdated: None,
+        };
+        let raw = serde_json::to_value(&report).unwrap();
+        (report, raw)
+    }
+
+    fn kinds_of(store: &Store) -> Vec<String> {
+        let mut rows = store.events(&EventFilter::default()).unwrap();
+        rows.reverse();
+        rows.into_iter().map(|row| row.kind).collect()
+    }
+
+    #[test]
+    fn two_different_reports_record_the_events_between_them() {
+        let store = Store::open_in_memory().unwrap();
+        let (report, raw) = carrying("aaa", "1.0.0", "ok", true);
+        store.ingest(&report, &raw).unwrap();
+        assert_eq!(
+            kinds_of(&store),
+            [
+                "project_first_seen",
+                "capability_added",
+                "capability_added",
+                "policy_gap_added"
+            ]
+        );
+
+        let (report, raw) = carrying("bbb", "1.1.0", "modified", false);
+        let outcome = store.ingest(&report, &raw).unwrap();
+        let all = store.events(&EventFilter::default()).unwrap();
+        let second: Vec<_> = all
+            .iter()
+            .filter(|row| row.report_id == outcome.report_id)
+            .collect();
+        let mut kinds: Vec<&str> = second.iter().map(|row| row.kind.as_str()).collect();
+        kinds.sort_unstable();
+        assert_eq!(
+            kinds,
+            ["drift_detected", "policy_gap_closed", "version_changed"]
+        );
+        assert!(
+            second
+                .iter()
+                .all(|row| row.commit.as_deref() == Some("bbb"))
+        );
+        assert!(
+            second
+                .iter()
+                .all(|row| row.project_id == outcome.project_id)
+        );
+
+        let (report, raw) = carrying("ccc", "1.1.0", "ok", false);
+        store.ingest(&report, &raw).unwrap();
+        assert_eq!(
+            kinds_of(&store).last().map(String::as_str),
+            Some("drift_cleared")
+        );
+    }
+
+    #[test]
+    fn the_same_report_twice_records_nothing_the_second_time() {
+        let store = Store::open_in_memory().unwrap();
+        let (report, raw) = carrying("aaa", "1.0.0", "ok", true);
+        store.ingest(&report, &raw).unwrap();
+        let before = store.events(&EventFilter::default()).unwrap();
+        let mut again = raw.clone();
+        again["generatedAt"] = json!("2026-10-01T00:00:00Z");
+        let outcome = store.ingest(&report, &again).unwrap();
+        assert!(outcome.deduplicated);
+        assert_eq!(store.events(&EventFilter::default()).unwrap(), before);
+    }
+
+    #[test]
+    fn the_inventory_holds_the_latest_report_as_rows() {
+        let store = Store::open_in_memory().unwrap();
+        let (report, raw) = carrying("aaa", "1.0.0", "ok", false);
+        store.ingest(&report, &raw).unwrap();
+        let (report, raw) = carrying("bbb", "1.1.0", "modified", false);
+        store.ingest(&report, &raw).unwrap();
+        type Row = (String, String, String, String, String);
+        let rows: Vec<Row> = store
+            .conn()
+            .prepare(
+                "SELECT capability_type, capability_id, target, version, status
+                 FROM inventory ORDER BY capability_id",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            })
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[1],
+            (
+                "skill".into(),
+                "lint".into(),
+                "claude".into(),
+                "1.1.0".into(),
+                "modified".into()
+            )
+        );
+    }
+
+    #[test]
+    fn events_filter_by_project_capability_kind_and_time() {
+        let store = Store::open_in_memory().unwrap();
+        let (report, raw) = carrying("aaa", "1.0.0", "ok", true);
+        let outcome = store.ingest(&report, &raw).unwrap();
+        let count = |filter: EventFilter| store.events(&filter).unwrap().len();
+        assert_eq!(
+            count(EventFilter {
+                project_id: Some(outcome.project_id),
+                ..Default::default()
+            }),
+            4
+        );
+        assert_eq!(
+            count(EventFilter {
+                project_id: Some(999),
+                ..Default::default()
+            }),
+            0
+        );
+        assert_eq!(
+            count(EventFilter {
+                capability: Some("lint".into()),
+                ..Default::default()
+            }),
+            1
+        );
+        assert_eq!(
+            count(EventFilter {
+                kind: Some("capability_added".into()),
+                ..Default::default()
+            }),
+            2
+        );
+        assert_eq!(
+            count(EventFilter {
+                since: Some("2999-01-01".into()),
+                ..Default::default()
+            }),
+            0
+        );
+        assert_eq!(
+            count(EventFilter {
+                since: Some("2000-01-01".into()),
+                limit: Some(1),
+                ..Default::default()
+            }),
+            1
+        );
+    }
+
+    #[test]
+    fn a_scoped_key_remembers_its_repository() {
+        let store = Store::open_in_memory().unwrap();
+        let secret = store
+            .create_key("web", Some("git@github.com:Acme/web.git"))
+            .unwrap();
+        let grant = store.verify_key(&secret).unwrap().unwrap();
+        assert_eq!(grant.repository.as_deref(), Some("github.com/Acme/web"));
+        assert_eq!(
+            store.keys().unwrap()[0].repository.as_deref(),
+            Some("github.com/Acme/web")
+        );
+        assert_eq!(
+            store.create_key("bad", Some("web")).unwrap_err().kind(),
+            ErrorKind::Usage
+        );
+    }
+
+    #[test]
+    fn a_version_one_database_gains_the_key_scope_column() {
+        let temp = tempfile::tempdir().unwrap();
+        {
+            let conn = Connection::open(temp.path().join(DATABASE_FILE)).unwrap();
+            conn.execute_batch(MIGRATIONS[0]).unwrap();
+            conn.pragma_update(None, "user_version", 1).unwrap();
+            conn.execute(
+                "INSERT INTO keys (name, sha256, created_at) VALUES ('old', 'x', 't')",
+                [],
+            )
+            .unwrap();
+        }
+        let store = Store::open(temp.path()).unwrap();
+        assert_eq!(store.schema_version().unwrap(), 2);
+        let keys = store.keys().unwrap();
+        assert_eq!(keys[0].name, "old");
+        assert_eq!(keys[0].repository, None);
     }
 }
