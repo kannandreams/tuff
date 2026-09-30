@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **The MCP catalog includes Screenpipe.** `tuff add mcp screenpipe` installs the official `screenpipe-mcp` server, which searches screen text and audio that Screenpipe captured on the machine, lists meetings, and summarizes activity. It needs Screenpipe running on `localhost:3030` and `SCREENPIPE_LOCAL_API_KEY` from `screenpipe auth token`.
+
 ## [0.15.0] - 2026-10-02
 
 ### Added
