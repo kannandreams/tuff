@@ -5,10 +5,13 @@ use tuff_hooks_spec::{
 };
 
 use tuff_core::adapter::{AgentAdapter, HookSettingsShape};
-use tuff_core::error::Result;
+use tuff_core::error::{Result, TuffError};
 use tuff_core::manifest::CapabilityType;
 use tuff_core::policy::{
     PolicyCoverageEntry, PolicyEffect, PolicyRule, PolicySubject, PolicySubjectKind,
+};
+use tuff_core::policy_eval::{
+    PolicyAction, PolicyHookAnswer, PolicyHookRequest, PolicyHookUse, PolicyVerdict,
 };
 
 pub const ID: &str = "claude";
@@ -30,7 +33,7 @@ const CLAUDE_PERMISSIONS_DOCS: &str = "https://code.claude.com/docs/en/permissio
 /// documentation. Command and file rules are real but not boundaries, and
 /// the caveats say how; an MCP rule names the tool itself.
 pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
-    const COMMAND: &str = "matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched";
+    const COMMAND: &str = "matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched unless the policy is installed with --runtime-hook, which also registers tuff policy evaluate as a PreToolUse hook on Bash; a script or program that runs the command itself is not seen either way";
     const FILES: &str = "covers Claude's file tools and the shell commands Claude Code recognises, such as cat and sed, not a script or program that opens the file itself";
     let row =
         |effect, subject, coverage, mechanism: &str, caveat: Option<&str>| PolicyCoverageEntry {
@@ -284,8 +287,114 @@ impl AgentAdapter for Claude {
         permission_rules(rule).map(Some)
     }
 
+    fn policy_hook_use(&self, rule: &PolicyRule) -> Result<PolicyHookUse> {
+        Ok(match rule.subject()?.kind() {
+            PolicySubjectKind::Command => PolicyHookUse::Optional,
+            _ => PolicyHookUse::Never,
+        })
+    }
+
+    fn policy_hook_fragment(
+        &self,
+        command: &str,
+        subjects: &[PolicySubjectKind],
+    ) -> Option<serde_json::Value> {
+        subjects.contains(&PolicySubjectKind::Command).then(|| {
+            serde_json::json!({
+                "hooks": {
+                    "PreToolUse": [{
+                        "matcher": "Bash",
+                        "hooks": [{"type": "command", "command": command}]
+                    }]
+                }
+            })
+        })
+    }
+
+    fn policy_hook_request(&self, input: &serde_json::Value) -> Result<PolicyHookRequest> {
+        pre_tool_use_request(input)
+    }
+
+    fn policy_hook_answer(&self, event: &str, verdict: PolicyVerdict<'_>) -> PolicyHookAnswer {
+        pre_tool_use_answer(event, verdict)
+    }
+
     fn detect(&self, repo_root: &Path) -> bool {
         repo_root.join(".claude").exists() || repo_root.join("CLAUDE.md").exists()
+    }
+}
+
+/// Read a Claude Code `PreToolUse` hook input: the Bash command, the path
+/// of a file tool, or the server and tool of an MCP call.
+pub fn pre_tool_use_request(input: &serde_json::Value) -> Result<PolicyHookRequest> {
+    let text = |value: &serde_json::Value, key: &str| {
+        value
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    };
+    let event = text(input, "hook_event_name").unwrap_or_else(|| "PreToolUse".to_string());
+    let tool =
+        text(input, "tool_name").ok_or_else(|| TuffError::usage("hook input has no tool_name"))?;
+    let tool_input = input.get("tool_input").cloned().unwrap_or_default();
+    let mut actions = Vec::new();
+    match tool.as_str() {
+        "Bash" => actions.push(PolicyAction::Shell(
+            text(&tool_input, "command")
+                .ok_or_else(|| TuffError::usage("Bash hook input has no tool_input.command"))?,
+        )),
+        "Read" => actions.extend(text(&tool_input, "file_path").map(PolicyAction::Read)),
+        "Edit" | "MultiEdit" | "Write" => {
+            actions.extend(text(&tool_input, "file_path").map(PolicyAction::Edit));
+        }
+        "NotebookEdit" => {
+            actions.extend(text(&tool_input, "notebook_path").map(PolicyAction::Edit));
+        }
+        other => {
+            if let Some((server, tool)) = other
+                .strip_prefix("mcp__")
+                .and_then(|rest| rest.split_once("__"))
+            {
+                actions.push(PolicyAction::Mcp {
+                    server: server.to_string(),
+                    tool: tool.to_string(),
+                });
+            }
+        }
+    }
+    Ok(PolicyHookRequest {
+        event,
+        cwd: text(input, "cwd").map(Into::into),
+        roots: Vec::new(),
+        actions,
+    })
+}
+
+/// A `PreToolUse` answer: a matched rule becomes a `permissionDecision` of
+/// `deny` or `ask` with the rule as the reason, and no match prints nothing,
+/// so the harness decides as it would without the hook. Input that cannot
+/// be read is denied.
+pub fn pre_tool_use_answer(event: &str, verdict: PolicyVerdict<'_>) -> PolicyHookAnswer {
+    let (decision, reason) = match verdict {
+        PolicyVerdict::NoMatch => {
+            return PolicyHookAnswer {
+                stdout: String::new(),
+                exit_code: 0,
+            };
+        }
+        PolicyVerdict::Matched(decision) => (decision.effect.as_str(), decision.message()),
+        PolicyVerdict::Failed(message) => ("deny", message.to_string()),
+    };
+    let answer = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": event,
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        }
+    });
+    PolicyHookAnswer {
+        stdout: answer.to_string(),
+        exit_code: 0,
     }
 }
 

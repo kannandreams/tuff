@@ -72,6 +72,12 @@ enum Command {
         #[arg(long = "accept-unenforced")]
         accept_unenforced: bool,
 
+        /// For a policy: also register tuff policy evaluate as a hook for rules
+        /// a native setting covers only in part, such as Claude Code command
+        /// rules, so reworded commands are caught too.
+        #[arg(long = "runtime-hook")]
+        runtime_hook: bool,
+
         #[command(subcommand)]
         kind: Option<AddCommand>,
     },
@@ -672,11 +678,16 @@ fn reject_parent_add_options(
     name: Option<&String>,
     agent: &[String],
     global: bool,
-    accept_unenforced: bool,
+    policy_options: commands::PolicyOptions,
 ) -> Result<()> {
-    if accept_unenforced {
+    if policy_options.accept_unenforced {
         return Err(TuffError::usage(
             "--accept-unenforced applies to 'tuff add <path>' of a policy, not to typed 'tuff add' commands",
+        ));
+    }
+    if policy_options.runtime_hook {
+        return Err(TuffError::usage(
+            "--runtime-hook applies to 'tuff add <path>' of a policy, not to typed 'tuff add' commands",
         ));
     }
     if source.is_some() || name.is_some() || !agent.is_empty() || global {
@@ -726,6 +737,18 @@ enum PolicyCommand {
         /// Output the matrix as JSON.
         #[arg(long = "json")]
         json: bool,
+    },
+    /// Answer a harness's hook: read the tool call as JSON on standard
+    /// input and deny or ask when an installed policy's rule matches it.
+    /// Tuff registers this command when it installs a policy; it is not
+    /// meant to be run by hand.
+    Evaluate {
+        /// The harness running the hook, such as claude, codex, or cursor.
+        #[arg(long = "harness", value_name = "HARNESS")]
+        harness: String,
+        /// The id of the installed policy to evaluate.
+        #[arg(long = "policy", value_name = "ID")]
+        policy: String,
     },
 }
 
@@ -818,131 +841,138 @@ fn run() -> Result<()> {
             agent,
             global,
             accept_unenforced,
+            runtime_hook,
             kind,
-        }) => match kind {
-            None => cmd_add_accepting(
-                &repo_root,
-                source.as_deref(),
-                name.as_deref(),
-                None,
-                &agent,
-                global,
-                None,
+        }) => {
+            let policy_options = commands::PolicyOptions {
                 accept_unenforced,
-            ),
-            Some(AddCommand::Skill {
-                source: typed_source,
-                name: typed_name,
-                agent: typed_agent,
-                global: typed_global,
-            }) => {
-                reject_parent_add_options(
-                    source.as_ref(),
-                    name.as_ref(),
-                    &agent,
-                    global,
-                    accept_unenforced,
-                )?;
-                cmd_add(
+                runtime_hook,
+            };
+            match kind {
+                None => cmd_add_accepting(
                     &repo_root,
-                    Some(typed_source.as_path()),
-                    typed_name.as_deref(),
-                    Some("skill"),
-                    &typed_agent,
-                    typed_global,
+                    source.as_deref(),
+                    name.as_deref(),
                     None,
-                )
-            }
-            Some(AddCommand::Tool {
-                source: typed_source,
-                name: typed_name,
-                agent: typed_agent,
-                global: typed_global,
-            }) => {
-                reject_parent_add_options(
-                    source.as_ref(),
-                    name.as_ref(),
                     &agent,
                     global,
-                    accept_unenforced,
-                )?;
-                cmd_add(
-                    &repo_root,
-                    Some(typed_source.as_path()),
-                    typed_name.as_deref(),
-                    Some("tool"),
-                    &typed_agent,
-                    typed_global,
                     None,
-                )
-            }
-            Some(AddCommand::Hook {
-                source: typed_source,
-                name: typed_name,
-                hook_file,
-                agent: typed_agent,
-                global: typed_global,
-            }) => {
-                reject_parent_add_options(
-                    source.as_ref(),
-                    name.as_ref(),
-                    &agent,
-                    global,
-                    accept_unenforced,
-                )?;
-                cmd_add(
-                    &repo_root,
-                    Some(typed_source.as_path()),
-                    typed_name.as_deref(),
-                    Some("hook"),
-                    &typed_agent,
-                    typed_global,
-                    hook_file.as_deref(),
-                )
-            }
-            Some(AddCommand::Pack {
-                source: typed_source,
-                agent: typed_agent,
-                reference: typed_reference,
-            }) => {
-                reject_parent_add_options(
-                    source.as_ref(),
-                    name.as_ref(),
-                    &agent,
-                    global,
-                    accept_unenforced,
-                )?;
-                cmd_add_pack(
-                    &repo_root,
-                    &typed_source,
-                    &typed_agent,
-                    typed_reference.as_deref(),
-                )
-            }
-            Some(AddCommand::Mcp {
-                sources,
-                agent: typed_agent,
-                global: typed_global,
-                yes,
-                registry,
-            }) => {
-                reject_parent_add_options(
-                    source.as_ref(),
-                    name.as_ref(),
-                    &agent,
-                    global,
-                    accept_unenforced,
-                )?;
-                cmd_add_mcp(
-                    &repo_root,
-                    &sources,
-                    &typed_agent,
-                    typed_global,
+                    policy_options,
+                ),
+                Some(AddCommand::Skill {
+                    source: typed_source,
+                    name: typed_name,
+                    agent: typed_agent,
+                    global: typed_global,
+                }) => {
+                    reject_parent_add_options(
+                        source.as_ref(),
+                        name.as_ref(),
+                        &agent,
+                        global,
+                        policy_options,
+                    )?;
+                    cmd_add(
+                        &repo_root,
+                        Some(typed_source.as_path()),
+                        typed_name.as_deref(),
+                        Some("skill"),
+                        &typed_agent,
+                        typed_global,
+                        None,
+                    )
+                }
+                Some(AddCommand::Tool {
+                    source: typed_source,
+                    name: typed_name,
+                    agent: typed_agent,
+                    global: typed_global,
+                }) => {
+                    reject_parent_add_options(
+                        source.as_ref(),
+                        name.as_ref(),
+                        &agent,
+                        global,
+                        policy_options,
+                    )?;
+                    cmd_add(
+                        &repo_root,
+                        Some(typed_source.as_path()),
+                        typed_name.as_deref(),
+                        Some("tool"),
+                        &typed_agent,
+                        typed_global,
+                        None,
+                    )
+                }
+                Some(AddCommand::Hook {
+                    source: typed_source,
+                    name: typed_name,
+                    hook_file,
+                    agent: typed_agent,
+                    global: typed_global,
+                }) => {
+                    reject_parent_add_options(
+                        source.as_ref(),
+                        name.as_ref(),
+                        &agent,
+                        global,
+                        policy_options,
+                    )?;
+                    cmd_add(
+                        &repo_root,
+                        Some(typed_source.as_path()),
+                        typed_name.as_deref(),
+                        Some("hook"),
+                        &typed_agent,
+                        typed_global,
+                        hook_file.as_deref(),
+                    )
+                }
+                Some(AddCommand::Pack {
+                    source: typed_source,
+                    agent: typed_agent,
+                    reference: typed_reference,
+                }) => {
+                    reject_parent_add_options(
+                        source.as_ref(),
+                        name.as_ref(),
+                        &agent,
+                        global,
+                        policy_options,
+                    )?;
+                    cmd_add_pack(
+                        &repo_root,
+                        &typed_source,
+                        &typed_agent,
+                        typed_reference.as_deref(),
+                    )
+                }
+                Some(AddCommand::Mcp {
+                    sources,
+                    agent: typed_agent,
+                    global: typed_global,
                     yes,
-                    &registry,
-                )
+                    registry,
+                }) => {
+                    reject_parent_add_options(
+                        source.as_ref(),
+                        name.as_ref(),
+                        &agent,
+                        global,
+                        policy_options,
+                    )?;
+                    cmd_add_mcp(
+                        &repo_root,
+                        &sources,
+                        &typed_agent,
+                        typed_global,
+                        yes,
+                        &registry,
+                    )
+                }
             }
-        },
+        }
         Some(Command::Pack { action }) => match action {
             PackCommand::Init {
                 name,
@@ -1095,6 +1125,9 @@ fn run() -> Result<()> {
         },
         Some(Command::Policy { action }) => match action {
             PolicyCommand::Matrix { json } => cmd_policy_matrix(json),
+            PolicyCommand::Evaluate { harness, policy } => {
+                std::process::exit(commands::cmd_policy_evaluate(&harness, &policy))
+            }
         },
         Some(Command::Cache {
             action: CacheCommand::Clear,

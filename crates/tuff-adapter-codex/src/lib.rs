@@ -10,6 +10,9 @@ use tuff_core::manifest::{CapabilityType, McpServerConfig, McpTransport};
 use tuff_core::policy::{
     PolicyCoverageEntry, PolicyEffect, PolicyRule, PolicySubject, PolicySubjectKind,
 };
+use tuff_core::policy_eval::{
+    PolicyAction, PolicyHookAnswer, PolicyHookRequest, PolicyHookUse, PolicyVerdict,
+};
 
 pub const ID: &str = "codex";
 pub const DISPLAY_NAME: &str = "Codex";
@@ -48,7 +51,9 @@ const CODEX_MCP_DOCS: &str = "https://developers.openai.com/codex/mcp";
 /// to settings on the server's table in `.codex/config.toml`.
 pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
     const COMMAND: &str = "matches the command's leading words, and each command of a simple chain joined by &&, ||, ; or |; a script with redirection, $(...), a variable assignment, a wildcard, or control flow is matched as one command and not caught, and a program run by absolute path such as /usr/bin/git may not be matched; Codex loads project rules only in a trusted project and labels rules experimental";
-    const FILES: &str = "Codex rules match commands, not file paths, and Tuff does not compile Codex's sandbox permission profiles";
+    const FILES: &str = "tuff policy evaluate runs as a PreToolUse hook and checks the files a Bash command names on its command line, as arguments of programs such as cat, head, sed, and grep or as redirections; a script or program that opens a file itself is not seen; tuff must be on the PATH, the project must be trusted and the hook approved in Codex, and Codex lets the call through if the hook fails";
+    const EDITS: &str = "tuff policy evaluate runs as a PreToolUse hook and checks the files an apply_patch call changes and the files a Bash command writes on its command line, as redirections or arguments of programs such as tee, rm, and mv; a script or program that writes a file itself is not seen; tuff must be on the PATH, the project must be trusted and the hook approved in Codex, and Codex lets the call through if the hook fails";
+    const NO_ASK: &str = "Codex rules match commands, not file paths, and a Codex PreToolUse hook can deny a call but cannot ask";
     const MCP: &str = "the server and tool must be exact names, since Codex has no pattern form for them, and the server must be declared in .codex/config.toml, which Codex loads only in a trusted project";
     let row =
         |effect, subject, coverage, mechanism: Option<&str>, caveat: String| PolicyCoverageEntry {
@@ -58,10 +63,10 @@ pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
             mechanism: mechanism.map(str::to_string),
             caveat: Some(caveat),
             source: Some(
-                if subject == Mcp {
-                    CODEX_MCP_DOCS
-                } else {
-                    CODEX_RULES_DOCS
+                match subject {
+                    Mcp => CODEX_MCP_DOCS,
+                    Read | Edit => CODEX_HOOKS_DOCS,
+                    Command => CODEX_RULES_DOCS,
                 }
                 .to_string(),
             ),
@@ -77,8 +82,20 @@ pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
             Some(".codex/rules/tuff.rules prefix_rule(decision = \"forbidden\")"),
             COMMAND.to_string(),
         ),
-        row(Deny, Read, Unsupported, None, FILES.to_string()),
-        row(Deny, Edit, Unsupported, None, FILES.to_string()),
+        row(
+            Deny,
+            Read,
+            Partial,
+            Some(".codex/hooks.json PreToolUse (Bash): tuff policy evaluate"),
+            FILES.to_string(),
+        ),
+        row(
+            Deny,
+            Edit,
+            Partial,
+            Some(".codex/hooks.json PreToolUse (Bash, apply_patch): tuff policy evaluate"),
+            EDITS.to_string(),
+        ),
         row(
             Deny,
             Mcp,
@@ -95,8 +112,8 @@ pub fn policy_matrix() -> Vec<PolicyCoverageEntry> {
                 "{COMMAND}; where Codex never asks for approval, as in codex exec by default, the command is refused"
             ),
         ),
-        row(Ask, Read, Unsupported, None, FILES.to_string()),
-        row(Ask, Edit, Unsupported, None, FILES.to_string()),
+        row(Ask, Read, Unsupported, None, NO_ASK.to_string()),
+        row(Ask, Edit, Unsupported, None, NO_ASK.to_string()),
         row(
             Ask,
             Mcp,
@@ -429,8 +446,145 @@ impl AgentAdapter for Codex {
         permission_rules(rule)
     }
 
+    fn policy_hook_use(&self, rule: &PolicyRule) -> Result<PolicyHookUse> {
+        Ok(match (rule.effect()?, rule.subject()?.kind()) {
+            (PolicyEffect::Deny, PolicySubjectKind::Read | PolicySubjectKind::Edit) => {
+                PolicyHookUse::Required
+            }
+            _ => PolicyHookUse::Never,
+        })
+    }
+
+    fn policy_hook_fragment(
+        &self,
+        command: &str,
+        subjects: &[PolicySubjectKind],
+    ) -> Option<serde_json::Value> {
+        let matcher = if subjects.contains(&PolicySubjectKind::Edit) {
+            "^(Bash|apply_patch)$"
+        } else if subjects.contains(&PolicySubjectKind::Read) {
+            "^Bash$"
+        } else {
+            return None;
+        };
+        Some(serde_json::json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": matcher,
+                    "hooks": [{"type": "command", "command": command}]
+                }]
+            }
+        }))
+    }
+
+    fn policy_hook_request(&self, input: &serde_json::Value) -> Result<PolicyHookRequest> {
+        pre_tool_use_request(input)
+    }
+
+    fn policy_hook_answer(&self, event: &str, verdict: PolicyVerdict<'_>) -> PolicyHookAnswer {
+        pre_tool_use_answer(event, verdict)
+    }
+
     fn detect(&self, repo_root: &Path) -> bool {
         repo_root.join(".agents").exists() || repo_root.join("AGENTS.md").exists()
+    }
+}
+
+/// Read a Codex `PreToolUse` hook input. `Bash` and `apply_patch` carry
+/// their text in `tool_input.command`; an MCP tool is named
+/// `mcp__<server>__<tool>`.
+pub fn pre_tool_use_request(input: &serde_json::Value) -> Result<PolicyHookRequest> {
+    let text = |value: &serde_json::Value, key: &str| {
+        value
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    };
+    let event = text(input, "hook_event_name").unwrap_or_else(|| "PreToolUse".to_string());
+    let tool =
+        text(input, "tool_name").ok_or_else(|| TuffError::usage("hook input has no tool_name"))?;
+    let tool_input = input.get("tool_input").cloned().unwrap_or_default();
+    let command = || -> Result<String> {
+        match tool_input.get("command") {
+            Some(serde_json::Value::String(command)) => Ok(command.clone()),
+            Some(serde_json::Value::Array(words)) => Ok(words
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .collect::<Vec<_>>()
+                .join(" ")),
+            _ => Err(TuffError::usage(format!(
+                "{tool} hook input has no tool_input.command"
+            ))),
+        }
+    };
+    let mut actions = Vec::new();
+    match tool.as_str() {
+        "Bash" => actions.push(PolicyAction::Shell(command()?)),
+        "apply_patch" => actions.extend(patch_paths(&command()?).map(PolicyAction::Edit)),
+        other => {
+            if let Some((server, tool)) = other
+                .strip_prefix("mcp__")
+                .and_then(|rest| rest.split_once("__"))
+            {
+                actions.push(PolicyAction::Mcp {
+                    server: server.to_string(),
+                    tool: tool.to_string(),
+                });
+            }
+        }
+    }
+    Ok(PolicyHookRequest {
+        event,
+        cwd: text(input, "cwd").map(Into::into),
+        roots: Vec::new(),
+        actions,
+    })
+}
+
+/// The files an `apply_patch` envelope adds, updates, deletes, or moves to.
+pub fn patch_paths(patch: &str) -> impl Iterator<Item = String> + '_ {
+    const HEADERS: [&str; 4] = [
+        "*** Add File: ",
+        "*** Update File: ",
+        "*** Delete File: ",
+        "*** Move to: ",
+    ];
+    patch.lines().filter_map(|line| {
+        let line = line.trim_start();
+        HEADERS
+            .iter()
+            .find_map(|header| line.strip_prefix(header))
+            .map(|path| path.trim().to_string())
+    })
+}
+
+/// A `PreToolUse` answer. Codex refuses a call with a `deny` decision and
+/// does not support `ask` from a hook, so an ask rule matched here says
+/// nothing and is left to the native rule, if any. No match prints
+/// nothing; input that cannot be read is denied.
+pub fn pre_tool_use_answer(event: &str, verdict: PolicyVerdict<'_>) -> PolicyHookAnswer {
+    let reason = match verdict {
+        PolicyVerdict::Matched(decision) if decision.effect == PolicyEffect::Deny => {
+            decision.message()
+        }
+        PolicyVerdict::Failed(message) => message.to_string(),
+        PolicyVerdict::NoMatch | PolicyVerdict::Matched(_) => {
+            return PolicyHookAnswer {
+                stdout: String::new(),
+                exit_code: 0,
+            };
+        }
+    };
+    let answer = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": event,
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    });
+    PolicyHookAnswer {
+        stdout: answer.to_string(),
+        exit_code: 0,
     }
 }
 
@@ -650,14 +804,15 @@ mod tests {
     }
 
     #[test]
-    fn the_policy_matrix_enforces_command_and_mcp_rules() {
+    fn the_policy_matrix_enforces_every_rule_but_asking_about_files() {
         let matrix = Codex.policy_compatibility();
         assert_eq!(matrix.len(), 8);
         for entry in &matrix {
-            let expected = if matches!(
-                entry.subject,
-                PolicySubjectKind::Command | PolicySubjectKind::Mcp
-            ) {
+            let expected = if entry.effect == PolicyEffect::Deny
+                || matches!(
+                    entry.subject,
+                    PolicySubjectKind::Command | PolicySubjectKind::Mcp
+                ) {
                 tuff_hooks_spec::CoverageLevel::Partial
             } else {
                 tuff_hooks_spec::CoverageLevel::Unsupported

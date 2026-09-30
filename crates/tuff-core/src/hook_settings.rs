@@ -189,13 +189,32 @@ pub fn remove_registrations(
     if !settings_path.is_file() {
         return Ok(());
     }
-    let mut settings: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&settings_path)?)?;
+    let existing = std::fs::read(&settings_path)?;
+    let Some(updated) = without_registrations(settings_relpath, &existing, managed_hooks)? else {
+        return Ok(());
+    };
+    std::fs::write(&settings_path, updated)?;
+    eprintln!(
+        "updated {display_name} hook settings -> {}",
+        lockfile::relative_or_absolute_fs(&settings_path, repo_root)
+    );
+    Ok(())
+}
+
+/// `remove_registrations` on a settings file's bytes: the bytes it should
+/// hold without the registrations, or `None` when it has no `hooks` object
+/// to take them from.
+pub fn without_registrations(
+    settings_relpath: &str,
+    existing: &[u8],
+    managed_hooks: &[ManagedHook],
+) -> Result<Option<Vec<u8>>> {
+    let mut settings: serde_json::Value = serde_json::from_slice(existing)?;
     let Some(hooks) = settings
         .get_mut("hooks")
         .and_then(|hooks| hooks.as_object_mut())
     else {
-        return Ok(());
+        return Ok(None);
     };
     let mut empty_events = Vec::new();
     for (event, groups) in hooks.iter_mut() {
@@ -234,15 +253,9 @@ pub fn remove_registrations(
     for event in empty_events {
         hooks.remove(&event);
     }
-    std::fs::write(
-        &settings_path,
-        serde_json::to_string_pretty(&settings)? + "\n",
-    )?;
-    eprintln!(
-        "updated {display_name} hook settings -> {}",
-        lockfile::relative_or_absolute_fs(&settings_path, repo_root)
-    );
-    Ok(())
+    Ok(Some(
+        (serde_json::to_string_pretty(&settings)? + "\n").into_bytes(),
+    ))
 }
 
 #[cfg(test)]

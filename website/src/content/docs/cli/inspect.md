@@ -189,4 +189,17 @@ Print, for every agent, how each kind of policy rule is enforced: one row per ef
 tuff policy matrix
 ```
 
-Claude Code's rows read `partial` for command and file rules and `full` for MCP rules, and every other agent's rows read `unsupported`. `tuff add` of a [policy](/primitives/policies/) prints the caveat for each partially enforced rule and is refused for any selected agent that would not enforce one of its rules.
+Each row names what the rule compiles to, a native permission rule or the `tuff policy evaluate` hook, and the notes give the caveat for each `partial` or `unsupported` row. Open Agents' rows read `unsupported`. `tuff add` of a [policy](/primitives/policies/) prints the caveat for each partially enforced rule and is refused for any selected agent that would not enforce one of its rules.
+
+## `tuff policy evaluate`
+
+Answer an agent's hook for an installed policy. The agent runs it before a tool call and passes the call as JSON on standard input; it prints the answer in that agent's format and exits 0. `tuff add` registers it where a policy needs it, so it is not meant to be run by hand. See [The policy hook](/primitives/policies/#the-policy-hook).
+
+```sh frame="terminal"
+tuff policy evaluate --harness <agent> --policy <policy id>
+```
+
+| Flag | Description |
+|---|---|
+| `--harness <id>` | The agent running the hook: `claude`, `codex`, or `cursor` |
+| `--policy <id>` | The installed policy to evaluate |

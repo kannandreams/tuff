@@ -18,7 +18,7 @@ The reference is split by task. Each page covers its commands, their flags, and 
 | [Create and Add](/cli/add/) | [`tuff create`](/cli/add/#tuff-create), [`tuff add`](/cli/add/#tuff-add), [`tuff scan`](/cli/add/#tuff-scan) |
 | [Packs](/cli/packs/) | [`tuff pack`](/cli/packs/#tuff-pack), [`tuff add pack`](/cli/packs/#install-a-pack), [pack updates](/cli/packs/#update-a-pack) |
 | [MCP Servers](/cli/mcp/) | [`tuff add mcp`](/cli/mcp/#install-an-mcp-server), [`tuff mcp catalog`](/cli/mcp/#tuff-mcp-catalog), [`tuff mcp search`](/cli/mcp/#tuff-mcp-search), [`tuff mcp doctor`](/cli/mcp/#tuff-mcp-doctor) |
-| [Inspect and Generate](/cli/inspect/) | [`tuff list`](/cli/inspect/#tuff-list), [`tuff status`](/cli/inspect/#tuff-status), [`tuff generate`](/cli/inspect/#tuff-generate), [`tuff outdated`](/cli/inspect/#tuff-outdated), [`tuff policy matrix`](/cli/inspect/#tuff-policy-matrix) |
+| [Inspect and Generate](/cli/inspect/) | [`tuff list`](/cli/inspect/#tuff-list), [`tuff status`](/cli/inspect/#tuff-status), [`tuff generate`](/cli/inspect/#tuff-generate), [`tuff outdated`](/cli/inspect/#tuff-outdated), [`tuff policy matrix`](/cli/inspect/#tuff-policy-matrix), [`tuff policy evaluate`](/cli/inspect/#tuff-policy-evaluate) |
 | [Diff and Update](/cli/diff-update/) | [`tuff diff`](/cli/diff-update/#tuff-diff), [`tuff update`](/cli/diff-update/#tuff-update) |
 | [Validate in CI](/cli/ci/) | [`tuff check`](/cli/ci/#tuff-check), [GitHub Actions](/cli/ci/#ci-with-github-actions) |
 | [Clean Up](/cli/clean-up/) | [`tuff delete`](/cli/clean-up/#tuff-delete), [`tuff untrack`](/cli/clean-up/#tuff-untrack), [`tuff lock migrate`](/cli/clean-up/#tuff-lock-migrate), [`tuff cache clear`](/cli/clean-up/#tuff-cache-clear) |

@@ -141,6 +141,7 @@ export default defineConfig({
         {
           label: 'Project',
           items: [
+            { label: 'Stability', slug: 'concepts/stability' },
             { label: 'Changelog', slug: 'changelog' },
             { label: 'Development', slug: 'development' },
             { label: 'Credits', slug: 'credits' },

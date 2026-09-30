@@ -4,7 +4,7 @@ description: Run a Tuff console server, manage its publish keys, and build a rep
 ---
 
 :::caution[In progress]
-The server stores and returns reports today. `tuff console publish` still prints the report it will send and sends nothing, and the web pages that show the stored reports come in a later release.
+The server stores and returns reports today. `tuff console publish` still prints the report it will send and sends nothing, and the web pages that show the stored reports come in a later release. The console is excluded from the [1.0 stability promise](/concepts/stability).
 :::
 
 ## `tuff console serve`

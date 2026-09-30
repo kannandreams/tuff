@@ -2372,7 +2372,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tuff-adapter-claude"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2381,7 +2381,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-codex"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2390,7 +2390,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-cursor"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2399,7 +2399,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-open-agents"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2408,7 +2408,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-opencode"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2417,7 +2417,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-console"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2434,7 +2434,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-core"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "chrono",
  "docker_credential",
@@ -2456,14 +2456,14 @@ dependencies = [
 
 [[package]]
 name = "tuff-hooks-spec"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "tuffcli"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "assert_cmd",
  "clap",
