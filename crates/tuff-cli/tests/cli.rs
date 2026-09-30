@@ -3905,9 +3905,13 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
         let rules = matrix["rules"].as_array().unwrap();
         assert_eq!(rules.len(), 8, "two effects by four subjects: {matrix}");
         for rule in rules {
-            let expected = match (agent, rule["subject"].as_str().unwrap()) {
-                ("claude" | "opencode", "mcp") => "full",
-                ("claude" | "opencode", _) | ("codex", "command" | "mcp") => "partial",
+            let effect = rule["effect"].as_str().unwrap();
+            let expected = match (agent, effect, rule["subject"].as_str().unwrap()) {
+                ("claude" | "opencode" | "cursor", _, "mcp") => "full",
+                ("cursor", _, "edit") | ("cursor" | "codex", "ask", "read" | "edit") => {
+                    "unsupported"
+                }
+                ("claude" | "opencode" | "codex" | "cursor", _, _) => "partial",
                 _ => "unsupported",
             };
             assert_eq!(rule["coverage"], expected, "{agent}: {rule}");
@@ -3925,7 +3929,10 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
             ".codex/rules/tuff.rules prefix_rule(decision = \"forbidden\")",
         ))
         .stdout(predicate::str::contains(
-            "cursor: Tuff does not compile policy rules for this agent yet",
+            ".cursor/hooks.json beforeShellExecution: tuff policy evaluate",
+        ))
+        .stdout(predicate::str::contains(
+            "open-agents: Tuff does not compile policy rules for this agent yet",
         ));
 }
 
@@ -3938,24 +3945,12 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
     let project = temp.path().join("project");
     fs::create_dir_all(&project).unwrap();
     tuff().current_dir(&project).arg("init").assert().success();
-    tuff()
-        .current_dir(&project)
-        .args(["harness", "add", "cursor"])
-        .assert()
-        .success();
     let policy = write_infra_policy(temp.path());
     let before = fs::read_to_string(project.join("tuff.lock")).unwrap();
 
     let output = tuff()
         .current_dir(&project)
-        .args([
-            "add",
-            policy.to_str().unwrap(),
-            "--harness",
-            "open-agents",
-            "--harness",
-            "cursor",
-        ])
+        .args(["add", policy.to_str().unwrap(), "--harness", "open-agents"])
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -3964,7 +3959,7 @@ fn adding_a_policy_no_agent_enforces_is_refused_naming_every_rule() {
         stderr.contains("policy 'infra-guardrails' would not be enforced as written"),
         "{stderr}"
     );
-    for agent in ["Open Agents", "Cursor"] {
+    for agent in ["Open Agents"] {
         for rule in [
             "rule 1 (deny command \"git push --force\")",
             "rule 2 (deny read \".env\", \"secrets/**\")",
@@ -4270,17 +4265,12 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
     let project = temp.path().join("project");
     fs::create_dir_all(&project).unwrap();
     tuff().current_dir(&project).arg("init").assert().success();
-    tuff()
-        .current_dir(&project)
-        .args(["harness", "add", "cursor"])
-        .assert()
-        .success();
     let policy = write_infra_policy(temp.path());
     let before = fs::read_to_string(project.join("tuff.lock")).unwrap();
 
     let refused = tuff()
         .current_dir(&project)
-        .args(["add", policy.to_str().unwrap(), "--harness", "cursor"])
+        .args(["add", policy.to_str().unwrap(), "--harness", "open-agents"])
         .output()
         .unwrap();
     assert!(!refused.status.success());
@@ -4296,7 +4286,7 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
             "add",
             policy.to_str().unwrap(),
             "--harness",
-            "cursor",
+            "open-agents",
             "--accept-unenforced",
         ])
         .output()
@@ -4305,12 +4295,12 @@ fn accepting_unenforced_rules_still_refuses_an_agent_that_enforces_none_of_them(
     let stderr = String::from_utf8(accepted.stderr).unwrap();
     assert!(
         stderr.contains(
-            "policy 'infra-guardrails' was not installed: Cursor enforces none of its rules"
+            "policy 'infra-guardrails' was not installed: Open Agents enforces none of its rules"
         ),
         "{stderr}"
     );
     assert!(
-        stderr.contains("Cursor: rule 2 (deny read \".env\", \"secrets/**\") is not enforced"),
+        stderr.contains("Open Agents: rule 2 (deny read \".env\", \"secrets/**\") is not enforced"),
         "{stderr}"
     );
     assert_eq!(
@@ -4333,14 +4323,15 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
         .success();
     let policy = write_infra_policy(temp.path());
 
-    // Codex has no rule for the read and MCP rules, so a plain add is refused.
+    // Codex names MCP tools exactly, so the MCP rule's pattern has no Codex
+    // form and a plain add is refused.
     tuff()
         .current_dir(&project)
         .args(["add", policy.to_str().unwrap(), "--harness", "codex"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "Codex: rule 2 (deny read \".env\", \"secrets/**\") is not enforced",
+            "Codex: rule 4 (deny mcp \"github:delete_*\") is not enforced",
         ));
 
     let output = tuff()
@@ -4394,7 +4385,22 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
         .iter()
         .map(|gap| gap["rule"].as_u64().unwrap())
         .collect();
-    assert_eq!(recorded, [2, 4], "{report}");
+    assert_eq!(recorded, [4], "{report}");
+
+    // The read rule runs through tuff policy evaluate on Codex's PreToolUse.
+    let hooks: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(project.join(".codex/hooks.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        hooks["hooks"]["PreToolUse"],
+        serde_json::json!([{
+            "matcher": "^Bash$",
+            "hooks": [{
+                "type": "command",
+                "command": "tuff policy evaluate --harness codex --policy infra-guardrails"
+            }]
+        }])
+    );
     tuff()
         .current_dir(&project)
         .args(["check", "--strict"])
@@ -4441,6 +4447,10 @@ fn a_policy_compiles_command_rules_into_a_codex_rules_file_and_records_the_rest(
         .assert()
         .success();
     assert!(!rules_path.exists());
+    let hooks: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(project.join(".codex/hooks.json")).unwrap())
+            .unwrap();
+    assert!(hooks["hooks"].get("PreToolUse").is_none(), "{hooks}");
 }
 
 #[test]
@@ -10663,4 +10673,355 @@ fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("no tuff.lock under"));
+}
+
+/// Run `tuff policy evaluate` as a harness would, with `input` on stdin,
+/// and return its standard output and exit status.
+fn evaluate_hook(project: &Path, harness: &str, input: serde_json::Value) -> (String, i32) {
+    evaluate_hook_text(project, harness, &input.to_string())
+}
+
+fn evaluate_hook_text(project: &Path, harness: &str, input: &str) -> (String, i32) {
+    use std::io::Write;
+    let mut child = tuff()
+        .current_dir(project)
+        .args([
+            "policy",
+            "evaluate",
+            "--harness",
+            harness,
+            "--policy",
+            "infra-guardrails",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    (
+        String::from_utf8(output.stdout).unwrap(),
+        output.status.code().unwrap(),
+    )
+}
+
+#[test]
+fn runtime_hook_registers_tuff_policy_evaluate_for_claude_code_and_catches_reworded_commands() {
+    let temp = TempDir::new().unwrap();
+    let project = claude_project_with_user_settings(temp.path());
+    let policy = write_infra_policy(temp.path());
+
+    // Without the flag, Claude Code gets native rules and no hook.
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--harness", "claude"])
+        .assert()
+        .success();
+    assert!(claude_settings(&project).get("hooks").is_none());
+
+    tuff()
+        .current_dir(&project)
+        .args([
+            "add",
+            policy.to_str().unwrap(),
+            "--harness",
+            "claude",
+            "--runtime-hook",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "registered tuff policy evaluate for infra-guardrails (claude) -> .claude/settings.json",
+        ));
+    let settings = claude_settings(&project);
+    assert_eq!(
+        settings["hooks"]["PreToolUse"],
+        serde_json::json!([{
+            "matcher": "Bash",
+            "hooks": [{
+                "type": "command",
+                "command": "tuff policy evaluate --harness claude --policy infra-guardrails"
+            }]
+        }])
+    );
+    assert_eq!(settings["model"], "opus", "the user's settings are kept");
+    assert!(
+        settings["permissions"]["deny"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("Bash(git push --force *)")),
+        "native rules stay in place: {settings}"
+    );
+    tuff()
+        .current_dir(&project)
+        .args(["check"])
+        .assert()
+        .success();
+
+    let bash = |command: &str| {
+        serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": project.to_str().unwrap(),
+        })
+    };
+    for reworded in [
+        "/usr/bin/git push --force",
+        "sh -c \"git push --force\"",
+        "git -C . push --force",
+        "cd . && git push origin main --force",
+    ] {
+        let (stdout, code) = evaluate_hook(&project, "claude", bash(reworded));
+        assert_eq!(code, 0, "{reworded}");
+        let answer: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(
+            answer["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{reworded}: {answer}"
+        );
+        assert!(
+            answer["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap()
+                .contains("rule 1 (deny command \"git push --force\")"),
+            "{answer}"
+        );
+    }
+    let (stdout, _) = evaluate_hook(&project, "claude", bash("bash -lc 'terraform apply'"));
+    assert!(
+        stdout.contains("\"permissionDecision\":\"ask\""),
+        "{stdout}"
+    );
+    let (stdout, code) = evaluate_hook(&project, "claude", bash("git status"));
+    assert_eq!((stdout.as_str(), code), ("", 0), "no match says nothing");
+
+    // Input that cannot be read is denied rather than let through.
+    let (stdout, _) = evaluate_hook_text(&project, "claude", "not json");
+    assert!(
+        stdout.contains("\"permissionDecision\":\"deny\""),
+        "{stdout}"
+    );
+
+    // An update of a changed policy keeps the hook without the flag.
+    let manifest = policy.join("tuff.toml");
+    let changed = fs::read_to_string(&manifest)
+        .unwrap()
+        .replace("version = \"1.0.0\"", "version = \"1.1.0\"")
+        .replace(
+            "command = [\"terraform\", \"apply\"]",
+            "command = [\"terraform\", \"apply\"]\nreason = \"A human approves infrastructure changes.\"",
+        );
+    fs::write(&manifest, changed).unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["update", "infra-guardrails", "--harness", "claude"])
+        .assert()
+        .success();
+    let (stdout, _) = evaluate_hook(&project, "claude", bash("terraform apply"));
+    assert!(
+        stdout.contains("A human approves infrastructure changes."),
+        "{stdout}"
+    );
+    assert!(claude_settings(&project)["hooks"]["PreToolUse"].is_array());
+
+    // A hand edit to the registration is drift.
+    let mut edited = claude_settings(&project);
+    edited["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = serde_json::json!("true");
+    fs::write(
+        project.join(".claude/settings.json"),
+        serde_json::to_string_pretty(&edited).unwrap(),
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["check"])
+        .assert()
+        .failure();
+    let mut restored = edited;
+    restored["hooks"]["PreToolUse"][0]["hooks"][0]["command"] =
+        serde_json::json!("tuff policy evaluate --harness claude --policy infra-guardrails");
+    fs::write(
+        project.join(".claude/settings.json"),
+        serde_json::to_string_pretty(&restored).unwrap(),
+    )
+    .unwrap();
+
+    // Delete takes out the hook and the rules, and leaves the user's own.
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "infra-guardrails", "--harness", "claude"])
+        .assert()
+        .success();
+    let settings = claude_settings(&project);
+    assert!(settings["hooks"].get("PreToolUse").is_none(), "{settings}");
+    assert_eq!(
+        settings["permissions"]["deny"],
+        serde_json::json!(["Bash(curl *)"])
+    );
+}
+
+#[test]
+fn a_policy_for_cursor_runs_through_fail_closed_hooks() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["harness", "add", "cursor"])
+        .assert()
+        .success();
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--harness", "cursor"])
+        .assert()
+        .success();
+
+    let hooks: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(project.join(".cursor/hooks.json")).unwrap())
+            .unwrap();
+    let entry = serde_json::json!([{
+        "command": "tuff policy evaluate --harness cursor --policy infra-guardrails",
+        "failClosed": true
+    }]);
+    assert_eq!(hooks["version"], 1);
+    for event in [
+        "beforeShellExecution",
+        "beforeReadFile",
+        "beforeMCPExecution",
+    ] {
+        assert_eq!(hooks["hooks"][event], entry, "{event}: {hooks}");
+    }
+    tuff()
+        .current_dir(&project)
+        .args(["check"])
+        .assert()
+        .success();
+
+    let base = |event: &str| {
+        serde_json::json!({
+            "hook_event_name": event,
+            "workspace_roots": [project.to_str().unwrap()],
+        })
+    };
+    let answer = |input: serde_json::Value| {
+        let (stdout, code) = evaluate_hook(&project, "cursor", input);
+        assert_eq!(code, 0);
+        serde_json::from_str::<serde_json::Value>(&stdout).unwrap()
+    };
+    let mut read = base("beforeReadFile");
+    read["file_path"] = serde_json::json!(project.join("app/.env").to_str().unwrap());
+    assert_eq!(answer(read)["permission"], "deny");
+    let mut read = base("beforeReadFile");
+    read["file_path"] = serde_json::json!(project.join("README.md").to_str().unwrap());
+    assert_eq!(answer(read), serde_json::json!({"permission": "allow"}));
+    let mut shell = base("beforeShellExecution");
+    shell["command"] = serde_json::json!("cat secrets/prod.key");
+    shell["cwd"] = serde_json::json!(project.to_str().unwrap());
+    assert_eq!(answer(shell)["permission"], "deny");
+    let mut shell = base("beforeShellExecution");
+    shell["command"] = serde_json::json!("terraform -chdir=infra apply");
+    assert_eq!(answer(shell)["permission"], "ask");
+    let mut mcp = base("beforeMCPExecution");
+    mcp["mcp_server_name"] = serde_json::json!("github");
+    mcp["tool_name"] = serde_json::json!("delete_repo");
+    let denied = answer(mcp);
+    assert_eq!(denied["permission"], "deny");
+    assert!(denied["agent_message"].as_str().unwrap().contains("rule 4"));
+
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "infra-guardrails", "--harness", "cursor"])
+        .assert()
+        .success();
+    let hooks: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(project.join(".cursor/hooks.json")).unwrap())
+            .unwrap();
+    assert_eq!(hooks["hooks"], serde_json::json!({}), "{hooks}");
+
+    // With the policy gone, a hook left behind denies instead of allowing.
+    let mut read = base("beforeReadFile");
+    read["file_path"] = serde_json::json!(project.join("README.md").to_str().unwrap());
+    let refused = answer(read);
+    assert_eq!(refused["permission"], "deny");
+    assert!(
+        refused["user_message"]
+            .as_str()
+            .unwrap()
+            .contains("policy 'infra-guardrails' is not installed"),
+        "{refused}"
+    );
+}
+
+#[test]
+fn a_codex_policy_hook_denies_patches_to_protected_files() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["harness", "add", "codex"])
+        .assert()
+        .success();
+    let dir = temp.path().join("infra-guardrails");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("tuff.toml"),
+        r#"id = "infra-guardrails"
+type = "policy"
+version = "1.0.0"
+description = "Secrets stay untouched."
+
+[[policy.rules]]
+effect = "deny"
+edit = [".env", "secrets/"]
+reason = "Secrets are managed by the platform team."
+"#,
+    )
+    .unwrap();
+    tuff()
+        .current_dir(&project)
+        .args(["add", dir.to_str().unwrap(), "--harness", "codex"])
+        .assert()
+        .success();
+    let hooks: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(project.join(".codex/hooks.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        hooks["hooks"]["PreToolUse"][0]["matcher"],
+        "^(Bash|apply_patch)$"
+    );
+
+    let call = |tool: &str, command: &str| {
+        serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool,
+            "tool_input": {"command": command},
+            "cwd": project.to_str().unwrap(),
+        })
+    };
+    let patch = "*** Begin Patch\n*** Update File: secrets/db.yaml\n@@\n-a\n+b\n*** End Patch\n";
+    let (stdout, code) = evaluate_hook(&project, "codex", call("apply_patch", patch));
+    assert_eq!(code, 0);
+    let answer: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(answer["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert!(
+        answer["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .ends_with("Secrets are managed by the platform team.")
+    );
+    let (stdout, _) = evaluate_hook(&project, "codex", call("Bash", "echo KEY=1 >> .env"));
+    assert!(stdout.contains("\"deny\""), "{stdout}");
+    let other = "*** Begin Patch\n*** Add File: src/main.rs\n+fn main() {}\n*** End Patch\n";
+    let (stdout, code) = evaluate_hook(&project, "codex", call("apply_patch", other));
+    assert_eq!((stdout.as_str(), code), ("", 0));
 }

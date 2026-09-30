@@ -389,6 +389,62 @@ pub trait AgentAdapter {
         Ok(None)
     }
 
+    /// Whether this harness enforces one policy rule through the
+    /// `tuff policy evaluate` hook (RFC-107 D3). The default is never.
+    fn policy_hook_use(
+        &self,
+        _rule: &crate::policy::PolicyRule,
+    ) -> Result<crate::policy_eval::PolicyHookUse> {
+        Ok(crate::policy_eval::PolicyHookUse::Never)
+    }
+
+    /// The hooks-only fragment that registers `command` for rules of these
+    /// subjects, in the file at `hook_settings_relpath`, or `None` when this
+    /// harness has no hook for policies.
+    fn policy_hook_fragment(
+        &self,
+        _command: &str,
+        _subjects: &[crate::policy::PolicySubjectKind],
+    ) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// Read the tool call a policy hook was run for from the harness's hook
+    /// input.
+    fn policy_hook_request(
+        &self,
+        _input: &serde_json::Value,
+    ) -> Result<crate::policy_eval::PolicyHookRequest> {
+        Err(TuffError::unsupported(format!(
+            "{} does not run policy hooks",
+            self.display_name()
+        )))
+    }
+
+    /// The answer a policy hook gives the harness. The default refuses
+    /// every call it has a reason to and says nothing otherwise.
+    fn policy_hook_answer(
+        &self,
+        _event: &str,
+        verdict: crate::policy_eval::PolicyVerdict<'_>,
+    ) -> crate::policy_eval::PolicyHookAnswer {
+        use crate::policy_eval::{PolicyHookAnswer, PolicyVerdict};
+        match verdict {
+            PolicyVerdict::NoMatch => PolicyHookAnswer {
+                stdout: String::new(),
+                exit_code: 0,
+            },
+            PolicyVerdict::Matched(decision) => PolicyHookAnswer {
+                stdout: decision.message(),
+                exit_code: 2,
+            },
+            PolicyVerdict::Failed(message) => PolicyHookAnswer {
+                stdout: message.to_string(),
+                exit_code: 2,
+            },
+        }
+    }
+
     fn kinds_supported(&self) -> &[CapabilityType];
 
     fn supports(&self, capability_type: CapabilityType) -> bool {
