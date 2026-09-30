@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-30
+
 ### Added
 
 - **`tuff policy evaluate` enforces policy rules an agent has no setting for.** It runs as a hook before a tool call, reads the call as JSON on standard input, finds the installed policy, and answers `deny` or `ask` in the agent's own format with the rule and its `reason`, or nothing when no rule matches. A command is split at `&&`, `||`, `;`, `|`, and newlines, a path such as `/usr/bin/git` is reduced to the program name, `sh -c`, `env`, `sudo`, `xargs`, `eval`, and `$(...)` are unwrapped, and options before a subcommand are skipped, so `git -C . push --force` matches `["git", "push", "--force"]`. Input that is not JSON, and a policy that is no longer installed, are denied. The hook is recorded in `tuff.lock`, so `tuff check` reports a hand edit, `tuff update` keeps it, and `tuff delete` removes it. `tuff` must be on the `PATH` wherever the agent runs.
@@ -13,6 +15,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 - **Cursor enforces policies.** `command`, `mcp`, and `deny` `read` rules run through `tuff policy evaluate` on `beforeShellExecution`, `beforeReadFile`, and `beforeMCPExecution` in `.cursor/hooks.json`, registered with `failClosed: true`, so a missing or failing `tuff` blocks the call. `edit` rules, and `ask` rules for `read`, are not enforced in Cursor. The mapping follows Cursor's hooks documentation and has not been checked in a running Cursor.
 - **`tuff add --runtime-hook` catches reworded commands in Claude Code.** It also registers `tuff policy evaluate` as a `PreToolUse` hook on `Bash`, next to the compiled permission rules, so `/usr/bin/git push --force`, `sh -c "git push --force"`, and `git -C . push --force` are refused. Checked in Claude Code 2.1.285.
 - **A [Stability](https://tuffcli.dev/concepts/stability/) page states what the 1.0 promise covers.** It lists the CLI commands, flags, and exit codes, the `--json` output, `tuff.toml`, `tuff.lock` schema 3, the hooks specification, and the file locations in each harness's folder. Policies, the dashboard, and the Rust API of the published crates are excluded. The page states how a new lockfile version is read alongside older ones and how a Tuff that predates it refuses the file.
+
+### Improved
+
+- **Docs site maintenance.** The agent policies blog post shows output from tuffcli 0.12.0, and the site's `fast-uri` dependency is updated for GHSA-hrr3-gc8f-f4qj.
 
 ## [0.12.0] - 2026-09-24
 
@@ -329,7 +335,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/kannandreams/tuff/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/kannandreams/tuff/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/kannandreams/tuff/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/kannandreams/tuff/compare/v0.10.1...v0.10.2
