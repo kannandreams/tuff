@@ -5,10 +5,10 @@ description: Policies declare what an agent must never do, or must ask before do
 
 A policy capability is a list of rules that narrow what a coding agent may do in a project: commands it must not run, files it must not read or edit, MCP tools it must not call, and actions it must ask a person about first. It is written once, and each agent the project uses enforces it in its own way, or Tuff says plainly that it cannot.
 
-:::caution[Preview: Claude Code, OpenCode, and Codex]
-Claude Code and OpenCode enforce every kind of policy rule. Codex enforces `command` and `mcp` rules. Tuff turns each rule into the agent's own rules.
+:::caution[Preview: Claude Code, OpenCode, Codex, and Cursor]
+Claude Code and OpenCode enforce every kind of policy rule. Codex enforces `command` and `mcp` rules, and `deny` rules for `read` and `edit`. Cursor enforces `command`, `mcp`, and `deny` `read` rules. Tuff turns each rule into the agent's own rules, or, where the agent has none, registers [the policy hook](#the-policy-hook).
 
-If you install a policy for an agent that does not enforce one of its rules, such as Cursor, or Codex for a `read` rule, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
+If you install a policy for an agent that does not enforce one of its rules, such as Cursor for an `edit` rule, or Open Agents for any rule, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
 
 This is on purpose. If Tuff installed the policy anyway, the agent would ignore the rules, but you would think they were in place.
 
@@ -116,6 +116,16 @@ This limit comes from Claude Code, not Tuff: Claude Code matches the text of
 a command, and its own documentation says command and file rules are not a
 security boundary.
 
+### Catching reworded commands
+
+`--runtime-hook` also registers [the policy hook](#the-policy-hook) as a `PreToolUse` hook on `Bash` in `.claude/settings.json`. The permission rules stay in place, and the hook checks each command again after reducing it to the programs it runs, so the three forms above are caught:
+
+```sh frame="terminal"
+tuff add ./policies/infra-guardrails -a claude --runtime-hook
+```
+
+The hook is recorded in `tuff.lock` like a permission rule: `tuff check` reports it when it is edited or removed by hand, `tuff update` keeps it, and `tuff delete` removes it. A script or program that runs the command itself is still not seen. Checked in Claude Code 2.1.285, where `/usr/bin/git push --force` and `sh -c "git -C . push --force"` were refused with the rule's reason while Bash was allowed.
+
 :::caution[Use the sandbox when a rule must never be bypassed]
 Policies stop an agent from doing something harmful by accident, such as a
 force push or reading `.env`. They are not a guarantee.
@@ -144,7 +154,7 @@ A rule's `reason` becomes the rule's `justification`, which Codex shows when it 
 - **Matching.** Codex matches a command's leading words, and splits a simple chain such as `git add . && git push --force` to check each command. A script with redirection, `$(...)`, a variable assignment, a wildcard, or control flow is checked as one command, so `git push --force > push.log` is not matched. A program run by absolute path, such as `/usr/bin/git`, may not be matched.
 - **Ask without approvals.** Where Codex never asks for approval, as in `codex exec` by default, a `prompt` rule refuses the command.
 - **MCP tools.** Codex removes a tool in `disabled_tools` from the session, and asks before calling a tool whose `approval_mode` is `prompt`. Both settings take exact names, so an `mcp` rule with `*`, such as `github:delete_*`, is not enforced in Codex. The server must already be in `.codex/config.toml`, installed with `tuff add mcp <server> -a codex` or written by hand, or `tuff add` refuses the policy. Codex calls a `prompt` tool without asking when its approval policy is `never` and the sandbox allows full disk access or is off, as with `--dangerously-bypass-approvals-and-sandbox`; in `codex exec` with its default sandbox, the call is refused.
-- **Other rules.** Codex has no project setting for file paths, so `read` and `edit` rules are not enforced in Codex. A policy with such rules installs for Codex only with [`--accept-unenforced`](#rules-an-agent-does-not-enforce).
+- **File rules.** Codex has no project setting for file paths, so a `deny` rule for `read` or `edit` runs through [the policy hook](#the-policy-hook), registered on `PreToolUse` in `.codex/hooks.json`. A `read` rule checks the files a `Bash` command names on its command line, as arguments of programs such as `cat`, `head`, `sed`, and `grep` or as `<` redirections. An `edit` rule checks the files an `apply_patch` call changes and the files a `Bash` command writes, as `>` redirections or arguments of programs such as `tee`, `rm`, and `mv`. A script or program that opens or writes a file itself is not seen. Codex runs a project's hooks only in a trusted project and after they are approved with `/hooks`, and lets the call through if the hook fails. A Codex hook can refuse a call but cannot ask, so an `ask` rule for `read` or `edit` is not enforced in Codex and installs only with [`--accept-unenforced`](#rules-an-agent-does-not-enforce).
 
 `tuff update` of a server keeps the policy's settings on its table, and `tuff delete` refuses to remove a server while an installed policy has settings on it. `tuff check` reports a compiled rule removed from either file by hand, and `tuff delete` of the policy removes its rules, and the rules file once no rules remain. To see how Codex reads a command rule:
 
@@ -175,6 +185,44 @@ An `ask` rule is written with `"ask"` in place of `"deny"`.
 
 `opencode` takes policies and [MCP servers](/primitives/mcp-servers/#what-gets-written). Skills reach OpenCode through `open-agents`, and `tuff init` does not register `opencode`.
 
+## Cursor
+
+Cursor has no project permission rules Tuff can write, so every rule runs through [the policy hook](#the-policy-hook), registered in `.cursor/hooks.json` with `failClosed: true`:
+
+| Policy rule | Cursor hook |
+|---|---|
+| `command` | `beforeShellExecution` |
+| `read` | `beforeReadFile`, and `beforeShellExecution` for the files a command names |
+| `mcp` | `beforeMCPExecution` |
+
+- **Fail closed.** With `failClosed`, Cursor blocks the call when the hook crashes, times out, or cannot be started, so a machine without `tuff` on its `PATH` refuses every shell command, file read, and MCP call the hook covers.
+- **Ask.** Cursor asks before a command or MCP call when the hook answers `ask`. `beforeReadFile` can only allow or deny, so an `ask` rule for `read` is not enforced.
+- **Edit rules.** Cursor's documentation does not describe where its `preToolUse` input carries the path of a file write, so `edit` rules are not enforced in Cursor.
+- **Verification.** The mapping follows Cursor's hooks documentation and has not yet been checked in a running Cursor.
+
+## The policy hook
+
+Where an agent has no setting for a rule, or with `--runtime-hook` for Claude Code, Tuff registers `tuff policy evaluate` as a hook the agent runs before a tool call:
+
+```text
+tuff policy evaluate --harness <agent> --policy <policy id>
+```
+
+The agent passes the tool call as JSON on standard input. `tuff policy evaluate` finds the installed policy by walking up from the call's working directory to the folder that holds `<agent folder>/policies/<policy id>/policy.toml`, checks the call against every rule, and answers in the agent's own format: `deny` or `ask` with the rule and its `reason`, or nothing when no rule matches, so the agent decides as it would without the hook.
+
+- **Commands.** A command is split the way a shell splits it, at `&&`, `||`, `;`, `|`, and newlines, and each program it runs is checked. A path is reduced to the program name, so `/usr/bin/git` is `git`. `sh -c`, `bash -lc`, `env`, `sudo`, `timeout`, `xargs`, `eval`, and `$(...)` are unwrapped. Options before the subcommand are skipped, so `git -C . push --force` matches `["git", "push", "--force"]`. The rule's later words may appear anywhere after the subcommand, so `git push origin main --force` matches too, and a short option cluster such as `-rf` matches `-fr` and `-r -f`.
+- **Files.** A path is judged relative to the project root, with the same `.gitignore` reading as the rest of the policy. A path outside the project matches no rule.
+- **Refusal.** Input that is not JSON, and a policy that is no longer installed, are answered with `deny`.
+- **Speed.** One evaluation took 4 ms at the median on an Apple silicon Mac with a release build, far below the agents' hook timeouts.
+- **Requirements.** `tuff` must be on the `PATH` of every machine and CI runner where the agent runs, and the installed `tuff` must read the policy's format.
+
+`tuff policy evaluate` is meant to be run by the agent. To see what it answers, pipe a hook input into it:
+
+```sh frame="terminal"
+echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"sh -c \"git push --force\""}}' \
+  | tuff policy evaluate --harness claude --policy infra-guardrails
+```
+
 ## What each agent can enforce
 
 ```sh frame="terminal"
@@ -182,37 +230,32 @@ tuff policy matrix
 tuff policy matrix --json
 ```
 
-Example output, showing Claude Code and Cursor. The full output also lists
-Open Agents, whose rows read `unsupported` like Cursor's, Codex, whose
-`command` and `mcp` rows read `partial`, and OpenCode, whose rows read like Claude Code's:
+Example output, showing Claude Code and Cursor. The full output also lists Open Agents, whose rows read `unsupported`, Codex, whose rows read `partial` except `ask` for `read` and `edit`, and OpenCode, whose rows read like Claude Code's:
 
 ```text
-┌─────────────┬────────┬─────────┬─────────────┬────────────────────────────────────────┐
-│ ADAPTER     │ EFFECT │ SUBJECT │ COVERAGE    │ MECHANISM                              │
-├─────────────┼────────┼─────────┼─────────────┼────────────────────────────────────────┤
-│ claude      │ deny   │ command │ partial     │ permissions.deny Bash(<command> *)     │
-│ claude      │ deny   │ read    │ partial     │ permissions.deny Read(<path>)          │
-│ claude      │ deny   │ edit    │ partial     │ permissions.deny Edit(<path>)          │
-│ claude      │ deny   │ mcp     │ full        │ permissions.deny mcp__<server>__<tool> │
-│ claude      │ ask    │ command │ partial     │ permissions.ask Bash(<command> *)      │
-│ claude      │ ask    │ read    │ partial     │ permissions.ask Read(<path>)           │
-│ claude      │ ask    │ edit    │ partial     │ permissions.ask Edit(<path>)           │
-│ claude      │ ask    │ mcp     │ full        │ permissions.ask mcp__<server>__<tool>  │
-│ cursor      │ deny   │ command │ unsupported │                                        │
-│ cursor      │ deny   │ read    │ unsupported │                                        │
-│ cursor      │ deny   │ edit    │ unsupported │                                        │
-│ cursor      │ deny   │ mcp     │ unsupported │                                        │
-│ cursor      │ ask    │ command │ unsupported │                                        │
-│ cursor      │ ask    │ read    │ unsupported │                                        │
-│ cursor      │ ask    │ edit    │ unsupported │                                        │
-│ cursor      │ ask    │ mcp     │ unsupported │                                        │
-└─────────────┴────────┴─────────┴─────────────┴────────────────────────────────────────┘
-
-Notes:
-- claude: matches the command as Claude writes it, including inside compound commands; the same program run another way, such as by absolute path, through sh -c, or as git -C . push, is not matched
-- claude: covers Claude's file tools and the shell commands Claude Code recognises, such as cat and sed, not a script or program that opens the file itself
-- cursor: Tuff does not compile policy rules for this agent yet
+┌─────────────┬────────┬─────────┬─────────────┬─────────────────────────────────────────────────────────────────────────────────┐
+│ ADAPTER     │ EFFECT │ SUBJECT │ COVERAGE    │ MECHANISM                                                                       │
+├─────────────┼────────┼─────────┼─────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│ claude      │ deny   │ command │ partial     │ permissions.deny Bash(<command> *)                                              │
+│ claude      │ deny   │ read    │ partial     │ permissions.deny Read(<path>)                                                   │
+│ claude      │ deny   │ edit    │ partial     │ permissions.deny Edit(<path>)                                                   │
+│ claude      │ deny   │ mcp     │ full        │ permissions.deny mcp__<server>__<tool>                                          │
+│ claude      │ ask    │ command │ partial     │ permissions.ask Bash(<command> *)                                               │
+│ claude      │ ask    │ read    │ partial     │ permissions.ask Read(<path>)                                                    │
+│ claude      │ ask    │ edit    │ partial     │ permissions.ask Edit(<path>)                                                    │
+│ claude      │ ask    │ mcp     │ full        │ permissions.ask mcp__<server>__<tool>                                           │
+│ cursor      │ deny   │ command │ partial     │ .cursor/hooks.json beforeShellExecution: tuff policy evaluate                   │
+│ cursor      │ deny   │ read    │ partial     │ .cursor/hooks.json beforeReadFile, beforeShellExecution: tuff policy evaluate   │
+│ cursor      │ deny   │ edit    │ unsupported │                                                                                 │
+│ cursor      │ deny   │ mcp     │ full        │ .cursor/hooks.json beforeMCPExecution: tuff policy evaluate                     │
+│ cursor      │ ask    │ command │ partial     │ .cursor/hooks.json beforeShellExecution: tuff policy evaluate                   │
+│ cursor      │ ask    │ read    │ unsupported │                                                                                 │
+│ cursor      │ ask    │ edit    │ unsupported │                                                                                 │
+│ cursor      │ ask    │ mcp     │ full        │ .cursor/hooks.json beforeMCPExecution: tuff policy evaluate                     │
+└─────────────┴────────┴─────────┴─────────────┴─────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+The notes under the table give the caveat for each `partial` and `unsupported` row.
 
 How to read it:
 
@@ -224,7 +267,7 @@ How to read it:
 | `COVERAGE` | `full` (always enforced), `partial` (enforced with the limits in the notes), or `unsupported` (not enforced, so `tuff add` refuses the policy) |
 | `MECHANISM` | What Tuff writes for that agent, such as a Claude Code permission rule |
 
-The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Cursor and Open Agents enforce nothing yet, Codex enforces `command` and `mcp` rules, and OpenCode enforces every kind of rule.
+The matrix has one row per agent, effect, and subject, with the same `full`, `partial`, and `unsupported` coverage the [Hooks Specification](/spec/hooks/) uses for hooks, the mechanism a rule compiles to, and the caveat when coverage is partial. `tuff add` prints each partial caveat for the rules it installs, and refuses a policy for any selected agent that would not enforce one of its rules. Open Agents enforces nothing, Codex enforces every rule but `ask` for `read` and `edit`, Cursor enforces every rule but `edit` and `ask` for `read`, and Claude Code and OpenCode enforce every kind of rule.
 
 ## Rules an agent does not enforce
 

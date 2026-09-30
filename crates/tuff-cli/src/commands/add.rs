@@ -33,13 +33,24 @@ pub fn cmd_add(
         target_ids,
         global,
         hook_file,
-        false,
+        PolicyOptions::default(),
     )
 }
 
-/// `tuff add`, where `accept_unenforced` (`--accept-unenforced`) installs a
-/// policy's rules that each selected agent enforces and records the rest,
-/// instead of refusing the policy (RFC-107 D6).
+/// How `tuff add` installs a policy.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PolicyOptions {
+    /// `--accept-unenforced`: install the rules each selected agent
+    /// enforces and record the rest, instead of refusing the policy
+    /// (RFC-107 D6).
+    pub accept_unenforced: bool,
+    /// `--runtime-hook`: also register `tuff policy evaluate` for rules a
+    /// native setting covers only in part, such as Claude Code command
+    /// rules (RFC-107 D3, internal #41).
+    pub runtime_hook: bool,
+}
+
+/// `tuff add` with the policy choices of [`PolicyOptions`].
 #[expect(
     clippy::too_many_arguments,
     reason = "CLI dispatch passes source and install context"
@@ -52,7 +63,7 @@ pub fn cmd_add_accepting(
     target_ids: &[String],
     global: bool,
     hook_file: Option<&Path>,
-    accept_unenforced: bool,
+    policy_options: PolicyOptions,
 ) -> Result<()> {
     let source = source.ok_or_else(|| TuffError::usage("source path or URL is required"))?;
     let (scope, install_root) = if global {
@@ -75,7 +86,7 @@ pub fn cmd_add_accepting(
             capability_type,
             repo_root,
             hook_file,
-            accept_unenforced,
+            policy_options,
         );
     }
     if let Some(name) = name
@@ -95,7 +106,7 @@ pub fn cmd_add_accepting(
         capability_type,
         name,
         hook_file,
-        accept_unenforced,
+        policy_options,
     )
 }
 
@@ -447,7 +458,7 @@ fn cmd_add_git(
     capability_type: Option<&str>,
     project_root: &Path,
     hook_file: Option<&Path>,
-    accept_unenforced: bool,
+    policy_options: PolicyOptions,
 ) -> Result<()> {
     // `<name>@<requirement>` asks for a release (RFC-101). The tags are
     // listed before anything is cloned, so a request nothing satisfies
@@ -562,7 +573,7 @@ fn cmd_add_git(
             requested: request.map(|request| request.to_string()),
         })),
         true,
-        accept_unenforced,
+        policy_options,
     );
     drop(source_guard);
     result
@@ -628,7 +639,7 @@ pub(crate) fn cmd_add_local_path(
         Some(capability_type.as_str()),
         None,
         None,
-        false,
+        PolicyOptions::default(),
     )
 }
 
@@ -645,7 +656,7 @@ fn cmd_add_local(
     capability_type: Option<&str>,
     name: Option<&str>,
     hook_file: Option<&Path>,
-    accept_unenforced: bool,
+    policy_options: PolicyOptions,
 ) -> Result<()> {
     let capability_dir = lockfile::absolutize(install_root, capability_path);
     let parsed_type = capability_type.and_then(CapabilityType::parse);
@@ -710,7 +721,7 @@ fn cmd_add_local(
         target_ids,
         None,
         true,
-        accept_unenforced,
+        policy_options,
     )
 }
 
@@ -1150,6 +1161,9 @@ struct CompiledPolicy {
     /// owns and no longer needs.
     files: Vec<(String, Vec<u8>)>,
     managed: Vec<lockfile::ManagedPermission>,
+    /// The `tuff policy evaluate` registrations, for rules the agent
+    /// enforces through its hook.
+    hooks: Vec<lockfile::ManagedHook>,
 }
 
 /// Say, per agent, which rules are enforced only partially and why.
@@ -1181,10 +1195,22 @@ fn warn_partially_enforced_policy(
     Ok(())
 }
 
-/// Compile a policy into each agent's native permission rules and compute
-/// the settings files they will be in, removing rules a previous install of
-/// the same policy recorded and this one no longer has. Everything here can
-/// refuse, a corrupt settings file included, and nothing here writes.
+/// The command a harness runs for a policy's `tuff policy evaluate` hook.
+pub(crate) fn policy_hook_command(adapter: AdapterKind, capability_id: &str) -> String {
+    format!(
+        "tuff policy evaluate --harness {} --policy {capability_id}",
+        adapter.id()
+    )
+}
+
+/// Compile a policy into each agent's native permission rules and its
+/// `tuff policy evaluate` hook, and compute the settings files they will be
+/// in, removing rules and registrations a previous install of the same
+/// policy recorded and this one no longer has. `runtime_hook`
+/// (`--runtime-hook`) also registers the hook for rules a native setting
+/// already covers in part; an install that registered it keeps it.
+/// Everything here can refuse, a corrupt settings file included, and
+/// nothing here writes.
 fn compile_policy(
     install_root: &Path,
     capability_id: &str,
@@ -1192,16 +1218,21 @@ fn compile_policy(
     adapters: &[AdapterKind],
     lockfile: &lockfile::Lockfile,
     enforcement: &BTreeMap<String, PolicyEnforcement>,
+    runtime_hook: bool,
 ) -> Result<BTreeMap<String, CompiledPolicy>> {
+    use tuff_core::policy_eval::PolicyHookUse;
     let mut compiled = BTreeMap::new();
     for adapter in adapters {
-        if adapter.permissions_settings_relpath().is_none() {
-            return Err(TuffError::unsupported(format!(
-                "{} has no native permission rules for policy '{capability_id}'",
-                adapter.display_name()
-            )));
-        }
+        let previous_target = lockfile
+            .capabilities
+            .get(capability_id)
+            .and_then(|entry| entry.targets.get(adapter.id()));
+        let previous_hooks = previous_target
+            .map(|target| target.managed_hooks.clone())
+            .unwrap_or_default();
+        let runtime_hook = runtime_hook || !previous_hooks.is_empty();
         let mut managed: Vec<lockfile::ManagedPermission> = Vec::new();
+        let mut hook_subjects: Vec<tuff_core::policy::PolicySubjectKind> = Vec::new();
         let enforced = enforcement
             .get(adapter.id())
             .map(|agent| agent.enforced.as_slice())
@@ -1211,6 +1242,18 @@ fn compile_policy(
                 continue;
             }
             let effect = rule.effect()?;
+            let hook_use = adapter.policy_hook_use(rule)?;
+            if hook_use == PolicyHookUse::Required
+                || (hook_use == PolicyHookUse::Optional && runtime_hook)
+            {
+                let subject = rule.subject()?.kind();
+                if !hook_subjects.contains(&subject) {
+                    hook_subjects.push(subject);
+                }
+            }
+            if hook_use == PolicyHookUse::Required {
+                continue;
+            }
             let cannot_compile = || {
                 TuffError::unsupported(format!(
                     "{} cannot compile policy rule ({}) natively",
@@ -1243,10 +1286,7 @@ fn compile_policy(
                 })
                 .collect::<Vec<_>>()
         };
-        let previous = lockfile
-            .capabilities
-            .get(capability_id)
-            .and_then(|entry| entry.targets.get(adapter.id()))
+        let previous = previous_target
             .map(|target| target.managed_permissions.clone())
             .unwrap_or_default();
         let relpaths: std::collections::BTreeSet<&str> = managed
@@ -1283,9 +1323,95 @@ fn compile_policy(
             )?;
             files.push((settings_relpath.to_string(), merged));
         }
-        compiled.insert(adapter.id().to_string(), CompiledPolicy { files, managed });
+        let hooks = compile_policy_hook(
+            install_root,
+            capability_id,
+            *adapter,
+            &hook_subjects,
+            &previous_hooks,
+            &mut files,
+        )?;
+        compiled.insert(
+            adapter.id().to_string(),
+            CompiledPolicy {
+                files,
+                managed,
+                hooks,
+            },
+        );
     }
     Ok(compiled)
+}
+
+/// Register a policy's `tuff policy evaluate` hook for the rules of
+/// `subjects`, and take out the registrations `previous` recorded that it
+/// no longer makes. The settings file's next bytes go into `files`, merged
+/// with any permission rules already compiled into the same file.
+fn compile_policy_hook(
+    install_root: &Path,
+    capability_id: &str,
+    adapter: AdapterKind,
+    subjects: &[tuff_core::policy::PolicySubjectKind],
+    previous: &[lockfile::ManagedHook],
+    files: &mut Vec<(String, Vec<u8>)>,
+) -> Result<Vec<lockfile::ManagedHook>> {
+    let relpath = adapter.hook_settings_relpath();
+    let fragment = if subjects.is_empty() {
+        None
+    } else {
+        Some(
+            adapter
+                .policy_hook_fragment(&policy_hook_command(adapter, capability_id), subjects)
+                .ok_or_else(|| {
+                    TuffError::unsupported(format!(
+                        "{} has no hook to run tuff policy evaluate for policy '{capability_id}'",
+                        adapter.display_name()
+                    ))
+                })?,
+        )
+    };
+    let hooks = match &fragment {
+        Some(fragment) => lockfile::managed_hooks_from_fragment(install_root, relpath, fragment)?,
+        None => Vec::new(),
+    };
+    let stale: Vec<lockfile::ManagedHook> = previous
+        .iter()
+        .filter(|old| {
+            !hooks.iter().any(|new| {
+                new.settings_path == old.settings_path
+                    && new.event == old.event
+                    && new.command == old.command
+            })
+        })
+        .cloned()
+        .collect();
+    if fragment.is_none() && stale.is_empty() {
+        return Ok(hooks);
+    }
+    let position = files.iter().position(|(path, _)| path == relpath);
+    let settings_path = install_root.join(relpath);
+    let mut bytes = match position {
+        Some(index) => Some(files[index].1.clone()),
+        None if settings_path.is_file() => Some(fs::read(&settings_path)?),
+        None => None,
+    };
+    if let Some(current) = &bytes
+        && !stale.is_empty()
+        && let Some(cleaned) =
+            tuff_core::hook_settings::without_registrations(relpath, current, &stale)?
+    {
+        bytes = Some(cleaned);
+    }
+    if let Some(fragment) = &fragment {
+        bytes = Some(adapter.merge_hook_fragment(bytes.as_deref(), fragment)?);
+    }
+    if let Some(bytes) = bytes {
+        match position {
+            Some(index) => files[index].1 = bytes,
+            None => files.push((relpath.to_string(), bytes)),
+        }
+    }
+    Ok(hooks)
 }
 
 /// The rules of a policy one agent enforces, and a record of the rest.
@@ -1416,12 +1542,11 @@ pub(crate) fn install_capability(
         target_ids,
         source,
         report,
-        false,
+        PolicyOptions::default(),
     )
 }
 
-/// `install_capability`, where `accept_unenforced` installs a policy's
-/// enforced rules and records the rest instead of refusing the policy.
+/// `install_capability` with the policy choices of [`PolicyOptions`].
 #[expect(
     clippy::too_many_arguments,
     reason = "install_capability's context plus the --accept-unenforced choice"
@@ -1434,11 +1559,11 @@ pub(crate) fn install_capability_accepting(
     target_ids: &[String],
     source: Option<lockfile::CapabilitySource>,
     report: bool,
-    accept_unenforced: bool,
+    policy_options: PolicyOptions,
 ) -> Result<()> {
     let policy_enforcement = match capability.kind {
         CapabilityKind::Policy { ref policy } => {
-            let accept = accept_unenforced
+            let accept = policy_options.accept_unenforced
                 || policy_recorded_unenforced_rules(install_root, scope, &capability.id);
             let enforcement = policy_enforcement(&capability.id, policy, target_ids, accept)?;
             if report {
@@ -1534,6 +1659,7 @@ pub(crate) fn install_capability_accepting(
             &adapters,
             &lockfile,
             &policy_enforcement,
+            policy_options.runtime_hook,
         )?,
         _ => BTreeMap::new(),
     };
@@ -1605,6 +1731,7 @@ pub(crate) fn install_capability_accepting(
         }
 
         if let Some(compiled) = compiled_policies.get(adapter.id()) {
+            managed_hooks = compiled.hooks.clone();
             for (settings_relpath, merged) in &compiled.files {
                 let settings_path = install_root.join(settings_relpath);
                 let owned = tuff_core::policy::is_rules_file(settings_relpath)
@@ -1627,6 +1754,19 @@ pub(crate) fn install_capability_accepting(
                 if report && count > 0 {
                     println!(
                         "compiled {count} permission rule(s) for {} ({}) -> {}",
+                        capability.id,
+                        adapter.id(),
+                        lockfile::relative_or_absolute_fs(&settings_path, install_root)
+                    );
+                }
+                if report
+                    && compiled
+                        .hooks
+                        .iter()
+                        .any(|hook| &hook.settings_path == settings_relpath)
+                {
+                    println!(
+                        "registered tuff policy evaluate for {} ({}) -> {}",
                         capability.id,
                         adapter.id(),
                         lockfile::relative_or_absolute_fs(&settings_path, install_root)

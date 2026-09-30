@@ -192,6 +192,7 @@ tuff hooks check-portability pre-commit-lint --target claude
 | `-n, --name <id>` | Override the installed capability ID for an auto-detected local source |
 | `--hook-file <path>` | Hook-only native settings fragment, relative to the hook source directory |
 | `--accept-unenforced` | For a policy added with `tuff add <path>`: install the rules each agent enforces and record the rest in `tuff.lock`, instead of refusing the policy. See [Rules an agent does not enforce](/primitives/policies/#rules-an-agent-does-not-enforce) |
+| `--runtime-hook` | For a policy added with `tuff add <path>`: also register the `tuff policy evaluate` hook for rules a native setting covers only in part, such as Claude Code command rules. See [Catching reworded commands](/primitives/policies/#catching-reworded-commands) |
 
 The capability type is specified as a subcommand (`skill`, `tool`, or `hook`)
 rather than a `--type` flag. For a typed local source, the name is

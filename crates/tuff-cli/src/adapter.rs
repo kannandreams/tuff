@@ -106,4 +106,8 @@ forward_to_implementation! {
     fn permission_relpath_for(&self, subject: tuff_core::policy::PolicySubjectKind) -> Option<&'static str>;
     fn policy_rule_gap(&self, rule: &tuff_core::policy::PolicyRule) -> Result<Option<String>>;
     fn native_permission_rules(&self, rule: &tuff_core::policy::PolicyRule) -> Result<Option<Vec<String>>>;
+    fn policy_hook_use(&self, rule: &tuff_core::policy::PolicyRule) -> Result<tuff_core::policy_eval::PolicyHookUse>;
+    fn policy_hook_fragment(&self, command: &str, subjects: &[tuff_core::policy::PolicySubjectKind]) -> Option<serde_json::Value>;
+    fn policy_hook_request(&self, input: &serde_json::Value) -> Result<tuff_core::policy_eval::PolicyHookRequest>;
+    fn policy_hook_answer(&self, event: &str, verdict: tuff_core::policy_eval::PolicyVerdict<'_>) -> tuff_core::policy_eval::PolicyHookAnswer;
 }

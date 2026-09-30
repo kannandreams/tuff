@@ -15,6 +15,7 @@ pub mod oci;
 pub mod pack;
 pub mod paths;
 pub mod policy;
+pub mod policy_eval;
 pub mod registry;
 pub mod release;
 pub mod report;
