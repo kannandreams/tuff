@@ -11,7 +11,7 @@ repository.workspace = true
 
 [dependencies]
 tuff-core.workspace = true
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "net", "signal", "macros"] }
 serde = { version = "1.0.228", features = ["derive"] }

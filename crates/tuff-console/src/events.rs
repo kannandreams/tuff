@@ -95,7 +95,7 @@ impl Event {
 
 /// A status that does not count as drift. A row the check did not cover is
 /// `unknown` and is treated as fine, since nothing says it changed.
-fn is_ok(status: &str) -> bool {
+pub fn is_ok(status: &str) -> bool {
     status == "ok" || status == "unknown"
 }
 

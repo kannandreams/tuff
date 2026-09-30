@@ -120,6 +120,19 @@ pub struct KeyInfo {
     pub last_used_at: Option<String>,
 }
 
+/// One stored report, without its body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportSummary {
+    pub id: i64,
+    pub received_at: String,
+    pub generated_at: String,
+    pub commit: Option<String>,
+    pub branch: Option<String>,
+    pub tuff_version: String,
+    pub digest: String,
+}
+
 /// What a live key allows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyGrant {
@@ -152,6 +165,8 @@ pub struct EventFilter {
     pub kind: Option<String>,
     /// RFC 3339 time or a date; events from then on.
     pub since: Option<String>,
+    /// Only events older than this event id, for paging back.
+    pub before: Option<i64>,
     pub limit: Option<u32>,
 }
 
@@ -297,9 +312,20 @@ impl Store {
     /// (digest over everything except `generatedAt`) adds no row and moves
     /// the project's last report time.
     pub fn ingest(&self, report: &Report, raw: &serde_json::Value) -> Result<IngestOutcome> {
+        self.ingest_at(report, raw, &now())
+    }
+
+    /// [`Store::ingest`] with the time the report counts as received at,
+    /// an RFC 3339 UTC string. `--demo` uses it to give sample reports a
+    /// history.
+    pub fn ingest_at(
+        &self,
+        report: &Report,
+        raw: &serde_json::Value,
+        received_at: &str,
+    ) -> Result<IngestOutcome> {
         let digest = report_digest(raw);
         let body = serde_json::to_string(raw)?;
-        let received_at = now();
         let mut conn = self.conn();
         let tx = conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -476,6 +502,60 @@ impl Store {
         Ok(Some((row, serde_json::from_str(&body)?)))
     }
 
+    /// Every project with its latest report as stored, in the order the
+    /// projects were first seen.
+    pub fn latest_reports(&self) -> Result<Vec<(ProjectRow, serde_json::Value)>> {
+        let conn = self.conn();
+        let mut statement = conn
+            .prepare(
+                "SELECT p.id, p.repository, p.path, p.name, p.first_report_at, p.last_report_at,
+                        (SELECT COUNT(*) FROM reports r WHERE r.project_id = p.id),
+                        (SELECT body FROM reports r WHERE r.project_id = p.id
+                         ORDER BY r.id DESC LIMIT 1)
+                 FROM projects p ORDER BY p.id",
+            )
+            .map_err(db_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((project_row(row)?, row.get::<_, Option<String>>(7)?))
+            })
+            .map_err(db_error)?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (project, body) = row.map_err(db_error)?;
+            if let Some(body) = body {
+                out.push((project, serde_json::from_str(&body)?));
+            }
+        }
+        Ok(out)
+    }
+
+    /// The stored reports of a project, newest first, without their bodies.
+    pub fn report_history(&self, project_id: i64, limit: u32) -> Result<Vec<ReportSummary>> {
+        let conn = self.conn();
+        let mut statement = conn
+            .prepare(
+                "SELECT id, received_at, generated_at, commit_sha, branch, tuff_version, digest
+                 FROM reports WHERE project_id = ?1 ORDER BY id DESC LIMIT ?2",
+            )
+            .map_err(db_error)?;
+        statement
+            .query_map(params![project_id, i64::from(limit)], |row| {
+                Ok(ReportSummary {
+                    id: row.get(0)?,
+                    received_at: row.get(1)?,
+                    generated_at: row.get(2)?,
+                    commit: row.get(3)?,
+                    branch: row.get(4)?,
+                    tuff_version: row.get(5)?,
+                    digest: row.get(6)?,
+                })
+            })
+            .map_err(db_error)?
+            .collect::<std::result::Result<_, _>>()
+            .map_err(db_error)
+    }
+
     /// Create a publish key and return its secret. Only the SHA-256 of the
     /// secret is stored, so this is the one time the secret exists in full.
     /// With `repository`, the key may publish for that repository only.
@@ -606,6 +686,7 @@ impl Store {
                    AND (?2 IS NULL OR e.capability_id = ?2)
                    AND (?3 IS NULL OR e.kind = ?3)
                    AND (?4 IS NULL OR e.occurred_at >= ?4)
+                   AND (?6 IS NULL OR e.id < ?6)
                  ORDER BY e.id DESC
                  LIMIT ?5",
             )
@@ -617,7 +698,8 @@ impl Store {
                     filter.capability,
                     filter.kind,
                     filter.since,
-                    i64::from(filter.limit.unwrap_or(500))
+                    i64::from(filter.limit.unwrap_or(500)),
+                    filter.before
                 ],
                 |row| {
                     Ok(EventRow {

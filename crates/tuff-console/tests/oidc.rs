@@ -155,6 +155,7 @@ impl Console {
                     ServerOptions {
                         require_key: false,
                         oidc: Some(Arc::new(verifier)),
+                        ..Default::default()
                     },
                     std::future::pending(),
                 )
