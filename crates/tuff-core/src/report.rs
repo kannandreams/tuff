@@ -1,5 +1,5 @@
-//! Dashboard reports (RFC-108): one JSON document describing one project at
-//! one commit, which `tuff dashboard publish` sends to a dashboard server.
+//! Console reports (RFC-108): one JSON document describing one project at
+//! one commit, which `tuff console publish` sends to a console server.
 //!
 //! A report is the project's lockfile plus what only the working tree can
 //! say: whether the installed files still match (`tuff check`) and,

@@ -19,7 +19,7 @@ Tuff is version 0.x today. In 0.x, any minor release can change commands, flags,
 These can change in any 1.x release.
 
 - **Policies.** Policy capabilities, `tuff policy matrix`, and the `--accept-unenforced` flag are [Preview](/primitives/policies).
-- **The dashboard.** `tuff dashboard publish`, the report it builds, and the dashboard server are [in progress](/cli/dashboard).
+- **Tuff Console.** `tuff console` (`serve`, `publish`, `key`), the report it builds, the console server, and its web pages are [in progress](/cli/console).
 - **The Rust API of the crates.** Tuff publishes its crates, such as `tuff-core`, to crates.io with the same version number as the CLI. The promise covers the CLI and the file formats. The Rust API of the crates can change in any minor release.
 
 A feature that is added after 1.0 and labelled Preview is excluded until its page stops carrying that label.

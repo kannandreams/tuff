@@ -1,6 +1,6 @@
 name: Publish to crates.io
 
-# Publishes all seven workspace crates in dependency order, using crates.io
+# Publishes all nine workspace crates in dependency order, using crates.io
 # Trusted Publishing (OIDC) — no stored token, matching the PyPI setup in
 # pypi.yml.
 #
@@ -21,6 +21,8 @@ name: Publish to crates.io
 #     tuff-adapter-claude         -> release-tuff-adapter-claude
 #     tuff-adapter-codex          -> release-tuff-adapter-codex
 #     tuff-adapter-cursor         -> release-tuff-adapter-cursor
+#     tuff-adapter-opencode       -> release-tuff-adapter-opencode
+#     tuff-console                 -> release-tuff-console
 #     tuffcli                     -> release-tuffcli
 #
 # GitHub Actions environments do not need to be created ahead of time — they
@@ -175,6 +177,26 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
+  tuff-console:
+    name: Publish tuff-console
+    needs: tuff-core
+    runs-on: ubuntu-latest
+    environment: release-tuff-console
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v4.2.3
+        with:
+          version: 2026.8.2
+          install_args: rust
+          cache: true
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p tuff-console --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
   tuffcli:
     name: Publish tuffcli
     needs:
@@ -183,6 +205,7 @@ jobs:
       - tuff-adapter-codex
       - tuff-adapter-cursor
       - tuff-adapter-opencode
+      - tuff-console
     runs-on: ubuntu-latest
     environment: release-tuffcli
     permissions:

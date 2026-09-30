@@ -10515,7 +10515,7 @@ fn scan_adopts_a_cursor_skill_in_place_for_cursor() {
     );
 }
 
-// ── dashboard reports ────────────────────────────────────────────────
+// ── console reports ────────────────────────────────────────────────
 
 fn git(dir: &Path, args: &[&str]) {
     let status = std::process::Command::new("git")
@@ -10528,7 +10528,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 #[test]
-fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
+fn console_publish_dry_run_reports_each_project_in_a_monorepo() {
     let temp = TempDir::new().unwrap();
     let home = TempDir::new().unwrap();
     let repo = temp.path().join("agents");
@@ -10567,7 +10567,7 @@ fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
     let output = tuff()
         .current_dir(&repo)
         .env("HOME", home.path())
-        .args(["dashboard", "publish", "--dry-run", "--all"])
+        .args(["console", "publish", "--dry-run", "--all"])
         .output()
         .unwrap();
     assert!(
@@ -10631,7 +10631,7 @@ fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
     let output = tuff()
         .current_dir(repo.join("apps/billing-agent"))
         .env("HOME", home.path())
-        .args(["dashboard", "publish", "--dry-run"])
+        .args(["console", "publish", "--dry-run"])
         .output()
         .unwrap();
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -10639,7 +10639,7 @@ fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
 }
 
 #[test]
-fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
+fn console_publish_outside_git_needs_a_project_name_and_a_dry_run() {
     let temp = TempDir::new().unwrap();
     tuff()
         .current_dir(temp.path())
@@ -10648,13 +10648,13 @@ fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["dashboard", "publish", "--dry-run"])
+        .args(["console", "publish", "--dry-run"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("pass --project <name>"));
     let output = tuff()
         .current_dir(temp.path())
-        .args(["dashboard", "publish", "--dry-run", "--project", "local"])
+        .args(["console", "publish", "--dry-run", "--project", "local"])
         .output()
         .unwrap();
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -10662,17 +10662,173 @@ fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
     assert_eq!(report["project"]["path"], ".");
     tuff()
         .current_dir(temp.path())
-        .args(["dashboard", "publish", "--project", "local"])
+        .args(["console", "publish", "--project", "local"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("pass --dry-run"));
     let empty = TempDir::new().unwrap();
     tuff()
         .current_dir(empty.path())
-        .args(["dashboard", "publish", "--dry-run", "--all"])
+        .args(["console", "publish", "--dry-run", "--all"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("no tuff.lock under"));
+}
+
+// ── console server ─────────────────────────────────────────────────
+
+#[test]
+fn console_keys_are_created_listed_and_revoked() {
+    let data = TempDir::new().unwrap();
+    let data_arg = data.path().to_str().unwrap();
+
+    let created = tuff()
+        .args(["console", "key", "create", "ci", "--data", data_arg])
+        .output()
+        .unwrap();
+    assert!(created.status.success());
+    let stdout = String::from_utf8(created.stdout).unwrap();
+    let secret = stdout
+        .lines()
+        .find(|line| line.starts_with("tuffc_"))
+        .expect("the secret is printed")
+        .to_string();
+
+    // The database keeps the SHA-256 and never the secret.
+    let database = fs::read(data.path().join("console.sqlite")).unwrap();
+    assert!(
+        !database
+            .windows(secret.len())
+            .any(|window| window == secret.as_bytes())
+    );
+
+    tuff()
+        .args(["console", "key", "create", "ci", "--data", data_arg])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already exists"));
+
+    let listed = tuff()
+        .args(["console", "key", "list", "--json", "--data", data_arg])
+        .output()
+        .unwrap();
+    let keys: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(keys[0]["name"], "ci");
+    assert!(keys[0]["lastUsedAt"].is_null());
+    assert!(!String::from_utf8_lossy(&listed.stdout).contains(&secret));
+
+    tuff()
+        .args(["console", "key", "list", "--data", data_arg])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ci").and(predicate::str::contains("never")));
+
+    tuff()
+        .args(["console", "key", "revoke", "ci", "--data", data_arg])
+        .assert()
+        .success();
+    tuff()
+        .args(["console", "key", "revoke", "ci", "--data", data_arg])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no key named 'ci'"));
+}
+
+#[test]
+fn console_serve_refuses_a_public_bind_without_the_required_flags() {
+    let data = TempDir::new().unwrap();
+    let data_arg = data.path().to_str().unwrap();
+
+    tuff()
+        .args([
+            "console",
+            "serve",
+            "--addr",
+            "0.0.0.0:0",
+            "--data",
+            data_arg,
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--public-read"));
+
+    tuff()
+        .args([
+            "console",
+            "serve",
+            "--addr",
+            "0.0.0.0:0",
+            "--public-read",
+            "--data",
+            data_arg,
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("tuff console key create"));
+}
+
+#[test]
+fn console_serve_accepts_a_report_and_returns_the_project() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpStream;
+
+    let data = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .arg("init")
+        .assert()
+        .success();
+    let report = tuff()
+        .current_dir(project.path())
+        .args(["console", "publish", "--dry-run", "--project", "local"])
+        .output()
+        .unwrap()
+        .stdout;
+
+    let mut server = tuff()
+        .args([
+            "console",
+            "serve",
+            "--addr",
+            "127.0.0.1:0",
+            "--data",
+            data.path().to_str().unwrap(),
+        ])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut first_line = String::new();
+    BufReader::new(server.stdout.as_mut().unwrap())
+        .read_line(&mut first_line)
+        .unwrap();
+    let addr = first_line
+        .trim()
+        .strip_prefix("Console listening on http://")
+        .unwrap_or_else(|| panic!("unexpected first line {first_line:?}"))
+        .to_string();
+
+    let request = |method: &str, path: &str, body: &[u8]| -> String {
+        let mut stream = TcpStream::connect(&addr).unwrap();
+        let head = format!(
+            "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(head.as_bytes()).unwrap();
+        stream.write_all(body).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        response
+    };
+
+    let posted = request("POST", "/api/v1/reports", &report);
+    let listed = request("GET", "/api/v1/projects", b"");
+    let _ = server.kill();
+    let _ = server.wait();
+
+    assert!(posted.starts_with("HTTP/1.1 201"), "{posted}");
+    assert!(listed.starts_with("HTTP/1.1 200"), "{listed}");
+    assert!(listed.contains("\"repository\":\"local\""), "{listed}");
 }
 
 /// Run `tuff policy evaluate` as a harness would, with `input` on stdin,

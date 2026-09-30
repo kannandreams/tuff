@@ -6,6 +6,16 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **`tuff console serve` runs Tuff Console, the self-hosted server for project reports.** It listens on `127.0.0.1:7474` by default, or on `--addr`, and keeps every report in one SQLite file, `console.sqlite`, in `--data` or in `$XDG_DATA_HOME/tuff/console`. `POST /api/v1/reports` stores a report, and a report that equals the project's previous one except for `generatedAt` adds no row and only moves the project's last report time. `GET /api/v1/projects`, `GET /api/v1/projects/{id}`, and `GET /healthz` read it back. A report with a `schema` the server does not read is refused with `422`. The database is created and migrated on first use, and a file from a newer Tuff is refused. `tuff console publish` still prints the report and sends nothing, and the web pages, including the Dashboard overview, come in a later release (RFC-108).
+- **`tuff console key create`, `list`, and `revoke` manage API keys.** `create` prints a `tuffc_` key once and stores only its SHA-256. Publishing needs `Authorization: Bearer <key>` whenever at least one key exists, on any address, loopback included, and a revoked key stops working at once. With no key, a loopback server accepts reports from anyone who can connect. `serve` refuses a non-loopback address unless `--public-read` is passed, because Tuff does not authenticate viewers, and unless at least one key exists.
+- **The `tuff-console` crate publishes with the others.** It holds the server and the store, and `tuffcli` depends on it. The `tuff` binary grows from 19,022,032 to 22,432,784 bytes because of the HTTP server and the bundled SQLite.
+
+### Changed
+
+- **`tuff dashboard publish` is now `tuff console publish`.** The command from 0.12.0 keeps its flags and its `--dry-run` behaviour. The old name is gone with no alias, so a script that calls `tuff dashboard publish` must change.
+
 ## [0.13.0] - 2026-09-30
 
 ### Added

@@ -17,7 +17,8 @@ use clap::{Parser, Subcommand};
 use commands::{
     PackBuildOptions, PackInitOptions, cmd_add, cmd_add_accepting, cmd_add_mcp, cmd_add_pack,
     cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear,
-    cmd_check, cmd_create, cmd_dashboard_publish, cmd_delete, cmd_diff, cmd_generate_index,
+    cmd_check, cmd_console_key_create, cmd_console_key_list, cmd_console_key_revoke,
+    cmd_console_publish, cmd_console_serve, cmd_create, cmd_delete, cmd_diff, cmd_generate_index,
     cmd_generate_report, cmd_hooks_check_portability, cmd_hooks_matrix, cmd_hooks_spec, cmd_init,
     cmd_list, cmd_lock_migrate, cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated,
     cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
@@ -287,16 +288,37 @@ enum Command {
         action: McpCommand,
     },
 
-    /// Report this project's capabilities to a dashboard server.
-    Dashboard {
+    /// Run a console server, and report this project's capabilities to one.
+    Console {
         #[command(subcommand)]
-        action: DashboardCommand,
+        action: ConsoleCommand,
     },
 }
 
 #[derive(Subcommand)]
-enum DashboardCommand {
-    /// Build this project's report for a dashboard server.
+enum ConsoleCommand {
+    /// Run the console server.
+    Serve {
+        /// Address to listen on. Anything but a loopback address needs --public-read and a key.
+        #[arg(long = "addr", value_name = "ADDR", default_value = "127.0.0.1:7474")]
+        addr: std::net::SocketAddr,
+
+        /// Folder for the console database (default: $XDG_DATA_HOME/tuff/console).
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
+
+        /// Allow a non-loopback address although viewers are not authenticated.
+        #[arg(long = "public-read")]
+        public_read: bool,
+    },
+
+    /// Manage the keys that authorise publishing.
+    Key {
+        #[command(subcommand)]
+        action: ConsoleKeyCommand,
+    },
+
+    /// Build this project's report for a console server.
     Publish {
         /// Report every project with a tuff.lock under this folder.
         #[arg(long = "all")]
@@ -313,6 +335,39 @@ enum DashboardCommand {
         /// Print the report and send nothing.
         #[arg(long = "dry-run")]
         dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConsoleKeyCommand {
+    /// Create a key and print it once.
+    Create {
+        /// Name the key is listed and revoked by.
+        name: String,
+
+        /// Folder for the console database.
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
+    },
+
+    /// List key names, creation times, and last use.
+    List {
+        /// Folder for the console database.
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
+
+        /// Output keys as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
+
+    /// Revoke a key.
+    Revoke {
+        name: String,
+
+        /// Folder for the console database.
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
     },
 }
 
@@ -1080,13 +1135,29 @@ fn run() -> Result<()> {
         Some(Command::Lock {
             action: LockCommand::Migrate,
         }) => cmd_lock_migrate(&repo_root),
-        Some(Command::Dashboard { action }) => match action {
-            DashboardCommand::Publish {
+        Some(Command::Console { action }) => match action {
+            ConsoleCommand::Serve {
+                addr,
+                data,
+                public_read,
+            } => cmd_console_serve(addr, data.as_deref(), public_read),
+            ConsoleCommand::Key { action } => match action {
+                ConsoleKeyCommand::Create { name, data } => {
+                    cmd_console_key_create(&name, data.as_deref())
+                }
+                ConsoleKeyCommand::List { data, json } => {
+                    cmd_console_key_list(data.as_deref(), json)
+                }
+                ConsoleKeyCommand::Revoke { name, data } => {
+                    cmd_console_key_revoke(&name, data.as_deref())
+                }
+            },
+            ConsoleCommand::Publish {
                 all,
                 outdated,
                 project,
                 dry_run,
-            } => cmd_dashboard_publish(
+            } => cmd_console_publish(
                 &repo_root,
                 commands::PublishOptions {
                     all,
