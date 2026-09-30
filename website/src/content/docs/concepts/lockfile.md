@@ -180,7 +180,7 @@ Errors you may see:
 - **A file whose syntax does not match its version**, such as TOML that claims version 3 or JSON that claims version 2, is reported as corrupt, with a message saying which.
 
 Versions 1 and 2 remain readable. If a future release stops reading either,
-the changelog will say so first.
+the changelog will say so first. [Stability](/concepts/stability) states how the format changes after 1.0.
 
 ## tuff.config.json
 

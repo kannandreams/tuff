@@ -4,7 +4,7 @@ description: Build a report of a project's capabilities for a Tuff dashboard ser
 ---
 
 :::caution[In progress]
-The dashboard server is being built. Today `tuff dashboard publish` prints the report it will send, and sends nothing.
+The dashboard server is being built. Today `tuff dashboard publish` prints the report it will send, and sends nothing. The dashboard is excluded from the [1.0 stability promise](/concepts/stability).
 :::
 
 ## `tuff dashboard publish`

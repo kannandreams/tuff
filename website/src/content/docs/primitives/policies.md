@@ -5,12 +5,14 @@ description: Policies declare what an agent must never do, or must ask before do
 
 A policy capability is a list of rules that narrow what a coding agent may do in a project: commands it must not run, files it must not read or edit, MCP tools it must not call, and actions it must ask a person about first. It is written once, and each agent the project uses enforces it in its own way, or Tuff says plainly that it cannot.
 
-:::caution[Preview: Claude Code, OpenCode, and Codex]
+:::caution[Preview: Claude Code, OpenCode, Codex, and Cursor]
 Claude Code and OpenCode enforce every kind of policy rule. Codex enforces `command` and `mcp` rules, and `deny` rules for `read` and `edit`. Cursor enforces `command`, `mcp`, and `deny` `read` rules. Tuff turns each rule into the agent's own rules, or, where the agent has none, registers [the policy hook](#the-policy-hook).
 
 If you install a policy for an agent that does not enforce one of its rules, such as Cursor for an `edit` rule, or Open Agents for any rule, `tuff add` stops with an error and installs nothing. The error lists the rules that agent cannot enforce.
 
 This is on purpose. If Tuff installed the policy anyway, the agent would ignore the rules, but you would think they were in place.
+
+Policies are excluded from the [1.0 stability promise](/concepts/stability) and can change in any 1.x release.
 
 `--accept-unenforced` does not change this for an agent that enforces none of the policy's rules. See [Rules an agent does not enforce](#rules-an-agent-does-not-enforce).
 :::
