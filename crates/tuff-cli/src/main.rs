@@ -299,7 +299,7 @@ enum Command {
 enum ConsoleCommand {
     /// Run the console server.
     Serve {
-        /// Address to listen on. Anything but a loopback address needs --public-read and a key.
+        /// Address to listen on. Anything but a loopback address needs --public-read and a key or a trust.
         #[arg(long = "addr", value_name = "ADDR", default_value = "127.0.0.1:7474")]
         addr: std::net::SocketAddr,
 
@@ -310,6 +310,14 @@ enum ConsoleCommand {
         /// Allow a non-loopback address although viewers are not authenticated.
         #[arg(long = "public-read")]
         public_read: bool,
+
+        /// Accept publishing from GitHub Actions jobs of this owner, with no secret (repeatable): github:<owner>.
+        #[arg(long = "trust", value_name = "PROVIDER:OWNER")]
+        trust: Vec<String>,
+
+        /// The URL publishers use to reach this console, which OIDC tokens name as their audience (default: http://<addr>).
+        #[arg(long = "public-url", value_name = "URL")]
+        public_url: Option<String>,
     },
 
     /// Manage the keys that authorise publishing.
@@ -318,8 +326,26 @@ enum ConsoleCommand {
         action: ConsoleKeyCommand,
     },
 
-    /// Build this project's report for a console server.
+    /// Send this project's report to a console server.
     Publish {
+        /// The console's URL.
+        #[arg(
+            long = "server",
+            value_name = "URL",
+            env = "TUFF_CONSOLE_URL",
+            default_value = "http://127.0.0.1:7474"
+        )]
+        server: String,
+
+        /// A console API key. Without one, a GitHub Actions job publishes with its OIDC token.
+        #[arg(
+            long = "key",
+            value_name = "KEY",
+            env = "TUFF_CONSOLE_KEY",
+            hide_env_values = true
+        )]
+        key: Option<String>,
+
         /// Report every project with a tuff.lock under this folder.
         #[arg(long = "all")]
         all: bool,
@@ -344,6 +370,10 @@ enum ConsoleKeyCommand {
     Create {
         /// Name the key is listed and revoked by.
         name: String,
+
+        /// Bind the key to one repository, such as github.com/acme/web.
+        #[arg(long = "repository", value_name = "REPOSITORY")]
+        repository: Option<String>,
 
         /// Folder for the console database.
         #[arg(long = "data", value_name = "DIR")]
@@ -1140,11 +1170,21 @@ fn run() -> Result<()> {
                 addr,
                 data,
                 public_read,
-            } => cmd_console_serve(addr, data.as_deref(), public_read),
+                trust,
+                public_url,
+            } => cmd_console_serve(
+                addr,
+                data.as_deref(),
+                public_read,
+                &trust,
+                public_url.as_deref(),
+            ),
             ConsoleCommand::Key { action } => match action {
-                ConsoleKeyCommand::Create { name, data } => {
-                    cmd_console_key_create(&name, data.as_deref())
-                }
+                ConsoleKeyCommand::Create {
+                    name,
+                    repository,
+                    data,
+                } => cmd_console_key_create(&name, repository.as_deref(), data.as_deref()),
                 ConsoleKeyCommand::List { data, json } => {
                     cmd_console_key_list(data.as_deref(), json)
                 }
@@ -1153,6 +1193,8 @@ fn run() -> Result<()> {
                 }
             },
             ConsoleCommand::Publish {
+                server,
+                key,
                 all,
                 outdated,
                 project,
@@ -1160,6 +1202,8 @@ fn run() -> Result<()> {
             } => cmd_console_publish(
                 &repo_root,
                 commands::PublishOptions {
+                    server: &server,
+                    key: key.as_deref(),
                     all,
                     outdated,
                     project: project.as_deref(),

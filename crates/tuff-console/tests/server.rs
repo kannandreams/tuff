@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
-use tuff_console::{Store, serve};
+use tuff_console::{ServerOptions, Store, serve};
 
 struct Running {
     base: String,
@@ -17,6 +17,14 @@ struct Running {
 
 impl Running {
     async fn start(require_key: bool) -> Self {
+        Self::start_with(ServerOptions {
+            require_key,
+            oidc: None,
+        })
+        .await
+    }
+
+    async fn start_with(options: ServerOptions) -> Self {
         let data = tempfile::tempdir().unwrap();
         let store = Arc::new(Store::open(data.path()).unwrap());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -25,7 +33,7 @@ impl Running {
         let task = tokio::spawn({
             let store = Arc::clone(&store);
             async move {
-                serve(store, listener, require_key, async {
+                serve(store, listener, options, async {
                     let _ = stopped.await;
                 })
                 .await
@@ -154,7 +162,7 @@ async fn publishing_needs_a_live_key_when_required() {
     let report = build_report(project.path(), "auth");
     let client = reqwest::Client::new();
     let url = format!("{}/api/v1/reports", server.base);
-    let secret = server.store.create_key("ci").unwrap();
+    let secret = server.store.create_key("ci", None).unwrap();
 
     let anonymous = client.post(&url).json(&report).send().await.unwrap();
     assert_eq!(anonymous.status(), 401);
@@ -253,7 +261,7 @@ async fn a_loopback_server_with_a_key_refuses_unauthenticated_publishing() {
     let open = client.post(&url).json(&report).send().await.unwrap();
     assert_eq!(open.status(), 201);
 
-    let secret = server.store.create_key("ci").unwrap();
+    let secret = server.store.create_key("ci", None).unwrap();
     let mut changed = report.clone();
     changed["project"]["commit"] = json!("later");
 

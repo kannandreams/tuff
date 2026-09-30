@@ -10639,7 +10639,7 @@ fn console_publish_dry_run_reports_each_project_in_a_monorepo() {
 }
 
 #[test]
-fn console_publish_outside_git_needs_a_project_name_and_a_dry_run() {
+fn console_publish_outside_git_needs_a_project_name_and_a_url() {
     let temp = TempDir::new().unwrap();
     tuff()
         .current_dir(temp.path())
@@ -10662,10 +10662,17 @@ fn console_publish_outside_git_needs_a_project_name_and_a_dry_run() {
     assert_eq!(report["project"]["path"], ".");
     tuff()
         .current_dir(temp.path())
-        .args(["console", "publish", "--project", "local"])
+        .args([
+            "console",
+            "publish",
+            "--project",
+            "local",
+            "--server",
+            "localhost:1",
+        ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("pass --dry-run"));
+        .stderr(predicate::str::contains("is not an http(s) URL"));
     let empty = TempDir::new().unwrap();
     tuff()
         .current_dir(empty.path())

@@ -5,7 +5,7 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
-use tuff_console::{ServeConfig, Store, default_data_dir};
+use tuff_console::{ServeConfig, Store, Trust, default_data_dir};
 
 use crate::error::{Result, TuffError};
 
@@ -21,28 +21,67 @@ fn data_dir(data: Option<&Path>) -> Result<PathBuf> {
 }
 
 /// `tuff console serve`: listen until interrupted.
-pub fn cmd_console_serve(addr: SocketAddr, data: Option<&Path>, public_read: bool) -> Result<()> {
+pub fn cmd_console_serve(
+    addr: SocketAddr,
+    data: Option<&Path>,
+    public_read: bool,
+    trusts: &[String],
+    public_url: Option<&str>,
+) -> Result<()> {
     let data_dir = data_dir(data)?;
     let shown_dir = data_dir.clone();
+    let trusts = trusts
+        .iter()
+        .map(|text| text.parse::<Trust>())
+        .collect::<Result<Vec<_>>>()?;
+    let public_url = public_url.map(|url| url.trim_end_matches('/').to_string());
+    if let Some(url) = &public_url
+        && !(url.starts_with("http://") || url.starts_with("https://"))
+    {
+        return Err(TuffError::usage(format!("'{url}' is not an http(s) URL"))
+            .with_hint("pass --public-url with the address publishers use, such as https://tuff.internal.acme.dev"));
+    }
+    let shown_trusts = trusts.clone();
+    let shown_url = public_url.clone();
     tuff_console::run(
         ServeConfig {
             data_dir,
             addr,
             public_read,
+            trusts,
+            public_url,
         },
         move |bound| {
             println!("Console listening on http://{bound}");
             println!("Data: {}", shown_dir.display());
+            if !shown_trusts.is_empty() {
+                let audience = shown_url.unwrap_or_else(|| format!("http://{bound}"));
+                let names: Vec<String> = shown_trusts.iter().map(ToString::to_string).collect();
+                println!("Trusting GitHub Actions jobs of: {}", names.join(", "));
+                println!("OIDC audience: {audience}");
+            }
             let _ = std::io::stdout().flush();
         },
     )
 }
 
 /// `tuff console key create`: print the secret once.
-pub fn cmd_console_key_create(name: &str, data: Option<&Path>) -> Result<()> {
+pub fn cmd_console_key_create(
+    name: &str,
+    repository: Option<&str>,
+    data: Option<&Path>,
+) -> Result<()> {
     let store = Store::open(&data_dir(data)?)?;
-    let secret = store.create_key(name)?;
+    let secret = store.create_key(name, repository)?;
     println!("Created key '{name}'. It is shown once and cannot be shown again.");
+    if let Some(repository) = store
+        .keys()?
+        .into_iter()
+        .find(|key| key.name == name)
+        .and_then(|key| key.repository)
+    {
+        println!("It can publish only for {repository}.");
+    }
     println!();
     println!("{secret}");
     println!();
@@ -67,12 +106,16 @@ pub fn cmd_console_key_list(data: Option<&Path>, json: bool) -> Result<()> {
         .map(|key| {
             vec![
                 key.name,
+                key.repository.unwrap_or_else(|| "any".to_string()),
                 key.created_at,
                 key.last_used_at.unwrap_or_else(|| "never".to_string()),
             ]
         })
         .collect();
-    print!("{}", render_table(&["NAME", "CREATED", "LAST USED"], &rows));
+    print!(
+        "{}",
+        render_table(&["NAME", "REPOSITORY", "CREATED", "LAST USED"], &rows)
+    );
     Ok(())
 }
 
@@ -80,56 +123,5 @@ pub fn cmd_console_key_list(data: Option<&Path>, json: bool) -> Result<()> {
 pub fn cmd_console_key_revoke(name: &str, data: Option<&Path>) -> Result<()> {
     Store::open(&data_dir(data)?)?.revoke_key(name)?;
     println!("Revoked key '{name}'.");
-    Ok(())
-}
-
-pub struct PublishOptions<'a> {
-    pub all: bool,
-    pub outdated: bool,
-    pub project: Option<&'a str>,
-    pub dry_run: bool,
-}
-
-pub fn cmd_console_publish(repo_root: &Path, options: PublishOptions<'_>) -> Result<()> {
-    if !options.dry_run {
-        return Err(
-            TuffError::unsupported("sending reports to a console server is not built yet")
-                .with_hint("pass --dry-run to print the report instead"),
-        );
-    }
-    let projects = if options.all {
-        let found = tuff_core::report::find_projects(repo_root)?;
-        if found.is_empty() {
-            return Err(TuffError::not_found(format!(
-                "no tuff.lock under {}",
-                repo_root.display()
-            ))
-            .with_hint("run 'tuff init' in each project folder first"));
-        }
-        found
-    } else {
-        vec![repo_root.to_path_buf()]
-    };
-
-    let mut reports = Vec::new();
-    for project in &projects {
-        let outdated = if options.outdated {
-            Some(super::outdated::project_outdated_json(project)?)
-        } else {
-            None
-        };
-        reports.push(tuff_core::report::build_report(
-            project,
-            options.project,
-            outdated,
-        )?);
-    }
-
-    let output = if options.all {
-        serde_json::to_string_pretty(&reports)?
-    } else {
-        serde_json::to_string_pretty(&reports[0])?
-    };
-    println!("{output}");
     Ok(())
 }
