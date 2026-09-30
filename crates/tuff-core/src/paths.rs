@@ -26,6 +26,13 @@ pub fn user_state(home: &Path) -> PathBuf {
         .join("tuff")
 }
 
+pub fn user_data(home: &Path) -> PathBuf {
+    std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".local").join("share"))
+        .join("tuff")
+}
+
 pub fn global_lockfile(home: &Path) -> PathBuf {
     user_state(home).join("tuff.lock")
 }

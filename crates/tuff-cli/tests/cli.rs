@@ -10664,3 +10664,159 @@ fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
         .failure()
         .stderr(predicate::str::contains("no tuff.lock under"));
 }
+
+// ── dashboard server ─────────────────────────────────────────────────
+
+#[test]
+fn dashboard_tokens_are_created_listed_and_revoked() {
+    let data = TempDir::new().unwrap();
+    let data_arg = data.path().to_str().unwrap();
+
+    let created = tuff()
+        .args(["dashboard", "token", "create", "ci", "--data", data_arg])
+        .output()
+        .unwrap();
+    assert!(created.status.success());
+    let stdout = String::from_utf8(created.stdout).unwrap();
+    let secret = stdout
+        .lines()
+        .find(|line| line.starts_with("tuffd_"))
+        .expect("the secret is printed")
+        .to_string();
+
+    // The database keeps the SHA-256 and never the secret.
+    let database = fs::read(data.path().join("dashboard.sqlite")).unwrap();
+    assert!(
+        !database
+            .windows(secret.len())
+            .any(|window| window == secret.as_bytes())
+    );
+
+    tuff()
+        .args(["dashboard", "token", "create", "ci", "--data", data_arg])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already exists"));
+
+    let listed = tuff()
+        .args(["dashboard", "token", "list", "--json", "--data", data_arg])
+        .output()
+        .unwrap();
+    let tokens: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(tokens[0]["name"], "ci");
+    assert!(tokens[0]["lastUsedAt"].is_null());
+    assert!(!String::from_utf8_lossy(&listed.stdout).contains(&secret));
+
+    tuff()
+        .args(["dashboard", "token", "list", "--data", data_arg])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ci").and(predicate::str::contains("never")));
+
+    tuff()
+        .args(["dashboard", "token", "revoke", "ci", "--data", data_arg])
+        .assert()
+        .success();
+    tuff()
+        .args(["dashboard", "token", "revoke", "ci", "--data", data_arg])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no token named 'ci'"));
+}
+
+#[test]
+fn dashboard_serve_refuses_a_public_bind_without_the_required_flags() {
+    let data = TempDir::new().unwrap();
+    let data_arg = data.path().to_str().unwrap();
+
+    tuff()
+        .args([
+            "dashboard",
+            "serve",
+            "--addr",
+            "0.0.0.0:0",
+            "--data",
+            data_arg,
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--public-read"));
+
+    tuff()
+        .args([
+            "dashboard",
+            "serve",
+            "--addr",
+            "0.0.0.0:0",
+            "--public-read",
+            "--data",
+            data_arg,
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("tuff dashboard token create"));
+}
+
+#[test]
+fn dashboard_serve_accepts_a_report_and_returns_the_project() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpStream;
+
+    let data = TempDir::new().unwrap();
+    let project = TempDir::new().unwrap();
+    tuff()
+        .current_dir(project.path())
+        .arg("init")
+        .assert()
+        .success();
+    let report = tuff()
+        .current_dir(project.path())
+        .args(["dashboard", "publish", "--dry-run", "--project", "local"])
+        .output()
+        .unwrap()
+        .stdout;
+
+    let mut server = tuff()
+        .args([
+            "dashboard",
+            "serve",
+            "--addr",
+            "127.0.0.1:0",
+            "--data",
+            data.path().to_str().unwrap(),
+        ])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut first_line = String::new();
+    BufReader::new(server.stdout.as_mut().unwrap())
+        .read_line(&mut first_line)
+        .unwrap();
+    let addr = first_line
+        .trim()
+        .strip_prefix("Dashboard listening on http://")
+        .unwrap_or_else(|| panic!("unexpected first line {first_line:?}"))
+        .to_string();
+
+    let request = |method: &str, path: &str, body: &[u8]| -> String {
+        let mut stream = TcpStream::connect(&addr).unwrap();
+        let head = format!(
+            "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(head.as_bytes()).unwrap();
+        stream.write_all(body).unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        response
+    };
+
+    let posted = request("POST", "/api/v1/reports", &report);
+    let listed = request("GET", "/api/v1/projects", b"");
+    let _ = server.kill();
+    let _ = server.wait();
+
+    assert!(posted.starts_with("HTTP/1.1 201"), "{posted}");
+    assert!(listed.starts_with("HTTP/1.1 200"), "{listed}");
+    assert!(listed.contains("\"repository\":\"local\""), "{listed}");
+}

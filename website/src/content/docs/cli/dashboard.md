@@ -1,11 +1,71 @@
 ---
 title: Dashboard
-description: Build a report of a project's capabilities for a Tuff dashboard server.
+description: Run a Tuff dashboard server, manage its publish tokens, and build a report of a project's capabilities.
 ---
 
 :::caution[In progress]
-The dashboard server is being built. Today `tuff dashboard publish` prints the report it will send, and sends nothing.
+The server stores and returns reports today. `tuff dashboard publish` still prints the report it will send and sends nothing, and the web pages that show the stored reports come in a later release.
 :::
+
+## `tuff dashboard serve`
+
+Starts the dashboard server. It stores the reports that projects publish in one SQLite file and serves them over HTTP.
+
+```sh frame="terminal"
+# Listen on 127.0.0.1:7474
+tuff dashboard serve
+
+# Another port and another data folder
+tuff dashboard serve --addr 127.0.0.1:9000 --data ./dashboard-data
+```
+
+| Flag | Description |
+|---|---|
+| `--addr <addr>` | Address to listen on. Default `127.0.0.1:7474`. Port `0` picks a free port, and the startup line shows it |
+| `--data <dir>` | Folder for `dashboard.sqlite`. Default `$XDG_DATA_HOME/tuff/dashboard`, which is `~/.local/share/tuff/dashboard` when `XDG_DATA_HOME` is unset |
+| `--public-read` | Allows a non-loopback address. Viewers are not authenticated by Tuff |
+
+The server runs until it receives an interrupt or `SIGTERM`. The folder and the database are created on first start, and the schema is migrated when a newer Tuff opens an older file. A file written by a newer Tuff than the running one is refused.
+
+### Who can connect
+
+On a loopback address (`127.0.0.1` or `::1`), reading and publishing need no credentials.
+
+Any other address, such as `0.0.0.0:7474`, needs two things before the server starts:
+
+- `--public-read`, because Tuff does not authenticate people who view the dashboard. Put the server behind a reverse proxy that does, such as Caddy or nginx with basic auth or oauth2-proxy.
+- At least one publish token, created with `tuff dashboard token create`.
+
+On a non-loopback address, `POST /api/v1/reports` needs `Authorization: Bearer <token>`. A missing, unknown, or revoked token gets `401`. Tokens are checked on every request, so a revoked token stops working at once.
+
+A server that listens on loopback behind a reverse proxy on the same machine accepts unauthenticated publishing from anything the proxy forwards. Bind such a server to a non-loopback address, or restrict the proxy's `/api/v1/reports` route.
+
+### HTTP API
+
+Errors use the same JSON shape as the CLI's `--json` errors: `{"error": {"kind", "message", "hint"}}`.
+
+| Request | Description |
+|---|---|
+| `POST /api/v1/reports` | Ingest one report. `201` when stored, `200` when the report equals the project's previous one. `422` for a `schema` the server does not read |
+| `GET /api/v1/projects` | Every project with its first and last report time and its report count |
+| `GET /api/v1/projects/{id}` | One project with its latest report |
+| `GET /healthz` | Liveness. Returns `{"status": "ok"}` |
+
+The response to a report holds `projectId`, `reportId`, `deduplicated`, and `projectFirstSeen`. A report is the same as the previous one when everything except `generatedAt` is equal. It then adds no row and only moves the project's last report time, so a CI job that publishes on every push does not grow the database. A report that differs is stored, including one that returns to an earlier state.
+
+## `tuff dashboard token`
+
+Publish tokens authorise `POST /api/v1/reports`.
+
+```sh frame="terminal"
+tuff dashboard token create ci
+tuff dashboard token list
+tuff dashboard token revoke ci
+```
+
+`create` prints the token once. The database stores only its SHA-256, so a lost token is replaced by revoking it and creating another. A token looks like `tuffd_` followed by 64 hexadecimal characters. Names use letters, digits, `-`, `_`, and `.`, up to 64 characters, and each name is unique.
+
+`list` shows each name with its creation time and the time it last authenticated, and `--json` prints the same as JSON. All three commands take `--data <dir>` and act on the database in that folder, whether or not a server is running from it.
 
 ## `tuff dashboard publish`
 

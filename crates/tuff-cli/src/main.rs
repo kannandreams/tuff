@@ -17,7 +17,8 @@ use clap::{Parser, Subcommand};
 use commands::{
     PackBuildOptions, PackInitOptions, cmd_add, cmd_add_accepting, cmd_add_mcp, cmd_add_pack,
     cmd_agent_add, cmd_agent_list, cmd_agent_remove, cmd_agent_set_default, cmd_cache_clear,
-    cmd_check, cmd_create, cmd_dashboard_publish, cmd_delete, cmd_diff, cmd_generate_index,
+    cmd_check, cmd_create, cmd_dashboard_publish, cmd_dashboard_serve, cmd_dashboard_token_create,
+    cmd_dashboard_token_list, cmd_dashboard_token_revoke, cmd_delete, cmd_diff, cmd_generate_index,
     cmd_generate_report, cmd_hooks_check_portability, cmd_hooks_matrix, cmd_hooks_spec, cmd_init,
     cmd_list, cmd_lock_migrate, cmd_mcp_catalog, cmd_mcp_doctor, cmd_mcp_search, cmd_outdated,
     cmd_pack_build, cmd_pack_check, cmd_pack_extract, cmd_pack_init, cmd_pack_inspect,
@@ -281,7 +282,7 @@ enum Command {
         action: McpCommand,
     },
 
-    /// Report this project's capabilities to a dashboard server.
+    /// Run a dashboard server, and report this project's capabilities to one.
     Dashboard {
         #[command(subcommand)]
         action: DashboardCommand,
@@ -290,6 +291,27 @@ enum Command {
 
 #[derive(Subcommand)]
 enum DashboardCommand {
+    /// Run the dashboard server.
+    Serve {
+        /// Address to listen on. Anything but a loopback address needs --public-read and a token.
+        #[arg(long = "addr", value_name = "ADDR", default_value = "127.0.0.1:7474")]
+        addr: std::net::SocketAddr,
+
+        /// Folder for the dashboard database (default: $XDG_DATA_HOME/tuff/dashboard).
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
+
+        /// Allow a non-loopback address although viewers are not authenticated.
+        #[arg(long = "public-read")]
+        public_read: bool,
+    },
+
+    /// Manage the tokens that authorise publishing.
+    Token {
+        #[command(subcommand)]
+        action: DashboardTokenCommand,
+    },
+
     /// Build this project's report for a dashboard server.
     Publish {
         /// Report every project with a tuff.lock under this folder.
@@ -307,6 +329,39 @@ enum DashboardCommand {
         /// Print the report and send nothing.
         #[arg(long = "dry-run")]
         dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum DashboardTokenCommand {
+    /// Create a token and print it once.
+    Create {
+        /// Name the token is listed and revoked by.
+        name: String,
+
+        /// Folder for the dashboard database.
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
+    },
+
+    /// List token names, creation times, and last use.
+    List {
+        /// Folder for the dashboard database.
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
+
+        /// Output tokens as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
+
+    /// Revoke a token.
+    Revoke {
+        name: String,
+
+        /// Folder for the dashboard database.
+        #[arg(long = "data", value_name = "DIR")]
+        data: Option<PathBuf>,
     },
 }
 
@@ -1048,6 +1103,22 @@ fn run() -> Result<()> {
             action: LockCommand::Migrate,
         }) => cmd_lock_migrate(&repo_root),
         Some(Command::Dashboard { action }) => match action {
+            DashboardCommand::Serve {
+                addr,
+                data,
+                public_read,
+            } => cmd_dashboard_serve(addr, data.as_deref(), public_read),
+            DashboardCommand::Token { action } => match action {
+                DashboardTokenCommand::Create { name, data } => {
+                    cmd_dashboard_token_create(&name, data.as_deref())
+                }
+                DashboardTokenCommand::List { data, json } => {
+                    cmd_dashboard_token_list(data.as_deref(), json)
+                }
+                DashboardTokenCommand::Revoke { name, data } => {
+                    cmd_dashboard_token_revoke(&name, data.as_deref())
+                }
+            },
             DashboardCommand::Publish {
                 all,
                 outdated,
