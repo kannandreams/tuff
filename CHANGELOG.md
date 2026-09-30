@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **A [Stability](https://tuffcli.dev/concepts/stability/) page states what the 1.0 promise covers.** It lists the CLI commands, flags, and exit codes, the `--json` output, `tuff.toml`, `tuff.lock` schema 3, the hooks specification, and the file locations in each harness's folder. Policies, the dashboard, and the Rust API of the published crates are excluded. The page states how a new lockfile version is read alongside older ones and how a Tuff that predates it refuses the file.
+
 ## [0.12.0] - 2026-09-24
 
 ### Added

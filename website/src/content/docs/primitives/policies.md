@@ -12,6 +12,8 @@ If you install a policy for an agent that does not enforce one of its rules, suc
 
 This is on purpose. If Tuff installed the policy anyway, the agent would ignore the rules, but you would think they were in place.
 
+Policies are excluded from the [1.0 stability promise](/concepts/stability) and can change in any 1.x release.
+
 `--accept-unenforced` does not change this for an agent that enforces none of the policy's rules. See [Rules an agent does not enforce](#rules-an-agent-does-not-enforce).
 :::
 
