@@ -128,6 +128,8 @@ To cut a release:
 2. Merge it, then tag the merge commit with `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag triggers the release, crates.io, and PyPI workflows and pushes the Homebrew formula.
 3. Confirm the GitHub release, crates.io, PyPI, and the Homebrew tap all show the new version.
 
+The `tuff-console` crate is published by the `tuff-console` job of `crates.yml`, after `tuff-core` and before `tuffcli`. Before the first tag that includes it, a maintainer reserves the crate name on crates.io and adds its trusted publisher (owner `kannandreams`, repository `tuff`, workflow `crates.yml`, environment `release-tuff-console`). A trusted publisher can only be added to a crate that exists, and the crate needs this release's `tuff-core` on crates.io to compile, so the reservation is done after that crate is published or with a stub.
+
 GitHub release notes are generated automatically from merged pull requests. Apply the `enhancement` or `feature`, `documentation`, `dependencies`, `maintenance`, `ci`, `bug`, or `fix` label when one category clearly applies; unlabeled changes remain visible under “Other Changes.” The curated changelog remains the authoritative summary of user-visible behavior.
 
 ## Checks

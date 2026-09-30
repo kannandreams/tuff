@@ -22,7 +22,7 @@ name: Publish to crates.io
 #     tuff-adapter-codex          -> release-tuff-adapter-codex
 #     tuff-adapter-cursor         -> release-tuff-adapter-cursor
 #     tuff-adapter-opencode       -> release-tuff-adapter-opencode
-#     tuff-console                 -> release-tuff-console
+#     tuff-console                -> release-tuff-console
 #     tuffcli                     -> release-tuffcli
 #
 # GitHub Actions environments do not need to be created ahead of time — they

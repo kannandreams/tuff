@@ -110,6 +110,7 @@ export default defineConfig({
             { label: 'Clean Up', slug: 'cli/clean-up' },
             { label: 'Harnesses and Scope', slug: 'cli/agents' },
             { label: 'Console', slug: 'cli/console' },
+            { label: 'Self-Hosting the Console', slug: 'guides/self-hosting-console' },
           ],
         },
         {

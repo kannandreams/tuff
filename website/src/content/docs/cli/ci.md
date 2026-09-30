@@ -52,6 +52,8 @@ jobs:
         run: tuff check --json
 ```
 
+To also send a report of the project to a [Tuff Console](/cli/console/) after the check passes, see [Publishing from GitHub Actions](/cli/console/#publishing-from-github-actions), which needs no stored secret, and [Publishing from other CI systems](/cli/console/#publishing-from-other-ci-systems).
+
 Commit `tuff.lock` to your repo so
 `tuff check` runs against the committed state. See [The tuff.lock File](/concepts/lockfile)
 for what to commit.
