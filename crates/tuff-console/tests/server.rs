@@ -1,11 +1,11 @@
-//! The server on a free port, driven over HTTP the way `tuff dashboard
+//! The server on a free port, driven over HTTP the way `tuff console
 //! publish` will drive it.
 
 use std::path::Path;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
-use tuff_server::{Store, serve};
+use tuff_console::{Store, serve};
 
 struct Running {
     base: String,
@@ -16,7 +16,7 @@ struct Running {
 }
 
 impl Running {
-    async fn start(require_token: bool) -> Self {
+    async fn start(require_key: bool) -> Self {
         let data = tempfile::tempdir().unwrap();
         let store = Arc::new(Store::open(data.path()).unwrap());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -25,7 +25,7 @@ impl Running {
         let task = tokio::spawn({
             let store = Arc::clone(&store);
             async move {
-                serve(store, listener, require_token, async {
+                serve(store, listener, require_key, async {
                     let _ = stopped.await;
                 })
                 .await
@@ -148,13 +148,13 @@ async fn publishing_the_same_report_again_adds_no_row() {
 }
 
 #[tokio::test]
-async fn publishing_needs_a_live_token_when_required() {
+async fn publishing_needs_a_live_key_when_required() {
     let server = Running::start(true).await;
     let project = tempfile::tempdir().unwrap();
     let report = build_report(project.path(), "auth");
     let client = reqwest::Client::new();
     let url = format!("{}/api/v1/reports", server.base);
-    let secret = server.store.create_token("ci").unwrap();
+    let secret = server.store.create_key("ci").unwrap();
 
     let anonymous = client.post(&url).json(&report).send().await.unwrap();
     assert_eq!(anonymous.status(), 401);
@@ -165,7 +165,7 @@ async fn publishing_needs_a_live_token_when_required() {
 
     let wrong = client
         .post(&url)
-        .bearer_auth("tuffd_wrong")
+        .bearer_auth("tuffc_wrong")
         .json(&report)
         .send()
         .await
@@ -181,7 +181,7 @@ async fn publishing_needs_a_live_token_when_required() {
         .unwrap();
     assert_eq!(accepted.status(), 201);
 
-    server.store.revoke_token("ci").unwrap();
+    server.store.revoke_key("ci").unwrap();
     let revoked = client
         .post(&url)
         .bearer_auth(&secret)
@@ -237,5 +237,41 @@ async fn bad_reports_are_rejected_with_a_reason() {
     assert_eq!(response.status(), 422);
 
     assert!(server.store.projects().unwrap().is_empty());
+    server.shut_down().await;
+}
+
+#[tokio::test]
+async fn a_loopback_server_with_a_key_refuses_unauthenticated_publishing() {
+    // Loopback without --public-read: `require_key` is false, as `run` sets it.
+    let server = Running::start(false).await;
+    let project = tempfile::tempdir().unwrap();
+    let report = build_report(project.path(), "proxy");
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/v1/reports", server.base);
+
+    // With no key the local server stays open.
+    let open = client.post(&url).json(&report).send().await.unwrap();
+    assert_eq!(open.status(), 201);
+
+    let secret = server.store.create_key("ci").unwrap();
+    let mut changed = report.clone();
+    changed["project"]["commit"] = json!("later");
+
+    let refused = client.post(&url).json(&changed).send().await.unwrap();
+    assert_eq!(refused.status(), 401);
+    let accepted = client
+        .post(&url)
+        .bearer_auth(&secret)
+        .json(&changed)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), 201);
+
+    // Revoking the last key opens publishing again.
+    server.store.revoke_key("ci").unwrap();
+    let reopened = client.post(&url).json(&report).send().await.unwrap();
+    assert_eq!(reopened.status(), 201);
+
     server.shut_down().await;
 }

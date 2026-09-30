@@ -1,4 +1,4 @@
-//! The dashboard's HTTP API (RFC-108 D5 and D9) and the rules for where it
+//! The console's HTTP API (RFC-108 D5 and D9) and the rules for where it
 //! may listen.
 
 use std::future::Future;
@@ -21,7 +21,7 @@ use crate::store::Store;
 /// Largest report body the server reads.
 const MAX_REPORT_BYTES: usize = 16 * 1024 * 1024;
 
-/// Where and how `tuff dashboard serve` listens.
+/// Where and how `tuff console serve` listens.
 #[derive(Debug, Clone)]
 pub struct ServeConfig {
     pub data_dir: PathBuf,
@@ -33,24 +33,24 @@ pub struct ServeConfig {
 
 /// The bind rules of D5. A loopback address needs nothing. Any other
 /// address needs `--public-read`, because viewing is not authenticated, and
-/// at least one publish token, because publishing is.
-pub fn check_bind(addr: SocketAddr, public_read: bool, token_count: u64) -> Result<()> {
+/// at least one publish key, because publishing is.
+pub fn check_bind(addr: SocketAddr, public_read: bool, key_count: u64) -> Result<()> {
     if addr.ip().is_loopback() {
         return Ok(());
     }
     if !public_read {
         return Err(TuffError::refused(format!(
-            "{addr} is not a loopback address, and the dashboard does not authenticate people who view it"
+            "{addr} is not a loopback address, and the console does not authenticate people who view it"
         ))
         .with_hint(
             "put the server behind a reverse proxy that authenticates viewers and pass --public-read, or bind 127.0.0.1",
         ));
     }
-    if token_count == 0 {
+    if key_count == 0 {
         return Err(TuffError::refused(format!(
-            "{addr} is not a loopback address, and no publish token exists"
+            "{addr} is not a loopback address, and no publish key exists"
         ))
-        .with_hint("run 'tuff dashboard token create <name>' first"));
+        .with_hint("run 'tuff console key create <name>' first"));
     }
     Ok(())
 }
@@ -60,7 +60,7 @@ pub fn check_bind(addr: SocketAddr, public_read: bool, token_count: u64) -> Resu
 /// connections.
 pub fn run(config: ServeConfig, on_ready: impl FnOnce(SocketAddr)) -> Result<()> {
     let store = Arc::new(Store::open(&config.data_dir)?);
-    check_bind(config.addr, config.public_read, store.token_count()?)?;
+    check_bind(config.addr, config.public_read, store.key_count()?)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -107,15 +107,15 @@ async fn shutdown_signal() {
     }
 }
 
-/// Serve `router(store, require_token)` on `listener` until `shutdown`
+/// Serve `router(store, require_key)` on `listener` until `shutdown`
 /// completes.
 pub async fn serve(
     store: Arc<Store>,
     listener: tokio::net::TcpListener,
-    require_token: bool,
+    require_key: bool,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<()> {
-    axum::serve(listener, router(store, require_token))
+    axum::serve(listener, router(store, require_key))
         .with_graceful_shutdown(shutdown)
         .await?;
     Ok(())
@@ -124,16 +124,15 @@ pub async fn serve(
 #[derive(Clone)]
 struct AppState {
     store: Arc<Store>,
-    require_token: bool,
+    require_key: bool,
 }
 
-/// The API routes. With `require_token`, publishing needs a live token in
-/// `Authorization: Bearer`; without it, anyone who can connect may publish.
-pub fn router(store: Arc<Store>, require_token: bool) -> Router {
-    let state = AppState {
-        store,
-        require_token,
-    };
+/// The API routes. Publishing needs a live key in `Authorization: Bearer`
+/// when `require_key` is set, and also whenever at least one key exists, on
+/// any address. With no key and `require_key` unset, anyone who can connect
+/// may publish.
+pub fn router(store: Arc<Store>, require_key: bool) -> Router {
+    let state = AppState { store, require_key };
     Router::new()
         .route("/healthz", get(healthz))
         .route("/api/v1/healthz", get(healthz))
@@ -221,7 +220,7 @@ async fn healthz() -> Json<serde_json::Value> {
 }
 
 async fn authorize(state: &AppState, headers: &HeaderMap) -> std::result::Result<(), ApiError> {
-    if !state.require_token {
+    if !state.require_key && blocking(&state.store, Store::key_count).await? == 0 {
         return Ok(());
     }
     let presented = headers
@@ -229,25 +228,25 @@ async fn authorize(state: &AppState, headers: &HeaderMap) -> std::result::Result
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
         .map(str::trim)
-        .filter(|token| !token.is_empty());
-    let Some(token) = presented else {
+        .filter(|key| !key.is_empty());
+    let Some(key) = presented else {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "unauthorized",
-            "publishing to this dashboard needs a token",
+            "publishing to this console needs a key",
         )
-        .hint("send 'Authorization: Bearer <token>', or set TUFF_DASHBOARD_TOKEN for 'tuff dashboard publish'"));
+        .hint("send 'Authorization: Bearer <key>', or set TUFF_CONSOLE_KEY for 'tuff console publish'"));
     };
-    let token = token.to_string();
-    if blocking(&state.store, move |store| store.verify_token(&token)).await? {
+    let key = key.to_string();
+    if blocking(&state.store, move |store| store.verify_key(&key)).await? {
         Ok(())
     } else {
         Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "unauthorized",
-            "the token is not valid or was revoked",
+            "the key is not valid or was revoked",
         )
-        .hint("create one with 'tuff dashboard token create <name>' on the server"))
+        .hint("create one with 'tuff console key create <name>' on the server"))
     }
 }
 
@@ -352,10 +351,10 @@ mod tests {
     }
 
     #[test]
-    fn a_public_bind_needs_a_token() {
+    fn a_public_bind_needs_a_key() {
         let error = check_bind(addr("0.0.0.0:7474"), true, 0).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Refused);
-        assert!(error.hint().unwrap().contains("token create"));
+        assert!(error.hint().unwrap().contains("key create"));
         check_bind(addr("0.0.0.0:7474"), true, 1).unwrap();
     }
 }

@@ -1,9 +1,9 @@
 ---
 // The landing page hero: one support agent's capabilities through the four
-// steps Tuff covers, and the dashboard section below it. The dashboard is
+// steps Tuff covers, and the console section below it. The console is
 // in progress (RFC-108), so its section says so and shows sample data.
 // `part` renders one of the two, so the page can place them apart.
-interface Props { part: 'hero' | 'dashboard' }
+interface Props { part: 'hero' | 'console' }
 const { part } = Astro.props;
 const docs = '/getting-started';
 
@@ -67,7 +67,7 @@ const projects = [
     </div>
     <div class="tuff-hero-actions">
       <a class="tuff-button tuff-button--primary" href={docs}>Start managing <span aria-hidden="true">→</span></a>
-      <a class="tuff-button tuff-button--quiet" href="#dashboard">Preview the dashboard</a>
+      <a class="tuff-button tuff-button--quiet" href="#console">Preview the console</a>
     </div>
     <div class="hs-install">
       <span aria-hidden="true">$</span><code>uv tool install tuffcli</code>
@@ -82,7 +82,7 @@ const projects = [
   </div>
 
   <div class="tuff-hero-demo hs-demo">
-    <figure class="hs-flow" data-hs-flow aria-label="A support agent's capabilities, from source to dashboard">
+    <figure class="hs-flow" data-hs-flow aria-label="A support agent's capabilities, from source to console">
       <div class="hs-bar"><i></i><i></i><i></i><span>support-agent</span><em>github.com/acme/agents · apps/support-agent</em></div>
 
       <div class="hs-stage" data-hs-step="0" style="--d: 0">
@@ -126,7 +126,7 @@ const projects = [
         </div>
       </div>
 
-      <div class="hs-merge" data-hs-step="3" style="--d: 3"><span>tuff dashboard publish</span></div>
+      <div class="hs-merge" data-hs-step="3" style="--d: 3"><span>tuff console publish</span></div>
 
       <div class="hs-stage hs-govern" data-hs-step="3" style="--d: 4">
         <div class="hs-label"><b>4</b> govern &amp; observe<span>See what every project runs, what drifted, and which rules are not enforced.</span></div>
@@ -150,18 +150,18 @@ const projects = [
 </section>
 )}
 
-{part === 'dashboard' && (
-<section class="tuff-section hs-dash-section" id="dashboard">
+{part === 'console' && (
+<section class="tuff-section hs-dash-section" id="console">
   <div class="tuff-section-head">
-    <div class="tuff-section-label">//dashboard <span class="hs-soon">in progress</span></div>
+    <div class="tuff-section-label">//console <span class="hs-soon">in progress</span></div>
     <h2>Every agent’s capabilities, across the organisation</h2>
-    <p>Projects publish a report from CI. The dashboard shows each agent’s skills, tools, MCP servers, hooks, and policies, which harness runs them, what changed, and when. It is being built now; the view below uses sample data.</p>
+    <p>Projects publish a report from CI. The console’s Dashboard shows each agent’s skills, tools, MCP servers, hooks, and policies, which harness runs them, what changed, and when. It is being built now; the view below uses sample data.</p>
   </div>
 
-  <div class="hs-app" aria-label="Dashboard preview with sample data">
-    <div class="hs-app-bar"><i></i><i></i><i></i><span>tuff dashboard</span><em>tuff.acme.internal</em></div>
+  <div class="hs-app" aria-label="Console preview with sample data">
+    <div class="hs-app-bar"><i></i><i></i><i></i><span>tuff console</span><em>tuff.acme.internal</em></div>
     <div class="hs-app-body">
-      <nav class="hs-app-nav" aria-label="Dashboard sections (sample)">
+      <nav class="hs-app-nav" aria-label="Console sections (sample)">
         <span class="is-active">Overview</span>
         <span>Projects</span>
         <span>Capabilities</span>
@@ -378,7 +378,7 @@ const projects = [
   .hs-stage.is-active .hs-label b { animation: hs-beat 1.2s ease-in-out infinite; }
   @keyframes hs-beat { 50% { box-shadow: 0 0 0 4px rgba(241, 132, 83, .25); } }
 
-  /* Dashboard section */
+  /* Console section */
   .hs-app { margin-top: 1.6rem; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .5rem; background: var(--tuff-bg); box-shadow: 0 2rem 5rem rgba(38, 31, 22, .14); }
   .hs-app-bar { display: flex; align-items: center; gap: .4rem; padding: .6rem .9rem; border-bottom: 1px solid var(--tuff-border); color: var(--tuff-text); background: var(--tuff-panel-2); font-family: 'JetBrains Mono', monospace; font-size: .7rem; }
   .hs-app-bar i { width: .46rem; height: .46rem; border: 1px solid #c9c3b9; border-radius: 50%; }

@@ -1,8 +1,8 @@
 [package]
-name = "tuff-server"
+name = "tuff-console"
 version.workspace = true
 edition.workspace = true
-description = "Dashboard server for Tuff: stores project reports in SQLite and serves them over HTTP."
+description = "Console server for Tuff: stores project reports in SQLite and serves them over HTTP."
 license.workspace = true
 authors.workspace = true
 homepage.workspace = true

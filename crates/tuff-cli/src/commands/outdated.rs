@@ -518,7 +518,7 @@ fn release_hints(rows: &[OutdatedRow]) -> Vec<String> {
 }
 
 /// `tuff outdated --json` for the project's own lockfile, without the
-/// global scope, as a dashboard report carries it.
+/// global scope, as a console report carries it.
 pub(crate) fn project_outdated_json(repo_root: &Path) -> Result<serde_json::Value> {
     let mut rows: Vec<OutdatedRow> = Vec::new();
     let mut cache = PackCheckCache::default();

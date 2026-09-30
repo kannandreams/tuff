@@ -10505,7 +10505,7 @@ fn scan_adopts_a_cursor_skill_in_place_for_cursor() {
     );
 }
 
-// ── dashboard reports ────────────────────────────────────────────────
+// ── console reports ────────────────────────────────────────────────
 
 fn git(dir: &Path, args: &[&str]) {
     let status = std::process::Command::new("git")
@@ -10518,7 +10518,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 #[test]
-fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
+fn console_publish_dry_run_reports_each_project_in_a_monorepo() {
     let temp = TempDir::new().unwrap();
     let home = TempDir::new().unwrap();
     let repo = temp.path().join("agents");
@@ -10557,7 +10557,7 @@ fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
     let output = tuff()
         .current_dir(&repo)
         .env("HOME", home.path())
-        .args(["dashboard", "publish", "--dry-run", "--all"])
+        .args(["console", "publish", "--dry-run", "--all"])
         .output()
         .unwrap();
     assert!(
@@ -10621,7 +10621,7 @@ fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
     let output = tuff()
         .current_dir(repo.join("apps/billing-agent"))
         .env("HOME", home.path())
-        .args(["dashboard", "publish", "--dry-run"])
+        .args(["console", "publish", "--dry-run"])
         .output()
         .unwrap();
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -10629,7 +10629,7 @@ fn dashboard_publish_dry_run_reports_each_project_in_a_monorepo() {
 }
 
 #[test]
-fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
+fn console_publish_outside_git_needs_a_project_name_and_a_dry_run() {
     let temp = TempDir::new().unwrap();
     tuff()
         .current_dir(temp.path())
@@ -10638,13 +10638,13 @@ fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
         .success();
     tuff()
         .current_dir(temp.path())
-        .args(["dashboard", "publish", "--dry-run"])
+        .args(["console", "publish", "--dry-run"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("pass --project <name>"));
     let output = tuff()
         .current_dir(temp.path())
-        .args(["dashboard", "publish", "--dry-run", "--project", "local"])
+        .args(["console", "publish", "--dry-run", "--project", "local"])
         .output()
         .unwrap();
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -10652,40 +10652,40 @@ fn dashboard_publish_outside_git_needs_a_project_name_and_a_dry_run() {
     assert_eq!(report["project"]["path"], ".");
     tuff()
         .current_dir(temp.path())
-        .args(["dashboard", "publish", "--project", "local"])
+        .args(["console", "publish", "--project", "local"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("pass --dry-run"));
     let empty = TempDir::new().unwrap();
     tuff()
         .current_dir(empty.path())
-        .args(["dashboard", "publish", "--dry-run", "--all"])
+        .args(["console", "publish", "--dry-run", "--all"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("no tuff.lock under"));
 }
 
-// ── dashboard server ─────────────────────────────────────────────────
+// ── console server ─────────────────────────────────────────────────
 
 #[test]
-fn dashboard_tokens_are_created_listed_and_revoked() {
+fn console_keys_are_created_listed_and_revoked() {
     let data = TempDir::new().unwrap();
     let data_arg = data.path().to_str().unwrap();
 
     let created = tuff()
-        .args(["dashboard", "token", "create", "ci", "--data", data_arg])
+        .args(["console", "key", "create", "ci", "--data", data_arg])
         .output()
         .unwrap();
     assert!(created.status.success());
     let stdout = String::from_utf8(created.stdout).unwrap();
     let secret = stdout
         .lines()
-        .find(|line| line.starts_with("tuffd_"))
+        .find(|line| line.starts_with("tuffc_"))
         .expect("the secret is printed")
         .to_string();
 
     // The database keeps the SHA-256 and never the secret.
-    let database = fs::read(data.path().join("dashboard.sqlite")).unwrap();
+    let database = fs::read(data.path().join("console.sqlite")).unwrap();
     assert!(
         !database
             .windows(secret.len())
@@ -10693,45 +10693,45 @@ fn dashboard_tokens_are_created_listed_and_revoked() {
     );
 
     tuff()
-        .args(["dashboard", "token", "create", "ci", "--data", data_arg])
+        .args(["console", "key", "create", "ci", "--data", data_arg])
         .assert()
         .failure()
         .stderr(predicate::str::contains("already exists"));
 
     let listed = tuff()
-        .args(["dashboard", "token", "list", "--json", "--data", data_arg])
+        .args(["console", "key", "list", "--json", "--data", data_arg])
         .output()
         .unwrap();
-    let tokens: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
-    assert_eq!(tokens[0]["name"], "ci");
-    assert!(tokens[0]["lastUsedAt"].is_null());
+    let keys: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(keys[0]["name"], "ci");
+    assert!(keys[0]["lastUsedAt"].is_null());
     assert!(!String::from_utf8_lossy(&listed.stdout).contains(&secret));
 
     tuff()
-        .args(["dashboard", "token", "list", "--data", data_arg])
+        .args(["console", "key", "list", "--data", data_arg])
         .assert()
         .success()
         .stdout(predicate::str::contains("ci").and(predicate::str::contains("never")));
 
     tuff()
-        .args(["dashboard", "token", "revoke", "ci", "--data", data_arg])
+        .args(["console", "key", "revoke", "ci", "--data", data_arg])
         .assert()
         .success();
     tuff()
-        .args(["dashboard", "token", "revoke", "ci", "--data", data_arg])
+        .args(["console", "key", "revoke", "ci", "--data", data_arg])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("no token named 'ci'"));
+        .stderr(predicate::str::contains("no key named 'ci'"));
 }
 
 #[test]
-fn dashboard_serve_refuses_a_public_bind_without_the_required_flags() {
+fn console_serve_refuses_a_public_bind_without_the_required_flags() {
     let data = TempDir::new().unwrap();
     let data_arg = data.path().to_str().unwrap();
 
     tuff()
         .args([
-            "dashboard",
+            "console",
             "serve",
             "--addr",
             "0.0.0.0:0",
@@ -10744,7 +10744,7 @@ fn dashboard_serve_refuses_a_public_bind_without_the_required_flags() {
 
     tuff()
         .args([
-            "dashboard",
+            "console",
             "serve",
             "--addr",
             "0.0.0.0:0",
@@ -10754,11 +10754,11 @@ fn dashboard_serve_refuses_a_public_bind_without_the_required_flags() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("tuff dashboard token create"));
+        .stderr(predicate::str::contains("tuff console key create"));
 }
 
 #[test]
-fn dashboard_serve_accepts_a_report_and_returns_the_project() {
+fn console_serve_accepts_a_report_and_returns_the_project() {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpStream;
 
@@ -10771,14 +10771,14 @@ fn dashboard_serve_accepts_a_report_and_returns_the_project() {
         .success();
     let report = tuff()
         .current_dir(project.path())
-        .args(["dashboard", "publish", "--dry-run", "--project", "local"])
+        .args(["console", "publish", "--dry-run", "--project", "local"])
         .output()
         .unwrap()
         .stdout;
 
     let mut server = tuff()
         .args([
-            "dashboard",
+            "console",
             "serve",
             "--addr",
             "127.0.0.1:0",
@@ -10794,7 +10794,7 @@ fn dashboard_serve_accepts_a_report_and_returns_the_project() {
         .unwrap();
     let addr = first_line
         .trim()
-        .strip_prefix("Dashboard listening on http://")
+        .strip_prefix("Console listening on http://")
         .unwrap_or_else(|| panic!("unexpected first line {first_line:?}"))
         .to_string();
 

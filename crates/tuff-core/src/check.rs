@@ -42,7 +42,7 @@ pub struct CheckOutcome {
 pub enum CheckScope {
     ProjectAndGlobal,
     Global,
-    /// The project's lockfile only, as a dashboard report describes it.
+    /// The project's lockfile only, as a console report describes it.
     Project,
 }
 

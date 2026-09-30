@@ -1,4 +1,4 @@
-//! The dashboard's SQLite file (RFC-108 D6).
+//! The console's SQLite file (RFC-108 D6).
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -10,10 +10,10 @@ use tuff_core::error::{ErrorKind, Result, TuffError};
 use tuff_core::report::Report;
 
 /// File name of the database inside the data directory.
-pub const DATABASE_FILE: &str = "dashboard.sqlite";
+pub const DATABASE_FILE: &str = "console.sqlite";
 
-/// Prefix of every publish token, so a leaked one is recognisable.
-pub const TOKEN_PREFIX: &str = "tuffd_";
+/// Prefix of every publish key, so a leaked one is recognisable.
+pub const KEY_PREFIX: &str = "tuffc_";
 
 /// Each entry moves the schema from version `index` to `index + 1`, tracked
 /// in `PRAGMA user_version`. Entries are never edited once released.
@@ -66,7 +66,7 @@ const MIGRATIONS: &[&str] = &[
         occurred_at TEXT NOT NULL
     );
     CREATE INDEX events_by_project ON events (project_id, id);
-    CREATE TABLE tokens (
+    CREATE TABLE keys (
         name TEXT PRIMARY KEY,
         sha256 TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL,
@@ -76,9 +76,9 @@ const MIGRATIONS: &[&str] = &[
 ];
 
 /// The data directory when `--data` is not given:
-/// `$XDG_DATA_HOME/tuff/dashboard`, or `~/.local/share/tuff/dashboard`.
+/// `$XDG_DATA_HOME/tuff/console`, or `~/.local/share/tuff/console`.
 pub fn default_data_dir(home: &Path) -> PathBuf {
-    tuff_core::paths::user_data(home).join("dashboard")
+    tuff_core::paths::user_data(home).join("console")
 }
 
 /// What ingesting a report did.
@@ -108,7 +108,7 @@ pub struct ProjectRow {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TokenInfo {
+pub struct KeyInfo {
     pub name: String,
     pub created_at: String,
     pub last_used_at: Option<String>,
@@ -119,7 +119,7 @@ pub struct Store {
 }
 
 fn db_error(error: rusqlite::Error) -> TuffError {
-    TuffError::of(ErrorKind::Source, format!("dashboard database: {error}")).with_source(error)
+    TuffError::of(ErrorKind::Source, format!("console database: {error}")).with_source(error)
 }
 
 fn now() -> String {
@@ -181,7 +181,7 @@ pub fn report_digest(report: &serde_json::Value) -> String {
     sha256_hex(canonical.as_bytes())
 }
 
-fn valid_token_name(name: &str) -> bool {
+fn valid_key_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
         && name
@@ -389,12 +389,12 @@ impl Store {
         Ok(Some((row, serde_json::from_str(&body)?)))
     }
 
-    /// Create a publish token and return its secret. Only the SHA-256 of the
+    /// Create a publish key and return its secret. Only the SHA-256 of the
     /// secret is stored, so this is the one time the secret exists in full.
-    pub fn create_token(&self, name: &str) -> Result<String> {
-        if !valid_token_name(name) {
+    pub fn create_key(&self, name: &str) -> Result<String> {
+        if !valid_key_name(name) {
             return Err(
-                TuffError::usage(format!("'{name}' is not a valid token name"))
+                TuffError::usage(format!("'{name}' is not a valid key name"))
                     .with_hint("use 1 to 64 letters, digits, '-', '_' or '.'"),
             );
         }
@@ -402,12 +402,12 @@ impl Store {
         getrandom::fill(&mut bytes).map_err(|error| {
             TuffError::of(
                 ErrorKind::Internal,
-                format!("no random bytes for a token: {error}"),
+                format!("no random bytes for a key: {error}"),
             )
         })?;
-        let secret = format!("{TOKEN_PREFIX}{}", hex(&bytes));
+        let secret = format!("{KEY_PREFIX}{}", hex(&bytes));
         let inserted = self.conn().execute(
-            "INSERT INTO tokens (name, sha256, created_at) VALUES (?1, ?2, ?3)",
+            "INSERT INTO keys (name, sha256, created_at) VALUES (?1, ?2, ?3)",
             params![name, sha256_hex(secret.as_bytes()), now()],
         );
         match inserted {
@@ -416,10 +416,8 @@ impl Store {
                 if failure.code == rusqlite::ErrorCode::ConstraintViolation =>
             {
                 Err(
-                    TuffError::refused(format!("a token named '{name}' already exists")).with_hint(
-                        format!(
-                            "run 'tuff dashboard token revoke {name}' first, or pick another name"
-                        ),
+                    TuffError::refused(format!("a key named '{name}' already exists")).with_hint(
+                        format!("run 'tuff console key revoke {name}' first, or pick another name"),
                     ),
                 )
             }
@@ -427,15 +425,15 @@ impl Store {
         }
     }
 
-    /// Tokens in creation order.
-    pub fn tokens(&self) -> Result<Vec<TokenInfo>> {
+    /// Keys in creation order.
+    pub fn keys(&self) -> Result<Vec<KeyInfo>> {
         let conn = self.conn();
         let mut statement = conn
-            .prepare("SELECT name, created_at, last_used_at FROM tokens ORDER BY created_at, name")
+            .prepare("SELECT name, created_at, last_used_at FROM keys ORDER BY created_at, name")
             .map_err(db_error)?;
         statement
             .query_map([], |row| {
-                Ok(TokenInfo {
+                Ok(KeyInfo {
                     name: row.get(0)?,
                     created_at: row.get(1)?,
                     last_used_at: row.get(2)?,
@@ -446,30 +444,30 @@ impl Store {
             .map_err(db_error)
     }
 
-    pub fn token_count(&self) -> Result<u64> {
+    pub fn key_count(&self) -> Result<u64> {
         self.conn()
-            .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM keys", [], |row| row.get(0))
             .map_err(db_error)
     }
 
-    pub fn revoke_token(&self, name: &str) -> Result<()> {
+    pub fn revoke_key(&self, name: &str) -> Result<()> {
         let removed = self
             .conn()
-            .execute("DELETE FROM tokens WHERE name = ?1", params![name])
+            .execute("DELETE FROM keys WHERE name = ?1", params![name])
             .map_err(db_error)?;
         if removed == 0 {
-            return Err(TuffError::not_found(format!("no token named '{name}'"))
-                .with_hint("run 'tuff dashboard token list' to see the names"));
+            return Err(TuffError::not_found(format!("no key named '{name}'"))
+                .with_hint("run 'tuff console key list' to see the names"));
         }
         Ok(())
     }
 
-    /// Whether `secret` is a live token. A match records its use.
-    pub fn verify_token(&self, secret: &str) -> Result<bool> {
+    /// Whether `secret` is a live key. A match records its use.
+    pub fn verify_key(&self, secret: &str) -> Result<bool> {
         let updated = self
             .conn()
             .execute(
-                "UPDATE tokens SET last_used_at = ?2 WHERE sha256 = ?1",
+                "UPDATE keys SET last_used_at = ?2 WHERE sha256 = ?1",
                 params![sha256_hex(secret.as_bytes()), now()],
             )
             .map_err(db_error)?;
@@ -567,11 +565,8 @@ mod tests {
     #[test]
     fn reopening_keeps_the_data() {
         let temp = tempfile::tempdir().unwrap();
-        Store::open(temp.path())
-            .unwrap()
-            .create_token("ci")
-            .unwrap();
-        assert_eq!(Store::open(temp.path()).unwrap().token_count().unwrap(), 1);
+        Store::open(temp.path()).unwrap().create_key("ci").unwrap();
+        assert_eq!(Store::open(temp.path()).unwrap().key_count().unwrap(), 1);
     }
 
     #[test]
@@ -671,65 +666,65 @@ mod tests {
     }
 
     #[test]
-    fn a_token_secret_is_shown_once_and_only_its_hash_is_stored() {
+    fn a_key_secret_is_shown_once_and_only_its_hash_is_stored() {
         let store = Store::open_in_memory().unwrap();
-        let secret = store.create_token("ci").unwrap();
-        assert!(secret.starts_with(TOKEN_PREFIX));
-        assert_eq!(secret.len(), TOKEN_PREFIX.len() + 64);
+        let secret = store.create_key("ci").unwrap();
+        assert!(secret.starts_with(KEY_PREFIX));
+        assert_eq!(secret.len(), KEY_PREFIX.len() + 64);
 
         let stored: String = store
             .conn()
-            .query_row("SELECT sha256 FROM tokens WHERE name = 'ci'", [], |row| {
+            .query_row("SELECT sha256 FROM keys WHERE name = 'ci'", [], |row| {
                 row.get(0)
             })
             .unwrap();
         assert_eq!(stored, sha256_hex(secret.as_bytes()));
         assert!(!stored.contains(&secret));
 
-        assert!(store.verify_token(&secret).unwrap());
-        assert!(!store.verify_token("tuffd_wrong").unwrap());
-        assert!(!store.verify_token("").unwrap());
-        let tokens = store.tokens().unwrap();
-        assert_eq!(tokens.len(), 1);
-        assert_eq!(tokens[0].name, "ci");
-        assert!(tokens[0].last_used_at.is_some());
+        assert!(store.verify_key(&secret).unwrap());
+        assert!(!store.verify_key("tuffc_wrong").unwrap());
+        assert!(!store.verify_key("").unwrap());
+        let keys = store.keys().unwrap();
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].name, "ci");
+        assert!(keys[0].last_used_at.is_some());
     }
 
     #[test]
-    fn a_token_is_unused_until_it_authenticates() {
+    fn a_key_is_unused_until_it_authenticates() {
         let store = Store::open_in_memory().unwrap();
-        store.create_token("ci").unwrap();
-        assert!(store.tokens().unwrap()[0].last_used_at.is_none());
+        store.create_key("ci").unwrap();
+        assert!(store.keys().unwrap()[0].last_used_at.is_none());
     }
 
     #[test]
-    fn a_revoked_token_stops_working() {
+    fn a_revoked_key_stops_working() {
         let store = Store::open_in_memory().unwrap();
-        let secret = store.create_token("ci").unwrap();
-        store.revoke_token("ci").unwrap();
-        assert!(!store.verify_token(&secret).unwrap());
-        assert_eq!(store.token_count().unwrap(), 0);
-        let error = store.revoke_token("ci").unwrap_err();
+        let secret = store.create_key("ci").unwrap();
+        store.revoke_key("ci").unwrap();
+        assert!(!store.verify_key(&secret).unwrap());
+        assert_eq!(store.key_count().unwrap(), 0);
+        let error = store.revoke_key("ci").unwrap_err();
         assert_eq!(error.kind(), ErrorKind::NotFound);
     }
 
     #[test]
-    fn token_names_are_unique_and_validated() {
+    fn key_names_are_unique_and_validated() {
         let store = Store::open_in_memory().unwrap();
-        store.create_token("ci").unwrap();
+        store.create_key("ci").unwrap();
         assert_eq!(
-            store.create_token("ci").unwrap_err().kind(),
+            store.create_key("ci").unwrap_err().kind(),
             ErrorKind::Refused
         );
         for bad in ["", "has space", "a/b", &"x".repeat(65)] {
             assert_eq!(
-                store.create_token(bad).unwrap_err().kind(),
+                store.create_key(bad).unwrap_err().kind(),
                 ErrorKind::Usage,
                 "{bad:?}"
             );
         }
-        let one = store.create_token("one").unwrap();
-        let two = store.create_token("two").unwrap();
+        let one = store.create_key("one").unwrap();
+        let two = store.create_key("two").unwrap();
         assert_ne!(one, two);
     }
 }

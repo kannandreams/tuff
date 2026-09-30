@@ -1,17 +1,17 @@
-//! `tuff dashboard` (RFC-108): reports about this project for a dashboard
+//! `tuff console` (RFC-108): reports about this project for a console
 //! server, and the server itself.
 
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
-use tuff_server::{ServeConfig, Store, default_data_dir};
+use tuff_console::{ServeConfig, Store, default_data_dir};
 
 use crate::error::{Result, TuffError};
 
 use super::{home_dir, render_table};
 
-/// Where the dashboard keeps its database: `--data`, or the default under
+/// Where the console keeps its database: `--data`, or the default under
 /// `$XDG_DATA_HOME`.
 fn data_dir(data: Option<&Path>) -> Result<PathBuf> {
     match data {
@@ -20,55 +20,55 @@ fn data_dir(data: Option<&Path>) -> Result<PathBuf> {
     }
 }
 
-/// `tuff dashboard serve`: listen until interrupted.
-pub fn cmd_dashboard_serve(addr: SocketAddr, data: Option<&Path>, public_read: bool) -> Result<()> {
+/// `tuff console serve`: listen until interrupted.
+pub fn cmd_console_serve(addr: SocketAddr, data: Option<&Path>, public_read: bool) -> Result<()> {
     let data_dir = data_dir(data)?;
     let shown_dir = data_dir.clone();
-    tuff_server::run(
+    tuff_console::run(
         ServeConfig {
             data_dir,
             addr,
             public_read,
         },
         move |bound| {
-            println!("Dashboard listening on http://{bound}");
+            println!("Console listening on http://{bound}");
             println!("Data: {}", shown_dir.display());
             let _ = std::io::stdout().flush();
         },
     )
 }
 
-/// `tuff dashboard token create`: print the secret once.
-pub fn cmd_dashboard_token_create(name: &str, data: Option<&Path>) -> Result<()> {
+/// `tuff console key create`: print the secret once.
+pub fn cmd_console_key_create(name: &str, data: Option<&Path>) -> Result<()> {
     let store = Store::open(&data_dir(data)?)?;
-    let secret = store.create_token(name)?;
-    println!("Created token '{name}'. It is shown once and cannot be shown again.");
+    let secret = store.create_key(name)?;
+    println!("Created key '{name}'. It is shown once and cannot be shown again.");
     println!();
     println!("{secret}");
     println!();
-    println!("Publish with TUFF_DASHBOARD_TOKEN set to it, or with --token.");
+    println!("Publish with TUFF_CONSOLE_KEY set to it, or with --key.");
     Ok(())
 }
 
-/// `tuff dashboard token list`.
-pub fn cmd_dashboard_token_list(data: Option<&Path>, json: bool) -> Result<()> {
+/// `tuff console key list`.
+pub fn cmd_console_key_list(data: Option<&Path>, json: bool) -> Result<()> {
     let store = Store::open(&data_dir(data)?)?;
-    let tokens = store.tokens()?;
+    let keys = store.keys()?;
     if json {
-        println!("{}", serde_json::to_string_pretty(&tokens)?);
+        println!("{}", serde_json::to_string_pretty(&keys)?);
         return Ok(());
     }
-    if tokens.is_empty() {
-        println!("No tokens. Create one with 'tuff dashboard token create <name>'.");
+    if keys.is_empty() {
+        println!("No keys. Create one with 'tuff console key create <name>'.");
         return Ok(());
     }
-    let rows: Vec<Vec<String>> = tokens
+    let rows: Vec<Vec<String>> = keys
         .into_iter()
-        .map(|token| {
+        .map(|key| {
             vec![
-                token.name,
-                token.created_at,
-                token.last_used_at.unwrap_or_else(|| "never".to_string()),
+                key.name,
+                key.created_at,
+                key.last_used_at.unwrap_or_else(|| "never".to_string()),
             ]
         })
         .collect();
@@ -76,10 +76,10 @@ pub fn cmd_dashboard_token_list(data: Option<&Path>, json: bool) -> Result<()> {
     Ok(())
 }
 
-/// `tuff dashboard token revoke`.
-pub fn cmd_dashboard_token_revoke(name: &str, data: Option<&Path>) -> Result<()> {
-    Store::open(&data_dir(data)?)?.revoke_token(name)?;
-    println!("Revoked token '{name}'.");
+/// `tuff console key revoke`.
+pub fn cmd_console_key_revoke(name: &str, data: Option<&Path>) -> Result<()> {
+    Store::open(&data_dir(data)?)?.revoke_key(name)?;
+    println!("Revoked key '{name}'.");
     Ok(())
 }
 
@@ -90,12 +90,12 @@ pub struct PublishOptions<'a> {
     pub dry_run: bool,
 }
 
-pub fn cmd_dashboard_publish(repo_root: &Path, options: PublishOptions<'_>) -> Result<()> {
+pub fn cmd_console_publish(repo_root: &Path, options: PublishOptions<'_>) -> Result<()> {
     if !options.dry_run {
-        return Err(TuffError::unsupported(
-            "sending reports to a dashboard server is not built yet",
-        )
-        .with_hint("pass --dry-run to print the report instead"));
+        return Err(
+            TuffError::unsupported("sending reports to a console server is not built yet")
+                .with_hint("pass --dry-run to print the report instead"),
+        );
     }
     let projects = if options.all {
         let found = tuff_core::report::find_projects(repo_root)?;
