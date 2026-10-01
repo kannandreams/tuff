@@ -68,6 +68,8 @@ mise run smoke-install
 
 Serve the documentation with `mise run docs-serve`. Regenerate terminal screenshots with `mise run docs-assets` when their underlying CLI output changes.
 
+The landing page embeds a preview of Tuff Console built from `crates/tuff-console/ui` and `tuff console serve --demo`. After changing either, run `mise run console-preview` and commit `website/public/console-preview/`; `mise run check` and `mise run docs-deploy` fail while it is out of date.
+
 ## Change guidelines
 
 - Keep changes scoped to the owning crate or adapter.
