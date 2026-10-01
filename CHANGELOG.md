@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Improved
+
+- **The landing page embeds a working Tuff Console preview.** It runs the console's own UI in the browser on a snapshot of `tuff console serve --demo`, so a visitor can open every view, a project, and the Audit filters, and it shows no server address. `mise run console-preview` rebuilds it. The console UI gains a `preview` setting that hides the server line, which only this preview sets.
+
 ## [0.14.0] - 2026-10-01
 
 ### Added

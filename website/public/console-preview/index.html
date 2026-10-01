@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Tuff Console preview</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c35a35'/%3E%3Cpath d='M9 10h14v4h-5v9h-4v-9H9z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#/">tuff <small>console</small></a>
+    <div class="server" id="server"></div>
+    <span class="chip demo" id="demo-chip" hidden title="Started with tuff console serve --demo">Sample data</span>
+    <div class="spacer"></div>
+    <span class="server hide-sm" id="last-report"></span>
+    <button class="iconbtn" id="theme-btn" type="button" aria-label="Switch between light and dark theme">Theme</button>
+  </div>
+</header>
+<div class="shell">
+  <nav class="nav" aria-label="Views" id="nav"></nav>
+  <main id="main" tabindex="-1"><p class="loading">Loading</p></main>
+</div>
+<noscript><p class="note">The console needs JavaScript to draw its views. The same data is at /api/v1/projects.</p></noscript>
+<script src="preview.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

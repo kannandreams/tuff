@@ -129,6 +129,13 @@ run = "npm --prefix website run dev"
 description = "Regenerate terminal screenshots"
 run = "./scripts/generate-doc-screenshot.sh tuff-welcome.png -- cargo run -p tuffcli --quiet --"
 
+[tasks.console-preview]
+description = "Rebuild the landing page's Tuff Console preview from tuff console serve --demo"
+run = [
+  "cargo build -p tuffcli",
+  "node scripts/build-console-preview.mjs",
+]
+
 [tasks.docs-deploy]
 description = "Deploy the documentation site to Cloudflare Pages"
 depends = ["docs-build"]
