@@ -25,6 +25,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 - **`tuff dashboard publish` is now `tuff console publish`.** The command from 0.12.0 keeps its flags and its `--dry-run` behaviour. The old name is gone with no alias, so a script that calls `tuff dashboard publish` must change.
 
+### Improved
+
+- **The landing page's Console section shows the real console.** Screenshots of the Dashboard, Audit, and Capabilities views from `tuff console serve --demo` replace the hand-drawn sample, with links to the Console docs and the self-hosting guide.
+
 ## [0.13.0] - 2026-09-30
 
 ### Added
