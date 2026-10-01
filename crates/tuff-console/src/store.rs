@@ -226,11 +226,20 @@ fn write_canonical(value: &serde_json::Value, out: &mut String) {
     }
 }
 
-/// SHA-256 over the report's canonical JSON without `generatedAt` (D6).
+/// SHA-256 over the report's canonical JSON without `generatedAt` and
+/// the project's `commit`, `branch`, and `dirty` (D6). Those describe when
+/// and where the report was taken; two reports that differ only there say
+/// the same thing about the project, so a CI job publishing on every push
+/// does not add a row per commit.
 pub fn report_digest(report: &serde_json::Value) -> String {
     let mut value = report.clone();
     if let Some(map) = value.as_object_mut() {
         map.remove("generatedAt");
+        if let Some(project) = map.get_mut("project").and_then(|p| p.as_object_mut()) {
+            for key in ["commit", "branch", "dirty"] {
+                project.remove(key);
+            }
+        }
     }
     let mut canonical = String::new();
     write_canonical(&value, &mut canonical);
@@ -309,8 +318,10 @@ impl Store {
 
     /// Store one report. `raw` is the report as received, kept verbatim in
     /// the `reports` row. A report equal to the project's previous one
-    /// (digest over everything except `generatedAt`) adds no row and moves
-    /// the project's last report time.
+    /// (digest over everything except `generatedAt`, commit, branch, and
+    /// dirty) adds no row: the previous row takes the new report's commit,
+    /// branch, body, and times, so the project shows where it was last
+    /// seen, and the project's last report time moves.
     pub fn ingest(&self, report: &Report, raw: &serde_json::Value) -> Result<IngestOutcome> {
         self.ingest_at(report, raw, &now())
     }
@@ -368,6 +379,20 @@ impl Store {
 
         let outcome = match previous {
             Some((report_id, previous_digest, _)) if previous_digest == digest => {
+                tx.execute(
+                    "UPDATE reports SET received_at = ?2, generated_at = ?3, commit_sha = ?4,
+                                        branch = ?5, body = ?6
+                     WHERE id = ?1",
+                    params![
+                        report_id,
+                        received_at,
+                        report.generated_at,
+                        report.project.commit,
+                        report.project.branch,
+                        body
+                    ],
+                )
+                .map_err(db_error)?;
                 tx.execute(
                     "UPDATE projects SET last_report_at = ?2 WHERE id = ?1",
                     params![project_id, received_at],
@@ -871,12 +896,12 @@ mod tests {
             &store,
             "2026-09-16T18:05:00Z",
             "bbb",
-            json!({ "version": 3 }),
+            json!({ "version": 3, "capabilities": [] }),
         );
         let c = ingest(
             &store,
             "2026-09-16T18:10:00Z",
-            "aaa",
+            "ccc",
             json!({ "version": 3 }),
         );
         assert!(!b.deduplicated && !c.deduplicated);
@@ -886,12 +911,42 @@ mod tests {
     }
 
     #[test]
+    fn a_new_commit_with_the_same_content_moves_the_latest_report() {
+        let store = Store::open_in_memory().unwrap();
+        let first = ingest(
+            &store,
+            "2026-09-16T18:00:00Z",
+            "aaa",
+            json!({ "version": 3 }),
+        );
+        let second = ingest(
+            &store,
+            "2026-09-17T09:00:00Z",
+            "bbb",
+            json!({ "version": 3 }),
+        );
+        assert!(second.deduplicated);
+        assert_eq!(second.report_id, first.report_id);
+        let reports = store.report_history(first.project_id, 10).unwrap();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].commit.as_deref(), Some("bbb"));
+        assert_eq!(reports[0].generated_at, "2026-09-17T09:00:00Z");
+    }
+
+    #[test]
     fn digests_ignore_key_order_and_generated_at_only() {
         let one = json!({ "generatedAt": "x", "b": [1, { "d": 1, "c": 2 }], "a": null });
         let two = json!({ "a": null, "generatedAt": "y", "b": [1, { "c": 2, "d": 1 }] });
         assert_eq!(report_digest(&one), report_digest(&two));
         let three = json!({ "a": null, "b": [1, { "c": 2, "d": 2 }] });
         assert_ne!(report_digest(&one), report_digest(&three));
+        let at = |commit: &str, dirty: bool| json!({ "project": { "repository": "r", "commit": commit, "branch": "main", "dirty": dirty }, "x": 1 });
+        assert_eq!(
+            report_digest(&at("aaa", false)),
+            report_digest(&at("bbb", true))
+        );
+        let elsewhere = json!({ "project": { "repository": "s", "commit": "aaa" }, "x": 1 });
+        assert_ne!(report_digest(&at("aaa", false)), report_digest(&elsewhere));
     }
 
     #[test]
@@ -910,7 +965,7 @@ mod tests {
             json!({ "version": 3 }),
         );
         let (project, latest) = store.project(outcome.project_id).unwrap().unwrap();
-        assert_eq!(project.report_count, 2);
+        assert_eq!(project.report_count, 1, "only the commit changed");
         assert_eq!(latest["project"]["commit"], "bbb");
         assert!(store.project(999).unwrap().is_none());
     }
