@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-01
+
 ### Added
 
 - **`tuff console serve` runs Tuff Console, the self-hosted server for project reports.** It listens on `127.0.0.1:7474` by default, or on `--addr`, and keeps every report in one SQLite file, `console.sqlite`, in `--data` or in `$XDG_DATA_HOME/tuff/console`. `POST /api/v1/reports` stores a report, and a report that equals the project's previous one except for `generatedAt` and the project's commit, branch, and `dirty` flag adds no row and moves the latest report to the new commit, so a job that publishes on every push adds a row only when something about the project changes. `GET /api/v1/projects`, `GET /api/v1/projects/{id}`, and `GET /healthz` read it back. A report with a `schema` the server does not read is refused with `422`. The database is created and migrated on first use, and a file from a newer Tuff is refused.
@@ -358,7 +360,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/kannandreams/tuff/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kannandreams/tuff/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/kannandreams/tuff/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/kannandreams/tuff/compare/v0.10.2...v0.11.0
