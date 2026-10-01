@@ -10,11 +10,15 @@
 // Options:
 //   --bin <path>   the tuff binary (default target/debug/tuff)
 //   --out <dir>    where to write (default website/public/console-preview)
+//   --check        build into a temporary folder and fail if the committed
+//                  preview differs, apart from timestamps (`mise run check`
+//                  and `mise run docs-deploy` run this)
 //
 // Run it again whenever crates/tuff-console/ui or the demo data changes.
 
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 
 const args = process.argv.slice(2);
@@ -23,7 +27,9 @@ const option = (name, fallback) => {
   return at >= 0 ? args[at + 1] : fallback;
 };
 const bin = resolve(option("--bin", "target/debug/tuff"));
-const out = resolve(option("--out", "website/public/console-preview"));
+const committed = resolve(option("--out", "website/public/console-preview"));
+const check = args.includes("--check");
+const out = check ? mkdtempSync(join(tmpdir(), "console-preview-")) : committed;
 const ui = resolve("crates/tuff-console/ui");
 
 function startConsole() {
@@ -91,7 +97,33 @@ try {
     .replace("<title>Tuff Console</title>", "<title>Tuff Console preview</title>");
   if (!index.includes('src="preview.js"')) throw new Error("index.html no longer loads /assets/app.js the way this script expects");
   writeFileSync(join(out, "index.html"), index);
-  console.log(`wrote the console preview to ${out} (${Object.keys(responses).length} responses, ${all.events.length} events)`);
+  if (check) {
+    const stale = compare(out, committed);
+    rmSync(out, { recursive: true, force: true });
+    if (stale.length) {
+      console.error(`The landing page's console preview is out of date: ${stale.join(", ")}.`);
+      console.error("Run `mise run console-preview` and commit website/public/console-preview.");
+      process.exitCode = 1;
+    } else {
+      console.log("The console preview matches the console UI and demo data.");
+    }
+  } else {
+    console.log(`wrote the console preview to ${out} (${Object.keys(responses).length} responses, ${all.events.length} events)`);
+  }
 } finally {
   server.stop();
+}
+
+/* Files that differ between a fresh build and the committed preview.
+   data.json is compared without its timestamps, which follow the clock. */
+function compare(fresh, saved) {
+  const ISO = /"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z"/g;
+  const normal = (name, text) => (name === "data.json" ? text.replace(ISO, '"<time>"') : text);
+  const stale = [];
+  for (const name of readdirSync(fresh)) {
+    const path = join(saved, name);
+    if (!existsSync(path)) { stale.push(`${name} is missing`); continue; }
+    if (normal(name, readFileSync(join(fresh, name), "utf8")) !== normal(name, readFileSync(path, "utf8"))) stale.push(name);
+  }
+  return stale;
 }

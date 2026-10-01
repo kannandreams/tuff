@@ -136,9 +136,16 @@ run = [
   "node scripts/build-console-preview.mjs",
 ]
 
+[tasks.console-preview-check]
+description = "Fail when the landing page's console preview no longer matches the console UI and demo data"
+run = [
+  "cargo build -p tuffcli",
+  "node scripts/build-console-preview.mjs --check",
+]
+
 [tasks.docs-deploy]
 description = "Deploy the documentation site to Cloudflare Pages"
-depends = ["docs-build"]
+depends = ["docs-build", "console-preview-check"]
 raw = true
 run = '''
 #!/usr/bin/env bash
@@ -203,6 +210,7 @@ run = [
   { task = "capabilities-check" },
   { task = "plugin-check" },
   { task = "spec-check" },
+  { task = "console-preview-check" },
   # The extension ships no runtime dependencies -- it is packaged with
   # --no-dependencies and shells out to the installed CLI -- so it is
   # type-checked and tested here but deliberately not in `security-audit`,
