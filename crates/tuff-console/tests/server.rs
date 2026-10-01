@@ -147,7 +147,12 @@ async fn publishing_the_same_report_again_adds_no_row() {
     let outcome: Value = repeated.json().await.unwrap();
     assert_eq!(outcome["deduplicated"], true);
 
-    let changed = build_report(project.path(), "different");
+    // A new commit alone is the same report; a change in content is not.
+    let moved = build_report(project.path(), "different");
+    let refreshed = client.post(&url).json(&moved).send().await.unwrap();
+    assert_eq!(refreshed.status(), 200);
+    let mut changed = moved.clone();
+    changed["tuffVersion"] = json!("99.0.0");
     let stored = client.post(&url).json(&changed).send().await.unwrap();
     assert_eq!(stored.status(), 201);
 
@@ -263,7 +268,7 @@ async fn a_loopback_server_with_a_key_refuses_unauthenticated_publishing() {
 
     let secret = server.store.create_key("ci", None).unwrap();
     let mut changed = report.clone();
-    changed["project"]["commit"] = json!("later");
+    changed["tuffVersion"] = json!("99.0.0");
 
     let refused = client.post(&url).json(&changed).send().await.unwrap();
     assert_eq!(refused.status(), 401);

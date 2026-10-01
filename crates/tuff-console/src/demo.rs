@@ -564,7 +564,7 @@ mod tests {
     }
 
     #[test]
-    fn admins_second_report_adds_no_events() {
+    fn admins_second_report_is_deduplicated_and_adds_no_events() {
         let store = Store::open_in_memory().unwrap();
         populate(&store).unwrap();
         let admin = store
@@ -573,7 +573,10 @@ mod tests {
             .into_iter()
             .find(|project| project.name == "admin")
             .unwrap();
-        assert_eq!(admin.report_count, 2);
+        assert_eq!(
+            admin.report_count, 1,
+            "the second report differs only in its commit"
+        );
         let events = store
             .events(&EventFilter {
                 project_id: Some(admin.id),

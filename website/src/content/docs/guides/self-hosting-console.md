@@ -240,7 +240,7 @@ In a container, run the same commands with `docker run --rm -v tuff-console-data
 
 ## Back up
 
-The database grows by one row for each stored report, and each row holds the report's JSON. A publish from a new commit stores a report, so a project that publishes on every push adds a row per push. The console has no pruning in this release.
+The database grows by one row for each stored report, and each row holds the report's JSON. A publish that changes only the commit, the branch, or the `dirty` flag updates the latest row, so a project that publishes on every push adds a row only when its capabilities, their status, or its policy gaps change. The console has no pruning in this release.
 
 All state is `console.sqlite`. The database runs in WAL mode, so the folder can also hold `console.sqlite-wal` and `console.sqlite-shm` while the server runs. Copying `console.sqlite` alone while the server is running can miss recent writes.
 
