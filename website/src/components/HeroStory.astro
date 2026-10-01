@@ -154,20 +154,10 @@ const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
 
   <figure class="hs-shots">
     <div class="hs-app">
-      <div class="hs-app-bar"><i></i><i></i><i></i><span>tuff console serve --demo</span><em>127.0.0.1:7474</em></div>
-      <img src="/img/console/light-dashboard.webp" width="1600" height="950" loading="lazy" decoding="async" alt="The console Dashboard: six projects in five repositories, 13 capabilities, two edited by hand, four behind the newest version, two policy rules not enforced, a list of projects that need attention, and recent changes with their commits." />
+      <div class="hs-app-bar"><i></i><i></i><i></i><span>Tuff Console</span></div>
+      <iframe class="hs-live" src="/console-preview/#/" title="Tuff Console preview with sample data" loading="lazy"></iframe>
     </div>
-    <div class="hs-shots-row">
-      <div class="hs-app">
-        <div class="hs-app-bar"><i></i><i></i><i></i><span>Audit</span></div>
-        <img src="/img/console/light-audit.webp" width="1600" height="950" loading="lazy" decoding="async" alt="The Audit view: events such as a version change, a capability added, and drift detected, each with its project and commit, and filters by project, event, capability, and date." />
-      </div>
-      <div class="hs-app">
-        <div class="hs-app-bar"><i></i><i></i><i></i><span>Capabilities</span></div>
-        <img src="/img/console/light-capabilities.webp" width="1600" height="950" loading="lazy" decoding="async" alt="The Capabilities view: every capability across projects with its type, the versions in use, and the projects that use it." />
-      </div>
-    </div>
-    <figcaption>Sample data from <code>tuff console serve --demo</code>. <a href="/cli/console/">Console docs</a> · <a href="/guides/self-hosting-console/">Self-hosting guide</a></figcaption>
+    <figcaption>A working preview with sample data. Open Projects, Capabilities, Policies, or Audit to look around. Run your own with <code>tuff console serve --demo</code>. <a href="/cli/console/">Console docs</a> · <a href="/guides/self-hosting-console/">Self-hosting guide</a></figcaption>
   </figure>
 </section>
 )}
@@ -326,8 +316,7 @@ const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
 
   /* Console section */
   .hs-shots { margin: 1.6rem 0 0; display: grid; gap: .9rem; }
-  .hs-shots img { display: block; width: 100%; height: auto; }
-  .hs-shots-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+  .hs-live { display: block; width: 100%; height: 44rem; border: 0; background: var(--tuff-bg); }
   .hs-shots figcaption { color: var(--tuff-muted); font-size: .8rem; }
   .hs-shots figcaption code { font-family: 'JetBrains Mono', monospace; font-size: .76rem; }
   .hs-shots figcaption a { color: var(--tuff-accent); }
@@ -371,6 +360,6 @@ const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
     .hs-facts li + li::before { margin-right: .15rem; }
     .hs-facts svg { width: .85rem; height: .85rem; }
     .hs-label span { flex-basis: 100%; margin: .35rem 0 0; padding-left: 0; text-align: left; }
-    .hs-shots-row { grid-template-columns: 1fr; }
+    .hs-live { height: 38rem; }
   }
 </style>
