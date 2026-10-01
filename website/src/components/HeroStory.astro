@@ -43,12 +43,6 @@ const caps = [
 ];
 const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
 
-const projects = [
-  { name: 'support-agent', repo: 'acme/agents · apps/support-agent', harnesses: 'claude · codex · opencode', caps: 5, pack: '1.4.0', status: 'ok' },
-  { name: 'billing-agent', repo: 'acme/agents · apps/billing-agent', harnesses: 'claude · opencode', caps: 7, pack: '2.1.0', status: 'drift' },
-  { name: 'onboarding-agent', repo: 'acme/onboarding', harnesses: 'codex · cursor', caps: 4, pack: '0.9.2', status: 'gap' },
-  { name: 'infra-agent', repo: 'acme/infra', harnesses: 'claude · codex', caps: 9, pack: '3.0.0', status: 'ok' },
-];
 ---
 
 {part === 'hero' && (
@@ -153,75 +147,28 @@ const projects = [
 {part === 'console' && (
 <section class="tuff-section hs-dash-section" id="console">
   <div class="tuff-section-head">
-    <div class="tuff-section-label">//console <span class="hs-soon">in progress</span></div>
+    <div class="tuff-section-label">//console</div>
     <h2>Every agent’s capabilities, across the organisation</h2>
-    <p>Projects publish a report from CI. The console’s Dashboard shows each agent’s skills, tools, MCP servers, hooks, and policies, which harness runs them, what changed, and when. It is being built now; the view below uses sample data.</p>
+    <p>Projects publish a report from CI. Tuff Console, which your team runs on its own server, shows each agent’s skills, tools, MCP servers, hooks, and policies, which harness runs them, what changed, and in which commit. GitHub Actions publishes without a secret; other CI uses an API key.</p>
   </div>
 
-  <div class="hs-app" aria-label="Console preview with sample data">
-    <div class="hs-app-bar"><i></i><i></i><i></i><span>tuff console</span><em>tuff.acme.internal</em></div>
-    <div class="hs-app-body">
-      <nav class="hs-app-nav" aria-label="Console sections (sample)">
-        <span class="is-active">Overview</span>
-        <span>Projects</span>
-        <span>Capabilities</span>
-        <span>Harnesses</span>
-        <span>Policies</span>
-        <span>Audit</span>
-      </nav>
-      <div class="hs-app-main">
-        <div class="hs-app-kpis">
-          <div><small>projects</small><b>12</b><em>3 repositories</em></div>
-          <div><small>capabilities</small><b>86</b><em>5 kinds</em></div>
-          <div><small>drifted</small><b class="is-warn">2</b><em>since last report</em></div>
-          <div><small>policy gaps</small><b class="is-gap">1</b><em>rule not enforced</em></div>
-        </div>
-
-        <div class="hs-app-grid">
-          <div class="hs-card">
-            <div class="hs-card-head">Projects</div>
-            <div class="hs-ptable">
-              <div class="hs-prow hs-prow--head"><span>agent</span><span>harnesses</span><span>caps</span><span>pack</span><span>status</span></div>
-              {projects.map((project) => (
-                <div class="hs-prow">
-                  <span><strong>{project.name}</strong><small>{project.repo}</small></span>
-                  <span>{project.harnesses}</span>
-                  <span>{project.caps}</span>
-                  <span>{project.pack}</span>
-                  <span class={`hs-status hs-status--${project.status}`}>{project.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div class="hs-card">
-            <div class="hs-card-head">Capability: <b>linear</b> <span class="hs-kind hs-kind--mcp">mcp</span></div>
-            <div class="hs-usage">
-              <div><span>used by</span><b>6 projects</b></div>
-              <div><span>versions</span><b>1.0.0 ×5 · 0.9.0 ×1</b></div>
-              <div><span>harnesses</span><b>claude · codex · opencode</b></div>
-            </div>
-            <div class="hs-bars" aria-hidden="true">
-              <div style="--w: 100%"><span>claude</span></div>
-              <div style="--w: 67%"><span>codex</span></div>
-              <div style="--w: 50%"><span>opencode</span></div>
-              <div style="--w: 17%"><span>cursor</span></div>
-            </div>
-          </div>
-
-          <div class="hs-card hs-card--wide">
-            <div class="hs-card-head">Audit trail</div>
-            <ol class="hs-audit">
-              <li><time>09:12</time><i class="is-add"></i><span><b>support-agent</b> added mcp <b>linear</b> for claude, codex, opencode</span><code>3f2c9e1</code></li>
-              <li><time>08:47</time><i class="is-ver"></i><span><b>infra-agent</b> moved pack <b>platform-base</b> 2.0.0 → 3.0.0</span><code>a91d0c4</code></li>
-              <li><time>08:30</time><i class="is-warn"></i><span><b>billing-agent</b> skill <b>ticket-triage</b> no longer matches its baseline</span><code>77be210</code></li>
-              <li><time>Tue</time><i class="is-gap"></i><span><b>onboarding-agent</b> policy <b>support-guardrails</b> rule 2 not enforced in cursor</span><code>c03f5aa</code></li>
-            </ol>
-          </div>
-        </div>
+  <figure class="hs-shots">
+    <div class="hs-app">
+      <div class="hs-app-bar"><i></i><i></i><i></i><span>tuff console serve --demo</span><em>127.0.0.1:7474</em></div>
+      <img src="/img/console/light-dashboard.webp" width="1600" height="950" loading="lazy" decoding="async" alt="The console Dashboard: six projects in five repositories, 13 capabilities, two edited by hand, four behind the newest version, two policy rules not enforced, a list of projects that need attention, and recent changes with their commits." />
+    </div>
+    <div class="hs-shots-row">
+      <div class="hs-app">
+        <div class="hs-app-bar"><i></i><i></i><i></i><span>Audit</span></div>
+        <img src="/img/console/light-audit.webp" width="1600" height="950" loading="lazy" decoding="async" alt="The Audit view: events such as a version change, a capability added, and drift detected, each with its project and commit, and filters by project, event, capability, and date." />
+      </div>
+      <div class="hs-app">
+        <div class="hs-app-bar"><i></i><i></i><i></i><span>Capabilities</span></div>
+        <img src="/img/console/light-capabilities.webp" width="1600" height="950" loading="lazy" decoding="async" alt="The Capabilities view: every capability across projects with its type, the versions in use, and the projects that use it." />
       </div>
     </div>
-  </div>
+    <figcaption>Sample data from <code>tuff console serve --demo</code>. <a href="/cli/console/">Console docs</a> · <a href="/guides/self-hosting-console/">Self-hosting guide</a></figcaption>
+  </figure>
 </section>
 )}
 
@@ -280,7 +227,6 @@ const projects = [
   .hs-main { padding-top: 0; }
   .hs-headlines { margin-top: 1.4rem; }
   .hs :global(.tuff-button--quiet:hover) { border-color: var(--g); color: var(--g); }
-  .hs-soon { margin-left: .5rem; padding: .12rem .45rem; border: 1px solid color-mix(in srgb, var(--g) 45%, transparent); border-radius: 999px; color: var(--g); background: color-mix(in srgb, var(--g) 8%, transparent); font-size: .62rem; letter-spacing: .02em; }
   .hs-install { display: flex; align-items: center; gap: .6rem; max-width: 22rem; margin-top: 1.4rem; padding: .75rem .9rem; border: 1px solid #343934; border-radius: .4rem; background: #1b1e1b; box-shadow: 0 1rem 2.5rem rgba(38, 31, 22, .1); font-family: 'JetBrains Mono', monospace; font-size: .85rem; }
   .hs-install > span { color: var(--g-dark); }
   .hs-install code { flex: 1; color: #eeeae2; font-family: inherit; white-space: nowrap; }
@@ -366,7 +312,7 @@ const projects = [
   .hs-feed li { display: flex; align-items: center; gap: .35rem; color: #aeb1aa; font-size: .58rem; }
   .hs-feed b { color: #eeeae2; font-weight: 500; }
   .hs-feed small { margin-left: auto; color: #7d8279; }
-  .hs-feed i, .hs-audit i { width: .42rem; height: .42rem; border-radius: 50%; flex: none; }
+  .hs-feed i { width: .42rem; height: .42rem; border-radius: 50%; flex: none; }
   i.is-add { background: var(--g-dark); }
   i.is-warn { background: #e4b75a; }
   i.is-gap { background: #f18453; }
@@ -379,50 +325,17 @@ const projects = [
   @keyframes hs-beat { 50% { box-shadow: 0 0 0 4px rgba(241, 132, 83, .25); } }
 
   /* Console section */
-  .hs-app { margin-top: 1.6rem; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .5rem; background: var(--tuff-bg); box-shadow: 0 2rem 5rem rgba(38, 31, 22, .14); }
+  .hs-shots { margin: 1.6rem 0 0; display: grid; gap: .9rem; }
+  .hs-shots img { display: block; width: 100%; height: auto; }
+  .hs-shots-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+  .hs-shots figcaption { color: var(--tuff-muted); font-size: .8rem; }
+  .hs-shots figcaption code { font-family: 'JetBrains Mono', monospace; font-size: .76rem; }
+  .hs-shots figcaption a { color: var(--tuff-accent); }
+  .hs-app { margin-top: 0; overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .5rem; background: var(--tuff-bg); box-shadow: 0 2rem 5rem rgba(38, 31, 22, .14); }
   .hs-app-bar { display: flex; align-items: center; gap: .4rem; padding: .6rem .9rem; border-bottom: 1px solid var(--tuff-border); color: var(--tuff-text); background: var(--tuff-panel-2); font-family: 'JetBrains Mono', monospace; font-size: .7rem; }
   .hs-app-bar i { width: .46rem; height: .46rem; border: 1px solid #c9c3b9; border-radius: 50%; }
   .hs-app-bar span { margin-left: .45rem; color: var(--tuff-accent); }
   .hs-app-bar em { margin-left: auto; color: var(--tuff-muted); font-style: normal; font-size: .64rem; }
-  .hs-app-body { display: grid; grid-template-columns: 11rem minmax(0, 1fr); min-height: 26rem; }
-  .hs-app-nav { display: flex; flex-direction: column; gap: .15rem; padding: .9rem .6rem; border-right: 1px solid var(--tuff-border); background: var(--tuff-panel); font-family: 'JetBrains Mono', monospace; font-size: .74rem; }
-  .hs-app-nav span { padding: .45rem .6rem; border-radius: .25rem; color: var(--tuff-dim); }
-  .hs-app-nav span.is-active { color: var(--tuff-text); background: color-mix(in srgb, var(--g) 10%, transparent); box-shadow: inset 2px 0 0 var(--g); }
-  .hs-app-main { display: grid; align-content: start; gap: .9rem; padding: 1rem; }
-  .hs-app-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
-  .hs-app-kpis div { padding: .7rem .8rem; border: 1px solid var(--tuff-border); border-radius: .35rem; background: var(--tuff-panel); }
-  .hs-app-kpis small, .hs-app-kpis em { display: block; color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .6rem; font-style: normal; }
-  .hs-app-kpis b { display: block; margin: .2rem 0; color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; }
-  .hs-app-kpis b.is-warn { color: #a86a12; }
-  .hs-app-kpis b.is-gap { color: var(--tuff-accent); }
-  .hs-app-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: .9rem; }
-  .hs-card { overflow: hidden; border: 1px solid var(--tuff-border); border-radius: .35rem; background: var(--tuff-panel); }
-  .hs-card--wide { grid-column: 1 / -1; }
-  .hs-card-head { display: flex; align-items: center; gap: .4rem; padding: .55rem .8rem; border-bottom: 1px solid var(--tuff-border); color: var(--tuff-dim); background: var(--tuff-panel-2); font-family: 'JetBrains Mono', monospace; font-size: .66rem; }
-  .hs-card-head b { color: var(--tuff-text); }
-  .hs-ptable { font-family: 'JetBrains Mono', monospace; font-size: .64rem; }
-  .hs-prow { display: grid; grid-template-columns: 1.7fr 1.3fr .5fr .6fr .6fr; gap: .5rem; align-items: center; padding: .5rem .8rem; border-top: 1px solid var(--tuff-border); color: var(--tuff-text); }
-  .hs-prow--head { border-top: 0; color: var(--tuff-muted); font-size: .56rem; letter-spacing: .05em; text-transform: uppercase; }
-  .hs-prow strong { display: block; font-weight: 600; }
-  .hs-prow small { display: block; color: var(--tuff-muted); font-size: .56rem; }
-  .hs-status { justify-self: start; padding: .08rem .35rem; border-radius: .2rem; font-size: .58rem; }
-  .hs-status--ok { color: var(--g); background: color-mix(in srgb, var(--g) 12%, transparent); }
-  .hs-status--drift { color: #a86a12; background: rgba(214, 150, 40, .14); }
-  .hs-status--gap { color: var(--tuff-accent); background: rgba(195, 90, 53, .1); }
-  .hs-card .hs-kind { color: var(--tuff-dim); background: var(--tuff-panel-2); font-family: 'JetBrains Mono', monospace; }
-  .hs-usage { display: grid; gap: .35rem; padding: .7rem .8rem; font-family: 'JetBrains Mono', monospace; font-size: .64rem; }
-  .hs-usage div { display: flex; justify-content: space-between; gap: .5rem; }
-  .hs-usage span { color: var(--tuff-muted); }
-  .hs-usage b { color: var(--tuff-text); font-weight: 500; text-align: right; }
-  .hs-bars { display: grid; gap: .35rem; padding: 0 .8rem .8rem; }
-  .hs-bars div { position: relative; height: 1.15rem; border-radius: .2rem; background: var(--tuff-panel-2); overflow: hidden; }
-  .hs-bars div::before { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--w); background: linear-gradient(90deg, rgba(195, 90, 53, .35), rgba(195, 90, 53, .18)); transform-origin: left; }
-  .hs-bars span { position: relative; padding-left: .45rem; color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: .58rem; line-height: 1.15rem; }
-  .hs-audit { display: grid; margin: 0; padding: 0; list-style: none; }
-  .hs-audit li { display: grid; grid-template-columns: 3rem .6rem minmax(0, 1fr) auto; gap: .5rem; align-items: center; padding: .5rem .8rem; border-top: 1px solid var(--tuff-border); color: var(--tuff-dim); font-size: .78rem; }
-  .hs-audit li:first-child { border-top: 0; }
-  .hs-audit time, .hs-audit code { color: var(--tuff-muted); font-family: 'JetBrains Mono', monospace; font-size: .6rem; }
-  .hs-audit b { color: var(--tuff-text); font-weight: 600; }
 
   @media (prefers-reduced-motion: no-preference) {
     .hs-flow > .hs-stage, .hs-flow > .hs-link, .hs-flow > .hs-fork, .hs-flow > .hs-merge { animation: hs-rise .5s ease backwards; animation-delay: calc(.2s + var(--d, 0) * .25s); }
@@ -439,7 +352,6 @@ const projects = [
     .hs-feed li:nth-child(1) { animation-delay: 1.8s; }
     .hs-feed li:nth-child(2) { animation-delay: 2.1s; }
     .hs-feed li:nth-child(3) { animation-delay: 2.4s; }
-    .hs-bars div::before { animation: hs-grow 1s ease both .3s; }
     @keyframes hs-rise { from { opacity: 0; transform: translateY(.4rem); } to { opacity: 1; transform: none; } }
     @keyframes hs-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
     @keyframes hs-flowline { to { background-position: 0 9px; } }
@@ -459,11 +371,6 @@ const projects = [
     .hs-facts li + li::before { margin-right: .15rem; }
     .hs-facts svg { width: .85rem; height: .85rem; }
     .hs-label span { flex-basis: 100%; margin: .35rem 0 0; padding-left: 0; text-align: left; }
-    .hs-app-grid { grid-template-columns: 1fr; }
-    .hs-app-body { grid-template-columns: 1fr; }
-    .hs-app-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--tuff-border); }
-    .hs-app-kpis { grid-template-columns: repeat(2, 1fr); }
-    .hs-prow { grid-template-columns: 1.6fr .6fr; }
-    .hs-prow > span:nth-child(2), .hs-prow > span:nth-child(3), .hs-prow > span:nth-child(4) { display: none; }
+    .hs-shots-row { grid-template-columns: 1fr; }
   }
 </style>
