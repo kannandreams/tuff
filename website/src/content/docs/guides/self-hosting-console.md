@@ -73,55 +73,52 @@ A server with no `--trust` and no key accepts reports from anything that can rea
 
 ## Run in a container
 
-The release workflow attaches `tuff-x86_64-unknown-linux-gnu.tar.gz` and `checksums.txt` to each GitHub release. The tarball holds the `tuff` binary. This Dockerfile downloads it, checks its checksum, and runs the console as an unprivileged user with `/data` as a volume:
+Each release after 0.14.0 publishes the image `ghcr.io/kannandreams/tuff-console` for `linux/amd64` and `linux/arm64`. It holds the `tuff` binary from the same GitHub release and runs the console as an unprivileged user with `/data` as a volume. `ca-certificates` is in the image because the console fetches GitHub's OIDC signing keys over HTTPS.
 
-```dockerfile title="Dockerfile"
-FROM ubuntu:24.04
+| Tag, for example | Points to |
+|---|---|
+| `0.15.0` | That release. Pin this tag in production |
+| `0.15` | The newest release with that minor version |
+| `latest` | The newest release |
 
-ARG TUFF_VERSION
-ARG BASE=https://github.com/kannandreams/tuff/releases/download/v${TUFF_VERSION}
-
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl \
- && curl -fsSLO ${BASE}/tuff-x86_64-unknown-linux-gnu.tar.gz \
- && curl -fsSLO ${BASE}/checksums.txt \
- && grep ' tuff-x86_64-unknown-linux-gnu.tar.gz$' checksums.txt | sha256sum -c - \
- && tar -xzf tuff-x86_64-unknown-linux-gnu.tar.gz -C /usr/local/bin tuff \
- && rm tuff-x86_64-unknown-linux-gnu.tar.gz checksums.txt \
- && apt-get purge -y curl \
- && apt-get autoremove -y \
- && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --home-dir /data --shell /usr/sbin/nologin tuff \
- && mkdir /data \
- && chown tuff:tuff /data
-
-USER tuff
-VOLUME /data
-EXPOSE 7474
-ENTRYPOINT ["tuff", "console", "serve", "--addr", "0.0.0.0:7474", "--public-read", "--data", "/data"]
-```
-
-Set `TUFF_VERSION` to a release that includes the console, without the leading `v`. The release has a Linux x86-64 binary only, so build the image for `linux/amd64`. `ca-certificates` stays in the image because the console fetches GitHub's OIDC signing keys over HTTPS.
-
-The entry point binds `0.0.0.0` and passes `--public-read`. The console also refuses to start on a non-loopback address until a publish credential exists, so create a key in the volume before the first start or pass `--trust`:
+The entry point is `tuff console serve --addr 0.0.0.0:7474 --public-read --data /data`. The console refuses to start on a non-loopback address until a publish credential exists, so create a key in the volume before the first start or pass `--trust`:
 
 ```sh frame="terminal"
-docker build --platform linux/amd64 --build-arg TUFF_VERSION=<version> -t tuff-console .
-
 # Create a key in the volume. The key is printed once
-docker run --rm -v tuff-console-data:/data --entrypoint tuff tuff-console \
+docker run --rm -v tuff-console-data:/data --entrypoint tuff ghcr.io/kannandreams/tuff-console:<version> \
   console key create ci --data /data
 
 # Start the console. Arguments after the image name are added to the entry point
 docker run -d --name tuff-console --restart unless-stopped \
   -p 127.0.0.1:7474:7474 \
   -v tuff-console-data:/data \
-  tuff-console --trust github:acme --public-url https://tuff.acme.dev
+  ghcr.io/kannandreams/tuff-console:<version> --trust github:acme --public-url https://tuff.acme.dev
 ```
 
-Publishing `127.0.0.1:7474` keeps the port reachable from the host only, where the reverse proxy runs. `GET /healthz` answers for container health checks. The image has no `curl` after the build, so run the check from outside the container.
+Publishing `127.0.0.1:7474` keeps the port reachable from the host only, where the reverse proxy runs. `GET /healthz` answers for container health checks, such as a Kubernetes `httpGet` probe. The image has no `curl`, so run a check from outside the container.
 
-Upgrade by building a new image with a newer `TUFF_VERSION` and recreating the container with the same volume.
+To look at the console before setting it up, run it with generated sample data. The data lives in memory and is gone when the container stops. A demo on a non-loopback address also needs a publish credential, and a trust for an owner that never publishes satisfies that:
+
+```sh frame="terminal"
+docker run --rm -p 127.0.0.1:7474:7474 --entrypoint tuff ghcr.io/kannandreams/tuff-console:<version> \
+  console serve --demo --addr 0.0.0.0:7474 --public-read --trust github:example
+```
+
+Upgrade by pulling a newer tag and recreating the container with the same volume. The console migrates the database on first use.
+
+### Verify the image
+
+The release workflow signs each image with [cosign](https://docs.sigstore.dev/) using GitHub's OIDC identity, and attaches an SBOM and build provenance. To check that an image was built by the Tuff release workflow:
+
+```sh frame="terminal"
+cosign verify ghcr.io/kannandreams/tuff-console:<version> \
+  --certificate-identity-regexp '^https://github.com/kannandreams/tuff/.github/workflows/release.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+### Build the image yourself
+
+[`docker/Dockerfile`](https://github.com/kannandreams/tuff/blob/main/docker/Dockerfile) packages the release binaries without compiling them. Its build context is a folder with `amd64/tuff` and `arm64/tuff`, taken from `tuff-x86_64-unknown-linux-gnu.tar.gz` and `tuff-aarch64-unknown-linux-gnu.tar.gz` on the GitHub release. Check the tarballs against `checksums.txt` before extracting them.
 
 ## Put a reverse proxy in front
 
@@ -236,7 +233,7 @@ Run the commands as the service user. A key created as `root` leaves `root`-owne
 
 `create` prints the key once. The database holds only its SHA-256, so a lost key is replaced with a new one. Copy the key straight into the CI system's secret store. A key created with `--repository` publishes reports for that repository only. A key without it publishes for any repository, so give each repository or team its own.
 
-In a container, run the same commands with `docker run --rm -v tuff-console-data:/data --entrypoint tuff tuff-console console key ... --data /data`, or with `docker exec tuff-console tuff console key list --data /data`.
+In a container, run the same commands with `docker run --rm -v tuff-console-data:/data --entrypoint tuff ghcr.io/kannandreams/tuff-console:<version> console key ... --data /data`, or with `docker exec tuff-console tuff console key list --data /data`.
 
 ## Back up
 

@@ -35,9 +35,15 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: tuff-aarch64-apple-darwin.tar.gz
+          # The Linux runners are pinned to Ubuntu 24.04 because the container
+          # image (docker/Dockerfile) uses the same release as its base, so the
+          # binaries never need a newer glibc than the image has.
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
             artifact: tuff-x86_64-unknown-linux-gnu.tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            artifact: tuff-aarch64-unknown-linux-gnu.tar.gz
 
     steps:
       - uses: actions/checkout@v4
@@ -82,9 +88,10 @@ jobs:
             sha256sum aarch64-apple-darwin/tuff-aarch64-apple-darwin.tar.gz | awk '{print $1 "  tuff-aarch64-apple-darwin.tar.gz"}'
             sha256sum x86_64-apple-darwin/tuff-x86_64-apple-darwin.tar.gz | awk '{print $1 "  tuff-x86_64-apple-darwin.tar.gz"}'
             sha256sum x86_64-unknown-linux-gnu/tuff-x86_64-unknown-linux-gnu.tar.gz | awk '{print $1 "  tuff-x86_64-unknown-linux-gnu.tar.gz"}'
+            sha256sum aarch64-unknown-linux-gnu/tuff-aarch64-unknown-linux-gnu.tar.gz | awk '{print $1 "  tuff-aarch64-unknown-linux-gnu.tar.gz"}'
           } > checksums.txt
           cat checksums.txt
-          test "$(wc -l < checksums.txt)" -eq 3
+          test "$(wc -l < checksums.txt)" -eq 4
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -95,6 +102,7 @@ jobs:
             x86_64-apple-darwin/tuff-x86_64-apple-darwin.tar.gz
             aarch64-apple-darwin/tuff-aarch64-apple-darwin.tar.gz
             x86_64-unknown-linux-gnu/tuff-x86_64-unknown-linux-gnu.tar.gz
+            aarch64-unknown-linux-gnu/tuff-aarch64-unknown-linux-gnu.tar.gz
             checksums.txt
 
       - name: Generate Homebrew formula
@@ -102,6 +110,7 @@ jobs:
           SHA_ARM=$(awk '$2 == "tuff-aarch64-apple-darwin.tar.gz" {print $1}' checksums.txt)
           SHA_INTEL=$(awk '$2 == "tuff-x86_64-apple-darwin.tar.gz" {print $1}' checksums.txt)
           SHA_LINUX=$(awk '$2 == "tuff-x86_64-unknown-linux-gnu.tar.gz" {print $1}' checksums.txt)
+          SHA_LINUX_ARM=$(awk '$2 == "tuff-aarch64-unknown-linux-gnu.tar.gz" {print $1}' checksums.txt)
           TAG="${GITHUB_REF#refs/tags/}"
 
           cat << EOF > formula.rb
@@ -122,8 +131,13 @@ jobs:
             end
 
             on_linux do
-              url "https://github.com/kannandreams/tuff/releases/download/${TAG}/tuff-x86_64-unknown-linux-gnu.tar.gz"
-              sha256 "${SHA_LINUX}"
+              if Hardware::CPU.arm?
+                url "https://github.com/kannandreams/tuff/releases/download/${TAG}/tuff-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LINUX_ARM}"
+              else
+                url "https://github.com/kannandreams/tuff/releases/download/${TAG}/tuff-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LINUX}"
+              end
             end
 
             def install
@@ -158,3 +172,97 @@ jobs:
           git add Formula/tuff.rb
           git commit -m "tuff ${GITHUB_REF#refs/tags/}"
           git push
+
+  image:
+    name: Publish container image
+    # After the release exists, so a published image always has a matching
+    # GitHub release, checksums, and Homebrew formula.
+    needs: [build, release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # keyless cosign signature
+    env:
+      IMAGE: ghcr.io/kannandreams/tuff-console
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-unknown-linux-gnu'
+
+      - name: Stage build context
+        run: |
+          mkdir -p context/amd64 context/arm64
+          tar -xzf x86_64-unknown-linux-gnu/tuff-x86_64-unknown-linux-gnu.tar.gz -C context/amd64 tuff
+          tar -xzf aarch64-unknown-linux-gnu/tuff-aarch64-unknown-linux-gnu.tar.gz -C context/arm64 tuff
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=Tuff Console
+            org.opencontainers.image.description=Self-hosted server for Tuff project reports
+            org.opencontainers.image.licenses=MIT
+
+      # Before anything is pushed: the amd64 image must start, answer
+      # /healthz, serve the demo data, and have no fixable critical CVEs.
+      - name: Build amd64 image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: context
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: tuff-console:test
+
+      - name: Smoke test
+        run: |
+          docker run --rm --entrypoint tuff tuff-console:test --version
+          docker run -d --name smoke -p 127.0.0.1:7474:7474 --entrypoint tuff tuff-console:test \
+            console serve --demo --addr 0.0.0.0:7474 --public-read --trust github:example
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:7474/healthz && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7474/api/v1/projects | grep -q '"projects"'
+          docker rm -f smoke
+
+      - name: Scan for vulnerabilities
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock ghcr.io/aquasecurity/trivy:latest \
+            image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress tuff-console:test
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: context
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign image
+        run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"

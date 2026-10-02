@@ -43,6 +43,12 @@ case "$OS-$ARCH" in
         HASH_COMMAND="sha256sum"
         ;;
 
+    Linux-aarch64 | Linux-arm64)
+        TARGET="aarch64-unknown-linux-gnu"
+        DEFAULT_INSTALL_DIR="/usr/local/bin"
+        HASH_COMMAND="sha256sum"
+        ;;
+
     *)
         echo "Unsupported platform: $OS / $ARCH" >&2
         exit 1

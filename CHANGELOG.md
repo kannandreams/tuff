@@ -6,6 +6,11 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **Tuff Console has an official container image.** Each release publishes `ghcr.io/kannandreams/tuff-console` for `linux/amd64` and `linux/arm64`, tagged with the version, the minor version, and `latest`. The image runs `tuff console serve` as an unprivileged user with `/data` as a volume. The release workflow starts it with the demo data and checks `/healthz` before publishing, and refuses to publish when it finds a fixable critical vulnerability. Each image is signed with cosign through GitHub's OIDC identity and carries an SBOM and build provenance. [Self-Hosting the Console](https://tuffcli.dev/guides/self-hosting-console/#run-in-a-container) uses the image and shows how to verify the signature, and `docker/Dockerfile` builds the same image from the release binaries.
+- **Releases include a Linux ARM64 binary.** `tuff-aarch64-unknown-linux-gnu.tar.gz` is attached to each GitHub release and listed in `checksums.txt`, and the curl installer and the Homebrew formula use it on ARM64 Linux.
+
 ### Improved
 
 - **The landing page embeds a working Tuff Console preview.** It runs the console's own UI in the browser on a snapshot of `tuff console serve --demo`, so a visitor can open every view, a project, and the Audit filters, and it shows no server address. `mise run console-preview` rebuilds it. The console UI gains a `preview` setting that hides the server line, which only this preview sets.
