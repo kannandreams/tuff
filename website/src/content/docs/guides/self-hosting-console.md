@@ -73,7 +73,7 @@ A server with no `--trust` and no key accepts reports from anything that can rea
 
 ## Run in a container
 
-Each release after 0.14.0 publishes the image `ghcr.io/kannandreams/tuff-console` for `linux/amd64` and `linux/arm64`. It holds the `tuff` binary from the same GitHub release and runs the console as an unprivileged user with `/data` as a volume. `ca-certificates` is in the image because the console fetches GitHub's OIDC signing keys over HTTPS.
+Each release from 0.15.0 publishes the image `ghcr.io/kannandreams/tuff-console` for `linux/amd64` and `linux/arm64`. It holds the `tuff` binary from the same GitHub release and runs the console as an unprivileged user with `/data` as a volume. `ca-certificates` is in the image because the console fetches GitHub's OIDC signing keys over HTTPS.
 
 | Tag, for example | Points to |
 |---|---|
