@@ -33,6 +33,7 @@ You can help by:
 - Adding or strengthening tests.
 - Testing Tuff on another operating system, shell, or harness adapter.
 - Proposing compatibility improvements for capability formats and lockfiles.
+- Adding an MCP server to the built-in catalog (see [MCP catalog entries](#mcp-catalog-entries)).
 
 ## Bug reports
 
@@ -176,6 +177,21 @@ For changes that affect installation, run the local smoke test as well:
 ```sh
 mise run smoke-install
 ```
+
+## MCP catalog entries
+
+The built-in catalog in `crates/tuff-core/assets/mcp-catalog.toml` is what `tuff add mcp <id>` installs by name, and `tuff mcp catalog`, the website, and the VS Code extension list it. A server outside the catalog can still be installed from a local folder, a Git URL, or the MCP registry. An entry is accepted when it meets all of these:
+
+- **It is the official server.** The maintainers of the service or tool publish it, or it is a reference server from the `modelcontextprotocol/servers` repository. Community forks of a service's API are not added.
+- **The invocation comes from a primary source.** The command, arguments, transport, URL, and headers are shown in the server's own README or documentation, and the pull request links to that page. Nothing is inferred from a `package.json` or a search result.
+- **It is maintained.** The server is not archived or deprecated, and it had a release or commit in the last six months.
+- **It is useful to someone working with a coding agent.** Developer tools, documentation, issue trackers, data sources, and products whose users run agents are in scope.
+- **Secrets are environment variable names.** `env` and `headers` name the variables the developer exports, and the description says where the value comes from.
+- **The description states what the server needs and where data goes.** Required running services, accounts, or keys are named, and so is any feature that sends data to a third party.
+
+A maintainer of the server is welcome to open the pull request. Say so in the description. The licence of the server does not decide inclusion, but a server that is not open source has its licence noted in a comment above the entry.
+
+A new entry starts at `version = "1.0.0"`, and a change to an existing entry bumps only that entry's version. Add the id to the catalog list in `crates/tuff-cli/assets/tuff-cli-guide.md` and run `mise run plugin-sync`, add a line under `Unreleased` in `CHANGELOG.md`, and run `cargo test -p tuff-core catalog` and `cargo test -p tuffcli mcp_catalog`.
 
 ## Pull requests
 
