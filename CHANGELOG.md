@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-02
+
 ### Added
 
 - **Tuff Console has an official container image.** Each release publishes `ghcr.io/kannandreams/tuff-console` for `linux/amd64` and `linux/arm64`, tagged with the version, the minor version, and `latest`. The image runs `tuff console serve` as an unprivileged user with `/data` as a volume. The release workflow starts it with the demo data and checks `/healthz` before publishing, and refuses to publish when it finds a fixable critical vulnerability. Each image is signed with cosign through GitHub's OIDC identity and carries an SBOM and build provenance. [Self-Hosting the Console](https://tuffcli.dev/guides/self-hosting-console/#run-in-a-container) uses the image and shows how to verify the signature, and `docker/Dockerfile` builds the same image from the release binaries.
@@ -369,7 +371,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/kannandreams/tuff/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kannandreams/tuff/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kannandreams/tuff/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/kannandreams/tuff/compare/v0.11.0...v0.12.0
