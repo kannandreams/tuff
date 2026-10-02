@@ -129,6 +129,10 @@ run = "npm --prefix website run dev"
 description = "Regenerate terminal screenshots"
 run = "./scripts/generate-doc-screenshot.sh tuff-welcome.png -- cargo run -p tuffcli --quiet --"
 
+[tasks.promo-video]
+description = "Build the Tuff Console promo video into target/promo/"
+run = "./scripts/promo/build.sh"
+
 [tasks.console-preview]
 description = "Rebuild the landing page's Tuff Console preview from tuff console serve --demo"
 run = [

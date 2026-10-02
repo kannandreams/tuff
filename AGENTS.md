@@ -66,7 +66,7 @@ For installation or end-to-end CLI changes, also run:
 mise run smoke-install
 ```
 
-Serve the documentation with `mise run docs-serve`. Regenerate terminal screenshots with `mise run docs-assets` when their underlying CLI output changes.
+Serve the documentation with `mise run docs-serve`. Regenerate terminal screenshots with `mise run docs-assets` when their underlying CLI output changes. `mise run promo-video` builds the Tuff Console promo video (`scripts/promo/`) into `target/promo/`; its zoom targets and captions follow the console UI, so check them after large UI changes.
 
 The landing page embeds a preview of Tuff Console built from `crates/tuff-console/ui` and `tuff console serve --demo`. After changing either, run `mise run console-preview` and commit `website/public/console-preview/`; `mise run check` and `mise run docs-deploy` fail while it is out of date.
 
