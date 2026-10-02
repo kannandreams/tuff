@@ -16,6 +16,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 - **A demo console needs no publish credential on a non-loopback address.** `tuff console serve --demo --public-read --addr 0.0.0.0:7474` starts with no key and no trust. Its data is generated and in memory, and with no credential every publish gets `401`, so the demo is read only. `--public-read` is still required.
 - **The container image sets `TUFF_CONSOLE_DATA=/data` instead of passing `--data /data`.** `docker run ghcr.io/kannandreams/tuff-console --demo` now starts the demo, and `docker exec <container> tuff console key list` needs no `--data`. The volume stays at `/data`, so existing containers keep their database.
 
+### Improved
+
+- **`pip install tuffcli` works on ARM64 Linux.** Each release publishes a `manylinux_2_39_aarch64` wheel to PyPI next to the x86-64 Linux and macOS wheels.
+
 ## [0.15.0] - 2026-10-02
 
 ### Added
