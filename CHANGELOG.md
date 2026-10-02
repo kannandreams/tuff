@@ -10,6 +10,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 - **The MCP catalog includes Screenpipe.** `tuff add mcp screenpipe` installs the official `screenpipe-mcp` server, which searches screen text and audio that Screenpipe captured on the machine, lists meetings, and summarizes activity. It needs Screenpipe running on `localhost:3030` and `SCREENPIPE_LOCAL_API_KEY` from `screenpipe auth token`.
 
+### Improved
+
+- **`pip install tuffcli` works on ARM64 Linux.** Each release publishes a `manylinux_2_39_aarch64` wheel to PyPI next to the x86-64 Linux and macOS wheels.
+
 ## [0.15.0] - 2026-10-02
 
 ### Added
