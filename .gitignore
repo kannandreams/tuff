@@ -46,3 +46,6 @@ website/src/data/mcp-catalog.json
 # Generated from spec/hooks/ by website/scripts/sync-hooks-spec.mjs
 website/src/content/docs/spec/
 website/public/spec/
+
+# macOS Finder metadata
+.DS_Store
