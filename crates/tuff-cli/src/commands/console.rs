@@ -11,12 +11,17 @@ use crate::error::{Result, TuffError};
 
 use super::{home_dir, render_table};
 
-/// Where the console keeps its database: `--data`, or the default under
-/// `$XDG_DATA_HOME`.
+/// Where the console keeps its database: `--data`, then `TUFF_CONSOLE_DATA`,
+/// then the default under `$XDG_DATA_HOME`. The variable is read here rather
+/// than by clap so that it does not count as `--data` for `--demo`, which
+/// lets the container image set it and still accept `--demo`.
 fn data_dir(data: Option<&Path>) -> Result<PathBuf> {
-    match data {
-        Some(path) => Ok(path.to_path_buf()),
-        None => Ok(default_data_dir(&home_dir()?)),
+    if let Some(path) = data {
+        return Ok(path.to_path_buf());
+    }
+    match std::env::var_os("TUFF_CONSOLE_DATA") {
+        Some(path) if !path.is_empty() => Ok(PathBuf::from(path)),
+        _ => Ok(default_data_dir(&home_dir()?)),
     }
 }
 

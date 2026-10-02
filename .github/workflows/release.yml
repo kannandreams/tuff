@@ -229,13 +229,13 @@ jobs:
       - name: Smoke test
         run: |
           docker run --rm --entrypoint tuff tuff-console:test --version
-          docker run -d --name smoke -p 127.0.0.1:7474:7474 --entrypoint tuff tuff-console:test \
-            console serve --demo --addr 0.0.0.0:7474 --public-read --trust github:example
+          docker run -d --name smoke -p 127.0.0.1:7474:7474 tuff-console:test --demo
           for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:7474/healthz && break
             sleep 1
           done
           curl -fsS http://127.0.0.1:7474/api/v1/projects | grep -q '"projects"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:7474/api/v1/reports)" = 401
           docker rm -f smoke
 
       - name: Scan for vulnerabilities

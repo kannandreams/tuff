@@ -25,7 +25,11 @@ RUN apt-get update \
 
 COPY --chmod=0755 ${TARGETARCH}/tuff /usr/local/bin/tuff
 
+# The data folder comes from TUFF_CONSOLE_DATA rather than --data, so that
+# `docker run <image> --demo` works: --demo cannot be combined with --data.
+ENV TUFF_CONSOLE_DATA=/data
+
 USER tuff
 VOLUME /data
 EXPOSE 7474
-ENTRYPOINT ["tuff", "console", "serve", "--addr", "0.0.0.0:7474", "--public-read", "--data", "/data"]
+ENTRYPOINT ["tuff", "console", "serve", "--addr", "0.0.0.0:7474", "--public-read"]

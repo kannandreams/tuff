@@ -23,10 +23,10 @@ tuff console serve --trust github:acme --public-url https://tuff.internal.acme.d
 | Flag | Description |
 |---|---|
 | `--addr <addr>` | Address to listen on. Default `127.0.0.1:7474`. Port `0` picks a free port, and the startup line shows it |
-| `--data <dir>` | Folder for `console.sqlite`. Default `$XDG_DATA_HOME/tuff/console`, which is `~/.local/share/tuff/console` when `XDG_DATA_HOME` is unset |
+| `--data <dir>` | Folder for `console.sqlite`. Default `TUFF_CONSOLE_DATA` when it is set, otherwise `$XDG_DATA_HOME/tuff/console`, which is `~/.local/share/tuff/console` when `XDG_DATA_HOME` is unset |
 | `--public-read` | Allows a non-loopback address. Viewers are not authenticated by Tuff |
 | `--trust <provider:owner>` | Accepts publishing from GitHub Actions jobs of that owner, as `github:<owner>`. Repeat it for several owners |
-| `--demo` | Serves generated sample projects from a temporary in-memory database, for trying the UI. The UI shows a Sample data chip. Cannot be combined with `--data` |
+| `--demo` | Serves generated sample projects from a temporary in-memory database, for trying the UI. The UI shows a Sample data chip. Cannot be combined with `--data`. `TUFF_CONSOLE_DATA` is ignored |
 | `--public-url <url>` | The address publishers use to reach the console, which OIDC tokens name as their audience. Default `http://<addr>` |
 
 The server runs until it receives an interrupt or `SIGTERM`. The folder and the database are created on first start, and the schema is migrated when a newer Tuff opens an older file. A file written by a newer Tuff than the running one is refused.
@@ -38,7 +38,7 @@ On a loopback address (`127.0.0.1` or `::1`), reading needs no credentials, and 
 Any other address, such as `0.0.0.0:7474`, needs two things before the server starts:
 
 - `--public-read`, because Tuff does not authenticate people who view the console. Put the server behind a reverse proxy that does, such as Caddy or nginx with basic auth or oauth2-proxy.
-- At least one publish credential: a key created with `tuff console key create`, or a `--trust`.
+- At least one publish credential: a key created with `tuff console key create`, or a `--trust`. A server started with `--demo` needs none. With no credential every publish is refused, so such a demo is read only.
 
 Once any key exists or any trust is configured, `POST /api/v1/reports` needs `Authorization: Bearer <credential>` on every address, loopback included. A server behind a reverse proxy on the same machine therefore needs a key or a trust before the proxy exposes it. Keys are checked on every request, so a revoked key stops working at once, and revoking the last key on a loopback server with no trust opens publishing again.
 
@@ -148,7 +148,7 @@ tuff console key revoke ci
 
 A key created with `--repository` can publish reports for that repository only, the way a GitHub token can. The repository is written as the reports name it, such as `github.com/acme/web`, and a remote URL such as `git@github.com:acme/web.git` is normalised to the same form. A report for another repository gets `403`.
 
-`list` shows each name with its repository, its creation time, and the time it last authenticated, and `--json` prints the same as JSON. All three commands take `--data <dir>` and act on the database in that folder, whether or not a server is running from it.
+`list` shows each name with its repository, its creation time, and the time it last authenticated, and `--json` prints the same as JSON. All three commands take `--data <dir>`, or read the folder from `TUFF_CONSOLE_DATA`, and act on the database in that folder, whether or not a server is running from it.
 
 ## `tuff console publish`
 

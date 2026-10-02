@@ -63,8 +63,15 @@ pub struct ServerOptions {
 /// The bind rules of D5. A loopback address needs nothing. Any other
 /// address needs `--public-read`, because viewing is not authenticated, and
 /// at least one publish credential (a key or a trust), because publishing
-/// is authenticated.
-pub fn check_bind(addr: SocketAddr, public_read: bool, credential_count: u64) -> Result<()> {
+/// is authenticated. A demo needs no credential: its data is generated and
+/// in memory, and with none configured every publish is refused, so it is
+/// read only.
+pub fn check_bind(
+    addr: SocketAddr,
+    public_read: bool,
+    credential_count: u64,
+    demo: bool,
+) -> Result<()> {
     if addr.ip().is_loopback() {
         return Ok(());
     }
@@ -76,7 +83,7 @@ pub fn check_bind(addr: SocketAddr, public_read: bool, credential_count: u64) ->
             "put the server behind a reverse proxy that authenticates viewers and pass --public-read, or bind 127.0.0.1",
         ));
     }
-    if credential_count == 0 {
+    if credential_count == 0 && !demo {
         return Err(TuffError::refused(format!(
             "{addr} is not a loopback address, and no publish key or trust exists"
         ))
@@ -100,6 +107,7 @@ pub fn run(config: ServeConfig, on_ready: impl FnOnce(SocketAddr)) -> Result<()>
         config.addr,
         config.public_read,
         store.key_count()? + config.trusts.len() as u64,
+        config.demo,
     )?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -674,14 +682,14 @@ mod tests {
     #[test]
     fn loopback_binds_need_nothing() {
         for text in ["127.0.0.1:7474", "127.0.0.1:0", "[::1]:7474"] {
-            check_bind(addr(text), false, 0).unwrap();
+            check_bind(addr(text), false, 0, false).unwrap();
         }
     }
 
     #[test]
     fn a_public_bind_needs_public_read() {
         for text in ["0.0.0.0:7474", "192.168.1.20:7474", "[::]:7474"] {
-            let error = check_bind(addr(text), false, 1).unwrap_err();
+            let error = check_bind(addr(text), false, 1, false).unwrap_err();
             assert_eq!(error.kind(), ErrorKind::Refused, "{text}");
             assert!(error.hint().unwrap().contains("--public-read"));
         }
@@ -689,9 +697,16 @@ mod tests {
 
     #[test]
     fn a_public_bind_needs_a_key() {
-        let error = check_bind(addr("0.0.0.0:7474"), true, 0).unwrap_err();
+        let error = check_bind(addr("0.0.0.0:7474"), true, 0, false).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::Refused);
         assert!(error.hint().unwrap().contains("key create"));
-        check_bind(addr("0.0.0.0:7474"), true, 1).unwrap();
+        check_bind(addr("0.0.0.0:7474"), true, 1, false).unwrap();
+    }
+
+    #[test]
+    fn a_public_demo_needs_public_read_but_no_key() {
+        check_bind(addr("0.0.0.0:7474"), true, 0, true).unwrap();
+        let error = check_bind(addr("0.0.0.0:7474"), false, 0, true).unwrap_err();
+        assert!(error.hint().unwrap().contains("--public-read"));
     }
 }
