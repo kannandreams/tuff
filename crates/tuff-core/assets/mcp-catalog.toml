@@ -175,7 +175,7 @@ tools_summary = "resolve-library-id, query-docs"
 [[servers]]
 id = "screenpipe"
 version = "1.0.0"
-description = "Search screen text and audio captured by Screenpipe, recall meetings, and summarize activity. Needs Screenpipe running on localhost:3030 and a key from `screenpipe auth token`. Screenpipe's cloud features, when enabled, can send this context off the machine."
+description = "Search locally captured screen text and audio, recall meetings, and summarize activity. Requires Screenpipe running on localhost:3030 and a local API key from `screenpipe auth token`. Configured cloud AI, transcription, sync and integrations can send context off-device. Source-available under the Screenpipe Commercial License; plans at https://screenpipe.com."
 transport = "stdio"
 command = "npx"
 args = ["-y", "screenpipe-mcp@latest"]
