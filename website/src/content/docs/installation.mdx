@@ -68,9 +68,19 @@ tuff --version
 tuff
 ```
 
+## Tuff Console container image
+
+Tuff Console, the self-hosted server for project reports, is also published as a container image for `linux/amd64` and `linux/arm64`. It holds the same `tuff` binary as the release, so a server that only runs the console does not need the CLI installed:
+
+```sh frame="terminal"
+docker pull ghcr.io/kannandreams/tuff-console:latest
+```
+
+[Run in a container](/guides/self-hosting-console/#run-in-a-container) covers the tags, creating a publish key, starting the console, trying it with sample data, and verifying the image signature.
+
 ## Requirements
 
-- **Rust**: `cargo` and build methods use it directly. `curl` and `brew` methods install prebuilt binaries.
+- **Rust**: `cargo` and build methods use it directly. `curl` and `brew` methods install prebuilt binaries, available for macOS (Apple silicon and Intel) and Linux (x86-64 and ARM64).
 - **Git**: required for `tuff add` with git-backed capabilities.
 
 ## Installed Files
