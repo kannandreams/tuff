@@ -167,3 +167,17 @@ transport = "http"
 url = "https://mcp.context7.com/mcp"
 headers = { Authorization = { from_env = "CONTEXT7_API_KEY", format = "Bearer {}" } }
 tools_summary = "resolve-library-id, query-docs"
+
+# Official manual NPX configuration and tools:
+# https://github.com/screenpipe/screenpipe/tree/main/packages/screenpipe-mcp
+# Source-available under the Screenpipe Commercial License:
+# https://github.com/screenpipe/screenpipe/blob/main/LICENSE.md
+[[servers]]
+id = "screenpipe"
+version = "1.0.0"
+description = "Search locally captured screen text and audio, recall meetings, and summarize activity. Requires Screenpipe running on localhost:3030 and a local API key from `screenpipe auth token`. Configured cloud AI, transcription, sync and integrations can send context off-device. Source-available under the Screenpipe Commercial License; plans at https://screenpipe.com."
+transport = "stdio"
+command = "npx"
+args = ["-y", "screenpipe-mcp@latest"]
+env = ["SCREENPIPE_LOCAL_API_KEY"]
+tools_summary = "search-content, keyword-search, activity-summary, list-meetings, get-meeting"

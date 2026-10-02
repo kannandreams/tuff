@@ -37,7 +37,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
 - `tuff add <policy-dir> -a claude` — install a policy (`type = "policy"`); only Claude Code enforces policies today, and the install is refused for any agent that would not enforce every rule
-- `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry, linear, context7) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
+- `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry, linear, context7, screenpipe) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
 
 ### Packs
 - `tuff pack build --name <name>` — package accepted project capabilities into `tuff-dist/<name>-0.1.0.tuffpack`
