@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-03
+
 ### Added
 
 - **The MCP catalog includes Screenpipe.** `tuff add mcp screenpipe` installs the official `screenpipe-mcp` server, which searches screen text and audio that Screenpipe captured on the machine, lists meetings, and summarizes activity. It needs Screenpipe running on `localhost:3030` and `SCREENPIPE_LOCAL_API_KEY` from `screenpipe auth token`.
@@ -385,7 +387,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/kannandreams/tuff/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/kannandreams/tuff/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kannandreams/tuff/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kannandreams/tuff/compare/v0.12.0...v0.13.0
