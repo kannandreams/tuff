@@ -5,7 +5,7 @@ description: Run a Tuff console server with its web UI, publish project reports 
 
 ## `tuff console serve`
 
-Tuff Console is the self-hosted server that collects project reports. Its overview page is called the Dashboard. The console is excluded from the [1.0 stability promise](/concepts/stability), so its commands, API, and storage can change in any release. [Self-Hosting the Console](/guides/self-hosting-console/) covers running it on a server, in a container, and behind a reverse proxy.
+Tuff Console is the self-hosted server that collects project reports. Its overview page is called the Dashboard. The console is excluded from the [1.0 stability promise](/concepts/stability), so its commands, API, and storage can change in any release. [Self-Hosting the Console](/guides/self-hosting-console/) covers running it on a server, in a container, and behind a reverse proxy. Each release also publishes the console as the container image `ghcr.io/kannandreams/tuff-console` for `linux/amd64` and `linux/arm64`, and [Run in a container](/guides/self-hosting-console/#run-in-a-container) shows how to start it.
 
 Starts the console server. It stores the reports that projects publish in one SQLite file and serves them over HTTP.
 
