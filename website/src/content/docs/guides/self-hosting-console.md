@@ -81,12 +81,12 @@ Each release from 0.15.0 publishes the image `ghcr.io/kannandreams/tuff-console`
 | `0.15` | The newest release with that minor version |
 | `latest` | The newest release |
 
-The entry point is `tuff console serve --addr 0.0.0.0:7474 --public-read --data /data`. The console refuses to start on a non-loopback address until a publish credential exists, so create a key in the volume before the first start or pass `--trust`:
+The entry point is `tuff console serve --addr 0.0.0.0:7474 --public-read`, and the image sets `TUFF_CONSOLE_DATA=/data`, so the console and the `tuff console key` commands use the volume without `--data`. The console refuses to start on a non-loopback address until a publish credential exists, so create a key in the volume before the first start or pass `--trust`:
 
 ```sh frame="terminal"
 # Create a key in the volume. The key is printed once
 docker run --rm -v tuff-console-data:/data --entrypoint tuff ghcr.io/kannandreams/tuff-console:<version> \
-  console key create ci --data /data
+  console key create ci
 
 # Start the console. Arguments after the image name are added to the entry point
 docker run -d --name tuff-console --restart unless-stopped \
@@ -97,12 +97,13 @@ docker run -d --name tuff-console --restart unless-stopped \
 
 Publishing `127.0.0.1:7474` keeps the port reachable from the host only, where the reverse proxy runs. `GET /healthz` answers for container health checks, such as a Kubernetes `httpGet` probe. The image has no `curl`, so run a check from outside the container.
 
-To look at the console before setting it up, run it with generated sample data. The data lives in memory and is gone when the container stops. A demo on a non-loopback address also needs a publish credential, and a trust for an owner that never publishes satisfies that:
+To look at the console before setting it up, run it with generated sample data and open `http://127.0.0.1:7474`. The data lives in memory and is gone when the container stops. The demo needs no publish credential and refuses every publish:
 
 ```sh frame="terminal"
-docker run --rm -p 127.0.0.1:7474:7474 --entrypoint tuff ghcr.io/kannandreams/tuff-console:<version> \
-  console serve --demo --addr 0.0.0.0:7474 --public-read --trust github:example
+docker run --rm -p 127.0.0.1:7474:7474 ghcr.io/kannandreams/tuff-console:<version> --demo
 ```
+
+The 0.15.0 image passes `--data /data` in its entry point instead of setting `TUFF_CONSOLE_DATA`, and its console needs a credential for a demo. With that image, run the demo as `docker run --rm -p 127.0.0.1:7474:7474 --entrypoint tuff ghcr.io/kannandreams/tuff-console:0.15.0 console serve --demo --addr 0.0.0.0:7474 --public-read --trust github:example`.
 
 Upgrade by pulling a newer tag and recreating the container with the same volume. The console migrates the database on first use.
 
@@ -233,7 +234,7 @@ Run the commands as the service user. A key created as `root` leaves `root`-owne
 
 `create` prints the key once. The database holds only its SHA-256, so a lost key is replaced with a new one. Copy the key straight into the CI system's secret store. A key created with `--repository` publishes reports for that repository only. A key without it publishes for any repository, so give each repository or team its own.
 
-In a container, run the same commands with `docker run --rm -v tuff-console-data:/data --entrypoint tuff ghcr.io/kannandreams/tuff-console:<version> console key ... --data /data`, or with `docker exec tuff-console tuff console key list --data /data`.
+In a container, run the same commands with `docker run --rm -v tuff-console-data:/data --entrypoint tuff ghcr.io/kannandreams/tuff-console:<version> console key ...`, or with `docker exec tuff-console tuff console key list`.
 
 ## Back up
 
