@@ -99,6 +99,7 @@ token, so the secret stays in your environment:
 | Claude Code, Open Agents | `{"type": "http", "url": …, "headers": {"Authorization": "Bearer ${NOTION_TOKEN}"}}` |
 | Codex | `url = …` with `bearer_token_env_var = "NOTION_TOKEN"` in `[mcp_servers.<id>]`; a header without a format becomes `env_http_headers` |
 | OpenCode | `{"type": "remote", "url": …, "headers": {"Authorization": "Bearer {env:NOTION_TOKEN}"}}` |
+| Pi | `{"url": …, "headers": {"Authorization": "Bearer ${NOTION_TOKEN}"}}` (no `type`; Pi infers it from `url`) |
 | Cursor | `{"url": …, "headers": {"Authorization": "Bearer ${env:NOTION_TOKEN}"}}` (no `type` for remote servers) |
 
 `tuff check` hashes the whole entry, so a header edited by hand in any of those
@@ -236,12 +237,15 @@ For each selected harness Tuff writes two things:
 | `open-agents` | `.agents/mcp.json` | `${VAR}` | `.agents/mcp-servers/<id>/server.toml` |
 | `codex` | `[mcp_servers.<id>]` in `.codex/config.toml` | `env_vars` forwards the variable by name | `.agents/mcp-servers/<id>/server.toml` |
 | `opencode` | `mcp` in `.opencode/opencode.json` | `{env:VAR}` | `.opencode/mcp-servers/<id>/server.toml` |
+| `pi` | `.pi/mcp.json` | `${VAR}` | `.pi/mcp-servers/<id>/server.toml` |
 
 The config entry is what the harness reads. `server.toml` is the canonical
 declaration Tuff hashes, so `tuff check` and `tuff diff` treat the capability
 exactly like a skill or tool.
 
 OpenCode reads MCP servers from `opencode.json`, under `mcp`, in its own shape: `type` is `local` or `remote`, a local server's program and arguments are one `command` array, and its variables sit under `environment`. Tuff writes the entry into `.opencode/opencode.json`, which OpenCode merges over the project's `opencode.json`, so the project's own file is not edited. Add the agent first with `tuff harness add opencode`. OpenCode does not read `.agents/mcp.json`, so a server installed with `-a open-agents` does not start in OpenCode.
+
+Pi reads a project's MCP servers from `.pi/mcp.json`, under `mcpServers`, and only once the project is trusted. Tuff adds its entries there and keeps the file's other servers and keys. Approve the project when Pi asks, or run `/trust`, then run `/reload` in a running session. Add the agent first with `tuff harness add pi`. Pi does not read `.agents/mcp.json`, so a server installed with `-a open-agents` does not start in Pi. Checked against Pi 1.1.0.
 
 :::note[Codex]
 Codex reads a project's MCP servers from `.codex/config.toml`, and only in a trusted project. Tuff writes `[mcp_servers.<id>]` there and leaves every other line of the file as it was. Two declarations have no Codex form and are refused at install: a variable the server reads under a different name from the one you export (Codex forwards a variable under its own name through `env_vars`), and a header built from a variable with any format other than `Authorization: Bearer {}` (which becomes `bearer_token_env_var`). A plain header variable becomes `env_http_headers`. Checked against Codex CLI 0.154.0.
