@@ -11,7 +11,7 @@ registration lives.
 
 ## Supported Adapters
 
-Tuff currently ships five adapters:
+Tuff currently ships six adapters:
 
 | Adapter | Target id | Main output root |
 |---|---|---|
@@ -20,8 +20,11 @@ Tuff currently ships five adapters:
 | Codex | `codex` | `.agents/` |
 | Cursor | `cursor` | `.cursor/` |
 | OpenCode | `opencode` | `.opencode/` |
+| Pi | `pi` | `.pi/` |
 
 `opencode` takes [policies](/primitives/policies/#opencode) and [MCP servers](/primitives/mcp-servers/#what-gets-written), both written to `.opencode/opencode.json`. OpenCode reads skills from the `.agents/` layout, so install those with `open-agents`.
+
+`pi` takes [MCP servers](/primitives/mcp-servers/#what-gets-written), written to `.pi/mcp.json`. Pi reads skills from the `.agents/` layout, so install those with `open-agents`. Pi has no permission rules and loads hooks as TypeScript extensions, so `pi` takes neither policies nor hooks.
 
 `open-agents` remains the generic shared `.agents/` adapter. Codex now has a dedicated adapter even
 though it currently emits the same directory family, because its hook coverage and native behavior
@@ -59,6 +62,7 @@ This records a new target and emits the capability into that harness's layout. T
 | `codex` | `.agents/tools/<id>/...` | `[mcp_servers.<id>]` in `.codex/config.toml` |
 | `cursor` | `.cursor/tools/<id>/...` | `.cursor/mcp.json` |
 | `opencode` | not supported | `mcp` in `.opencode/opencode.json` (MCP servers only) |
+| `pi` | not supported | `.pi/mcp.json` (MCP servers only) |
 
 Tuff writes the tool files and also registers the tool in the agent's MCP config so the harness
 can discover it.

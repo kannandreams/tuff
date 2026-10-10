@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **A `pi` harness for the Pi coding agent.** `tuff harness add pi` registers it, and `tuff add mcp <id> -a pi` writes the server into `.pi/mcp.json`, with variables as `${VAR}`. Pi reads that file only in a trusted project, and `tuff add` says so. Pi reads skills from `.agents/skills/`, so `open-agents` now lists Pi. Pi has no permission rules and loads hooks as TypeScript extensions, so `pi` takes neither policies nor hooks.
+
 ## [0.16.0] - 2026-10-03
 
 ### Added

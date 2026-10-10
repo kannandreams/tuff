@@ -4,7 +4,7 @@
    reaches the page goes through h`...`, which escapes it. */
 
 const HNAME = {
-  claude: "Claude Code", codex: "Codex", cursor: "Cursor", opencode: "OpenCode", "open-agents": "Open Agents",
+  claude: "Claude Code", codex: "Codex", cursor: "Cursor", opencode: "OpenCode", pi: "Pi", "open-agents": "Open Agents",
 };
 const DOCS = "https://tuffcli.dev/cli/console/";
 const hname = (h) => HNAME[h] || h;

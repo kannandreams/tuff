@@ -3898,7 +3898,7 @@ fn policy_matrix_lists_every_agent_and_every_kind_of_rule() {
         .collect();
     assert_eq!(
         agents,
-        ["open-agents", "claude", "codex", "cursor", "opencode"]
+        ["open-agents", "claude", "codex", "cursor", "opencode", "pi"]
     );
     for matrix in matrices {
         let agent = matrix["adapter"].as_str().unwrap();
@@ -4684,6 +4684,73 @@ fn an_mcp_server_registers_under_mcp_in_the_opencode_config_beside_the_policy_ru
         serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
     assert!(after.get("mcp").is_none(), "{after}");
     assert_eq!(after["permission"]["bash"]["git push --force *"], "deny");
+    tuff().current_dir(&project).arg("check").assert().success();
+}
+
+#[test]
+fn an_mcp_server_registers_in_pis_project_mcp_config_and_a_policy_is_refused() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir_all(project.join(".pi")).unwrap();
+    fs::write(
+        project.join(".pi/mcp.json"),
+        r#"{"mcpServers": {"own": {"command": "own-server"}}, "autoEnableCodemode": false}"#,
+    )
+    .unwrap();
+    tuff().current_dir(&project).arg("init").assert().success();
+    tuff()
+        .current_dir(&project)
+        .args(["harness", "add", "pi"])
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(&project)
+        .args(["add", "mcp", "everything", "github", "-a", "pi"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "registered MCP server everything (pi) -> .pi/mcp.json",
+        ))
+        .stderr(predicate::str::contains("only in a trusted project"));
+
+    let config_path = project.join(".pi/mcp.json");
+    let raw = fs::read_to_string(&config_path).unwrap();
+    let config: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(config["mcpServers"]["own"]["command"], "own-server");
+    assert_eq!(config["autoEnableCodemode"], false);
+    assert_eq!(config["mcpServers"]["everything"]["command"], "npx");
+    assert_eq!(
+        config["mcpServers"]["github"]["env"]["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+    );
+    tuff().current_dir(&project).arg("check").assert().success();
+
+    // Pi has no permission rules, so a policy is refused for it.
+    let policy = write_infra_policy(temp.path());
+    tuff()
+        .current_dir(&project)
+        .args(["add", policy.to_str().unwrap(), "--harness", "pi"])
+        .assert()
+        .failure();
+
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "everything", "-a", "pi", "--force"])
+        .assert()
+        .success();
+    tuff()
+        .current_dir(&project)
+        .args(["delete", "github", "-a", "pi"])
+        .assert()
+        .success();
+    let after: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+    assert_eq!(
+        after["mcpServers"],
+        serde_json::json!({"own": {"command": "own-server"}})
+    );
+    assert_eq!(after["autoEnableCodemode"], false);
     tuff().current_dir(&project).arg("check").assert().success();
 }
 

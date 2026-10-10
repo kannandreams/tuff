@@ -10,7 +10,7 @@ Skills are installed into agent-specific directories along with any associated f
 references, assets):
 
 ```text
-# Open Agents standard (codex, cursor, opencode, copilot, etc.)
+# Open Agents standard (codex, cursor, opencode, pi, copilot, etc.)
 .agents/skills/<id>/SKILL.md
 
 # Claude Code

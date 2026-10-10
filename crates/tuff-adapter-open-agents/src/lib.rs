@@ -29,6 +29,7 @@ pub const SUPPORTED_AGENTS: &[&str] = &[
     "Amp",
     "Goose",
     "JetBrains Junie",
+    "Pi",
 ];
 
 pub const HOOK_SETTINGS_RELPATH: &str = ".agents/hook.json";

@@ -46,12 +46,13 @@ tuff harness add claude
 tuff harness add codex
 tuff harness add cursor
 tuff harness add opencode
+tuff harness add pi
 ```
 
 Registering a harness also creates its project directory (`.agents/` or
 `.claude/`) if it does not already exist.
 
-`claude-code` remains an alias for `claude`. `codex`, `cursor`, and `opencode` are dedicated adapter IDs. `opencode` takes policies and MCP servers, and `tuff init` does not register it.
+`claude-code` remains an alias for `claude`. `codex`, `cursor`, `opencode`, and `pi` are dedicated adapter IDs. `opencode` takes policies and MCP servers, `pi` takes MCP servers, and `tuff init` registers neither.
 
 ### Remove a harness
 

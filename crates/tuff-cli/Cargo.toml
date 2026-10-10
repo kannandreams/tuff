@@ -21,6 +21,7 @@ tuff-adapter-claude.workspace = true
 tuff-adapter-codex.workspace = true
 tuff-adapter-cursor.workspace = true
 tuff-adapter-opencode.workspace = true
+tuff-adapter-pi.workspace = true
 tuff-console.workspace = true
 clap = { version = "4.5.53", features = ["derive", "env"] }
 serde = { version = "1.0.228", features = ["derive"] }

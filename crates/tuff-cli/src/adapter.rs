@@ -14,12 +14,14 @@ use tuff_adapter_codex::Codex;
 use tuff_adapter_cursor::Cursor;
 use tuff_adapter_open_agents::OpenAgents;
 use tuff_adapter_opencode::OpenCode;
+use tuff_adapter_pi::Pi;
 
 static OPEN_AGENTS: OpenAgents = OpenAgents;
 static CLAUDE: Claude = Claude;
 static CODEX: Codex = Codex;
 static CURSOR: Cursor = Cursor;
 static OPENCODE: OpenCode = OpenCode;
+static PI: Pi = Pi;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdapterKind {
@@ -28,6 +30,7 @@ pub enum AdapterKind {
     Codex,
     Cursor,
     OpenCode,
+    Pi,
 }
 
 impl AdapterKind {
@@ -38,6 +41,7 @@ impl AdapterKind {
             Self::Codex,
             Self::Cursor,
             Self::OpenCode,
+            Self::Pi,
         ]
     }
 
@@ -48,6 +52,7 @@ impl AdapterKind {
             "codex" => Some(Self::Codex),
             "cursor" => Some(Self::Cursor),
             "opencode" => Some(Self::OpenCode),
+            "pi" => Some(Self::Pi),
             _ => None,
         }
     }
@@ -59,6 +64,7 @@ impl AdapterKind {
             Self::Codex => &CODEX,
             Self::Cursor => &CURSOR,
             Self::OpenCode => &OPENCODE,
+            Self::Pi => &PI,
         }
     }
 }
