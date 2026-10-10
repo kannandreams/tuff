@@ -24,6 +24,9 @@
     "smol-toml": "^1.8.0",
     "typescript": "^5.8.3"
   },
+  "overrides": {
+    "postcss-nested": "^7.0.2"
+  },
   "engines": {
     "node": ">=24.19 <25",
     "npm": ">=11.16"
