@@ -387,5 +387,8 @@
     "@vscode/vsce": "^3.6.0",
     "ovsx": "^0.10.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "@azure/msal-node": "^7.1.2"
   }
 }
