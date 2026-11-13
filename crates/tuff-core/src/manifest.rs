@@ -672,6 +672,27 @@ pub fn frontmatter_description(skill: &str) -> Option<String> {
     None
 }
 
+/// Read a top-level `name:` out of `SKILL.md` frontmatter, the field the
+/// Agent Skills specification uses for a skill's identifier.
+pub fn frontmatter_name(skill: &str) -> Option<String> {
+    let mut lines = skill.lines().map(|line| line.trim_end_matches('\r'));
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+    for line in lines {
+        if line.trim() == "---" {
+            break;
+        }
+        if line.starts_with([' ', '\t']) {
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("name:") {
+            return frontmatter_scalar(value);
+        }
+    }
+    None
+}
+
 /// A frontmatter value that is allowed to contain spaces, unlike a version.
 fn frontmatter_text(value: &str) -> Option<String> {
     let value = value.trim();
@@ -773,6 +794,23 @@ mod tests {
 
     fn write_manifest(dir: &std::path::Path, content: &str) {
         fs::write(dir.join("tuff.toml"), content).unwrap();
+    }
+
+    #[test]
+    fn frontmatter_name_reads_the_top_level_name_only() {
+        assert_eq!(
+            frontmatter_name("---\nname: pdf\ndescription: x\n---\n").as_deref(),
+            Some("pdf")
+        );
+        assert_eq!(
+            frontmatter_name("---\nname: \"quoted\"\n---\n").as_deref(),
+            Some("quoted")
+        );
+        assert_eq!(
+            frontmatter_name("---\nmetadata:\n  name: nested\n---\n"),
+            None
+        );
+        assert_eq!(frontmatter_name("# no frontmatter\nname: x\n"), None);
     }
 
     #[test]

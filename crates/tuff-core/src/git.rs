@@ -271,6 +271,48 @@ pub fn discover_capability(
     name: &str,
     capability_type: CapabilityType,
 ) -> Result<PathBuf> {
+    locate_capability(repo, name, capability_type).map(|found| found.dir)
+}
+
+/// Where [`locate_capability`] found a capability.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocatedCapability {
+    pub dir: PathBuf,
+    /// True when no conventional layout matched and the directory was found
+    /// by searching the repository. The caller then records the
+    /// repository-relative path, so later updates go straight to it.
+    pub searched: bool,
+}
+
+/// A capability found by searching a repository.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoundCapability {
+    /// The capability's name: the `name:` in its `SKILL.md` frontmatter,
+    /// else its directory name.
+    pub name: String,
+    /// The directory, relative to the repository root, with `/` separators.
+    pub path: String,
+}
+
+/// Directories never searched for capabilities: version-control metadata
+/// and dependency trees, which can be large and hold other projects' skills.
+const SKIPPED_SEARCH_DIRS: &[&str] = &[".git", "node_modules", "target", ".venv", "vendor"];
+
+/// How deep [`find_capabilities`] looks below the repository root.
+const MAX_SEARCH_DEPTH: usize = 8;
+
+/// Find a capability named `name` in a checked-out repository.
+///
+/// The conventional layouts are tried first, so a repository that follows
+/// them resolves exactly as before. When none matches, the whole repository
+/// is searched for capability directories whose directory name or
+/// `SKILL.md` `name:` equals `name`, which covers layouts such as
+/// `.claude/skills/<name>` or `plugins/<plugin>/skills/<name>`.
+pub fn locate_capability(
+    repo: &Path,
+    name: &str,
+    capability_type: CapabilityType,
+) -> Result<LocatedCapability> {
     let dir_plural = capability_type.plural_dir(); // "skills", "tools", "hooks", "mcp-servers"
     let dir_singular = capability_type.as_str(); // "skill", "tool", "hook", "mcp-server"
 
@@ -318,57 +360,215 @@ pub fn discover_capability(
     matches.sort();
     matches.dedup();
     match matches.len() {
-        0 => {
-            let nearby = list_nearby_capabilities(repo, capability_type)?;
-            let hint = if nearby.is_empty() {
-                String::new()
-            } else {
-                format!("\nAvailable {dir_plural}: {}", nearby.join(", "))
-            };
-            Err(TuffError::not_found(format!(
-                "{} '{}' not found in repository{hint}",
-                capability_type, name
-            )))
+        0 => {}
+        1 => {
+            return Ok(LocatedCapability {
+                dir: matches.remove(0),
+                searched: false,
+            });
         }
-        1 => Ok(matches[0].clone()),
-        _ => {
-            let paths: Vec<_> = matches
-                .iter()
-                .map(|p| p.strip_prefix(repo).unwrap_or(p).display().to_string())
-                .collect();
-            Err(TuffError::usage(format!(
-                "ambiguous capability name '{}' matches multiple paths: {}",
-                name,
-                paths.join(", ")
-            )))
-        }
+        _ => return Err(ambiguous(repo, name, &matches)),
+    }
+
+    let found = find_capabilities(repo, capability_type)?;
+    let searched: Vec<PathBuf> = found
+        .iter()
+        .filter(|capability| {
+            capability.name == name || capability.path.rsplit('/').next() == Some(name)
+        })
+        .map(|capability| repo.join(&capability.path))
+        .collect();
+    match searched.len() {
+        0 => Err(not_found(name, capability_type, &found)),
+        1 => Ok(LocatedCapability {
+            dir: searched.into_iter().next().expect("one match"),
+            searched: true,
+        }),
+        _ => Err(ambiguous(repo, name, &searched)),
     }
 }
 
-fn list_nearby_capabilities(repo: &Path, capability_type: CapabilityType) -> Result<Vec<String>> {
-    let dir_plural = capability_type.plural_dir();
-    let capabilities_dir = repo.join(dir_plural);
-    if !capabilities_dir.is_dir() {
-        return Ok(Vec::new());
-    }
-
-    let mut names = Vec::new();
-    for entry in std::fs::read_dir(&capabilities_dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !name.starts_with('.') {
-                names.push(name);
+/// Every capability of `capability_type` in a checked-out repository,
+/// sorted by path. A skill is a directory holding `SKILL.md`; any other
+/// type is a directory holding a `tuff.toml`.
+pub fn find_capabilities(
+    repo: &Path,
+    capability_type: CapabilityType,
+) -> Result<Vec<FoundCapability>> {
+    let marker = if capability_type == CapabilityType::Skill {
+        "SKILL.md"
+    } else {
+        "tuff.toml"
+    };
+    let mut found = Vec::new();
+    let mut pending = vec![(repo.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = pending.pop() {
+        if dir != repo && dir.join(marker).is_file() {
+            let path = dir
+                .strip_prefix(repo)
+                .unwrap_or(&dir)
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+                .join("/");
+            let dir_name = dir
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let name = if capability_type == CapabilityType::Skill {
+                std::fs::read_to_string(dir.join(marker))
+                    .ok()
+                    .and_then(|skill| crate::manifest::frontmatter_name(&skill))
+                    .unwrap_or(dir_name)
+            } else {
+                dir_name
+            };
+            found.push(FoundCapability { name, path });
+            // A capability's own subdirectories are its files, not more
+            // capabilities.
+            continue;
+        }
+        if depth >= MAX_SEARCH_DEPTH {
+            continue;
+        }
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            // `file_type` does not follow symlinks, so a link cycle cannot
+            // keep the search going.
+            if !entry.file_type()?.is_dir() {
+                continue;
             }
+            let file_name = entry.file_name();
+            if SKIPPED_SEARCH_DIRS
+                .iter()
+                .any(|skipped| file_name == std::ffi::OsStr::new(skipped))
+            {
+                continue;
+            }
+            pending.push((entry.path(), depth + 1));
         }
     }
-    names.sort();
-    Ok(names)
+    found.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(found)
+}
+
+fn ambiguous(repo: &Path, name: &str, matches: &[PathBuf]) -> TuffError {
+    let paths: Vec<_> = matches
+        .iter()
+        .map(|p| p.strip_prefix(repo).unwrap_or(p).display().to_string())
+        .collect();
+    TuffError::usage(format!(
+        "ambiguous capability name '{}' matches multiple paths: {}",
+        name,
+        paths.join(", ")
+    ))
+    .with_hint("name the folder in the URL instead, e.g. <repo>/tree/<branch>/<path>")
+}
+
+fn not_found(name: &str, capability_type: CapabilityType, found: &[FoundCapability]) -> TuffError {
+    let mut message = format!("{capability_type} '{name}' not found in repository");
+    if !found.is_empty() {
+        message.push_str(&format!("\n{}", describe_found(capability_type, found)));
+    }
+    TuffError::not_found(message).with_hint(
+        "pass one of the names above, or name the folder in the URL, e.g. <repo>/tree/<branch>/<path>",
+    )
+}
+
+/// The "Available skills:" block shared by every error that lists what a
+/// repository offers: one `name  path` line per capability.
+pub fn describe_found(capability_type: CapabilityType, found: &[FoundCapability]) -> String {
+    let width = found.iter().map(|c| c.name.len()).max().unwrap_or(0);
+    let mut lines = vec![format!("Available {}:", capability_type.plural_dir())];
+    for capability in found {
+        lines.push(format!(
+            "  {:width$}  {}",
+            capability.name,
+            capability.path,
+            width = width
+        ));
+    }
+    lines.join("\n")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn write_skill(repo: &Path, path: &str, name: &str) {
+        let dir = repo.join(path);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: d\n---\nbody\n"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn find_capabilities_searches_the_repository_and_skips_dependency_trees() {
+        let repo = tempfile::tempdir().unwrap();
+        write_skill(repo.path(), "skills/alpha", "alpha");
+        write_skill(repo.path(), ".claude/skills/beta", "beta");
+        write_skill(repo.path(), "skills/zeta-skill", "zeta");
+        write_skill(repo.path(), "node_modules/dep/skills/beta", "beta");
+        // A skill's own subfolders are its files, not more skills.
+        write_skill(repo.path(), "skills/alpha/examples/inner", "inner");
+
+        let found = find_capabilities(repo.path(), CapabilityType::Skill).unwrap();
+        let pairs: Vec<_> = found
+            .iter()
+            .map(|c| (c.name.as_str(), c.path.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                ("beta", ".claude/skills/beta"),
+                ("alpha", "skills/alpha"),
+                ("zeta", "skills/zeta-skill"),
+            ]
+        );
+    }
+
+    #[test]
+    fn locate_capability_prefers_conventional_layouts_then_searches() {
+        let repo = tempfile::tempdir().unwrap();
+        write_skill(repo.path(), "skills/alpha", "alpha");
+        write_skill(repo.path(), "plugins/p/skills/gamma", "gamma");
+        write_skill(repo.path(), "skills/zeta-skill", "zeta");
+
+        let alpha = locate_capability(repo.path(), "alpha", CapabilityType::Skill).unwrap();
+        assert!(!alpha.searched);
+        assert_eq!(alpha.dir, repo.path().join("skills/alpha"));
+
+        let gamma = locate_capability(repo.path(), "gamma", CapabilityType::Skill).unwrap();
+        assert!(gamma.searched);
+        assert_eq!(gamma.dir, repo.path().join("plugins/p/skills/gamma"));
+
+        // Matched by the frontmatter name, not the folder.
+        let zeta = locate_capability(repo.path(), "zeta", CapabilityType::Skill).unwrap();
+        assert_eq!(zeta.dir, repo.path().join("skills/zeta-skill"));
+
+        let missing = locate_capability(repo.path(), "nope", CapabilityType::Skill)
+            .unwrap_err()
+            .to_string();
+        assert!(missing.contains("plugins/p/skills/gamma"), "{missing}");
+    }
+
+    #[test]
+    fn locate_capability_reports_a_name_found_twice_by_search() {
+        let repo = tempfile::tempdir().unwrap();
+        write_skill(repo.path(), "a/skills/dup", "dup");
+        write_skill(repo.path(), "b/skills/dup", "dup");
+        let err = locate_capability(repo.path(), "dup", CapabilityType::Skill)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("ambiguous"), "{err}");
+        assert!(
+            err.contains("a/skills/dup") && err.contains("b/skills/dup"),
+            "{err}"
+        );
+    }
 
     #[test]
     fn ls_remote_tags_peel_annotated_tags_to_their_commit() {

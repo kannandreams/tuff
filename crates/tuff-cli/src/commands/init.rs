@@ -41,8 +41,45 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
         let home = home_dir()?;
         let lock_path = crate::paths::global_lockfile(&home);
         lockfile::init_lockfile_at(&lock_path)?;
-        let _ = config::read_global_config(&home)?;
+
+        // The same detection a project gets, run against the home
+        // directory, where `~/.claude` and `~/.cursor` say which harnesses
+        // this user runs. Registering them is what lets later global
+        // commands, such as the capability index, reach those harnesses.
+        let detected = detected_harnesses(&home);
+        let mut config = config::read_global_config(&home)?;
+        for id in std::iter::once("open-agents").chain(detected.iter().map(|adapter| adapter.id()))
+        {
+            if !config.agents.iter().any(|agent| agent == id) {
+                config.agents.push(id.to_string());
+            }
+        }
+        config::write_global_config(&home, &config)?;
+
+        let shown = |path: &Path| {
+            path.strip_prefix(&home)
+                .map(|relative| format!("~/{}", relative.to_string_lossy().replace('\\', "/")))
+                .unwrap_or_else(|_| path.display().to_string())
+        };
         println!("initialized global Tuff state");
+        println!("  lockfile  {}", shown(&lock_path));
+        println!("  config    {}", shown(&crate::paths::user_config(&home)));
+        println!(
+            "  harnesses {} (default: {})",
+            config.agents.join(", "),
+            config.default_agent
+        );
+        println!("global installs need --global, e.g. 'tuff add skill <url> --global'");
+        for adapter in &detected {
+            if adapter.id() != config.default_agent {
+                println!(
+                    "{} reads {}/skills; add '-a {}' to install there",
+                    adapter.supported_agents().join(", "),
+                    shown(&home.join(adapter.dir_prefix())),
+                    adapter.id()
+                );
+            }
+        }
     } else {
         display::print_init_banner();
 

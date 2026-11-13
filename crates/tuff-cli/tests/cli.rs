@@ -434,7 +434,13 @@ fn add_requires_init() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("run 'tuff init' first"));
+        .stderr(predicate::str::contains("has no tuff.lock"))
+        .stderr(predicate::str::contains("run 'tuff init'"))
+        .stderr(predicate::str::contains("add --global"));
+    assert!(
+        !temp.path().join("tuff.config.json").exists(),
+        "a failed add must not leave a config behind"
+    );
 }
 
 #[test]
@@ -771,6 +777,63 @@ fn global_default_agent_is_used_for_global_add() {
 }
 
 #[test]
+fn global_onboarding_registers_detected_harnesses_and_writes_nothing_stray() {
+    let project = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    fs::create_dir_all(home.path().join(".claude")).unwrap();
+    let repo = make_git_skill_repo(project.path());
+    let repo_url = format!("file://{}", repo.display());
+    let workdir = project.path().join("work");
+    fs::create_dir_all(&workdir).unwrap();
+
+    tuff()
+        .current_dir(&workdir)
+        .env("HOME", home.path())
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("XDG_STATE_HOME")
+        .args(["init", "--global"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("~/.local/state/tuff/tuff.lock"))
+        .stdout(predicate::str::contains("~/.config/tuff/config.json"))
+        .stdout(predicate::str::contains("harnesses open-agents, claude"))
+        .stdout(predicate::str::contains("add '-a claude'"));
+
+    tuff()
+        .current_dir(&workdir)
+        .env("HOME", home.path())
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("XDG_STATE_HOME")
+        .args(["add", "skill", &repo_url, "-a", "open-agents", "--global"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed test-skill (open-agents) -> ~/.agents/skills/test-skill/SKILL.md",
+        ))
+        .stderr(predicate::str::contains("Claude Code reads ~/.claude/"));
+
+    tuff()
+        .current_dir(&workdir)
+        .env("HOME", home.path())
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("XDG_STATE_HOME")
+        .args(["add", "skill", &repo_url, "-a", "claude", "--global"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "~/.claude/skills/test-skill/SKILL.md",
+        ))
+        .stderr(predicate::str::contains("note:").not());
+
+    assert!(!home.path().join("tuff.config.json").exists());
+    assert_eq!(
+        fs::read_dir(&workdir).unwrap().count(),
+        0,
+        "global add wrote into the working directory"
+    );
+}
+
+#[test]
 fn add_to_multiple_agents() {
     let temp = TempDir::new().unwrap();
     let primitive = make_primitive(temp.path(), "example");
@@ -950,7 +1013,7 @@ fn typed_add_rejects_parent_level_flags() {
 }
 
 #[test]
-fn add_git_requires_skill_flag() {
+fn add_git_repo_with_one_skill_needs_no_name() {
     let temp = TempDir::new().unwrap();
     let repo = make_git_skill_repo(temp.path());
     let repo_url = format!("file://{}", repo.display());
@@ -965,8 +1028,89 @@ fn add_git_requires_skill_flag() {
         .current_dir(temp.path())
         .args(["add", &repo_url, "--harness", "open-agents"])
         .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "installed test-skill (open-agents)",
+        ));
+    let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+    assert!(lock.contains("\"path\": \"skills/test-skill\""), "{lock}");
+}
+
+/// A repository laid out the way skill collections often are, with skills
+/// outside the conventional `skills/<name>` folders.
+fn make_git_repo_with_scattered_skills(root: &Path) -> std::path::PathBuf {
+    let skill = |name: &str| format!("---\nname: {name}\ndescription: test\n---\nbody\n");
+    make_git_repo_with(
+        root,
+        "scattered",
+        &[
+            ("skills/alpha/SKILL.md", &skill("alpha")),
+            (".claude/skills/beta/SKILL.md", &skill("beta")),
+            ("plugins/tools/skills/gamma/SKILL.md", &skill("gamma")),
+            ("skills/eng/backend/delta/SKILL.md", &skill("delta")),
+            ("skills/zeta-skill/SKILL.md", &skill("zeta")),
+            ("node_modules/dep/skills/beta/SKILL.md", &skill("beta")),
+        ],
+    )
+}
+
+#[test]
+fn add_git_finds_a_named_skill_outside_the_conventional_folders() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_repo_with_scattered_skills(temp.path());
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    for (name, path) in [
+        ("beta", ".claude/skills/beta"),
+        ("gamma", "plugins/tools/skills/gamma"),
+        ("delta", "skills/eng/backend/delta"),
+        ("zeta", "skills/zeta-skill"),
+    ] {
+        tuff()
+            .current_dir(temp.path())
+            .args(["add", "skill", &repo_url, name, "-a", "open-agents"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(format!(
+                "installed {name} (open-agents)"
+            )));
+        let lock = fs::read_to_string(temp.path().join("tuff.lock")).unwrap();
+        assert!(lock.contains(&format!("\"path\": \"{path}\"")), "{lock}");
+    }
+
+    // The recorded path takes later commands straight to the skill.
+    tuff()
+        .current_dir(temp.path())
+        .args(["update", "gamma"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn add_git_repo_with_several_skills_lists_them() {
+    let temp = TempDir::new().unwrap();
+    let repo = make_git_repo_with_scattered_skills(temp.path());
+    let repo_url = format!("file://{}", repo.display());
+    tuff()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    tuff()
+        .current_dir(temp.path())
+        .args(["add", "skill", &repo_url, "-a", "open-agents"])
+        .assert()
         .failure()
-        .stderr(predicate::str::contains("--name is required"));
+        .stderr(predicate::str::contains("repository has 5 skills"))
+        .stderr(predicate::str::contains("plugins/tools/skills/gamma"))
+        .stderr(predicate::str::contains("node_modules").not())
+        .stderr(predicate::str::contains("tuff add skill <url>"));
 }
 
 #[test]
