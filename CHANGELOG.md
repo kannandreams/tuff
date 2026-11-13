@@ -6,9 +6,29 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-13
+
 ### Added
 
 - **A `pi` harness for the Pi coding agent.** `tuff harness add pi` registers it, and `tuff add mcp <id> -a pi` writes the server into `.pi/mcp.json`, with variables as `${VAR}`. Pi reads that file only in a trusted project, and `tuff add` says so. Pi reads skills from `.agents/skills/`, so `open-agents` now lists Pi. Pi has no permission rules and loads hooks as TypeScript extensions, so `pi` takes neither policies nor hooks.
+- **`tuff add` finds a git skill anywhere in the repository.** `tuff add skill <repo-url> <name>` checks the conventional `skills/<name>` layouts first, then searches the repository for a folder or `SKILL.md` `name:` that matches, so skills under `.claude/skills/`, `plugins/<plugin>/skills/`, or deeper folders install from the plain repository URL. `node_modules`, `vendor`, `target`, and `.venv` are skipped. A skill found this way is recorded in `tuff.lock` with its path, so `tuff update` goes straight to it.
+- **A git install needs no name when the answer is clear.** A repository with one skill installs it, and a `/tree/<branch>/<path>` URL names the skill after its folder. A repository with several skills lists each name and path to choose from.
+
+### Changed
+
+- **`tuff init --global` reports what it set up.** It prints the global lockfile and config paths, registers the harnesses it finds in the home directory (`~/.claude/` registers `claude`, `~/.cursor/` registers `cursor`), and prints the `-a` flag that reaches each one. The default harness is unchanged.
+- **A project `tuff add` without `tuff.lock` names both ways forward.** The error suggests `tuff init` for the project or `--global` for the user, and it appears before anything is downloaded.
+- **Global installs report paths under `~/`.** `installed pdf (claude) -> ~/.claude/skills/pdf/SKILL.md` replaces a relative path that read as the current directory.
+- **An install that misses a detected harness says so.** Installing a skill for `open-agents` where Claude Code is present prints a note that Claude Code reads `.claude/` and that `-a claude` reaches it.
+
+### Fixed
+
+- **Global installs no longer leave `~/tuff.config.json` in the home directory,** and a failed project `tuff add` no longer leaves `tuff.config.json` in the working directory. Reading a config never writes one.
+- **The CLI's dependencies are updated for security advisories.** rustls 0.23.46 (GHSA-2mjx-qc3c-rqvc), rustls-webpki, quinn-proto, tokio, and webpki-root-certs clear nine RustSec advisories and one unsoundness warning, and the yanked chacha20 and libssh2-sys releases are replaced.
+
+### Improved
+
+- **Docs site maintenance.** The site's astro (GHSA-mh32-jxcr-mh9f, GHSA-r3h5-4585-7x3w), vite, zod, undici, and fast-xml-parser (GHSA-474x-hrwr-fgx4) dependencies are updated, along with the VS Code extension's npm dependencies.
 
 ## [0.16.0] - 2026-10-03
 
@@ -391,7 +411,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/kannandreams/tuff/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/kannandreams/tuff/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/kannandreams/tuff/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/kannandreams/tuff/compare/v0.13.0...v0.14.0
