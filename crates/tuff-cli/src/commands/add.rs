@@ -72,12 +72,13 @@ pub fn cmd_add_accepting(
         lockfile::init_lockfile_at(&lock_path)?;
         (Scope::Global, home)
     } else {
+        require_project_lockfile(repo_root)?;
         (Scope::Project, repo_root.to_path_buf())
     };
     let target_ids = resolve_agent_selection(&install_root, target_ids, global)?;
 
-    if git::is_git_url(&source.to_string_lossy()) {
-        return cmd_add_git(
+    let installed = if git::is_git_url(&source.to_string_lossy()) {
+        cmd_add_git(
             &install_root,
             scope,
             &source.to_string_lossy(),
@@ -87,8 +88,40 @@ pub fn cmd_add_accepting(
             repo_root,
             hook_file,
             policy_options,
-        );
-    }
+        )
+    } else {
+        add_local_source(
+            &install_root,
+            scope,
+            source,
+            &target_ids,
+            repo_root,
+            capability_type,
+            name,
+            hook_file,
+            policy_options,
+        )
+    };
+    installed?;
+    note_unreached_harnesses(&install_root, scope, &target_ids, capability_type);
+    Ok(())
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "CLI dispatch passes source and install context"
+)]
+fn add_local_source(
+    install_root: &Path,
+    scope: Scope,
+    source: &Path,
+    target_ids: &[String],
+    repo_root: &Path,
+    capability_type: Option<&str>,
+    name: Option<&str>,
+    hook_file: Option<&Path>,
+    policy_options: PolicyOptions,
+) -> Result<()> {
     if let Some(name) = name
         && name.contains('@')
     {
@@ -98,16 +131,65 @@ pub fn cmd_add_accepting(
         .with_hint("a local directory has no release tags; pass the name without '@'"));
     }
     cmd_add_local(
-        &install_root,
+        install_root,
         scope,
         source,
-        &target_ids,
+        target_ids,
         repo_root,
         capability_type,
         name,
         hook_file,
         policy_options,
     )
+}
+
+/// Point out a harness whose files are present in the install root but
+/// that the install did not reach. The common case is a Claude Code user
+/// installing for `open-agents`: the files land in `.agents/skills`, which
+/// Claude Code does not read, so the skill looks installed and never runs.
+fn note_unreached_harnesses(
+    install_root: &Path,
+    scope: Scope,
+    target_ids: &[String],
+    capability_type: Option<&str>,
+) {
+    // Skills only: they are the files a harness discovers by folder. MCP
+    // servers and policies land in config files a note about folders
+    // would misdescribe.
+    let kind = capability_type
+        .and_then(CapabilityType::parse)
+        .unwrap_or(CapabilityType::Skill);
+    if kind != CapabilityType::Skill {
+        return;
+    }
+    let covered_agents: Vec<&str> = target_ids
+        .iter()
+        .filter_map(|id| AdapterKind::from_id(id))
+        .flat_map(|adapter| adapter.supported_agents().to_vec())
+        .collect();
+    let prefix = match scope {
+        Scope::Global => "~/",
+        Scope::Project => "",
+    };
+    for adapter in AdapterKind::all() {
+        if matches!(adapter, AdapterKind::OpenAgents | AdapterKind::Codex)
+            || target_ids.iter().any(|id| id == adapter.id())
+            || !adapter.supports(kind)
+            || !adapter.detect(install_root)
+            || adapter
+                .supported_agents()
+                .iter()
+                .all(|agent| covered_agents.contains(agent))
+        {
+            continue;
+        }
+        eprintln!(
+            "note: {} reads {prefix}{}/, which this install did not write; add '-a {}' to install for it too",
+            adapter.supported_agents().join(", "),
+            adapter.dir_prefix(),
+            adapter.id()
+        );
+    }
 }
 
 /// `tuff add mcp <source>...` — each source is a built-in catalog id, a
@@ -508,6 +590,10 @@ fn cmd_add_git(
     let cap_type = capability_type
         .and_then(CapabilityType::parse)
         .unwrap_or(CapabilityType::Skill);
+    // The repository-relative path the lockfile records. A path the URL
+    // named, or one found by searching, is recorded as is so updates go
+    // straight to it; a conventional layout records just the name.
+    let mut recorded_path = source_path.clone();
     let skill_dir = if let Some(path) = source_path.as_deref() {
         crate::tool::check_path_traversal(path)?;
         let path = cache_dir.join(path);
@@ -524,13 +610,41 @@ fn cmd_add_git(
         return Err(TuffError::usage(
             "installing an mcp-server from git requires a subdirectory in the URL (e.g. <repo>//mcp-servers/github)",
         ));
+    } else if let Some(name) = name {
+        let located = git::locate_capability(&cache_dir, name, cap_type)?;
+        if located.searched {
+            recorded_path = Some(repo_relative(&cache_dir, &located.dir));
+        }
+        located.dir
     } else {
-        let name = name.ok_or_else(|| {
-            TuffError::usage(
-                "--name is required when installing from a git URL without a subdirectory",
-            )
-        })?;
-        git::discover_capability(&cache_dir, name, cap_type)?
+        // No name and no folder in the URL: a repository with a single
+        // capability needs neither, and one with several gets a list to
+        // choose from rather than a demand for a flag.
+        let found = git::find_capabilities(&cache_dir, cap_type)?;
+        match found.as_slice() {
+            [only] => {
+                recorded_path = Some(only.path.clone());
+                cache_dir.join(&only.path)
+            }
+            [] => {
+                return Err(
+                    TuffError::not_found(format!("no {cap_type} found in repository"))
+                        .with_hint("name the folder in the URL, e.g. <repo>/tree/<branch>/<path>"),
+                );
+            }
+            _ => {
+                return Err(TuffError::usage(format!(
+                    "repository has {} {}; choose one\n{}",
+                    found.len(),
+                    cap_type.plural_dir(),
+                    git::describe_found(cap_type, &found)
+                ))
+                .with_hint(format!(
+                    "pass a name after the URL, e.g. 'tuff add {cap_type} <url> {}'",
+                    found[0].name
+                )));
+            }
+        }
     };
 
     // The lockfile pins the commit either way. The entry's version is the
@@ -545,7 +659,7 @@ fn cmd_add_git(
         git_manifest(&skill_dir, name, &installed_version)?
     };
     let name: &str = name.unwrap_or(&manifest.id);
-    let source_skill = source_path.as_deref().unwrap_or(name);
+    let source_skill = recorded_path.as_deref().unwrap_or(name);
 
     let capability = if native_hook {
         resolve_native_hook_capability(&skill_dir, Some(name), &installed_version, hook_file)?
@@ -610,10 +724,64 @@ pub(super) fn git_manifest(
         manifest.version = version.to_string();
         return Ok(manifest);
     }
-    let name = name.ok_or_else(|| {
-        TuffError::usage("--name is required when the git source has no tuff.toml")
-    })?;
+    // Without a tuff.toml the skill is named after its folder, the same
+    // rule `tuff add <local path>` follows.
+    let folder_name;
+    let name = match name {
+        Some(name) => name,
+        None => {
+            folder_name = skill_dir
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .ok_or_else(|| {
+                    TuffError::usage("cannot infer a name for a skill at the repository root")
+                        .with_hint("pass a name after the URL, e.g. 'tuff add skill <url> <name>'")
+                })?;
+            folder_name.as_str()
+        }
+    };
     manifest::synthetic_manifest(skill_dir, name, version)
+}
+
+/// A project-scope add needs the project's `tuff.lock`. Checked before any
+/// clone so the error comes first, and worded so it names both ways
+/// forward: set up this project, or install for the user with `--global`,
+/// which needs no `tuff init` and writes nothing into the project.
+fn require_project_lockfile(repo_root: &Path) -> Result<()> {
+    let lock_path = lockfile::project_lockfile(repo_root);
+    if lock_path.is_file() {
+        return Ok(());
+    }
+    Err(TuffError::not_found(format!(
+        "{} has no tuff.lock, so it is not a Tuff project",
+        repo_root.display()
+    ))
+    .with_hint(
+        "run 'tuff init' to manage capabilities in this project, or add --global to install for your user instead (no project files, no init needed)",
+    ))
+}
+
+/// Where an installed file landed, as the install report shows it: relative
+/// to the project, or under `~/` for the global scope, whose root is the
+/// home directory. A bare relative path there reads as the current
+/// directory.
+fn installed_path_display(path: &Path, install_root: &Path, scope: Scope) -> String {
+    let relative = lockfile::relative_or_absolute_fs(path, install_root);
+    match scope {
+        Scope::Global if path.starts_with(install_root) => format!("~/{relative}"),
+        _ => relative,
+    }
+}
+
+/// `dir` relative to a checkout root, with `/` separators, as the lockfile
+/// records source paths.
+fn repo_relative(repo: &Path, dir: &Path) -> String {
+    dir.strip_prefix(repo)
+        .unwrap_or(dir)
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// Adopt or install one local capability directory, the way `tuff add
@@ -1721,7 +1889,7 @@ pub(crate) fn install_capability_accepting(
                     "installed {} ({}) -> {}",
                     capability.id,
                     adapter.id(),
-                    lockfile::relative_or_absolute_fs(&target_path, install_root)
+                    installed_path_display(&target_path, install_root, scope)
                 );
             }
         }

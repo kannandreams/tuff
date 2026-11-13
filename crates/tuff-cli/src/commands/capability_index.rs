@@ -24,7 +24,7 @@ use crate::manifest::CapabilityType;
 use crate::resolver::Scope;
 
 use super::add::write_planned_file;
-use super::hooks::registered_adapters;
+use super::hooks::{registered_adapters, registered_adapters_in};
 
 pub(crate) const CAPABILITY_INDEX_ID: &str = "tuff-capabilities";
 
@@ -37,7 +37,12 @@ const INDEX_DESCRIPTION: &str = "Index of project tools and MCP servers installe
 /// last-known content hash before anything is written).
 pub(crate) fn regenerate_capability_index(repo_root: &Path, scope: Scope) -> Result<()> {
     let mut lockfile = lockfile::require_scoped_lockfile(repo_root, scope)?;
-    let adapters = registered_adapters(repo_root)?;
+    // The global scope's root is the home directory, whose harness list
+    // lives in the user config, not in a project `tuff.config.json` there.
+    let adapters = match scope {
+        Scope::Global => registered_adapters_in(&crate::config::read_global_config(repo_root)?)?,
+        Scope::Project => registered_adapters(repo_root)?,
+    };
 
     let mut new_targets: BTreeMap<String, TargetLockEntry> = BTreeMap::new();
 

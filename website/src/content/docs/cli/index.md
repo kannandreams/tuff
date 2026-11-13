@@ -52,6 +52,8 @@ tuff init --global
 Creates `tuff.lock` (and a user-state lockfile for global scope),
 scaffolds `.agents/`, and configures `open-agents` as the default agent.
 
+`tuff init --global` writes only to Tuff's user config and state directories, prints both paths, and registers the harnesses it detects in your home directory (`~/.claude/` registers `claude`, `~/.cursor/` registers `cursor`). It leaves the default harness unchanged and prints the `-a` flag that reaches each detected harness.
+
 Project initialization also looks for the harnesses already present in the repository and registers them:
 
 - A `.claude/` directory or a `CLAUDE.md` file registers `claude`.

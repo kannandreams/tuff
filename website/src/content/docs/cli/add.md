@@ -83,15 +83,23 @@ tuff add <capability-type> https://github.com/owner/repo <name> -a open-agents
 tuff add <capability-type> https://github.com/owner/repo <name> -a claude
 ```
 
-For Git sources, `<name>` is the capability directory name inside the
-repository. For example:
+For Git sources, `<name>` is the skill's directory name or the `name:` in its `SKILL.md` frontmatter. Tuff checks the conventional layouts first (`skills/<name>`, `skill/<name>`, `<name>`, and `skills/<category>/<name>`), then searches the whole repository, so skills under folders such as `.claude/skills/` or `plugins/<plugin>/skills/` are found too. `node_modules`, `vendor`, `target`, and `.venv` are skipped. For example:
 
 ```sh frame="terminal"
 tuff add skill https://github.com/owner/repo rust-implement -a open-agents
 ```
 
-Use the same structure for a tool or hook by replacing `skill` with
-the corresponding capability type.
+A skill found by searching is recorded in `tuff.lock` with its path in the repository, so `tuff update` goes straight to it.
+
+The name is optional when the repository holds a single skill. When it holds several, Tuff lists each skill's name and path so you can pick one.
+
+You can also name the folder in the URL. The skill is then named after that folder:
+
+```sh frame="terminal"
+tuff add skill https://github.com/owner/repo/tree/main/plugins/review/skills/rust-implement -a open-agents
+```
+
+Use the same structure for a tool or hook by replacing `skill` with the corresponding capability type. Tools and hooks are found by the `tuff.toml` in their directory.
 
 ### Install a release
 

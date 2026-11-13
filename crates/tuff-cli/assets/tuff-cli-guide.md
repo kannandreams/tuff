@@ -29,7 +29,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff add tool <path> [name] -a <agent>` — install a tool
 - `tuff add hook <path> [name] -a <agent>` — install a hook
 - `tuff add .agents/skills/<id> -a open-agents` — track existing agent files in place
-- `tuff add skill <git-url> <name> -a <agent>` — install a skill from git; `<name>` is its directory in the repository
+- `tuff add skill <git-url> <name> -a <agent>` — install a skill from git; `<name>` is its directory name or `SKILL.md` `name:`, found anywhere in the repository; omit it when the repository holds one skill, or use a `/tree/<branch>/<path>` URL
 - `tuff add tool <git-url> <name> -a <agent>` — install a tool from git
 - `tuff add hook <git-url> <name> -a <agent>` — install a hook from git
 - `tuff add skill <git-url> <name>@<version|range> -a <agent>` — install a tagged release (`1.2.0`, `^1.2`, `>=1, <2`); the lockfile records the tag, the requirement, and the commit
@@ -86,7 +86,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff cache clear` — delete Tuff's disposable machine-local cache
 - `tuff harness list` — show available harnesses (Tuff 0.11 and earlier: `tuff agent list`)
 - `tuff harness add <id>` — register a harness and initialize its project directory
-- `tuff init --global` — initialize global scope
+- `tuff init --global` — initialize global scope and register harnesses found in the home directory; global commands need `--global`, and `-a claude` is what reaches `~/.claude/skills`
 
 ### Agents
 - `open-agents` — `.agents/` layout; its skills are read by Codex, Cursor, OpenCode, Copilot, Gemini CLI, Windsurf, Amp, Goose, Junie

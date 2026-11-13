@@ -33,14 +33,16 @@ pub fn read_global_config(home: &Path) -> Result<TuffConfig> {
     read_config_at(&paths::user_config(home))
 }
 
+/// Read a config, or the defaults when there is none. Reading never writes:
+/// a command that only consults the config, such as an add that fails or a
+/// global install, must not leave a `tuff.config.json` behind in whatever
+/// directory it ran from.
 fn read_config_at(path: &Path) -> Result<TuffConfig> {
     if path.exists() {
         let config: TuffConfig = serde_json::from_str(&std::fs::read_to_string(path)?)?;
         Ok(config)
     } else {
-        let default = TuffConfig::default();
-        write_config_at(path, &default)?;
-        Ok(default)
+        Ok(TuffConfig::default())
     }
 }
 

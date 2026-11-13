@@ -39,6 +39,12 @@ tuff add ./my-skill --global
 tuff update my-skill --scope global
 ```
 
+Global scope writes nothing into the directory you run it from, so it suits capabilities you want on your machine without adding files to a repository. `tuff add --global` creates the global state on first use, so `tuff init --global` is optional. It is still useful: it prints where the lockfile and config live, and it registers the harnesses it finds in your home directory, such as `claude` for `~/.claude/`.
+
+Every global command needs `--global` (or `--scope global`). Without it, `tuff add` installs into the current project and asks for `tuff init` there.
+
+The harness decides which folder a global skill lands in. `open-agents` writes `~/.agents/skills/`, which Claude Code does not read, so pass `-a claude` to install into `~/.claude/skills/`, or make it the global default with `tuff harness set-default claude --global`. When an install misses a harness Tuff detects, it prints a note naming the flag to add.
+
 ## Resolution order
 
 When Tuff looks up an installed capability by id, it resolves in this order:

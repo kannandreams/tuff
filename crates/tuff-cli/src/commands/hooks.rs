@@ -294,10 +294,14 @@ pub fn cmd_hooks_check_portability(repo_root: &Path, hook_id: &str, target: &str
 }
 
 pub(crate) fn registered_adapters(repo_root: &Path) -> Result<Vec<AdapterKind>> {
-    let config = config::read_config(repo_root)?;
+    registered_adapters_in(&config::read_config(repo_root)?)
+}
+
+/// The harnesses a config registers, in order, without duplicates.
+pub(crate) fn registered_adapters_in(config: &config::TuffConfig) -> Result<Vec<AdapterKind>> {
     let mut adapters = Vec::new();
-    for id in config.agents {
-        let adapter = AdapterKind::from_id(&id).ok_or_else(|| {
+    for id in &config.agents {
+        let adapter = AdapterKind::from_id(id).ok_or_else(|| {
             TuffError::usage(format!("unknown registered agent '{}'", id))
                 .with_hint("run 'tuff harness list' to inspect config")
         })?;
