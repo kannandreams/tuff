@@ -110,7 +110,7 @@ command = "cargo fmt --check"
 | `[hook]` field | What it means | Required |
 |---|---|---|
 | `event` | When the hook runs, such as `session_start` or `before_finish`. The full list is in the [Hooks Specification](/spec/hooks/) | Yes |
-| `command` | The command to run | Yes |
+| `command` | The command to run. `{{hook_dir}}` in it is replaced by the folder the hook's files are installed in, relative to the project root, so `sh {{hook_dir}}/check.sh` runs a script the hook lists in `files` on every agent | Yes |
 | `working_directory` | Where the command runs. Defaults to `.` | No |
 
 Tuff translates the event into each agent's own hook settings, and refuses the

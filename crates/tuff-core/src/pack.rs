@@ -810,7 +810,14 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
             .iter()
             .map(|capability| capability.id.as_str())
             .collect::<Vec<_>>();
-        if target_ids != capability_ids {
+        // A harness target installs every member. A bundle target holds
+        // the members its format can take, which `--skip-unsupported` may
+        // make fewer than all.
+        let described = match target.kind {
+            PackTargetKind::Harness => target_ids == capability_ids,
+            PackTargetKind::Bundle => target_ids.iter().all(|id| capability_ids.contains(id)),
+        };
+        if !described {
             return Err(TuffError::corrupt(format!(
                 "pack artifact target '{}' does not describe every capability",
                 target.id

@@ -5637,7 +5637,7 @@ fn hooks_spec_prints_the_document_the_published_specification_is_generated_from(
         .args(["hooks", "spec"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Tuff hooks specification 0.2.0"))
+        .stdout(predicate::str::contains("Tuff hooks specification 0.3.0"))
         .stdout(predicate::str::contains("blocks action"))
         .stdout(predicate::str::contains("cursor"))
         .stdout(predicate::str::contains("preToolUse"));

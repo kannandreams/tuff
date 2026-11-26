@@ -1,4 +1,4 @@
-"""Tests for tuff_hooks_example.py against SPEC.md version 0.2.0, organised by
+"""Tests for tuff_hooks_example.py against SPEC.md version 0.3.0, organised by
 the section 7 conformance checklist item(s) each test covers. Run with
 `python3 -m unittest` from this directory.
 
@@ -93,7 +93,7 @@ def make_fixture_spec() -> dict:
         "hook_settings_path": ".fixture/settings.json",
         "hook_settings_shape": "grouped",
         "hook_command": "sh .fixture/hooks/<id>/run.sh",
-        "spec_version": "0.2.0",
+        "spec_version": "0.3.0",
         "events": [
             _row("session_start", "SessionStart", "full", aliases=["SessionStart"]),
             _row("session_end", None, "unsupported", caveat="no session end"),
@@ -116,7 +116,7 @@ def make_fixture_spec() -> dict:
         "hook_settings_path": ".fixtureflat/hooks.json",
         "hook_settings_shape": "flat",
         "hook_command": "sh .fixtureflat/hooks/<id>/run.sh",
-        "spec_version": "0.2.0",
+        "spec_version": "0.3.0",
         "events": [
             _row("session_start", "sessionStart", "full"),
             _row("session_end", "sessionEnd", "full"),
@@ -129,7 +129,7 @@ def make_fixture_spec() -> dict:
     }
 
     return {
-        "spec_version": "0.2.0",
+        "spec_version": "0.3.0",
         "events": events,
         "adapters": [grouped_adapter, flat_adapter],
     }

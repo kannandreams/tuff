@@ -44,6 +44,33 @@ tuff pack build [path] --output <artifact.tuffpack>
 
 For a standalone pack, omitting `--output` writes `<pack-name>-<pack-version>.tuffpack` beneath the pack root. Build always refuses to overwrite an existing artifact.
 
+### Build a Claude Code plugin
+
+`claude-plugin` is a bundle format target: list it in `[build] targets`, or pass `-a claude-plugin` to a project build, and the artifact holds the pack written as a Claude Code plugin. Extract it to get the plugin folder:
+
+```sh frame="terminal"
+tuff pack build . --output review-kit.tuffpack     # [build] targets = ["claude", "claude-plugin"]
+tuff pack extract review-kit.tuffpack -a claude-plugin --output review-kit-plugin/
+```
+
+| In the pack | In the plugin |
+|---|---|
+| `name` (its last part), `version`, `description`, `author`, `homepage`, `license`, `keywords` | `.claude-plugin/plugin.json` |
+| A skill | `skills/<id>/`, with every file |
+| An MCP server | An entry in `.mcp.json`, with variables as `${VAR}` |
+| A tool served over MCP (`implementation.mcp = true`) | `tools/<id>/` and an entry in `.mcp.json` that runs it from `${CLAUDE_PLUGIN_ROOT}` |
+| A hook whose event Claude Code has | An entry in `hooks/hooks.json` running the hook's command, and `hooks/<id>/` with its files. `{{hook_dir}}` becomes `${CLAUDE_PLUGIN_ROOT}/hooks/<id>` |
+
+A member a plugin cannot hold, such as a tool that is not served over MCP or an id with a `/`, fails the build with its name and the reason. `--skip-unsupported` builds the plugin without it and lists what it left out. A hook that ships files but does not use `{{hook_dir}}` builds with a warning, because inside a plugin its command cannot find them. A `claude-plugin` target is extracted, never installed: `tuff add pack -a claude-plugin` is refused.
+
+### Build a Claude Code marketplace
+
+```sh frame="terminal"
+tuff pack marketplace build packs/ --output acme-tools --owner-name "Acme" --owner-url https://example.com
+```
+
+Each source pack folder or `.tuffpack` artifact given, or found one level inside a given folder, is written as a plugin under `plugins/<name>/`, and `.claude-plugin/marketplace.json` lists each one with its source path, version, and description. A source pack is built as a plugin whatever its `[build] targets` say; an artifact must have a `claude-plugin` target. The marketplace is named after the output folder unless `--name` is given, and the output folder must be missing or empty. Push the folder to a git repository, and Claude Code users add it with `/plugin marketplace add <repository>`.
+
 ### Inspect and verify
 
 ```sh frame="terminal"

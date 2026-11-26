@@ -617,6 +617,33 @@ enum AddCommand {
 }
 
 #[derive(Subcommand)]
+enum MarketplaceCommand {
+    /// Write each pack as a Claude Code plugin under plugins/ and list them
+    /// in .claude-plugin/marketplace.json.
+    Build {
+        /// Source pack folders, .tuffpack artifacts, or folders holding them.
+        #[arg(required = true)]
+        sources: Vec<PathBuf>,
+        /// Folder to write the marketplace into; must be missing or empty.
+        #[arg(short = 'o', long = "output")]
+        output: PathBuf,
+        /// Marketplace name (defaults to the output folder's name).
+        #[arg(long = "name")]
+        name: Option<String>,
+        /// Who maintains the marketplace.
+        #[arg(long = "owner-name")]
+        owner_name: String,
+        /// A URL for the maintainer.
+        #[arg(long = "owner-url")]
+        owner_url: Option<String>,
+        /// Leave out members a plugin cannot hold, listing them, instead of
+        /// failing.
+        #[arg(long = "skip-unsupported")]
+        skip_unsupported: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum PackCommand {
     /// List installed packs, where each came from, and their members.
     List {
@@ -673,12 +700,22 @@ enum PackCommand {
         /// Tracked capability to include (repeatable).
         #[arg(short = 'c', long = "capability")]
         capability: Vec<String>,
-        /// Harness to render (repeatable; defaults to the project default).
+        /// Harness or bundle format to render, such as claude-plugin
+        /// (repeatable; defaults to the project default).
         #[arg(short = 'a', long = "harness", value_name = "HARNESS")]
         agent: Vec<String>,
         /// Artifact output path.
         #[arg(short = 'o', long = "output")]
         output: Option<PathBuf>,
+        /// Build a bundle format target, such as claude-plugin, without the
+        /// members it cannot hold, listing them, instead of failing.
+        #[arg(long = "skip-unsupported")]
+        skip_unsupported: bool,
+    },
+    /// Build a Claude Code marketplace from packs.
+    Marketplace {
+        #[command(subcommand)]
+        action: MarketplaceCommand,
     },
     /// Print verified pack metadata.
     Inspect {
@@ -1116,6 +1153,7 @@ fn run() -> Result<()> {
                 capability,
                 agent,
                 output,
+                skip_unsupported,
             } => cmd_pack_build(
                 &repo_root,
                 PackBuildOptions {
@@ -1126,8 +1164,27 @@ fn run() -> Result<()> {
                     capabilities: capability,
                     agents: agent,
                     output,
+                    skip_unsupported,
                 },
             ),
+            PackCommand::Marketplace {
+                action:
+                    MarketplaceCommand::Build {
+                        sources,
+                        output,
+                        name,
+                        owner_name,
+                        owner_url,
+                        skip_unsupported,
+                    },
+            } => commands::cmd_pack_marketplace_build(commands::MarketplaceBuildOptions {
+                sources: &sources,
+                output: &output,
+                name: name.as_deref(),
+                owner_name: &owner_name,
+                owner_url: owner_url.as_deref(),
+                skip_unsupported,
+            }),
             PackCommand::Inspect {
                 source,
                 git_ref,

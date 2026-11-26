@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Current version of the Tuff hook specification.
-pub const SPEC_VERSION: &str = "0.2.0";
+pub const SPEC_VERSION: &str = "0.3.0";
 
 /// The spec version that introduced the seven events of the first
 /// published vocabulary. Kept apart from [`SPEC_VERSION`] so that moving

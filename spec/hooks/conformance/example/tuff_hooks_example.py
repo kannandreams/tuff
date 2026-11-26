@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Clean-room toy implementation of the Tuff-standard hook part of the
-Tuff Hooks Specification, version 0.2.0.
+Tuff Hooks Specification, version 0.3.0.
 
 Standard library only. All harness-specific data (paths, settings shapes,
 compatibility matrices, event vocabulary) is read at runtime from the
@@ -450,7 +450,8 @@ def cmd_install(args: argparse.Namespace) -> int:
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         f"cd -- {sq(manifest.working_directory)}\n"
-        f"exec bash -euo pipefail -c {sq(manifest.command)}\n"
+        # 4.2 (0.3.0): {{hook_dir}} names the hook directory.
+        f"exec bash -euo pipefail -c {sq(manifest.command.replace('{{hook_dir}}', hook_dir_rel))}\n"
     )
 
     settings_path_rel = adapter["hook_settings_path"]
