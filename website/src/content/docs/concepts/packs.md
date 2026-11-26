@@ -226,7 +226,17 @@ tuff check
 
 Tuff verifies and stages the entire installation before changing the project. A tracked capability or untracked target-file collision prevents every member from being installed. Shared hook and MCP configuration is merged in staging, and a failed commit restores previous files.
 
-Each member remains an ordinary lockfile capability with its normal baseline and drift behavior. Optional pack provenance records the pack name, pack release version, and artifact digest without replacing the member capability version.
+Each member remains an ordinary lockfile capability with its normal baseline and drift behavior. Optional pack provenance records the pack name, pack release version, and artifact digest without replacing the member capability version. The lockfile's [`packs` object](/concepts/lockfile/#the-packs-object) records each installed pack once, with where it came from, so `tuff pack list` and `tuff pack remove` work on the pack as a whole.
+
+### Install from git
+
+A repository that holds a standalone source pack installs without a build step on the author's side:
+
+```sh frame="terminal"
+tuff add pack https://github.com/acme/crm-integration -a open-agents
+```
+
+Tuff picks the newest release tag, such as `v1.2.0`, checks the commit out, confirms that its `tuff-pack.toml` declares version `1.2.0`, builds the pack for the harnesses you selected, and installs it as it installs an artifact. The lockfile pins the commit. `tuff outdated` and `tuff update` follow the repository's release tags, or its branch when it has none. See [Install from git](/cli/packs/#install-from-git) for `--ref`, `--path`, and the tag shapes.
 
 ## Update an installed pack
 
@@ -254,7 +264,7 @@ When the installed version is already the newest tag, `tuff update` still resolv
 ## Current boundaries
 
 - A built artifact always contains canonical portable member sources and pre-rendered targets; project-backed selection is an authoring convenience, not a new artifact format.
-- Standalone source packs contain local manifest-backed members only.
+- Standalone source packs contain local manifest-backed members only. A pack installed from git is a standalone source pack in a repository.
 - Pack installation is project-scoped; `--global` is not supported.
 - Tuff does not resolve pack-to-pack dependencies or semantic-version constraints. Registry resolution picks the newest semver tag; it does not pin to a range.
 - `tuff outdated` verifies that the installed tag still serves the installed digest, and `tuff update` refuses to call a republished tag "up to date". Neither verifies signatures; a repointed tag is detected, not prevented.

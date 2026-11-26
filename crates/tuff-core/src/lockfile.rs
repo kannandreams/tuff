@@ -19,7 +19,12 @@ use crate::manifest::{CapabilityType, ImplementationConfig, McpServerConfig};
 /// is the layout npm, jq, Python, and VS Code's JSON formatter all agree
 /// on, so a formatter that a repository runs over its JSON files leaves
 /// the lockfile byte for byte unchanged instead of rewriting it.
-pub const LOCKFILE_VERSION: u8 = 3;
+///
+/// Version 4 adds the top-level `packs` section (RFC-110 D2): one entry per
+/// installed pack with its source, which for a git pack is the repository
+/// and commit. A version 3 writer would drop that section without an error,
+/// so the version changed rather than the section being added quietly.
+pub const LOCKFILE_VERSION: u8 = 4;
 /// Oldest schema this build still reads.
 pub const OLDEST_READABLE_LOCKFILE_VERSION: u8 = 1;
 
@@ -62,6 +67,134 @@ pub struct Lockfile {
     /// lockfile built in memory. Writers ignore it and emit the current one.
     pub version: u8,
     pub capabilities: BTreeMap<String, CapabilityLockEntry>,
+    /// Installed packs by name (RFC-110 D2). The members are the
+    /// capabilities whose source names the pack; this map holds what the
+    /// pack has as a whole, chiefly where it came from. Kept in step with
+    /// the members on every write by [`Lockfile::normalized_packs`].
+    #[serde(default)]
+    pub packs: BTreeMap<String, PackLockEntry>,
+}
+
+impl Lockfile {
+    /// An empty lockfile of the current schema.
+    pub fn empty() -> Self {
+        Self {
+            version: LOCKFILE_VERSION,
+            capabilities: BTreeMap::new(),
+            packs: BTreeMap::new(),
+        }
+    }
+
+    /// Every capability the lockfile attributes to one pack, sorted by id.
+    pub fn pack_members(&self, pack_name: &str) -> Vec<String> {
+        self.capabilities
+            .iter()
+            .filter(|(_, entry)| {
+                entry
+                    .source
+                    .as_pack()
+                    .is_some_and(|pack| pack.name == pack_name)
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// The packs section as it should be written: one entry for every pack
+    /// a member names, with the version and digest its members record, and
+    /// none for a pack whose members are all gone. A pack no entry
+    /// describes, such as one read from a version 3 file, came from an
+    /// artifact, with the registry its members recorded.
+    pub fn normalized_packs(&self) -> BTreeMap<String, PackLockEntry> {
+        let mut packs = BTreeMap::new();
+        for entry in self.capabilities.values() {
+            let Some(provenance) = entry.source.as_pack() else {
+                continue;
+            };
+            if packs.contains_key(&provenance.name) {
+                continue;
+            }
+            let source = self
+                .packs
+                .get(&provenance.name)
+                .map(|pack| pack.source.clone())
+                .unwrap_or_else(|| {
+                    PackSource::Artifact(PackArtifactSource {
+                        registry: provenance.registry.clone(),
+                    })
+                });
+            packs.insert(
+                provenance.name.clone(),
+                PackLockEntry {
+                    version: provenance.version.clone(),
+                    digest: provenance.digest.clone(),
+                    source,
+                },
+            );
+        }
+        packs
+    }
+}
+
+/// One installed pack (RFC-110 D2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackLockEntry {
+    /// The pack release version.
+    pub version: String,
+    /// Digest of the artifact that was installed, bare lowercase hex. For a
+    /// git pack it is the artifact Tuff built from the checkout, which a
+    /// later Tuff can render differently, so updates compare commits.
+    pub digest: String,
+    pub source: PackSource,
+}
+
+/// Where an installed pack came from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PackSource {
+    /// A `.tuffpack` file, pulled from an OCI registry when `registry` is set.
+    Artifact(PackArtifactSource),
+    /// A repository holding a `tuff-pack.toml`, at one commit.
+    Git(PackGitSource),
+}
+
+impl PackSource {
+    pub fn as_git(&self) -> Option<&PackGitSource> {
+        match self {
+            Self::Git(git) => Some(git),
+            Self::Artifact(_) => None,
+        }
+    }
+
+    /// The OCI repository an artifact pack was pulled from, when known.
+    pub fn registry(&self) -> Option<&str> {
+        match self {
+            Self::Artifact(artifact) => artifact.registry.as_deref(),
+            Self::Git(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackArtifactSource {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackGitSource {
+    pub url: String,
+    /// The repository folder holding `tuff-pack.toml`, empty for the root.
+    #[serde(default)]
+    pub path: String,
+    /// The commit that was installed.
+    #[serde(rename = "ref")]
+    pub git_ref: String,
+    /// The release tag that chose the commit, when one did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    /// The branch that chose the commit, when the install followed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,7 +354,9 @@ pub struct PackProvenance {
     /// the OCI boundary.
     pub digest: String,
     /// The OCI registry and repository this pack was pulled from
-    /// ("registry/repository", no tag), when known.
+    /// ("registry/repository", no tag), when known. From schema version 4
+    /// the file records it once, on the pack's entry in `packs`, and the
+    /// reader copies it here so each member still carries it.
     ///
     /// `tuff add pack` only ever sees a local artifact file; it has no way to
     /// know where that file came from unless the caller says so with
@@ -501,13 +636,7 @@ pub fn init_lockfile(repo_root: &Path) -> Result<PathBuf> {
 
 pub fn init_lockfile_at(lock_path: &Path) -> Result<()> {
     if !lock_path.exists() {
-        write_lockfile_at(
-            lock_path,
-            &Lockfile {
-                version: LOCKFILE_VERSION,
-                capabilities: BTreeMap::new(),
-            },
-        )?;
+        write_lockfile_at(lock_path, &Lockfile::empty())?;
     }
     Ok(())
 }
@@ -563,10 +692,10 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
             path.display()
         )));
     }
-    let rows: Vec<Row> = match version {
-        1 => read_v1_rows(&raw)?,
-        2 => read_v2_rows(&raw)?,
-        _ => read_v3_rows(&raw)?,
+    let (rows, wire_packs): (Vec<Row>, BTreeMap<String, WirePack>) = match version {
+        1 => (read_v1_rows(&raw)?, BTreeMap::new()),
+        2 => (read_v2_rows(&raw)?, BTreeMap::new()),
+        _ => read_json_rows(&raw)?,
     };
     let mut capabilities: BTreeMap<String, CapabilityLockEntry> = BTreeMap::new();
     for row in rows {
@@ -598,9 +727,46 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
             }
         }
     }
+    let packs = wire_packs
+        .into_iter()
+        .map(|(name, pack)| {
+            (
+                name,
+                PackLockEntry {
+                    version: pack.version,
+                    digest: pack.digest,
+                    source: pack.source,
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    // Members are the record of membership; an entry is the record of the
+    // pack's source. A member naming a pack must agree with its entry, and
+    // carries the entry's registry the way version 3 members did.
+    for (id, entry) in &mut capabilities {
+        let CapabilitySource::Pack(provenance) = &mut entry.source else {
+            continue;
+        };
+        let Some(pack) = packs.get(&provenance.name) else {
+            continue;
+        };
+        if pack.version != provenance.version || pack.digest != provenance.digest {
+            return Err(TuffError::corrupt(format!(
+                "{} records '{id}' as part of pack {} {}, but the pack's entry says {}",
+                path.display(),
+                provenance.name,
+                provenance.version,
+                pack.version
+            )));
+        }
+        if let Some(registry) = pack.source.registry() {
+            provenance.registry = Some(registry.to_string());
+        }
+    }
     Ok(Lockfile {
         version,
         capabilities,
+        packs,
     })
 }
 
@@ -721,10 +887,13 @@ fn read_v2_rows(raw: &str) -> Result<Vec<Row>> {
     Ok(rows_from_wire(wire))
 }
 
-/// Schema version 3: the current rows, JSON-encoded.
-fn read_v3_rows(raw: &str) -> Result<Vec<Row>> {
-    let wire: WireLockfile = serde_json::from_str(raw).map_err(|error| invalid_lockfile(&error))?;
-    Ok(rows_from_wire(wire))
+/// Schema versions 3 and 4: the current rows, JSON-encoded, and from
+/// version 4 the packs section.
+fn read_json_rows(raw: &str) -> Result<(Vec<Row>, BTreeMap<String, WirePack>)> {
+    let mut wire: WireLockfile =
+        serde_json::from_str(raw).map_err(|error| invalid_lockfile(&error))?;
+    let packs = std::mem::take(&mut wire.packs);
+    Ok((rows_from_wire(wire), packs))
 }
 
 /// A lockfile that does not parse, with a pointer for the one known cause:
@@ -786,8 +955,14 @@ pub fn write_lockfile_at(path: &Path, lockfile: &Lockfile) -> Result<()> {
 /// The bytes `write_lockfile_at` writes: the current schema, whatever
 /// schema the lockfile was read from.
 pub fn render_lockfile(lockfile: &Lockfile) -> Result<String> {
+    let packs = lockfile.normalized_packs();
     let mut capabilities = Vec::new();
     for (name, entry) in &lockfile.capabilities {
+        // The pack's entry holds its registry; a member row names the pack.
+        let mut source = entry.source.clone();
+        if let CapabilitySource::Pack(provenance) = &mut source {
+            provenance.registry = None;
+        }
         for (target, target_entry) in &entry.targets {
             capabilities.push(WireCapability {
                 name: name.clone(),
@@ -799,7 +974,7 @@ pub fn render_lockfile(lockfile: &Lockfile) -> Result<String> {
                 installed_path: target_entry.installed_path.clone(),
                 sha256: target_entry.sha256.clone(),
                 ownership: target_entry.ownership,
-                source: entry.source.clone(),
+                source: source.clone(),
                 managed_hooks: target_entry.managed_hooks.clone(),
                 managed_mcp_entry: target_entry.managed_mcp_entry.clone(),
                 managed_permissions: target_entry.managed_permissions.clone(),
@@ -817,8 +992,24 @@ pub fn render_lockfile(lockfile: &Lockfile) -> Result<String> {
             .then_with(|| a.target.cmp(&b.target))
             .then_with(|| a.installed_path.cmp(&b.installed_path))
     });
+    let packs = packs
+        .into_iter()
+        .map(|(name, pack)| {
+            let members = lockfile.pack_members(&name);
+            (
+                name,
+                WirePack {
+                    version: pack.version,
+                    digest: pack.digest,
+                    source: pack.source,
+                    members,
+                },
+            )
+        })
+        .collect();
     let wire = WireLockfile {
         version: LOCKFILE_VERSION,
+        packs,
         capabilities,
     };
     // `to_string_pretty` is the `JSON.stringify(value, null, 2)` layout;
@@ -837,7 +1028,21 @@ pub fn render_lockfile(lockfile: &Lockfile) -> Result<String> {
 #[derive(Debug, Serialize, Deserialize)]
 struct WireLockfile {
     version: u8,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    packs: BTreeMap<String, WirePack>,
     capabilities: Vec<WireCapability>,
+}
+
+/// A pack's entry as written. `members` is derived from the capability
+/// rows on every write so a reader sees the pack's contents in one place;
+/// the reader takes membership from the rows.
+#[derive(Debug, Serialize, Deserialize)]
+struct WirePack {
+    version: String,
+    digest: String,
+    source: PackSource,
+    #[serde(default)]
+    members: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -975,12 +1180,12 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("tuff.lock");
         for raw in [
-            "{\n  \"version\": 4,\n  \"capabilities\": []\n}\n",
-            "version = 4\ncapabilities = []\n",
+            "{\n  \"version\": 5,\n  \"capabilities\": []\n}\n",
+            "version = 5\ncapabilities = []\n",
         ] {
             fs::write(&path, raw).unwrap();
             let error = read_lockfile_at(&path).unwrap_err().to_string();
-            assert!(error.contains("unsupported lockfile version: 4"), "{error}");
+            assert!(error.contains("unsupported lockfile version: 5"), "{error}");
         }
     }
 
@@ -1012,7 +1217,7 @@ mod tests {
         init_lockfile_at(&path).unwrap();
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
-            "{\n  \"version\": 3,\n  \"capabilities\": []\n}\n"
+            "{\n  \"version\": 4,\n  \"capabilities\": []\n}\n"
         );
     }
 
@@ -1020,10 +1225,7 @@ mod tests {
     fn write_and_read_roundtrip() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("tuff.lock");
-        let mut lf = Lockfile {
-            version: LOCKFILE_VERSION,
-            capabilities: BTreeMap::new(),
-        };
+        let mut lf = Lockfile::empty();
         lf.capabilities.insert(
             "test".into(),
             CapabilityLockEntry {
@@ -1059,7 +1261,7 @@ mod tests {
         let written = fs::read_to_string(&path).unwrap();
         assert!(
             written.starts_with(
-                "{\n  \"version\": 3,\n  \"capabilities\": [\n    {\n      \"name\": \"test\",\n"
+                "{\n  \"version\": 4,\n  \"capabilities\": [\n    {\n      \"name\": \"test\",\n"
             ),
             "{written}"
         );
@@ -1197,20 +1399,34 @@ version = "1.0.0"
             VersionScheme::Declared
         );
 
-        // Writing produces v3, and v3 round-trips byte for byte.
+        // Writing produces v4, and v4 round-trips byte for byte. The pack's
+        // registry moves to its entry in `packs` and comes back on read.
         write_lockfile_at(&path, &lf).unwrap();
         let written = fs::read_to_string(&path).unwrap();
-        assert!(written.starts_with("{\n  \"version\": 3,\n"), "{written}");
+        assert!(
+            written.starts_with("{\n  \"version\": 4,\n  \"packs\": {\n"),
+            "{written}"
+        );
         assert!(written.contains("\"kind\": \"pack\""), "{written}");
+        assert!(written.contains("\"kind\": \"artifact\""), "{written}");
+        assert_eq!(
+            written.matches("ghcr.io/acme/fixture").count(),
+            1,
+            "{written}"
+        );
         assert!(!written.contains("resolved_ref"));
         let again = read_lockfile_at(&path).unwrap();
-        assert_eq!(again.version, 3);
+        assert_eq!(again.version, 4);
+        assert_eq!(
+            again.capabilities["pack-skill"].source,
+            lf.capabilities["pack-skill"].source
+        );
         write_lockfile_at(&path, &again).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), written);
     }
 
     #[test]
-    fn a_version_2_lockfile_is_read_as_is_and_written_as_version_3() {
+    fn a_version_2_lockfile_is_read_as_is_and_written_as_the_current_version() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("tuff.lock");
         fs::write(
@@ -1254,11 +1470,123 @@ requested = "^1.2"
 
         write_lockfile_at(&path, &lf).unwrap();
         let written = fs::read_to_string(&path).unwrap();
-        assert!(written.starts_with("{\n  \"version\": 3,\n"), "{written}");
+        assert!(written.starts_with("{\n  \"version\": 4,\n"), "{written}");
         assert!(written.contains("\"requested\": \"^1.2\""), "{written}");
         let again = read_lockfile_at(&path).unwrap();
-        assert_eq!(again.version, 3);
+        assert_eq!(again.version, 4);
         assert_eq!(again.capabilities["git-skill"].source, entry.source);
+    }
+
+    fn pack_member(pack: &str, version: &str) -> CapabilityLockEntry {
+        CapabilityLockEntry {
+            capability_type: CapabilityType::Skill,
+            version: "1.0.0".into(),
+            version_scheme: VersionScheme::Declared,
+            description: String::new(),
+            source: CapabilitySource::Pack(PackProvenance {
+                name: pack.into(),
+                version: version.into(),
+                digest: "ab".repeat(32),
+                registry: None,
+                path: "capabilities/review".into(),
+            }),
+            targets: BTreeMap::from([(
+                "open-agents".into(),
+                TargetLockEntry {
+                    managed_hooks: Vec::new(),
+                    managed_mcp_entry: None,
+                    managed_permissions: Vec::new(),
+                    unenforced_rules: Vec::new(),
+                    ownership: TargetOwnership::Generated,
+                    sha256: hash_bytes(b"content"),
+                    installed_path: ".agents/skills/review".into(),
+                },
+            )]),
+            implementation: None,
+            parameters: None,
+            server: None,
+        }
+    }
+
+    #[test]
+    fn a_git_pack_source_round_trips_through_the_packs_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("tuff.lock");
+        let mut lf = Lockfile::empty();
+        lf.capabilities
+            .insert("review".into(), pack_member("acme/review", "1.2.0"));
+        let source = PackSource::Git(PackGitSource {
+            url: "https://example.com/review-pack".into(),
+            path: "packs/review".into(),
+            git_ref: "4b1e".repeat(10),
+            tag: Some("v1.2.0".into()),
+            branch: None,
+        });
+        lf.packs.insert(
+            "acme/review".into(),
+            PackLockEntry {
+                version: "stale".into(),
+                digest: "stale".into(),
+                source: source.clone(),
+            },
+        );
+        write_lockfile_at(&path, &lf).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(
+            written.contains("\"members\": [\n        \"review\"\n      ]"),
+            "{written}"
+        );
+        assert!(
+            !written.contains("stale"),
+            "version and digest come from the members: {written}"
+        );
+
+        let read = read_lockfile_at(&path).unwrap();
+        assert_eq!(read.packs["acme/review"].source, source);
+        assert_eq!(read.packs["acme/review"].version, "1.2.0");
+        assert_eq!(read.pack_members("acme/review"), vec!["review".to_string()]);
+    }
+
+    #[test]
+    fn a_pack_with_no_members_left_is_not_written() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("tuff.lock");
+        let mut lf = Lockfile::empty();
+        lf.packs.insert(
+            "acme/gone".into(),
+            PackLockEntry {
+                version: "1.0.0".into(),
+                digest: "ab".repeat(32),
+                source: PackSource::Artifact(PackArtifactSource { registry: None }),
+            },
+        );
+        write_lockfile_at(&path, &lf).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "{\n  \"version\": 4,\n  \"capabilities\": []\n}\n"
+        );
+    }
+
+    #[test]
+    fn a_member_that_disagrees_with_its_pack_entry_is_corrupt() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("tuff.lock");
+        let mut lf = Lockfile::empty();
+        lf.capabilities
+            .insert("review".into(), pack_member("acme/review", "1.2.0"));
+        write_lockfile_at(&path, &lf).unwrap();
+        let edited = fs::read_to_string(&path).unwrap().replacen(
+            "\"version\": \"1.2.0\"",
+            "\"version\": \"9.9.9\"",
+            1,
+        );
+        fs::write(&path, edited).unwrap();
+        let error = read_lockfile_at(&path).unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Corrupt);
+        assert!(
+            error.to_string().contains("pack's entry says 9.9.9"),
+            "{error}"
+        );
     }
 
     #[test]

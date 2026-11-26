@@ -17,6 +17,7 @@ mod mcp_doctor;
 mod mcp_search;
 mod outdated;
 mod pack;
+mod pack_git;
 mod policy;
 mod project_pack;
 mod report;

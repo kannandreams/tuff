@@ -101,6 +101,36 @@ tuff add pack ./engineering.tuffpack -a open-agents \
 where it came from unless told. Without `--reference`, `tuff outdated` reports
 this pack's capabilities as `not checked` rather than guessing.
 
+### Install from git
+
+A repository that holds a standalone `tuff-pack.toml` installs from its address:
+
+```sh frame="terminal"
+tuff add pack https://github.com/acme/engineering-pack -a open-agents
+tuff add pack https://github.com/acme/agents --path packs/engineering
+tuff add pack https://github.com/acme/agents/tree/main/packs/engineering
+tuff add pack https://github.com/acme/engineering-pack --ref v1.2.0
+```
+
+- Without `--ref`, Tuff installs the newest release tag. Release tags are `v1.2.0` or `1.2.0`, or, in a repository with several packs, `<name>/v1.2.0` or `<name>-v1.2.0`, where `<name>` is the last part of the pack name (`engineering` for `com.acme/engineering`). When any tag names the pack, only those tags count.
+- A repository with no release tags installs its default branch, and later updates follow that branch.
+- `--ref` takes a tag, a branch, or a commit.
+- A release tag names a version, so the `tuff-pack.toml` at that tag must declare the same version, or the install is refused.
+- Each harness you install for must be listed in the pack's `[build] targets`.
+- A pack whose `tuff-pack.toml` selects capabilities from its author's project (`[project]`) cannot be installed from git, because only its author can build it.
+
+Tuff checks out the commit, builds the pack, and installs it with the same checks as an artifact. Nothing in the repository runs: Tuff does not fetch submodules and runs no hooks. `tuff.lock` records the repository, the folder, the commit, and the tag or branch that chose it. `--json` prints the installed pack, its source, and its members.
+
+## List and remove packs
+
+```sh frame="terminal"
+tuff pack list
+tuff pack list --json
+tuff pack remove com.acme/engineering
+```
+
+`tuff pack list` shows each installed pack with its version, where it came from, and its members. `tuff pack remove` deletes every member as one change, including hook registrations and MCP entries, and refuses when a member has local edits unless `--force` is given.
+
 ## Update a pack
 
 A capability installed by `tuff add pack` moves forward with its pack, never on its own. Naming any member updates every member:
@@ -120,6 +150,9 @@ tuff update <member-id>
 # whether local edits stand in the way
 tuff update <member-id> --check
 
+# The same preview as JSON, with the files that change
+tuff update <member-id> --check --json
+
 # Apply a pulled artifact instead of resolving the registry (offline, or a
 # pack installed without --reference)
 tuff update <member-id> --pack ./engineering-1.2.0.tuffpack
@@ -129,3 +162,42 @@ tuff update <member-id> --plain-http --ca-file ./registry-ca.pem
 ```
 
 A pack update applies to every agent the pack is installed for; a narrower `--harness` selection is refused rather than leaving one agent on the old release. Local edits to any member block the update unless `--force` is given. Only semver tags are compared when resolving the registry, matching `tuff outdated`; when nothing parses, pass `--pack` with the artifact you mean.
+
+A pack installed from git updates from its repository. One installed at a release tag moves to the newest release tag, and one installed from a branch moves to the branch's newest commit, even when the version is unchanged. A pack installed from a bare commit has nothing to follow; reinstall it with `--ref <tag>`, or pass `--pack`. When the installed tag now names a different commit, `tuff outdated` reports `repointed`, and `tuff update` refuses without `--force`.
+
+### Preview an update as JSON
+
+`tuff update <member-id> --check --json` prints the preview without changing anything:
+
+```json
+{
+  "schema": 1,
+  "pack": "com.acme/engineering",
+  "status": "update",
+  "from": { "version": "1.1.0", "digest": "...", "source": { "kind": "git", "...": "..." } },
+  "to": { "version": "1.3.0", "digest": "...", "source": { "kind": "git", "tag": "v1.3.0", "...": "..." } },
+  "targets": ["open-agents"],
+  "members": [
+    {
+      "id": "pack-skill",
+      "change": "updated",
+      "fromVersion": "1.1.0",
+      "toVersion": "1.3.0",
+      "files": [
+        {
+          "target": "open-agents",
+          "path": ".agents/skills/pack-skill/SKILL.md",
+          "status": "modified",
+          "patch": "diff --git a/SKILL.md b/SKILL.md\n..."
+        }
+      ]
+    }
+  ],
+  "blockedBy": []
+}
+```
+
+- `status` is `update` when there is a release to apply, `current` when the pack is up to date, and `repointed` when the installed tag names a different commit. The last two carry a `message` and no members.
+- `change` is `added`, `updated`, `removed`, or `unchanged`. Files are compared with what is on disk now, and `patch` is empty for a binary file.
+- `blockedBy` lists members with local edits, as `id (harness)`. Applying the update needs `--force` while it is not empty.
+- For a pack from a registry, the JSON preview pulls the new release to list its files; the text preview does not pull.

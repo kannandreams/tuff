@@ -188,6 +188,32 @@ pub fn list_remote_refs(raw_url: &str) -> Result<RemoteRefs> {
     })
 }
 
+/// The commit one branch names on the remote now, without cloning, or
+/// `None` when the remote has no such branch.
+pub fn remote_branch_head(raw_url: &str, branch: &str) -> Result<Option<String>> {
+    let (clean_url, _) = clean_git_url(raw_url);
+    let head_ref = format!("refs/heads/{branch}");
+    let listing = ls_remote(&clean_url, &[], &[&head_ref])?;
+    Ok(listing.lines().find_map(|line| {
+        let (sha, reference) = line.split_once('\t')?;
+        (reference == head_ref).then(|| sha.to_string())
+    }))
+}
+
+/// The branch a checkout is on, or `None` for a detached HEAD.
+pub fn current_branch(repo: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .current_dir(repo)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!branch.is_empty()).then_some(branch)
+}
+
 /// Run `git ls-remote <flags> <url> <patterns>` and return its stdout.
 fn ls_remote(clean_url: &str, flags: &[&str], patterns: &[&str]) -> Result<String> {
     let output = Command::new("git")

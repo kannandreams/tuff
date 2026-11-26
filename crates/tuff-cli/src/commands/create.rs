@@ -44,10 +44,7 @@ pub fn cmd_create(
     let mut tuff_lock = if lock_path.exists() {
         lockfile::read_lockfile_at(&lock_path)?
     } else {
-        lockfile::Lockfile {
-            version: lockfile::LOCKFILE_VERSION,
-            capabilities: BTreeMap::new(),
-        }
+        lockfile::Lockfile::empty()
     };
     if tuff_lock.capabilities.contains_key(id) {
         return Err(

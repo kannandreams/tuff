@@ -63,7 +63,7 @@ leaves the checkout clean.
 
 ```json title="tuff.lock"
 {
-  "version": 3,
+  "version": 4,
   "capabilities": [
     {
       "name": "python-uv-default",
@@ -86,7 +86,8 @@ leaves the checkout clean.
 
 `version` at the top is the version of the file format. Each item in
 `capabilities` is one capability installed for one agent, so a skill installed
-for both Claude Code and Open Agents has two entries.
+for both Claude Code and Open Agents has two entries. A project with installed
+packs also has a `packs` object, described [below](#the-packs-object).
 
 ## Fields
 
@@ -117,12 +118,43 @@ other fields it has:
 | `local` | `path`: the source folder, relative to the project when it is inside it. Empty for a capability adopted in place, whose only copy is the installed one | `tuff add <path>`, `tuff create` |
 | `git` | `url`, `path` (the folder inside the repository), `ref` (the commit installed). When installed at a release, also `tag` (the tag chosen) and `requested` (the requirement you asked for, such as `^1.2`) | `tuff add <type> <url> <name>` |
 | `catalog` | `id` (the catalog entry) and `version` (that entry's version at install) | `tuff add mcp <id>` |
-| `pack` | `name`, `version` (the pack's release), `digest` (the pack artifact's hash), `registry` (when installed with `--reference`), `path` (the capability's path inside the pack) | `tuff add pack` |
+| `pack` | `name`, `version` (the pack's release), `digest` (the pack artifact's hash), `path` (the capability's path inside the pack) | `tuff add pack` |
 
 For a capability installed from a pack, the entry's own `version` is the
 capability's version, and `source.version` is the pack's. Every capability from
 the same pack shares this source, which is why `tuff update` on any one of them
 updates the whole pack.
+
+## The packs object
+
+`packs` has one entry per installed pack, keyed by the pack's name. It records where the pack came from, so the pack can be listed, updated, and removed as one unit.
+
+```json title="tuff.lock"
+"packs": {
+  "acme/review": {
+    "version": "1.2.0",
+    "digest": "9f2c...",
+    "source": {
+      "kind": "git",
+      "url": "https://github.com/acme/review-pack",
+      "path": "",
+      "ref": "4b1e9c2...",
+      "tag": "v1.2.0"
+    },
+    "members": [
+      "code-review",
+      "github"
+    ]
+  }
+}
+```
+
+| `source.kind` | Fields | Written by |
+|---|---|---|
+| `artifact` | `registry`, when the artifact was installed with `--reference` | `tuff add pack <file>` |
+| `git` | `url`, `path` (the folder holding `tuff-pack.toml`, empty for the root), `ref` (the commit installed), and `tag` or `branch` when one chose the commit | `tuff add pack <git-url>` |
+
+`members` lists the capabilities whose `source` names the pack. Tuff writes it on every change; the capability entries are the record of membership. `version` and `digest` repeat what the members record, and a file where they disagree is refused as corrupt. For a pack from git, `digest` is the hash of the artifact Tuff built from the checkout, kept for reference.
 
 ## Extra fields for some types
 
@@ -131,7 +163,7 @@ updates the whole pack.
 
 ## File format
 
-- `tuff.lock` is JSON, file format version 3.
+- `tuff.lock` is JSON, file format version 4.
 - Entries are sorted by name, type, agent, and installed path. A change touches only the lines for that capability, and merge conflicts stay local to it.
 - The file uses two-space indentation, one array item per line, and a trailing newline. This is the layout `JSON.stringify(value, null, 2)` produces, and the one npm's `package-lock.json` uses.
 
@@ -148,30 +180,30 @@ file, the same way Prettier handles `package-lock.json`.
 |---|---|---|
 | 1 | TOML | Tuff 0.1.x |
 | 2 | TOML | Tuff 0.2 to 0.7 |
-| 3 | JSON | Tuff 0.8 and later |
+| 3 | JSON | Tuff 0.8 to 0.17 |
+| 4 | JSON | Tuff 0.18 and later |
 
-Tuff reads all three versions, and every command works on any of them.
+Tuff reads all four versions, and every command works on any of them.
 
 - Read-only commands leave an older file as it is.
-- The first command that changes the lockfile rewrites it as version 3.
+- The first command that changes the lockfile rewrites it as version 4.
 - To do the upgrade on its own, as a separate commit, run:
 
 ```sh frame="terminal"
 tuff lock migrate
 ```
 
-This rewrites the file as version 3 and changes nothing else. On a version 3
+This rewrites the file as version 4 and changes nothing else. On a version 4
 file it does nothing.
 
 What the upgrade changes:
 
+- **From version 3:** a project with installed packs gains the `packs` object, and each pack's `registry` moves from its members' `source` to the pack's entry. Nothing else changes.
 - **From version 2:** only the syntax. The fields, their names, and their order stay the same.
 - **From version 1:** the old columns are mapped to the new `source` object. `source = "git"` with `repository`, `source_path`, and `resolved_ref` becomes a `git` source. `source = "catalog"` becomes a `catalog` source. A row with a `pack` table becomes a `pack` source. Anything else becomes a `local` source. `version_scheme` is set to `sha` for Git entries and `declared` for the rest. The `emittedFiles` and `scope` fields are dropped, because the hash and the lockfile's location already hold that information.
 
-:::caution[Everyone on the project needs Tuff 0.8 or newer]
-Tuff 0.7 and earlier cannot read a version 3 lockfile and report it as invalid.
-Once a project's lockfile is upgraded, everyone who runs Tuff on it, including
-through the VS Code extension, needs Tuff 0.8 or newer.
+:::caution[Everyone on the project needs Tuff 0.18 or newer]
+Tuff 0.17 and earlier refuse a version 4 lockfile with an error asking to upgrade Tuff, and Tuff 0.7 and earlier cannot read version 3 or 4 at all. Once a project's lockfile is upgraded, everyone who runs Tuff on it, including through the VS Code extension, needs Tuff 0.18 or newer.
 :::
 
 Errors you may see:
@@ -179,7 +211,7 @@ Errors you may see:
 - **A lockfile written by a newer Tuff** is refused with a message naming its version.
 - **A file whose syntax does not match its version**, such as TOML that claims version 3 or JSON that claims version 2, is reported as corrupt, with a message saying which.
 
-Versions 1 and 2 remain readable. If a future release stops reading either,
+Versions 1, 2, and 3 remain readable. If a future release stops reading either,
 the changelog will say so first. [Stability](/concepts/stability) states how the format changes after 1.0.
 
 ## tuff.config.json

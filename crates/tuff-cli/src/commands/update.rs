@@ -428,6 +428,8 @@ pub struct UpdateOptions<'a> {
     /// registry; only meaningful for a pack-installed capability.
     pub pack_artifact: Option<&'a Path>,
     pub oci_options: OciTransferOptions,
+    /// With `check`, print the preview as JSON. Pack members only.
+    pub json: bool,
 }
 
 pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Result<()> {
@@ -441,7 +443,11 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
         force,
         pack_artifact,
         oci_options,
+        json,
     } = options;
+    if json && !check {
+        return Err(TuffError::usage("--json applies to a preview; add --check"));
+    }
     let (scope, entry, scope_root) = if let Some(s) = scope_str {
         let scope = resolver::Scope::parse(s)
             .ok_or_else(|| TuffError::usage(format!("invalid scope '{}'", s)))?;
@@ -495,7 +501,13 @@ pub fn cmd_update(repo_root: &Path, id: &str, options: UpdateOptions<'_>) -> Res
             force,
             artifact: pack_artifact,
             oci_options: &oci_options,
+            json,
         });
+    }
+    if json {
+        return Err(TuffError::usage(format!(
+            "--json previews a pack update; '{id}' was not installed from a pack"
+        )));
     }
     if pack_artifact.is_some() {
         return Err(TuffError::usage(format!(

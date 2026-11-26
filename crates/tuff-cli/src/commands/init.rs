@@ -145,10 +145,8 @@ pub fn cmd_init(repo_root: &Path, global: bool) -> Result<()> {
 
             let baseline_tree_hash = crate::cache::hash_tree(&guide_path)?;
             crate::cache::populate(&home_dir()?, &baseline_tree_hash, &guide_path)?;
-            let mut lf = lockfile::require_lockfile(repo_root).unwrap_or(lockfile::Lockfile {
-                version: lockfile::LOCKFILE_VERSION,
-                capabilities: BTreeMap::new(),
-            });
+            let mut lf =
+                lockfile::require_lockfile(repo_root).unwrap_or(lockfile::Lockfile::empty());
 
             let mut targets = BTreeMap::new();
             targets.insert(

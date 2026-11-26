@@ -6,6 +6,17 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **`tuff add pack` installs a pack from a git repository.** A repository that holds a standalone `tuff-pack.toml` installs from its URL, at its newest release tag (`v1.2.0`, or `<name>/v1.2.0` in a repository with several packs), or at the tag, branch, or commit given with `--ref`. `--path` names the folder holding the pack. The `tuff-pack.toml` at a release tag must declare the tag's version. Tuff builds the pack from the checkout and installs it with the same all-or-nothing checks as an artifact, and `tuff.lock` pins the commit. `--json` prints the installed pack, its source, and its members.
+- **`tuff outdated` and `tuff update` follow a git pack's repository.** A pack installed at a release tag moves to the newest release tag, and one installed from a branch moves to the branch's newest commit. A tag that now names a different commit is reported as `repointed` and refused by `tuff update` without `--force`.
+- **`tuff update <member> --check --json` previews a pack update.** It lists every member the new release adds, updates, or removes, the files that change on each harness with a unified diff, and the members whose local edits block the update.
+- **`tuff pack list` and `tuff pack remove`.** `list` shows each installed pack with its version, where it came from, and its members, and takes `--json`. `remove` deletes every member of a pack as one change and refuses when a member has local edits unless `--force` is given.
+
+### Changed
+
+- **`tuff.lock` is schema version 4.** It adds a `packs` object with one entry per installed pack, recording where the pack came from, and each pack's `registry` moves there from its members' `source`. Tuff reads versions 1 to 4, and the first command that changes the lockfile writes version 4. Tuff 0.17 and earlier refuse a version 4 lockfile and ask to upgrade Tuff, so everyone working on a project needs this release once its lockfile is upgraded. `tuff lock migrate` does the upgrade on its own.
+
 ## [0.17.0] - 2026-11-13
 
 ### Added

@@ -8236,23 +8236,24 @@ fn add_pack_into_a_project_that_already_has_a_capability_index() {
 // ── lockfile schema (RFC-105; JSON since v3) ─────────────────────────
 
 /// The lockfiles older releases wrote: v1 by tuff 0.1.8, v2 by 0.2 to
-/// 0.7. Both cover every row shape: local, git, catalog, pack with a
-/// registry, an adopted (imported) capability, a hook with managed
-/// settings, an MCP-native tool, and the generated index.
-fn older_lockfile_fixtures() -> [(u8, std::path::PathBuf); 2] {
+/// 0.7, v3 by 0.8 to 0.17. All cover every row shape: local, git, catalog,
+/// pack with a registry, an adopted (imported) capability, a hook with
+/// managed settings, an MCP-native tool, and the generated index.
+fn older_lockfile_fixtures() -> [(u8, std::path::PathBuf); 3] {
     [
         (1, test_fixture("lockfile-v1").join("tuff.lock")),
         (2, test_fixture("lockfile-v2").join("tuff.lock")),
+        (3, test_fixture("lockfile-v3").join("tuff.lock")),
     ]
 }
 
-/// What migrating either older fixture must produce, byte for byte.
+/// What migrating any older fixture must produce, byte for byte.
 fn golden_lockfile() -> String {
-    fs::read_to_string(test_fixture("lockfile-v3").join("tuff.lock")).unwrap()
+    fs::read_to_string(test_fixture("lockfile-v4").join("tuff.lock")).unwrap()
 }
 
 #[test]
-fn lock_migrate_rewrites_every_older_lockfile_to_the_golden_version_3() {
+fn lock_migrate_rewrites_every_older_lockfile_to_the_golden_version_4() {
     let expected = golden_lockfile();
     for (version, fixture) in older_lockfile_fixtures() {
         let project = TempDir::new().unwrap();
@@ -8266,7 +8267,7 @@ fn lock_migrate_rewrites_every_older_lockfile_to_the_golden_version_3() {
             .assert()
             .success()
             .stdout(predicate::str::contains(format!(
-                "from schema version {version} to 3"
+                "from schema version {version} to 4"
             )));
         assert_eq!(
             fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
@@ -8280,7 +8281,7 @@ fn lock_migrate_rewrites_every_older_lockfile_to_the_golden_version_3() {
             .args(["lock", "migrate"])
             .assert()
             .success()
-            .stdout(predicate::str::contains("already schema version 3"));
+            .stdout(predicate::str::contains("already schema version 4"));
         assert_eq!(
             fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
             expected
@@ -8302,7 +8303,7 @@ fn the_lockfile_is_a_fixed_point_of_the_writer_and_of_a_json_formatter() {
     let home = TempDir::new().unwrap();
     fs::write(project.path().join("tuff.lock"), &expected).unwrap();
     let lock = tuff_core::lockfile::read_lockfile_at(&project.path().join("tuff.lock")).unwrap();
-    assert_eq!(lock.version, 3);
+    assert_eq!(lock.version, 4);
     tuff_core::lockfile::write_lockfile_at(&project.path().join("tuff.lock"), &lock).unwrap();
     assert_eq!(
         fs::read_to_string(project.path().join("tuff.lock")).unwrap(),
@@ -8332,7 +8333,7 @@ fn the_lockfile_is_a_fixed_point_of_the_writer_and_of_a_json_formatter() {
         .args(["lock", "migrate"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("already schema version 3"));
+        .stdout(predicate::str::contains("already schema version 4"));
 }
 
 #[test]
@@ -8385,7 +8386,7 @@ fn read_only_commands_leave_an_older_lockfile_alone_and_a_mutating_one_upgrades_
             .success();
         let lock = fs::read_to_string(project.path().join("tuff.lock")).unwrap();
         assert!(
-            lock.starts_with("{\n  \"version\": 3,\n  \"capabilities\": [\n"),
+            lock.starts_with("{\n  \"version\": 4,\n  \"packs\": {\n"),
             "{lock}"
         );
         assert!(lock.contains("\"name\": \"fresh-skill\""));
@@ -8404,7 +8405,7 @@ fn a_lockfile_from_a_newer_tuff_is_refused_by_version_not_by_shape() {
     let home = TempDir::new().unwrap();
     fs::write(
         project.path().join("tuff.lock"),
-        "{\n  \"version\": 4,\n  \"capabilities\": [\n    {\n      \"name\": \"x\",\n      \"future_field\": true\n    }\n  ]\n}\n",
+        "{\n  \"version\": 5,\n  \"capabilities\": [\n    {\n      \"name\": \"x\",\n      \"future_field\": true\n    }\n  ]\n}\n",
     )
     .unwrap();
     tuff()
@@ -8413,7 +8414,7 @@ fn a_lockfile_from_a_newer_tuff_is_refused_by_version_not_by_shape() {
         .args(["lock", "migrate"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unsupported lockfile version: 4"))
+        .stderr(predicate::str::contains("unsupported lockfile version: 5"))
         .stderr(predicate::str::contains("upgrade tuff"))
         .stderr(predicate::str::contains("future_field").not());
 }
@@ -10814,7 +10815,7 @@ fn console_publish_dry_run_reports_each_project_in_a_monorepo() {
     );
     let support = &reports[1];
     assert_eq!(support["schema"], 1);
-    assert_eq!(support["lockfile"]["version"], 3);
+    assert_eq!(support["lockfile"]["version"], 4);
     assert_eq!(support["project"]["dirty"], false);
     assert!(support["project"]["commit"].as_str().unwrap().len() == 40);
     assert!(support["outdated"].is_null());

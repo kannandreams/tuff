@@ -8,7 +8,7 @@ use crate::adapter::{
     resolve_capability,
 };
 use crate::error::{Result, TuffError};
-use crate::lockfile::{self, PackProvenance};
+use crate::lockfile::{self, PackLockEntry, PackProvenance, PackSource};
 use crate::manifest;
 use crate::oci::{self, OciPushStatus, OciTransferOptions};
 use crate::pack::{
@@ -486,25 +486,198 @@ pub fn cmd_pack_extract(path: &Path, agent: &str, output: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn cmd_add_pack(
-    repo_root: &Path,
-    path: &Path,
-    target_ids: &[String],
-    reference: Option<&str>,
-) -> Result<()> {
+/// What `tuff add pack` was asked to install.
+pub struct AddPackOptions<'a> {
+    /// A `.tuffpack` path or a git address.
+    pub source: &'a str,
+    pub targets: &'a [String],
+    /// OCI repository an artifact came from (`--reference`).
+    pub reference: Option<&'a str>,
+    /// Tag, branch, or commit of a git pack (`--ref`).
+    pub git_ref: Option<&'a str>,
+    /// Repository folder holding a git pack's `tuff-pack.toml` (`--path`).
+    pub path: Option<&'a str>,
+    pub json: bool,
+}
+
+pub fn cmd_add_pack(repo_root: &Path, options: AddPackOptions<'_>) -> Result<()> {
+    let AddPackOptions {
+        source,
+        targets,
+        reference,
+        git_ref,
+        path,
+        json,
+    } = options;
+    if crate::git::is_git_url(source) {
+        if reference.is_some() {
+            return Err(TuffError::usage(
+                "--reference names the OCI repository an artifact came from; a pack from git records its repository itself",
+            ));
+        }
+        // Checked before anything is cloned.
+        lockfile::require_lockfile(repo_root)?;
+        let target_ids =
+            canonical_target_ids(&resolve_agent_selection(repo_root, targets, false)?)?;
+        let checkout = super::pack_git::checkout(source, path, git_ref)?;
+        let (_built, artifact) = build_pack_for_targets(&checkout.pack_root, &target_ids)?;
+        let source = PackSource::Git(checkout.source.clone());
+        install_pack_artifact(repo_root, &artifact, &target_ids, &source)?;
+        return report_pack_install(&artifact, &source, &target_ids, json);
+    }
+    if git_ref.is_some() || path.is_some() {
+        return Err(TuffError::usage(
+            "--ref and --path apply to a pack installed from a git address",
+        ));
+    }
     // Normalized before any install work starts: a malformed --reference
     // should fail closed, not install the pack and then fail on cleanup.
     let registry = reference.map(oci::normalize_pack_repository).transpose()?;
-    let artifact = pack::read_artifact(path)?;
-    let target_ids = canonical_target_ids(&resolve_agent_selection(repo_root, target_ids, false)?)?;
-    let current_lock = lockfile::require_lockfile(repo_root)?;
-    preflight_pack_install(repo_root, &artifact, &current_lock, &target_ids)?;
+    let artifact = pack::read_artifact(Path::new(source))?;
+    let target_ids = canonical_target_ids(&resolve_agent_selection(repo_root, targets, false)?)?;
+    let source = PackSource::Artifact(lockfile::PackArtifactSource { registry });
+    install_pack_artifact(repo_root, &artifact, &target_ids, &source)?;
+    report_pack_install(&artifact, &source, &target_ids, json)
+}
 
+/// Load the source pack at `pack_root` and build an artifact holding only
+/// `targets`, each of which the pack must declare in `[build] targets`.
+/// The artifact lives in the returned temporary directory.
+fn build_pack_for_targets(
+    pack_root: &Path,
+    targets: &[String],
+) -> Result<(tempfile::TempDir, PackArtifact)> {
+    let mut loaded = pack::load_pack(pack_root)?;
+    let declared = canonical_target_ids(&loaded.manifest.build.targets)?;
+    for target in targets {
+        if !declared.contains(target) {
+            return Err(TuffError::unsupported(format!(
+                "pack {} is built for {}, not for {target}",
+                loaded.manifest.name,
+                declared.join(", ")
+            ))
+            .with_hint("choose one of those harnesses with -a"));
+        }
+    }
+    loaded.manifest.build.targets = targets.to_vec();
+    let (metadata, contents) = render_artifact(&loaded)?;
+    let directory = tempfile::tempdir()?;
+    let output = directory.path().join("pack.tuffpack");
+    pack::write_artifact(&output, metadata, contents)?;
+    let artifact = pack::read_artifact(&output)?;
+    Ok((directory, artifact))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PackInstallReport<'a> {
+    schema: u8,
+    name: &'a str,
+    version: &'a str,
+    digest: &'a str,
+    source: &'a PackSource,
+    targets: &'a [String],
+    members: Vec<PackInstallMember<'a>>,
+}
+
+#[derive(serde::Serialize)]
+struct PackInstallMember<'a> {
+    id: &'a str,
+    #[serde(rename = "type")]
+    capability_type: crate::manifest::CapabilityType,
+    version: &'a str,
+}
+
+fn report_pack_install(
+    artifact: &PackArtifact,
+    source: &PackSource,
+    targets: &[String],
+    json: bool,
+) -> Result<()> {
+    if json {
+        let report = PackInstallReport {
+            schema: 1,
+            name: &artifact.metadata.name,
+            version: &artifact.metadata.version,
+            digest: &artifact.digest,
+            source,
+            targets,
+            members: artifact
+                .metadata
+                .capabilities
+                .iter()
+                .map(|capability| PackInstallMember {
+                    id: &capability.id,
+                    capability_type: capability.capability_type,
+                    version: &capability.version,
+                })
+                .collect(),
+        };
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+    match source {
+        PackSource::Git(git) => println!(
+            "installed pack {} {} from {} ({})",
+            artifact.metadata.name,
+            artifact.metadata.version,
+            git.url,
+            describe_git_ref(git)
+        ),
+        PackSource::Artifact(_) => println!(
+            "installed pack {} {} (sha256:{})",
+            artifact.metadata.name, artifact.metadata.version, artifact.digest
+        ),
+    }
+    for capability in &artifact.metadata.capabilities {
+        println!("  - {} {}", capability.id, capability.version);
+    }
+    if let PackSource::Git(git) = source
+        && git.tag.is_none()
+        && git.branch.is_some()
+    {
+        println!(
+            "note: the repository publishes no release tags, so this install follows the branch; tuff update moves it to the branch's newest commit"
+        );
+    }
+    Ok(())
+}
+
+/// `tag v1.2.0 at 4b1e9c2`, `branch main at 4b1e9c2`, or `commit 4b1e9c2`.
+fn describe_git_ref(git: &lockfile::PackGitSource) -> String {
+    let commit = super::short_sha(&git.git_ref);
+    match (&git.tag, &git.branch) {
+        (Some(tag), _) => format!("tag {tag} at {commit}"),
+        (None, Some(branch)) => format!("branch {branch} at {commit}"),
+        (None, None) => format!("commit {commit}"),
+    }
+}
+
+/// Install every member of a verified artifact into the project as one
+/// staged change, recording `source` as where the pack came from.
+fn install_pack_artifact(
+    repo_root: &Path,
+    artifact: &PackArtifact,
+    target_ids: &[String],
+    source: &PackSource,
+) -> Result<()> {
+    let current_lock = lockfile::require_lockfile(repo_root)?;
+    if !current_lock
+        .pack_members(&artifact.metadata.name)
+        .is_empty()
+    {
+        return Err(TuffError::refused(format!(
+            "pack {} is already installed",
+            artifact.metadata.name
+        ))
+        .with_hint("use 'tuff update <member>' to move it to another release"));
+    }
+    preflight_pack_install(repo_root, artifact, &current_lock, target_ids)?;
     let staging = tempfile::tempdir()?;
     lockfile::write_lockfile_at(&staging.path().join("tuff.lock"), &current_lock)?;
-    copy_shared_configuration(repo_root, staging.path(), &target_ids)?;
+    copy_shared_configuration(repo_root, staging.path(), target_ids)?;
     let sources = staging.path().join("sources");
-    pack::extract_prefix(&artifact, "sources", &sources)?;
+    pack::extract_prefix(artifact, "sources", &sources)?;
 
     for capability in &artifact.metadata.capabilities {
         let manifest = manifest::load_manifest(&sources.join(&capability.id))?;
@@ -515,19 +688,20 @@ pub fn cmd_add_pack(
             Scope::Project,
             &resolved,
             &manifest,
-            &target_ids,
+            target_ids,
             None,
             false,
         )?;
     }
 
-    validate_staged_target_hashes(staging.path(), &artifact, &target_ids)?;
+    validate_staged_target_hashes(staging.path(), artifact, target_ids)?;
     let mut staged_lock = lockfile::read_lockfile_at(&staging.path().join("tuff.lock"))?;
+    record_pack_entry(&mut staged_lock, artifact, source);
     let provenance = PackProvenance {
         name: artifact.metadata.name.clone(),
         version: artifact.metadata.version.clone(),
         digest: artifact.digest.clone(),
-        registry: registry.clone(),
+        registry: source.registry().map(str::to_string),
         path: String::new(),
     };
     for capability in &artifact.metadata.capabilities {
@@ -551,19 +725,24 @@ pub fn cmd_add_pack(
     let mutations = collect_install_mutations(
         repo_root,
         staging.path(),
-        &artifact,
+        artifact,
         &staged_lock,
-        &target_ids,
+        target_ids,
     )?;
     commit_mutations(&mutations)?;
-    println!(
-        "installed pack {} {} (sha256:{})",
-        artifact.metadata.name, artifact.metadata.version, artifact.digest
-    );
-    for capability in &artifact.metadata.capabilities {
-        println!("  - {} {}", capability.id, capability.version);
-    }
     Ok(())
+}
+
+/// Record the pack itself in the lockfile's packs section (RFC-110 D2).
+fn record_pack_entry(lock: &mut lockfile::Lockfile, artifact: &PackArtifact, source: &PackSource) {
+    lock.packs.insert(
+        artifact.metadata.name.clone(),
+        PackLockEntry {
+            version: artifact.metadata.version.clone(),
+            digest: artifact.digest.clone(),
+            source: source.clone(),
+        },
+    );
 }
 
 fn render_artifact(
@@ -1190,12 +1369,14 @@ pub struct PackUpdateRequest<'a> {
     /// be applied without the registry being reachable at update time.
     pub artifact: Option<&'a Path>,
     pub oci_options: &'a OciTransferOptions,
+    pub json: bool,
 }
 
 /// Where the new release came from, for the summary line.
 enum PackReleaseSource {
     Registry(String),
     Artifact(PathBuf),
+    Git(String),
 }
 
 pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
@@ -1207,6 +1388,7 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
         force,
         artifact,
         oci_options,
+        json,
     } = request;
     let lock = lockfile::require_lockfile(repo_root)?;
     let entry = lock
@@ -1219,15 +1401,52 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
         .cloned()
         .ok_or_else(|| TuffError::usage(format!("'{id}' was not installed from a pack")))?;
 
-    let members = pack_members(&lock, &provenance.name);
+    let members = lock.pack_members(&provenance.name);
     let target_ids = pack_update_targets(&lock, &members, requested_targets)?;
+    let installed_source = lock
+        .normalized_packs()
+        .get(&provenance.name)
+        .map(|pack| pack.source.clone())
+        // `normalized_packs` describes every pack a member names.
+        .unwrap_or_else(|| {
+            PackSource::Artifact(lockfile::PackArtifactSource {
+                registry: provenance.registry.clone(),
+            })
+        });
 
-    let (artifact, source) = match artifact {
-        Some(path) => {
+    // The artifact and where it came from. `_built` keeps a pulled or built
+    // artifact's directory alive until the update is applied.
+    let mut _built = None;
+    let (artifact, source, new_source) = match (artifact, &installed_source) {
+        (Some(path), _) => {
             let artifact = pack::read_artifact(path)?;
-            (artifact, PackReleaseSource::Artifact(path.to_path_buf()))
+            (
+                artifact,
+                PackReleaseSource::Artifact(path.to_path_buf()),
+                PackSource::Artifact(lockfile::PackArtifactSource {
+                    registry: provenance.registry.clone(),
+                }),
+            )
         }
-        None => {
+        (None, PackSource::Git(git)) => {
+            let Some(reference) = git_update_ref(id, &provenance, git, check, force, json)? else {
+                return Ok(());
+            };
+            let checkout = super::pack_git::checkout(&git.url, Some(&git.path), Some(&reference))?;
+            let (directory, artifact) = build_pack_for_targets(&checkout.pack_root, &target_ids)?;
+            _built = Some(directory);
+            let describe = format!(
+                "{} ({})",
+                checkout.source.url,
+                describe_git_ref(&checkout.source)
+            );
+            (
+                artifact,
+                PackReleaseSource::Git(describe),
+                PackSource::Git(checkout.source.clone()),
+            )
+        }
+        (None, PackSource::Artifact(_)) => {
             let Some(registry) = provenance.registry.as_deref() else {
                 return Err(TuffError::usage(format!(
                     "pack {} was installed without --reference, so there is no registry to check",
@@ -1244,22 +1463,30 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
                     // that were installed. Say so rather than "up to date".
                     match super::outdated::verify_pack_tag(&provenance, registry, oci_options) {
                         super::outdated::PackTagIntegrity::Matches => {
-                            println!(
-                                "pack {} is already up to date ({})",
-                                provenance.name, provenance.version
+                            return print_no_update(
+                                &provenance,
+                                "current",
+                                &format!(
+                                    "pack {} is already up to date ({})",
+                                    provenance.name, provenance.version
+                                ),
+                                json,
                             );
-                            return Ok(());
                         }
                         super::outdated::PackTagIntegrity::Repointed { live_digest } => {
                             if check {
-                                println!(
-                                    "pack {} {} was republished: installed sha256:{}, {registry}:{} now serves {live_digest}; 'tuff update {id} --force' replaces the installed release with what the tag serves now",
-                                    provenance.name,
-                                    provenance.version,
-                                    provenance.digest,
-                                    provenance.version
+                                return print_no_update(
+                                    &provenance,
+                                    "repointed",
+                                    &format!(
+                                        "pack {} {} was republished: installed sha256:{}, {registry}:{} now serves {live_digest}; 'tuff update {id} --force' replaces the installed release with what the tag serves now",
+                                        provenance.name,
+                                        provenance.version,
+                                        provenance.digest,
+                                        provenance.version
+                                    ),
+                                    json,
                                 );
-                                return Ok(());
                             }
                             if !force {
                                 return Err(TuffError::refused(format!(
@@ -1299,10 +1526,11 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
                 }
                 super::outdated::PackVersionStatus::Newer(latest) => latest,
             };
-            if check {
+            if check && !json {
                 // A dry run answers "what would change" without a pull:
                 // the version and the membership come from the lockfile
-                // and the tag list, the dirtiness from disk.
+                // and the tag list, the dirtiness from disk. The JSON
+                // preview pulls, since it lists the files that change.
                 return report_pack_update_plan(
                     repo_root,
                     &provenance,
@@ -1317,7 +1545,12 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
             let reference = format!("{registry}:{latest}");
             block_on_oci(oci::pull_pack(&reference, &output, oci_options))?;
             let artifact = pack::read_artifact(&output)?;
-            (artifact, PackReleaseSource::Registry(reference))
+            _built = Some(pulled);
+            (
+                artifact,
+                PackReleaseSource::Registry(reference),
+                installed_source.clone(),
+            )
         }
     };
 
@@ -1327,13 +1560,22 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
             provenance.name, artifact.metadata.name
         )));
     }
-    if artifact.metadata.version == provenance.version {
+    // A pack built from git is rebuilt for every update, and its digest
+    // changes whenever Tuff renders differently, so for git the commit
+    // decides (`git_update_ref`) and this comparison applies to artifacts.
+    if artifact.metadata.version == provenance.version
+        && matches!(new_source, PackSource::Artifact(_))
+    {
         if artifact.digest == provenance.digest {
-            println!(
-                "pack {} is already up to date ({})",
-                provenance.name, provenance.version
+            return print_no_update(
+                &provenance,
+                "current",
+                &format!(
+                    "pack {} is already up to date ({})",
+                    provenance.name, provenance.version
+                ),
+                json,
             );
-            return Ok(());
         }
         if !force {
             return Err(TuffError::refused(format!(
@@ -1348,6 +1590,17 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
         artifact_target(&artifact, target)?;
     }
 
+    if check && json {
+        return print_pack_update_preview(
+            repo_root,
+            &lock,
+            &provenance,
+            &members,
+            &artifact,
+            &new_source,
+            &target_ids,
+        );
+    }
     if check {
         return report_pack_update_plan(
             repo_root,
@@ -1372,15 +1625,15 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
     apply_pack_update(
         repo_root,
         &lock,
-        &provenance,
         &members,
-        &artifact,
+        Some((&artifact, &new_source)),
         &target_ids,
     )?;
 
     let from = match &source {
         PackReleaseSource::Registry(reference) => reference.clone(),
         PackReleaseSource::Artifact(path) => path.display().to_string(),
+        PackReleaseSource::Git(describe) => describe.clone(),
     };
     println!(
         "updated pack {} {} -> {} (sha256:{}) from {from}",
@@ -1408,18 +1661,421 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
     Ok(())
 }
 
-/// Every capability the lockfile attributes to one pack, sorted by id.
-fn pack_members(lock: &lockfile::Lockfile, pack_name: &str) -> Vec<String> {
-    lock.capabilities
-        .iter()
-        .filter(|(_, entry)| {
-            entry
-                .source
-                .as_pack()
-                .is_some_and(|pack| pack.name == pack_name)
+#[derive(serde::Serialize)]
+struct PackListing<'a> {
+    schema: u8,
+    packs: Vec<PackListEntry<'a>>,
+}
+
+#[derive(serde::Serialize)]
+struct PackListEntry<'a> {
+    name: String,
+    version: String,
+    digest: String,
+    source: PackSource,
+    members: Vec<PackListMember<'a>>,
+}
+
+#[derive(serde::Serialize)]
+struct PackListMember<'a> {
+    id: &'a str,
+    #[serde(rename = "type")]
+    capability_type: crate::manifest::CapabilityType,
+    version: &'a str,
+    targets: Vec<&'a str>,
+}
+
+/// `tuff pack list`: every installed pack, where it came from, and its
+/// members (RFC-110 D2).
+pub fn cmd_pack_list(repo_root: &Path, json: bool) -> Result<()> {
+    let lock = lockfile::require_lockfile(repo_root)?;
+    let packs = lock
+        .normalized_packs()
+        .into_iter()
+        .map(|(name, pack)| {
+            let members = lock
+                .pack_members(&name)
+                .into_iter()
+                .filter_map(|id| lock.capabilities.get_key_value(&id))
+                .map(|(id, entry)| PackListMember {
+                    id,
+                    capability_type: entry.capability_type,
+                    version: &entry.version,
+                    targets: entry.targets.keys().map(String::as_str).collect(),
+                })
+                .collect();
+            PackListEntry {
+                name,
+                version: pack.version,
+                digest: pack.digest,
+                source: pack.source,
+                members,
+            }
         })
-        .map(|(id, _)| id.clone())
-        .collect()
+        .collect::<Vec<_>>();
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&PackListing { schema: 1, packs })?
+        );
+        return Ok(());
+    }
+    if packs.is_empty() {
+        println!("no packs installed");
+        return Ok(());
+    }
+    for pack in &packs {
+        let source = match &pack.source {
+            PackSource::Git(git) => format!("{} ({})", git.url, describe_git_ref(git)),
+            PackSource::Artifact(artifact) => match &artifact.registry {
+                Some(registry) => format!("{registry} (sha256:{})", super::short_sha(&pack.digest)),
+                None => format!("artifact (sha256:{})", super::short_sha(&pack.digest)),
+            },
+        };
+        println!("{} {}  {source}", pack.name, pack.version);
+        for member in &pack.members {
+            println!(
+                "  - {} {} ({}; {})",
+                member.id,
+                member.version,
+                member.capability_type,
+                member.targets.join(", ")
+            );
+        }
+    }
+    Ok(())
+}
+
+/// `tuff pack remove <name>`: delete every member of an installed pack as
+/// one staged change, the way `tuff delete` deletes one capability.
+pub fn cmd_pack_remove(repo_root: &Path, name: &str, force: bool) -> Result<()> {
+    let lock = lockfile::require_lockfile(repo_root)?;
+    let members = lock.pack_members(name);
+    if members.is_empty() {
+        return Err(
+            TuffError::not_found(format!("pack {name} is not installed"))
+                .with_hint("run 'tuff pack list' to see installed packs"),
+        );
+    }
+    let target_ids = members
+        .iter()
+        .filter_map(|member| lock.capabilities.get(member))
+        .flat_map(|entry| entry.targets.keys().cloned())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    for member in &members {
+        for target in &target_ids {
+            let policies = super::delete::policies_on_server_table(&lock, member, target);
+            if let Some(policy) = policies.first() {
+                return Err(TuffError::refused(format!(
+                    "'{member}' has rules from policy '{policy}' on its table, so pack {name} was not removed"
+                ))
+                .with_hint(format!(
+                    "delete the policy first ('tuff delete {policy}'), or drop its rules for '{member}'"
+                )));
+            }
+        }
+    }
+    let dirty = dirty_pack_members(repo_root, &lock, &members, &target_ids);
+    if !dirty.is_empty() && !force {
+        return Err(TuffError::drift(format!(
+            "pack {name} has local changes in {}",
+            dirty.join(", ")
+        ))
+        .with_hint("run 'tuff diff <id>' first, or use --force to remove them"));
+    }
+    let version = lock
+        .capabilities
+        .get(&members[0])
+        .and_then(|entry| entry.source.as_pack())
+        .map(|pack| pack.version.clone())
+        .unwrap_or_default();
+    apply_pack_update(repo_root, &lock, &members, None, &target_ids)?;
+    println!("removed pack {name} {version}");
+    for member in &members {
+        println!("  - {member}");
+    }
+    Ok(())
+}
+
+/// Say that there is nothing to apply: a sentence, or with `--json` the
+/// preview document with no members and the reason in `status`.
+fn print_no_update(
+    provenance: &PackProvenance,
+    status: &str,
+    message: &str,
+    json: bool,
+) -> Result<()> {
+    if json {
+        let document = serde_json::json!({
+            "schema": 1,
+            "pack": provenance.name,
+            "status": status,
+            "message": message,
+            "from": { "version": provenance.version, "digest": provenance.digest },
+            "to": null,
+            "members": [],
+            "blockedBy": [],
+        });
+        println!("{}", serde_json::to_string_pretty(&document)?);
+    } else {
+        println!("{message}");
+    }
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdatePreview<'a> {
+    schema: u8,
+    pack: &'a str,
+    status: &'static str,
+    from: PreviewRelease<'a>,
+    to: PreviewRelease<'a>,
+    targets: &'a [String],
+    members: Vec<PreviewMember>,
+    blocked_by: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct PreviewRelease<'a> {
+    version: &'a str,
+    digest: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<&'a PackSource>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviewMember {
+    id: String,
+    change: &'static str,
+    from_version: Option<String>,
+    to_version: Option<String>,
+    files: Vec<PreviewFile>,
+}
+
+#[derive(serde::Serialize)]
+struct PreviewFile {
+    target: String,
+    path: String,
+    status: String,
+    /// The unified diff of this file, empty for a binary file.
+    patch: String,
+}
+
+/// `tuff update <member> --check --json` (RFC-110 D5): every member the new
+/// release adds, updates, or removes, and for each the files that change
+/// on each harness, compared with what is on disk now.
+fn print_pack_update_preview(
+    repo_root: &Path,
+    lock: &lockfile::Lockfile,
+    provenance: &PackProvenance,
+    members: &[String],
+    artifact: &PackArtifact,
+    new_source: &PackSource,
+    target_ids: &[String],
+) -> Result<()> {
+    let scratch = tempfile::tempdir()?;
+    let empty = scratch.path().join("empty");
+    fs::create_dir_all(&empty)?;
+    let mut rendered = BTreeMap::new();
+    for target in target_ids {
+        let output = scratch.path().join("targets").join(target);
+        pack::extract_prefix(artifact, &format!("targets/{target}"), &output)?;
+        rendered.insert(target.clone(), output);
+    }
+
+    let mut ids = members.iter().cloned().collect::<BTreeSet<_>>();
+    ids.extend(
+        artifact
+            .metadata
+            .capabilities
+            .iter()
+            .map(|capability| capability.id.clone()),
+    );
+    let mut preview_members = Vec::new();
+    for id in ids {
+        let installed = members
+            .iter()
+            .any(|member| member == &id)
+            .then(|| lock.capabilities.get(&id))
+            .flatten();
+        let incoming = artifact
+            .metadata
+            .capabilities
+            .iter()
+            .find(|capability| capability.id == id);
+        let mut files = Vec::new();
+        for target in target_ids {
+            let old_relative = installed
+                .and_then(|entry| entry.targets.get(target))
+                .map(|entry| entry.installed_path.clone());
+            let new_relative = incoming
+                .and_then(|_| artifact_target(artifact, target).ok())
+                .and_then(|rendered| rendered.capabilities.iter().find(|c| c.id == id))
+                .map(|capability| capability.installed_path.clone());
+            let old_root = old_relative
+                .as_ref()
+                .map(|relative| repo_root.join(relative))
+                .filter(|path| path.is_dir())
+                .unwrap_or_else(|| empty.clone());
+            let new_root = new_relative
+                .as_ref()
+                .map(|relative| rendered[target].join(relative))
+                .filter(|path| path.is_dir())
+                .unwrap_or_else(|| empty.clone());
+            let shown = new_relative.or(old_relative).unwrap_or_default();
+            let comparison = crate::tree_diff::compare(&old_root, &new_root)?;
+            let patches = split_patch(&comparison.patch);
+            for change in comparison.changes {
+                files.push(PreviewFile {
+                    target: target.clone(),
+                    path: if shown.is_empty() {
+                        change.path.clone()
+                    } else {
+                        format!("{shown}/{}", change.path)
+                    },
+                    status: change.status,
+                    patch: patches.get(&change.path).cloned().unwrap_or_default(),
+                });
+            }
+        }
+        let change = match (installed, incoming) {
+            (None, Some(_)) => "added",
+            (Some(_), None) => "removed",
+            _ if files.is_empty() => "unchanged",
+            _ => "updated",
+        };
+        preview_members.push(PreviewMember {
+            id,
+            change,
+            from_version: installed.map(|entry| entry.version.clone()),
+            to_version: incoming.map(|capability| capability.version.clone()),
+            files,
+        });
+    }
+
+    let installed_source = lock
+        .normalized_packs()
+        .get(&provenance.name)
+        .map(|pack| pack.source.clone());
+    let preview = UpdatePreview {
+        schema: 1,
+        pack: &provenance.name,
+        status: "update",
+        from: PreviewRelease {
+            version: &provenance.version,
+            digest: &provenance.digest,
+            source: installed_source.as_ref(),
+        },
+        to: PreviewRelease {
+            version: &artifact.metadata.version,
+            digest: &artifact.digest,
+            source: Some(new_source),
+        },
+        targets: target_ids,
+        members: preview_members,
+        blocked_by: dirty_pack_members(repo_root, lock, members, target_ids),
+    };
+    println!("{}", serde_json::to_string_pretty(&preview)?);
+    Ok(())
+}
+
+/// Split a multi-file unified diff into one patch per file, keyed by the
+/// path after `b/` (or `a/` for a deleted file).
+fn split_patch(patch: &str) -> BTreeMap<String, String> {
+    let mut patches = BTreeMap::new();
+    let mut current: Option<(String, String)> = None;
+    for line in patch.split_inclusive('\n') {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            if let Some((path, body)) = current.take() {
+                patches.insert(path, body);
+            }
+            let path = rest
+                .trim_end()
+                .rsplit_once(" b/")
+                .map(|(_, path)| path.to_string())
+                .unwrap_or_default();
+            current = Some((path, line.to_string()));
+        } else if let Some((_, body)) = current.as_mut() {
+            body.push_str(line);
+        }
+    }
+    if let Some((path, body)) = current {
+        patches.insert(path, body);
+    }
+    patches
+}
+
+/// The ref a git pack update checks out, or `None` when there is nothing
+/// to do and the reason has been printed. Mirrors the registry path: a
+/// repointed tag is refused without `--force` and reported by `--check`.
+fn git_update_ref(
+    id: &str,
+    provenance: &PackProvenance,
+    git: &lockfile::PackGitSource,
+    check: bool,
+    force: bool,
+    json: bool,
+) -> Result<Option<String>> {
+    use super::pack_git::GitPackStatus;
+    let (status, _) = super::pack_git::status(&provenance.name, &provenance.version, git)?;
+    let installed = describe_git_ref(git);
+    match status {
+        GitPackStatus::Current => {
+            print_no_update(
+                provenance,
+                "current",
+                &format!(
+                    "pack {} is already up to date ({}, {installed})",
+                    provenance.name, provenance.version
+                ),
+                json,
+            )?;
+            Ok(None)
+        }
+        GitPackStatus::Pinned => Err(TuffError::usage(format!(
+            "pack {} was installed from {installed}, so there is no tag or branch to follow",
+            provenance.name
+        ))
+        .with_hint(
+            "reinstall with 'tuff add pack <url> --ref <tag>', or pass --pack <artifact> to update from a file",
+        )),
+        GitPackStatus::TagMissing => Err(TuffError::not_found(format!(
+            "pack {} {} is installed from {installed}, but {} no longer has that tag",
+            provenance.name, provenance.version, git.url
+        ))),
+        GitPackStatus::Repointed { live_commit } => {
+            let tag = git.tag.clone().unwrap_or_default();
+            let message = format!(
+                "pack {} {}: tag {tag} now names commit {} in {}, and {} was installed",
+                provenance.name,
+                provenance.version,
+                super::short_sha(&live_commit),
+                git.url,
+                super::short_sha(&git.git_ref)
+            );
+            if check {
+                print_no_update(
+                    provenance,
+                    "repointed",
+                    &format!("{message}; 'tuff update {id} --force' installs what the tag names now"),
+                    json,
+                )?;
+                return Ok(None);
+            }
+            if !force {
+                return Err(TuffError::refused(message).with_hint(
+                    "inspect with 'tuff outdated', then use --force to install what the tag names now",
+                ));
+            }
+            Ok(Some(tag))
+        }
+        GitPackStatus::Newer { tag, .. } => Ok(Some(tag)),
+        GitPackStatus::BranchMoved { .. } => Ok(git.branch.clone()),
+    }
 }
 
 /// The agents a pack update applies to: every agent the pack is installed
@@ -1534,6 +2190,75 @@ fn report_pack_update_plan(
     Ok(())
 }
 
+/// Install a new release on top of a staging tree its predecessor was
+/// removed from, the way `tuff add pack` installs, and return the writes
+/// that carry the result into the project.
+fn stage_release(
+    repo_root: &Path,
+    stage: &Path,
+    staged_lock_path: &Path,
+    artifact: &PackArtifact,
+    source: &PackSource,
+    target_ids: &[String],
+) -> Result<Vec<FileMutation>> {
+    // Now identical to a fresh `tuff add pack` against the staged state.
+    let staged_lock = lockfile::read_lockfile_at(staged_lock_path)?;
+    for capability in &artifact.metadata.capabilities {
+        if staged_lock.capabilities.contains_key(&capability.id) {
+            return Err(TuffError::refused(format!(
+                "capability '{}' in pack {} {} is already tracked from another source; pack update is all-or-nothing",
+                capability.id, artifact.metadata.name, artifact.metadata.version
+            )));
+        }
+    }
+    let sources = stage.join("sources");
+    pack::extract_prefix(artifact, "sources", &sources)?;
+    for capability in &artifact.metadata.capabilities {
+        let manifest = manifest::load_manifest(&sources.join(&capability.id))?;
+        validate_artifact_member(capability, &manifest)?;
+        let resolved = resolve_capability(&manifest)?;
+        install_capability(
+            stage,
+            Scope::Project,
+            &resolved,
+            &manifest,
+            target_ids,
+            None,
+            false,
+        )?;
+    }
+    validate_staged_target_hashes(stage, artifact, target_ids)?;
+
+    let mut staged_lock = lockfile::read_lockfile_at(staged_lock_path)?;
+    record_pack_entry(&mut staged_lock, artifact, source);
+    let new_provenance = PackProvenance {
+        name: artifact.metadata.name.clone(),
+        version: artifact.metadata.version.clone(),
+        digest: artifact.digest.clone(),
+        registry: source.registry().map(str::to_string),
+        path: String::new(),
+    };
+    for capability in &artifact.metadata.capabilities {
+        let entry = staged_lock
+            .capabilities
+            .get_mut(&capability.id)
+            .ok_or_else(|| {
+                TuffError::new(format!(
+                    "staged pack update did not track '{}'",
+                    capability.id
+                ))
+            })?;
+        entry.source = lockfile::CapabilitySource::Pack(PackProvenance {
+            path: capability.source_path.clone(),
+            ..new_provenance.clone()
+        });
+        entry.version_scheme = entry.source.version_scheme_for(&entry.version);
+    }
+    lockfile::write_lockfile_at(staged_lock_path, &staged_lock)?;
+
+    collect_install_mutations(repo_root, stage, artifact, &staged_lock, target_ids)
+}
+
 /// Replace one pack release with another in a staging tree, then commit
 /// the result to the project as one set of file writes plus the removal of
 /// whatever the old release emitted and the new one does not.
@@ -1547,9 +2272,8 @@ fn report_pack_update_plan(
 fn apply_pack_update(
     repo_root: &Path,
     lock: &lockfile::Lockfile,
-    provenance: &PackProvenance,
     members: &[String],
-    artifact: &PackArtifact,
+    release: Option<(&PackArtifact, &PackSource)>,
     target_ids: &[String],
 ) -> Result<()> {
     let staging = tempfile::tempdir()?;
@@ -1615,66 +2339,25 @@ fn apply_pack_update(
     }
     lockfile::write_lockfile_at(&staged_lock_path, &staged_lock)?;
 
-    // Now identical to a fresh `tuff add pack` against the staged state.
-    for capability in &artifact.metadata.capabilities {
-        if staged_lock.capabilities.contains_key(&capability.id) {
-            return Err(TuffError::refused(format!(
-                "capability '{}' in pack {} {} is already tracked from another source; pack update is all-or-nothing",
-                capability.id, artifact.metadata.name, artifact.metadata.version
-            )));
-        }
-    }
-    let sources = staging.path().join("sources");
-    pack::extract_prefix(artifact, "sources", &sources)?;
-    for capability in &artifact.metadata.capabilities {
-        let manifest = manifest::load_manifest(&sources.join(&capability.id))?;
-        validate_artifact_member(capability, &manifest)?;
-        let resolved = resolve_capability(&manifest)?;
-        install_capability(
+    let mut mutations = match release {
+        Some((artifact, source)) => stage_release(
+            repo_root,
             staging.path(),
-            Scope::Project,
-            &resolved,
-            &manifest,
+            &staged_lock_path,
+            artifact,
+            source,
             target_ids,
-            None,
-            false,
-        )?;
-    }
-    validate_staged_target_hashes(staging.path(), artifact, target_ids)?;
-
-    let mut staged_lock = lockfile::read_lockfile_at(&staged_lock_path)?;
-    let new_provenance = PackProvenance {
-        name: artifact.metadata.name.clone(),
-        version: artifact.metadata.version.clone(),
-        digest: artifact.digest.clone(),
-        registry: provenance.registry.clone(),
-        path: String::new(),
+        )?,
+        None => {
+            // A removal: the index lists what is left, or goes.
+            capability_index::regenerate_capability_index(staging.path(), Scope::Project)?;
+            vec![FileMutation {
+                path: repo_root.join("tuff.lock"),
+                bytes: fs::read(&staged_lock_path)?,
+                must_be_absent: false,
+            }]
+        }
     };
-    for capability in &artifact.metadata.capabilities {
-        let entry = staged_lock
-            .capabilities
-            .get_mut(&capability.id)
-            .ok_or_else(|| {
-                TuffError::new(format!(
-                    "staged pack update did not track '{}'",
-                    capability.id
-                ))
-            })?;
-        entry.source = lockfile::CapabilitySource::Pack(PackProvenance {
-            path: capability.source_path.clone(),
-            ..new_provenance.clone()
-        });
-        entry.version_scheme = entry.source.version_scheme_for(&entry.version);
-    }
-    lockfile::write_lockfile_at(&staged_lock_path, &staged_lock)?;
-
-    let mut mutations = collect_install_mutations(
-        repo_root,
-        staging.path(),
-        artifact,
-        &staged_lock,
-        target_ids,
-    )?;
     // Files the old release emitted may legitimately exist in the project;
     // the new release overwrites them. Anything the old release owned that
     // the new one no longer writes is removed after the commit.
