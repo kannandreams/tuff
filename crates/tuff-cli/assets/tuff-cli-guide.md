@@ -46,7 +46,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff pack init <name> --from-project --capability <id>` — save a reusable ID-based definition under `tuff-packs/`
 - `tuff pack check [path]` — validate a local source pack
 - `tuff pack build [path] -o <artifact.tuffpack>` — build a reusable project definition or standalone source pack
-- `tuff pack inspect <artifact.tuffpack>` — inspect verified metadata
+- `tuff pack inspect <artifact|folder|git-url> [--json]` — inspect a pack before installing: members, files per harness, what runs code, MCP servers, host tables (`[x.<namespace>]`)
 - `tuff pack verify <artifact.tuffpack>` — verify metadata and every stored file
 - `tuff pack push <artifact.tuffpack> <registry/repository:tag>` — publish exact pack bytes as an OCI artifact
 - `tuff pack pull <registry/repository:tag-or-digest> -o <artifact.tuffpack>` — download and verify an OCI-distributed pack without overwriting an existing file

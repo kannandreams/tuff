@@ -80,6 +80,9 @@ pub struct CapabilityManifest {
     #[serde(default)]
     #[allow(dead_code)]
     pub targets: Vec<String>,
+    /// Host tables (RFC-110 D6), carried and never read.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub x: crate::host::HostTables,
 
     #[serde(skip)]
     pub root: PathBuf,
@@ -371,6 +374,7 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     validate_non_empty("version", &manifest.version)?;
     validate_non_empty("type", &manifest.capability_type.to_string())?;
     validate_non_empty("description", &manifest.description)?;
+    crate::host::validate(&manifest.x, &manifest_path.display().to_string())?;
 
     match manifest.capability_type {
         CapabilityType::Skill => {
@@ -757,6 +761,7 @@ pub fn synthetic_manifest(
         server: None,
         policy: None,
         targets: Vec::new(),
+        x: Default::default(),
         root: skill_dir.to_path_buf(),
     })
 }
@@ -1031,6 +1036,7 @@ files = ["SKILL.md"]
             server: None,
             policy: None,
             targets: vec![],
+            x: Default::default(),
             root: tmp.path().to_path_buf(),
         };
         let files = m.source_files().unwrap();
@@ -1051,6 +1057,7 @@ files = ["SKILL.md"]
             server: None,
             policy: None,
             targets: vec![],
+            x: Default::default(),
             root: root.to_path_buf(),
         }
     }
@@ -1174,6 +1181,7 @@ files = ["SKILL.md"]
             server: None,
             policy: None,
             targets: vec![],
+            x: Default::default(),
             root: tmp.path().to_path_buf(),
         };
         assert!(m.source_files().is_err());

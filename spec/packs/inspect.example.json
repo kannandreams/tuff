@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "name": "com.example/review",
+  "version": "1.0.0",
+  "description": "Review capabilities: a skill, a GitHub MCP server, and a lint hook.",
+  "homepage": "https://example.com/review",
+  "license": "MIT",
+  "keywords": [
+    "review",
+    "github"
+  ],
+  "author": {
+    "name": "Example",
+    "url": "https://example.com"
+  },
+  "source": {
+    "kind": "folder",
+    "path": "spec/packs/example/review-pack"
+  },
+  "digest": "5aaa264b592b5d6e2fe978b7bd6055a345f583603901fcbbe02dcdd72529aacd",
+  "artifactVersion": 2,
+  "targets": [
+    "claude",
+    "open-agents"
+  ],
+  "members": [
+    {
+      "id": "github",
+      "type": "mcp-server",
+      "version": "2.0.0",
+      "description": "GitHub's MCP server.",
+      "sourcePath": "capabilities/github",
+      "runsCode": true,
+      "runsCodeReason": "the harness starts the MCP server command as a local process",
+      "files": {
+        "claude": [
+          ".claude/mcp-servers/github/server.toml"
+        ],
+        "open-agents": [
+          ".agents/mcp-servers/github/server.toml"
+        ]
+      },
+      "sharedFiles": {
+        "claude": [
+          ".mcp.json"
+        ],
+        "open-agents": [
+          ".agents/mcp.json"
+        ]
+      },
+      "mcp": {
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ],
+        "env": [
+          "GITHUB_TOKEN"
+        ],
+        "headerEnv": []
+      },
+      "x": {
+        "example-host": {
+          "default_level": "ask"
+        }
+      }
+    },
+    {
+      "id": "lint-hook",
+      "type": "hook",
+      "version": "1.0.0",
+      "description": "Lint after each edit.",
+      "sourcePath": "capabilities/lint-hook",
+      "runsCode": true,
+      "runsCodeReason": "the harness runs the hook command when its event fires",
+      "files": {
+        "claude": [
+          ".claude/hooks/lint-hook/run.sh"
+        ],
+        "open-agents": [
+          ".agents/hooks/lint-hook/run.sh"
+        ]
+      },
+      "sharedFiles": {
+        "claude": [
+          ".claude/settings.json"
+        ],
+        "open-agents": [
+          ".agents/hook.json"
+        ]
+      },
+      "hook": {
+        "event": "post_tool_use",
+        "command": "echo lint",
+        "workingDirectory": "."
+      },
+      "x": {}
+    },
+    {
+      "id": "review-skill",
+      "type": "skill",
+      "version": "1.0.0",
+      "description": "How to review a pull request.",
+      "sourcePath": "capabilities/review-skill",
+      "runsCode": false,
+      "runsCodeReason": "instructions and files the agent reads; the harness runs nothing from a skill on its own",
+      "files": {
+        "claude": [
+          ".claude/skills/review-skill/SKILL.md",
+          ".claude/skills/review-skill/scripts/check.sh"
+        ],
+        "open-agents": [
+          ".agents/skills/review-skill/SKILL.md",
+          ".agents/skills/review-skill/scripts/check.sh"
+        ]
+      },
+      "sharedFiles": {
+        "claude": [],
+        "open-agents": []
+      },
+      "x": {}
+    }
+  ],
+  "unsupported": [],
+  "x": {
+    "example-host": {
+      "default_level": "read"
+    }
+  }
+}

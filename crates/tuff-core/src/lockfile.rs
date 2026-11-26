@@ -113,21 +113,19 @@ impl Lockfile {
             if packs.contains_key(&provenance.name) {
                 continue;
             }
-            let source = self
-                .packs
-                .get(&provenance.name)
-                .map(|pack| pack.source.clone())
-                .unwrap_or_else(|| {
-                    PackSource::Artifact(PackArtifactSource {
-                        registry: provenance.registry.clone(),
-                    })
-                });
+            let recorded = self.packs.get(&provenance.name);
+            let source = recorded.map(|pack| pack.source.clone()).unwrap_or_else(|| {
+                PackSource::Artifact(PackArtifactSource {
+                    registry: provenance.registry.clone(),
+                })
+            });
             packs.insert(
                 provenance.name.clone(),
                 PackLockEntry {
                     version: provenance.version.clone(),
                     digest: provenance.digest.clone(),
                     source,
+                    x: recorded.map(|pack| pack.x.clone()).unwrap_or_default(),
                 },
             );
         }
@@ -145,6 +143,10 @@ pub struct PackLockEntry {
     /// later Tuff can render differently, so updates compare commits.
     pub digest: String,
     pub source: PackSource,
+    /// The pack's host tables (RFC-110 D6), as JSON, carried for the host
+    /// that installed it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub x: crate::host::HostTablesJson,
 }
 
 /// Where an installed pack came from.
@@ -736,6 +738,7 @@ pub fn read_lockfile_at(path: &Path) -> Result<Lockfile> {
                     version: pack.version,
                     digest: pack.digest,
                     source: pack.source,
+                    x: pack.x,
                 },
             )
         })
@@ -1003,6 +1006,7 @@ pub fn render_lockfile(lockfile: &Lockfile) -> Result<String> {
                     digest: pack.digest,
                     source: pack.source,
                     members,
+                    x: pack.x,
                 },
             )
         })
@@ -1043,6 +1047,8 @@ struct WirePack {
     source: PackSource,
     #[serde(default)]
     members: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    x: crate::host::HostTablesJson,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1528,6 +1534,10 @@ requested = "^1.2"
                 version: "stale".into(),
                 digest: "stale".into(),
                 source: source.clone(),
+                x: BTreeMap::from([(
+                    "host".to_string(),
+                    serde_json::json!({ "default_level": "read" }),
+                )]),
             },
         );
         write_lockfile_at(&path, &lf).unwrap();
@@ -1543,6 +1553,7 @@ requested = "^1.2"
 
         let read = read_lockfile_at(&path).unwrap();
         assert_eq!(read.packs["acme/review"].source, source);
+        assert_eq!(read.packs["acme/review"].x["host"]["default_level"], "read");
         assert_eq!(read.packs["acme/review"].version, "1.2.0");
         assert_eq!(read.pack_members("acme/review"), vec!["review".to_string()]);
     }
@@ -1558,6 +1569,7 @@ requested = "^1.2"
                 version: "1.0.0".into(),
                 digest: "ab".repeat(32),
                 source: PackSource::Artifact(PackArtifactSource { registry: None }),
+                x: BTreeMap::new(),
             },
         );
         write_lockfile_at(&path, &lf).unwrap();

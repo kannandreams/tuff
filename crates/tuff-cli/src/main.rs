@@ -678,9 +678,16 @@ enum PackCommand {
     },
     /// Print verified pack metadata.
     Inspect {
-        /// Pack artifact path.
-        artifact: PathBuf,
-        /// Print canonical metadata as JSON.
+        /// A pack artifact, a source pack folder, or a git URL.
+        source: String,
+        /// For a git URL: the tag, branch, or commit to inspect.
+        #[arg(long = "ref", value_name = "REF")]
+        git_ref: Option<String>,
+        /// For a git URL: the repository folder holding tuff-pack.toml.
+        #[arg(long = "path", value_name = "DIR")]
+        path: Option<String>,
+        /// Print the pack, its members, what each writes and runs, and its
+        /// host tables as JSON (schema 1).
         #[arg(long = "json")]
         json: bool,
     },
@@ -1090,7 +1097,17 @@ fn run() -> Result<()> {
                     output,
                 },
             ),
-            PackCommand::Inspect { artifact, json } => cmd_pack_inspect(&artifact, json),
+            PackCommand::Inspect {
+                source,
+                git_ref,
+                path,
+                json,
+            } => cmd_pack_inspect(commands::PackInspectOptions {
+                source: &source,
+                git_ref: git_ref.as_deref(),
+                path: path.as_deref(),
+                json,
+            }),
             PackCommand::Verify { artifact } => cmd_pack_verify(&artifact),
             PackCommand::Push {
                 artifact,

@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tuffcli.dev/spec/packs/inspect.schema.json",
+  "title": "Tuff pack inspect document, schema 1",
+  "description": "What `tuff pack inspect --json` prints for an artifact, a source folder, or a git repository.",
+  "type": "object",
+  "required": ["schema", "name", "version", "description", "keywords", "source", "digest", "artifactVersion", "targets", "members", "unsupported", "x"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "number", "enum": [1] },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "homepage": { "type": "string" },
+    "license": { "type": "string" },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "author": { "$ref": "#/$defs/author" },
+    "source": {
+      "anyOf": [
+        { "$ref": "#/$defs/artifactSource" },
+        { "$ref": "#/$defs/folderSource" },
+        { "$ref": "#/$defs/gitSource" }
+      ]
+    },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "artifactVersion": { "type": "number" },
+    "targets": { "type": "array", "items": { "type": "string" } },
+    "members": { "type": "array", "items": { "$ref": "#/$defs/member" } },
+    "unsupported": { "type": "array", "items": { "type": "object" } },
+    "x": { "$ref": "#/$defs/hostTables" }
+  },
+  "$defs": {
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "artifactSource": {
+      "type": "object",
+      "required": ["kind", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["artifact"] },
+        "path": { "type": "string" }
+      }
+    },
+    "folderSource": {
+      "type": "object",
+      "required": ["kind", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["folder"] },
+        "path": { "type": "string" }
+      }
+    },
+    "gitSource": {
+      "type": "object",
+      "required": ["kind", "url", "path", "ref"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["git"] },
+        "url": { "type": "string" },
+        "path": { "type": "string" },
+        "ref": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "tag": { "type": "string" },
+        "branch": { "type": "string" }
+      }
+    },
+    "hostTables": {
+      "description": "Host tables by namespace. Tuff carries them and never reads them.",
+      "type": "object"
+    },
+    "filesByTarget": {
+      "description": "Project-relative paths, keyed by target id.",
+      "type": "object"
+    },
+    "member": {
+      "type": "object",
+      "required": ["id", "type", "version", "description", "sourcePath", "runsCode", "runsCodeReason", "files", "sharedFiles", "x"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["skill", "tool", "hook", "mcp-server", "policy"] },
+        "version": { "type": "string" },
+        "description": { "type": "string" },
+        "sourcePath": { "type": "string" },
+        "runsCode": { "type": "boolean" },
+        "runsCodeReason": { "type": "string" },
+        "files": { "$ref": "#/$defs/filesByTarget" },
+        "sharedFiles": { "$ref": "#/$defs/filesByTarget" },
+        "mcp": {
+          "type": "object",
+          "required": ["transport", "args", "env", "headerEnv"],
+          "additionalProperties": false,
+          "properties": {
+            "transport": { "type": "string", "enum": ["stdio", "http"] },
+            "command": { "type": "string" },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "url": { "type": "string" },
+            "env": { "type": "array", "items": { "type": "string" } },
+            "headerEnv": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "tool": {
+          "type": "object",
+          "required": ["language", "entrypoint", "mcp", "runtimeDeps"],
+          "additionalProperties": false,
+          "properties": {
+            "language": { "type": "string" },
+            "entrypoint": { "type": "string" },
+            "mcp": { "type": "boolean" },
+            "runtimeDeps": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "hook": {
+          "type": "object",
+          "required": ["event", "command", "workingDirectory"],
+          "additionalProperties": false,
+          "properties": {
+            "event": { "type": "string" },
+            "command": { "type": "string" },
+            "workingDirectory": { "type": "string" }
+          }
+        },
+        "x": { "$ref": "#/$defs/hostTables" }
+      }
+    }
+  }
+}

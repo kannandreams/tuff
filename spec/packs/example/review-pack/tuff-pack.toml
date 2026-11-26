@@ -1,0 +1,27 @@
+schema = 1
+name = "com.example/review"
+version = "1.0.0"
+description = "Review capabilities: a skill, a GitHub MCP server, and a lint hook."
+homepage = "https://example.com/review"
+license = "MIT"
+keywords = ["review", "github"]
+
+[author]
+name = "Example"
+url = "https://example.com"
+
+[build]
+targets = ["open-agents", "claude"]
+
+[[capabilities]]
+path = "capabilities/review-skill"
+
+[[capabilities]]
+path = "capabilities/github"
+
+[[capabilities]]
+path = "capabilities/lint-hook"
+
+# A host application's own settings. Tuff carries this table and never reads it.
+[x.example-host]
+default_level = "read"

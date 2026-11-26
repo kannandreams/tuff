@@ -8,6 +8,7 @@ pub mod config;
 pub mod error;
 pub mod git;
 pub mod hook_settings;
+pub mod host;
 pub mod lockfile;
 pub mod manifest;
 pub mod mcp;

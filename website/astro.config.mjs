@@ -117,6 +117,7 @@ export default defineConfig({
           label: 'Packaging & Distribution',
           items: [
             { label: 'Capability Packs', slug: 'concepts/packs' },
+            { label: 'Pack JSON Specification', slug: 'spec/packs' },
             { label: 'OCI Registries & Container Images', slug: 'guides/oci-registries-and-container-images' },
           ],
         },

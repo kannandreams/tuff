@@ -14,8 +14,14 @@ use crate::manifest::{self, CapabilityManifest, CapabilityType};
 
 /// Source-manifest schema understood by this Tuff release.
 pub const PACK_SCHEMA_VERSION: u8 = 1;
-/// Binary artifact format understood by this Tuff release.
-pub const PACK_ARTIFACT_VERSION: u8 = 1;
+/// Binary artifact format this Tuff release writes. Version 2 (RFC-110 D8)
+/// adds the optional manifest fields, host tables, the raw
+/// `pack/tuff-pack.toml`, and each target's kind. Version 1 is still read.
+pub const PACK_ARTIFACT_VERSION: u8 = 2;
+/// Oldest artifact format this Tuff release reads.
+pub const OLDEST_READABLE_PACK_ARTIFACT_VERSION: u8 = 1;
+/// Where a version 2 artifact stores the pack's manifest as written.
+pub const ARTIFACT_MANIFEST_PATH: &str = "pack/tuff-pack.toml";
 /// Canonical source-pack manifest filename.
 pub const PACK_MANIFEST_FILE: &str = "tuff-pack.toml";
 
@@ -30,11 +36,33 @@ pub struct PackManifest {
     pub name: String,
     pub version: String,
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<PackAuthor>,
     pub build: PackBuild,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectPackSelection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<PackMember>,
+    /// Host tables (RFC-110 D6), carried and never read.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub x: crate::host::HostTables,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// Who publishes a pack.
+pub struct PackAuthor {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +110,18 @@ pub struct PackArtifactMetadata {
     pub name: String,
     pub version: String,
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<PackAuthor>,
+    /// The pack's host tables as JSON. The bytes as written are in
+    /// [`ARTIFACT_MANIFEST_PATH`].
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub x: crate::host::HostTablesJson,
     pub capabilities: Vec<PackArtifactCapability>,
     pub targets: Vec<PackArtifactTarget>,
     pub files: Vec<PackArtifactFile>,
@@ -103,7 +143,27 @@ pub struct PackArtifactCapability {
 /// Pre-rendered adapter metadata stored in an artifact.
 pub struct PackArtifactTarget {
     pub id: String,
+    /// A harness target installs into a project; a bundle target is a
+    /// harness's own bundle format, such as a Claude Code plugin, which is
+    /// extracted and never installed.
+    #[serde(default, skip_serializing_if = "PackTargetKind::is_harness")]
+    pub kind: PackTargetKind,
     pub capabilities: Vec<PackArtifactTargetCapability>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+/// What a pack artifact target renders.
+pub enum PackTargetKind {
+    #[default]
+    Harness,
+    Bundle,
+}
+
+impl PackTargetKind {
+    pub fn is_harness(&self) -> bool {
+        *self == Self::Harness
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -251,6 +311,16 @@ fn load_path_pack(root: PathBuf, manifest: PackManifest) -> Result<LoadedPack> {
 pub fn write_manifest(path: &Path, manifest: &PackManifest) -> Result<()> {
     fs::write(path, toml::to_string_pretty(manifest)?)?;
     Ok(())
+}
+
+/// The pack's `tuff-pack.toml` as written, for [`ARTIFACT_MANIFEST_PATH`].
+/// Host tables are kept byte for byte this way.
+///
+/// # Errors
+///
+/// Returns an error when the manifest is missing, linked, or unreadable.
+pub fn manifest_bytes(pack: &LoadedPack) -> Result<Vec<u8>> {
+    read_safe_member_file(&pack.root, &pack.root.join(PACK_MANIFEST_FILE))
 }
 
 /// Collects the canonical manifest and declared source files for every pack member.
@@ -528,6 +598,13 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
     if manifest.name.chars().any(char::is_whitespace) {
         return Err(TuffError::usage("pack name must not contain whitespace"));
     }
+    if let Some(author) = &manifest.author {
+        validate_non_empty("author.name", &author.name)?;
+    }
+    for keyword in &manifest.keywords {
+        validate_non_empty("keywords", keyword)?;
+    }
+    crate::host::validate(&manifest.x, PACK_MANIFEST_FILE)?;
     match (&manifest.project, manifest.capabilities.is_empty()) {
         (None, true) => {
             return Err(TuffError::usage(
@@ -585,11 +662,15 @@ fn validate_pack_manifest(manifest: &PackManifest) -> Result<()> {
 }
 
 fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
-    if metadata.artifact_version != PACK_ARTIFACT_VERSION {
+    if !(OLDEST_READABLE_PACK_ARTIFACT_VERSION..=PACK_ARTIFACT_VERSION)
+        .contains(&metadata.artifact_version)
+    {
         return Err(TuffError::unsupported(format!(
-            "unsupported pack artifact version: {}",
-            metadata.artifact_version
-        )));
+            "unsupported pack artifact version: {} (this tuff {} reads versions {OLDEST_READABLE_PACK_ARTIFACT_VERSION} to {PACK_ARTIFACT_VERSION})",
+            metadata.artifact_version,
+            env!("CARGO_PKG_VERSION")
+        ))
+        .with_hint("a newer tuff built this pack; upgrade tuff"));
     }
     if metadata.pack_schema != PACK_SCHEMA_VERSION {
         return Err(TuffError::unsupported(format!(
@@ -717,7 +798,8 @@ fn validate_artifact_metadata(metadata: &PackArtifactMetadata) -> Result<()> {
     let mut paths = BTreeSet::new();
     for file in &metadata.files {
         validate_relative_path(Path::new(&file.path))?;
-        if !file.path.starts_with("sources/") && !file.path.starts_with("targets/") {
+        let pack_file = metadata.artifact_version >= 2 && file.path == ARTIFACT_MANIFEST_PATH;
+        if !pack_file && !file.path.starts_with("sources/") && !file.path.starts_with("targets/") {
             return Err(TuffError::corrupt(format!(
                 "unsupported pack artifact file path: {}",
                 file.path
@@ -825,6 +907,11 @@ mod tests {
             name: "com.acme/demo".into(),
             version: "1.0.0".into(),
             description: "Demo pack".into(),
+            homepage: None,
+            license: None,
+            keywords: Vec::new(),
+            author: None,
+            x: BTreeMap::new(),
             capabilities: vec![PackArtifactCapability {
                 id: "demo".into(),
                 capability_type: CapabilityType::Skill,
@@ -834,6 +921,7 @@ mod tests {
             }],
             targets: vec![PackArtifactTarget {
                 id: "demo".into(),
+                kind: PackTargetKind::Harness,
                 capabilities: vec![PackArtifactTargetCapability {
                     id: "demo".into(),
                     installed_path: ".agents/skills/demo".into(),
@@ -912,6 +1000,71 @@ mod tests {
                 "{id}: {error}"
             );
         }
+    }
+
+    #[test]
+    fn a_version_1_artifact_is_still_read_and_a_newer_one_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let contents = || {
+            vec![
+                PackArtifactContent {
+                    path: "sources/demo/tuff.toml".into(),
+                    bytes: b"manifest".to_vec(),
+                },
+                PackArtifactContent {
+                    path: "targets/demo/file".into(),
+                    bytes: b"safe".to_vec(),
+                },
+            ]
+        };
+        let mut v1 = metadata();
+        v1.artifact_version = 1;
+        let path = temp.path().join("v1.tuffpack");
+        write_artifact(&path, v1, contents()).unwrap();
+        assert_eq!(read_artifact(&path).unwrap().metadata.artifact_version, 1);
+
+        let mut v3 = metadata();
+        v3.artifact_version = 3;
+        let path = temp.path().join("v3.tuffpack");
+        write_artifact(&path, v3, contents()).unwrap();
+        let error = read_artifact(&path).unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Unsupported);
+        assert!(
+            error.to_string().contains("reads versions 1 to 2"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn only_a_version_2_artifact_may_carry_the_pack_manifest() {
+        let temp = tempfile::tempdir().unwrap();
+        let contents = || {
+            vec![
+                PackArtifactContent {
+                    path: "sources/demo/tuff.toml".into(),
+                    bytes: b"manifest".to_vec(),
+                },
+                PackArtifactContent {
+                    path: ARTIFACT_MANIFEST_PATH.into(),
+                    bytes: b"schema = 1\n".to_vec(),
+                },
+            ]
+        };
+        let path = temp.path().join("v2.tuffpack");
+        write_artifact(&path, metadata(), contents()).unwrap();
+        read_artifact(&path).unwrap();
+
+        let mut v1 = metadata();
+        v1.artifact_version = 1;
+        let path = temp.path().join("v1.tuffpack");
+        write_artifact(&path, v1, contents()).unwrap();
+        let error = read_artifact(&path).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported pack artifact file path"),
+            "{error}"
+        );
     }
 
     #[test]

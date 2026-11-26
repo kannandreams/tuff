@@ -116,6 +116,17 @@ command = "cargo fmt --check"
 Tuff translates the event into each agent's own hook settings, and refuses the
 install if an agent cannot run that event.
 
+## Host tables
+
+An application that installs capabilities for its own users can keep its own settings in a manifest, under `x` and a namespace it chooses:
+
+```toml title="tuff.toml"
+[x.myapp]
+default_level = "read"
+```
+
+Tuff checks that each namespace is made of letters, digits, `-`, and `_`, keeps the table as written, and returns it in [`tuff pack inspect --json`](/spec/packs/). Tuff never reads a key inside it. A pack's `tuff-pack.toml` takes host tables the same way.
+
 ## What Tuff refuses
 
 Capabilities are often installed from other people's repositories, so Tuff
