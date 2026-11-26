@@ -1,5 +1,7 @@
 use std::path::Path;
 
+pub mod plugin;
+
 use tuff_hooks_spec::{
     CompatibilityEntry, CompatibilityMatrix, CoverageLevel, HookEvent, SPEC_VERSION,
 };

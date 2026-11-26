@@ -1,15 +1,20 @@
-//! Packs installed from a git repository (RFC-110 D3 and D4).
+//! Packs installed from a git repository (RFC-110 D3, D4, and D12).
 //!
-//! A git pack is a repository folder holding a standalone `tuff-pack.toml`.
-//! Tuff checks the folder out at one commit, builds an artifact from it, and
-//! installs that artifact the way `tuff add pack <file>` does. The lockfile
-//! pins the commit. Release tags use RFC-101's shapes, matched against the
-//! last component of the pack name.
+//! A git pack is a repository folder holding a standalone `tuff-pack.toml`,
+//! or a Claude Code plugin or marketplace, which is imported as a pack each
+//! time it is installed or updated. Tuff checks the folder out at one
+//! commit, builds an artifact from it, and installs that artifact the way
+//! `tuff add pack <file>` does. The lockfile pins the commit. Release tags
+//! use RFC-101's shapes, matched against the last component of the pack or
+//! plugin name.
 
 use std::path::{Path, PathBuf};
 
 use semver::Version;
 use tempfile::TempDir;
+
+use tuff_adapter_claude::plugin::{self as claude_plugin, ClaudePlugin};
+use tuff_core::bundle::{BundleLocation, BundleReader, LocalBundle, RemoteBundle};
 
 use crate::error::{Result, TuffError};
 use crate::git;
@@ -17,13 +22,38 @@ use crate::lockfile::PackGitSource;
 use crate::pack;
 use crate::release;
 
+/// What a checked-out folder holds.
+pub(crate) enum CheckedOut {
+    /// A standalone Tuff source pack at `pack_root`.
+    Tuff,
+    /// A Claude Code plugin, read from this bundle.
+    ClaudePlugin(LocalBundle),
+}
+
 /// A pack folder checked out at one commit. The checkout is deleted when
 /// this is dropped.
 pub(crate) struct GitPackCheckout {
-    _guard: TempDir,
-    /// The folder holding `tuff-pack.toml`.
+    _guards: Vec<TempDir>,
+    /// The folder that was checked out: the one holding `tuff-pack.toml`,
+    /// or the plugin or marketplace.
     pub(crate) pack_root: PathBuf,
+    pub(crate) found: CheckedOut,
     pub(crate) source: PackGitSource,
+    /// The version the release tag names, for a plugin that declares none.
+    pub(crate) version_hint: Option<String>,
+}
+
+/// What to check out.
+pub(crate) struct CheckoutRequest<'a> {
+    pub(crate) url: &'a str,
+    pub(crate) path: Option<&'a str>,
+    /// A tag, branch, or commit; the newest release tag when absent.
+    pub(crate) git_ref: Option<&'a str>,
+    /// The marketplace entry to read.
+    pub(crate) plugin: Option<&'a str>,
+    /// Whether a marketplace entry may live in another repository. An
+    /// install follows one repository's tags, so only an import allows it.
+    pub(crate) allow_remote: bool,
 }
 
 /// The name release tags are scoped by: the last component of a pack name
@@ -32,13 +62,41 @@ pub(crate) fn release_name(pack_name: &str) -> &str {
     pack_name.rsplit('/').next().unwrap_or(pack_name)
 }
 
-/// Check out the pack at `url`, in `path` (or the folder the URL names),
-/// at `requested` (a tag, branch, or commit) or else at its newest release.
-pub(crate) fn checkout(
-    url: &str,
-    path: Option<&str>,
-    requested: Option<&str>,
-) -> Result<GitPackCheckout> {
+/// What a folder holds, with the name and version that release tags are
+/// read against.
+enum Found {
+    Tuff {
+        name: String,
+        version: String,
+    },
+    Plugin {
+        bundle: LocalBundle,
+        name: String,
+        version: Option<String>,
+    },
+    Remote(RemoteBundle),
+}
+
+impl Found {
+    fn name(&self) -> &str {
+        match self {
+            Self::Tuff { name, .. } => name,
+            Self::Plugin { name, .. } => name,
+            Self::Remote(remote) => &remote.name,
+        }
+    }
+}
+
+/// Check out `request.url`, in `request.path` (or the folder the URL
+/// names), at `request.git_ref` or else at the newest release tag.
+pub(crate) fn checkout(request: CheckoutRequest<'_>) -> Result<GitPackCheckout> {
+    let CheckoutRequest {
+        url,
+        path,
+        git_ref: requested,
+        plugin,
+        allow_remote,
+    } = request;
     let subdir = match path {
         Some(path) => Some(path.trim_matches('/').to_string()),
         None => git::source_subdirectory(url),
@@ -73,14 +131,15 @@ pub(crate) fn checkout(
             let (guard, checkout, clean_url) = git::clone_to_temp(url, None)?;
             // The release tags are scoped by the pack's name, which only the
             // checkout can tell.
-            let name = manifest_at(&checkout, subdir.as_deref(), &clean_url)?.name;
+            let found = identify(&checkout, subdir.as_deref(), &clean_url, plugin)?;
             let releases = release::release_tags(
                 tags.iter().map(|tag| tag.name.as_str()),
-                release_name(&name),
+                release_name(found.name()),
             );
             match release::latest_release(&releases) {
                 Some(latest) => {
                     let latest = latest.tag.clone();
+                    drop(found);
                     drop(guard);
                     let (guard, checkout, clean_url) = git::clone_tag_to_temp(url, &latest)?;
                     (guard, checkout, clean_url, Some(latest), None)
@@ -94,44 +153,133 @@ pub(crate) fn checkout(
     };
 
     let commit = git::resolve_ref(&checkout)?;
-    let manifest = manifest_at(&checkout, subdir.as_deref(), &clean_url)?;
-    if let Some(tag) = tag.as_deref() {
-        check_tag_version(tag, &manifest)?;
-    }
+    let found = identify(&checkout, subdir.as_deref(), &clean_url, plugin)?;
     let pack_root = match subdir.as_deref() {
         Some(subdir) => checkout.join(subdir),
         None => checkout,
     };
+    let release_version = tag
+        .as_deref()
+        .and_then(|tag| release::parse_release_tag(tag, release_name(found.name())))
+        .map(|release| (release.tag, release.version));
+    let mut source = PackGitSource {
+        url: clean_url,
+        path: subdir.unwrap_or_default(),
+        git_ref: commit,
+        tag,
+        branch,
+        format: None,
+        plugin: plugin.map(str::to_string),
+    };
+    let mut guards = vec![guard];
+    let mut version_hint = None;
+    let found = match found {
+        Found::Tuff {
+            version: declared, ..
+        } => {
+            if let Some((tag, version)) = &release_version {
+                check_tag_version(tag, version, Some(&declared))?;
+            }
+            CheckedOut::Tuff
+        }
+        Found::Plugin {
+            bundle, version, ..
+        } => {
+            source.format = Some(claude_plugin::FORMAT_ID.to_string());
+            if let Some((tag, release)) = &release_version {
+                check_tag_version(tag, release, version.as_deref())?;
+                version_hint = Some(release.to_string());
+            }
+            CheckedOut::ClaudePlugin(bundle)
+        }
+        Found::Remote(remote) => {
+            if !allow_remote {
+                return Err(TuffError::unsupported(format!(
+                    "marketplace entry '{}' lives in another repository, {}",
+                    remote.name, remote.url
+                ))
+                .with_hint(
+                    "install from that repository, or import the entry with 'tuff pack import --plugin'",
+                ));
+            }
+            let (guard, bundle, remote_source) = checkout_remote(&remote)?;
+            guards.push(guard);
+            source = remote_source;
+            CheckedOut::ClaudePlugin(bundle)
+        }
+    };
     Ok(GitPackCheckout {
-        _guard: guard,
+        _guards: guards,
         pack_root,
-        source: PackGitSource {
-            url: clean_url,
-            path: subdir.unwrap_or_default(),
-            git_ref: commit,
-            tag,
-            branch,
-        },
+        found,
+        source,
+        version_hint,
     })
 }
 
-/// The repository chose the folder and the manifest, so neither may be a
-/// link that leads out of the checkout to a file on this machine.
-fn contained_in_checkout(checkout: &Path, pack_root: &Path) -> Result<()> {
+/// Clone the repository a marketplace entry names, at the commit or ref it
+/// names, and return the plugin folder in it.
+pub(crate) fn checkout_remote(
+    remote: &RemoteBundle,
+) -> Result<(TempDir, LocalBundle, PackGitSource)> {
+    let (guard, checkout, clean_url) = match (&remote.commit, &remote.git_ref) {
+        (Some(commit), _) => git::clone_to_temp(&remote.url, Some(commit))?,
+        (None, Some(reference)) => git::clone_tag_to_temp(&remote.url, reference)?,
+        (None, None) => git::clone_to_temp(&remote.url, None)?,
+    };
+    let commit = git::resolve_ref(&checkout)?;
+    let relative = match remote.path.as_deref() {
+        Some(path) => tuff_core::bundle::bundle_path(path)?,
+        None => PathBuf::new(),
+    };
+    let root = checkout.join(&relative);
+    contained_in_checkout(&checkout, &root, None)?;
+    // A listing's `ref` can name a tag or a branch; record which, so an
+    // update knows whether to follow tags or the branch.
+    let (tag, branch) = match remote.git_ref.as_deref() {
+        Some(reference)
+            if git::list_remote_tags(&clean_url)?
+                .iter()
+                .any(|tag| tag.name == reference) =>
+        {
+            (Some(reference.to_string()), None)
+        }
+        Some(reference) => (None, Some(reference.to_string())),
+        None => (None, None),
+    };
+    let source = PackGitSource {
+        url: clean_url,
+        path: relative.to_string_lossy().replace('\\', "/"),
+        git_ref: commit,
+        tag: tag.clone(),
+        branch,
+        format: Some(claude_plugin::FORMAT_ID.to_string()),
+        plugin: Some(remote.name.clone()),
+    };
+    let bundle = LocalBundle {
+        root,
+        name: Some(remote.name.clone()),
+        entry: Some(remote.entry.clone()),
+    };
+    Ok((guard, bundle, source))
+}
+
+/// The repository chose the folder and its manifests, so none of them may
+/// be a link that leads out of the checkout to a file on this machine.
+fn contained_in_checkout(checkout: &Path, folder: &Path, manifest: Option<&str>) -> Result<()> {
     let refuse = || {
-        TuffError::refused(format!(
-            "the pack folder or its {} is a symbolic link out of the repository",
-            pack::PACK_MANIFEST_FILE
-        ))
+        TuffError::refused(
+            "the pack folder or its manifest is a symbolic link out of the repository",
+        )
     };
     let checkout = checkout.canonicalize()?;
-    if !pack_root.canonicalize()?.starts_with(&checkout) {
+    if !folder.canonicalize()?.starts_with(&checkout) {
         return Err(refuse());
     }
-    let manifest = pack_root.join(pack::PACK_MANIFEST_FILE);
-    if std::fs::symlink_metadata(&manifest)?
-        .file_type()
-        .is_symlink()
+    if let Some(manifest) = manifest
+        && std::fs::symlink_metadata(folder.join(manifest))?
+            .file_type()
+            .is_symlink()
     {
         return Err(refuse());
     }
@@ -142,50 +290,83 @@ fn looks_like_commit(reference: &str) -> bool {
     (7..=40).contains(&reference.len()) && reference.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-/// The pack manifest in the checkout, or an error naming where it was looked
-/// for. Only the manifest is read here; members are loaded by the caller.
-fn manifest_at(checkout: &Path, subdir: Option<&str>, url: &str) -> Result<pack::PackManifest> {
+/// What the checkout holds at the folder: a Tuff pack, a Claude Code plugin,
+/// or a marketplace entry in this repository or another.
+fn identify(
+    checkout: &Path,
+    subdir: Option<&str>,
+    url: &str,
+    plugin: Option<&str>,
+) -> Result<Found> {
     let folder = match subdir {
         Some(subdir) => checkout.join(subdir),
         None => checkout.to_path_buf(),
     };
-    if !folder.join(pack::PACK_MANIFEST_FILE).is_file() {
-        let place = subdir.map_or_else(
+    let place = || {
+        subdir.map_or_else(
             || "the repository root".to_string(),
             |subdir| format!("'{subdir}'"),
-        );
+        )
+    };
+    if !folder.is_dir() {
         return Err(TuffError::not_found(format!(
-            "no {} at {place} in {url}",
-            pack::PACK_MANIFEST_FILE
-        ))
-        .with_hint("name the folder holding the pack with --path, or in the URL"));
+            "{} is not a folder in {url}",
+            place()
+        )));
     }
-    contained_in_checkout(checkout, &folder)?;
-    let (_, manifest) = pack::load_manifest(&folder)?;
-    if manifest.project.is_some() {
-        return Err(TuffError::usage(format!(
-            "the pack at {url} selects capabilities from its author's project, which only its author can build"
-        ))
-        .with_hint("install a pack whose tuff-pack.toml lists [[capabilities]] paths"));
+    if folder.join(pack::PACK_MANIFEST_FILE).is_file() {
+        contained_in_checkout(checkout, &folder, Some(pack::PACK_MANIFEST_FILE))?;
+        if plugin.is_some() {
+            return Err(TuffError::usage(
+                "--plugin selects a marketplace entry, and this folder holds a Tuff pack",
+            ));
+        }
+        let (_, manifest) = pack::load_manifest(&folder)?;
+        if manifest.project.is_some() {
+            return Err(TuffError::usage(format!(
+                "the pack at {url} selects capabilities from its author's project, which only its author can build"
+            ))
+            .with_hint("install a pack whose tuff-pack.toml lists [[capabilities]] paths"));
+        }
+        return Ok(Found::Tuff {
+            name: manifest.name,
+            version: manifest.version,
+        });
     }
-    Ok(manifest)
+    if ClaudePlugin.detect(&folder) {
+        contained_in_checkout(checkout, &folder, None)?;
+        return match ClaudePlugin.locate(&folder, plugin)? {
+            BundleLocation::Local(bundle) => {
+                contained_in_checkout(checkout, &bundle.root, None)?;
+                let (name, version) = claude_plugin::identity(&bundle)?;
+                Ok(Found::Plugin {
+                    bundle,
+                    name,
+                    version,
+                })
+            }
+            BundleLocation::Remote(remote) => Ok(Found::Remote(remote)),
+        };
+    }
+    Err(TuffError::not_found(format!(
+        "no {} or Claude Code plugin at {} in {url}",
+        pack::PACK_MANIFEST_FILE,
+        place()
+    ))
+    .with_hint("name the folder holding the pack with --path, or in the URL"))
 }
 
-/// A release tag names a version, so the manifest at that tag must declare
-/// the same one. A tag that does not read as a release is taken as named.
-fn check_tag_version(tag: &str, manifest: &pack::PackManifest) -> Result<()> {
-    let Some(release) = release::parse_release_tag(tag, release_name(&manifest.name)) else {
+/// A release tag names a version, so a source at that tag that declares a
+/// version must declare the same one.
+fn check_tag_version(tag: &str, release: &Version, declared: Option<&str>) -> Result<()> {
+    let Some(declared) = declared else {
         return Ok(());
     };
-    let declared = Version::parse(&manifest.version).ok();
-    if declared.as_ref() != Some(&release.version) {
+    if Version::parse(declared).ok().as_ref() != Some(release) {
         return Err(TuffError::refused(format!(
-            "tag {tag} names version {}, but the tuff-pack.toml at that tag declares version {}",
-            release.version, manifest.version
+            "tag {tag} names version {release}, but the manifest at that tag declares version {declared}"
         ))
-        .with_hint(
-            "the pack's author should tag the commit whose manifest declares that version",
-        ));
+        .with_hint("the author should tag the commit whose manifest declares that version"));
     }
     Ok(())
 }

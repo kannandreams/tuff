@@ -2377,6 +2377,7 @@ name = "tuff-adapter-claude"
 version = "0.17.0"
 dependencies = [
  "serde_json",
+ "toml",
  "tuff-core",
  "tuff-hooks-spec",
 ]

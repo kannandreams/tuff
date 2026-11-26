@@ -46,7 +46,8 @@ screens = [{ resource = "ui://changelog/preview", may_call = ["list_pull_request
 | `artifactVersion` | number | The artifact format version |
 | `targets` | array of string | Target ids, sorted |
 | `members` | array | One object per member, sorted by id (below) |
-| `unsupported` | array | Parts of the source Tuff could not carry. Empty for a Tuff pack; an import of another bundle format fills it |
+| `import` | object, optional | For a pack imported from another bundle format: `format` (such as `claude-plugin`), and where it was read from: `url`, `path`, `plugin` (the marketplace entry), `commit` |
+| `unsupported` | array | Parts of the source Tuff could not carry, each with `kind` (such as `commands`, `hooks`, or `mcp-server`), optional `name` and `path`, and `reason`. Empty for a pack written as a Tuff pack |
 | `x` | object | The pack's host tables |
 
 Each member:
@@ -87,6 +88,9 @@ A skill's folder can contain scripts the agent may choose to run. `files` lists 
 | `source` | `{ "kind": "artifact", "registry"? }` or `{ "kind": "git", "url", "path", "ref", "tag"?, "branch"? }` |
 | `targets` | The harnesses installed for |
 | `members` | `id`, `type`, `version` for each member |
+| `unsupported` | For a pack imported from another bundle format, what it had that the pack does not carry, as in section 3 |
+
+For a Claude Code plugin installed from git, `source` also has `format: "claude-plugin"`, and `plugin` when a marketplace entry was chosen.
 
 A host that showed the inspect document for a git URL SHOULD install with `--ref` set to that document's `source.ref`, so that what is installed is the commit that was reviewed.
 

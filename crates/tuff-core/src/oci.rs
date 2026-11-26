@@ -721,6 +721,7 @@ mod tests {
                 keywords: Vec::new(),
                 author: None,
                 x: Default::default(),
+                import: None,
                 capabilities: Vec::new(),
                 targets: Vec::new(),
                 files: Vec::new(),

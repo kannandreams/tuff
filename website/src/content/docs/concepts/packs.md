@@ -255,6 +255,10 @@ tuff add pack https://github.com/acme/crm-integration -a open-agents
 
 Tuff picks the newest release tag, such as `v1.2.0`, checks the commit out, confirms that its `tuff-pack.toml` declares version `1.2.0`, builds the pack for the harnesses you selected, and installs it as it installs an artifact. The lockfile pins the commit. `tuff outdated` and `tuff update` follow the repository's release tags, or its branch when it has none. See [Install from git](/cli/packs/#install-from-git) for `--ref`, `--path`, and the tag shapes.
 
+### Claude Code plugins
+
+A Claude Code plugin is read as a pack: its skills and MCP servers become members, and what Tuff does not carry, such as commands, agents, and hooks, is listed with a reason. `tuff pack import` writes the result as a source pack you can edit, check, and build, and `tuff add pack <git-url>` installs a plugin's repository directly. The installed skills and MCP servers are tracked like any other pack's, and render for every harness the pack is built for. See [Import a Claude Code plugin](/cli/packs/#import-a-claude-code-plugin).
+
 ## Update an installed pack
 
 Members move with their pack. The pack is the unit of versioning and verification: the artifact's target hashes are checked as a whole and every member records the same provenance, so updating one member alone would leave a lockfile claiming two releases of one pack and no artifact that reproduces either. `tuff update` on any member therefore updates all of them.

@@ -1,6 +1,7 @@
 //! Tuff's harness-neutral lifecycle engine and adapter contract.
 
 pub mod adapter;
+pub mod bundle;
 pub mod cache;
 pub mod catalog;
 pub mod check;

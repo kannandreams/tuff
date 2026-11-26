@@ -96,7 +96,7 @@ enum Command {
         json: bool,
     },
 
-    /// Build, inspect, verify, extract, list, and remove capability packs.
+    /// Build, inspect, verify, extract, import, list, and remove capability packs.
     Pack {
         #[command(subcommand)]
         action: PackCommand,
@@ -561,8 +561,8 @@ enum AddCommand {
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
-    /// Install every capability in a pack, from a verified artifact or a git
-    /// repository holding a tuff-pack.toml.
+    /// Install every capability in a pack, from a verified artifact, or a
+    /// git repository holding a tuff-pack.toml or a Claude Code plugin.
     Pack {
         /// A .tuffpack artifact path, or a git URL.
         source: String,
@@ -572,9 +572,13 @@ enum AddCommand {
         /// the newest release tag, or the default branch when there is none.
         #[arg(long = "ref", value_name = "REF")]
         git_ref: Option<String>,
-        /// For a git URL: the repository folder holding tuff-pack.toml.
+        /// For a git URL: the repository folder holding tuff-pack.toml or
+        /// the plugin.
         #[arg(long = "path", value_name = "DIR")]
         path: Option<String>,
+        /// For a Claude Code marketplace: the plugin to install.
+        #[arg(long = "plugin", value_name = "NAME")]
+        plugin: Option<String>,
         /// Print the installed pack, its source, and its members as JSON.
         #[arg(long = "json")]
         json: bool,
@@ -686,8 +690,33 @@ enum PackCommand {
         /// For a git URL: the repository folder holding tuff-pack.toml.
         #[arg(long = "path", value_name = "DIR")]
         path: Option<String>,
+        /// For a Claude Code marketplace in a git repository: the plugin.
+        #[arg(long = "plugin", value_name = "NAME")]
+        plugin: Option<String>,
         /// Print the pack, its members, what each writes and runs, and its
         /// host tables as JSON (schema 1).
+        #[arg(long = "json")]
+        json: bool,
+    },
+    /// Read a Claude Code plugin, or one plugin of a marketplace, as a
+    /// standalone source pack. Skills and MCP servers become members; what
+    /// Tuff does not carry is listed and kept under extra/.
+    Import {
+        /// A plugin or marketplace folder, or a git URL.
+        source: String,
+        /// The marketplace entry to import.
+        #[arg(long = "plugin", value_name = "NAME")]
+        plugin: Option<String>,
+        /// For a git URL: the tag, branch, or commit to read.
+        #[arg(long = "ref", value_name = "REF")]
+        git_ref: Option<String>,
+        /// The folder holding the plugin or marketplace.
+        #[arg(long = "path", value_name = "DIR")]
+        path: Option<String>,
+        /// Folder to write the source pack into; must be missing or empty.
+        #[arg(short = 'o', long = "output")]
+        output: PathBuf,
+        /// Print the imported pack as the inspect document (schema 1).
         #[arg(long = "json")]
         json: bool,
     },
@@ -1007,6 +1036,7 @@ fn run() -> Result<()> {
                     reference: typed_reference,
                     git_ref,
                     path,
+                    plugin,
                     json,
                 }) => {
                     reject_parent_add_options(
@@ -1024,6 +1054,7 @@ fn run() -> Result<()> {
                             reference: typed_reference.as_deref(),
                             git_ref: git_ref.as_deref(),
                             path: path.as_deref(),
+                            plugin: plugin.as_deref(),
                             json,
                         },
                     )
@@ -1101,11 +1132,28 @@ fn run() -> Result<()> {
                 source,
                 git_ref,
                 path,
+                plugin,
                 json,
             } => cmd_pack_inspect(commands::PackInspectOptions {
                 source: &source,
                 git_ref: git_ref.as_deref(),
                 path: path.as_deref(),
+                plugin: plugin.as_deref(),
+                json,
+            }),
+            PackCommand::Import {
+                source,
+                plugin,
+                git_ref,
+                path,
+                output,
+                json,
+            } => commands::cmd_pack_import(commands::PackImportOptions {
+                source: &source,
+                plugin: plugin.as_deref(),
+                git_ref: git_ref.as_deref(),
+                path: path.as_deref(),
+                output: &output,
                 json,
             }),
             PackCommand::Verify { artifact } => cmd_pack_verify(&artifact),

@@ -301,7 +301,7 @@ fn a_tag_whose_manifest_declares_another_version_is_refused() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "tag v2.0.0 names version 2.0.0, but the tuff-pack.toml at that tag declares version 1.0.0",
+            "tag v2.0.0 names version 2.0.0, but the manifest at that tag declares version 1.0.0",
         ));
     assert!(!project.path().join(".agents/skills/pack-skill").exists());
 }
@@ -439,7 +439,7 @@ fn a_pack_in_a_subfolder_is_found_with_path_and_a_missing_manifest_says_where_it
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "no tuff-pack.toml at the repository root",
+            "no tuff-pack.toml or Claude Code plugin at the repository root",
         ))
         .stderr(predicate::str::contains("--path"));
 

@@ -26,10 +26,33 @@
     "artifactVersion": { "type": "number" },
     "targets": { "type": "array", "items": { "type": "string" } },
     "members": { "type": "array", "items": { "$ref": "#/$defs/member" } },
-    "unsupported": { "type": "array", "items": { "type": "object" } },
+    "import": {
+      "type": "object",
+      "required": ["format"],
+      "additionalProperties": false,
+      "properties": {
+        "format": { "type": "string" },
+        "url": { "type": "string" },
+        "path": { "type": "string" },
+        "plugin": { "type": "string" },
+        "commit": { "type": "string" }
+      }
+    },
+    "unsupported": { "type": "array", "items": { "$ref": "#/$defs/unsupported" } },
     "x": { "$ref": "#/$defs/hostTables" }
   },
   "$defs": {
+    "unsupported": {
+      "type": "object",
+      "required": ["kind", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string" },
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    },
     "author": {
       "type": "object",
       "required": ["name"],
