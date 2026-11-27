@@ -121,6 +121,11 @@ pub struct PlanSummary {
     /// Notes about members, such as a hook that runs code. Show them before
     /// asking whether to apply.
     pub notes: Vec<String>,
+    /// Identifies exactly this change: the pack release, the targets, each
+    /// member, and every file's path, contents before, and contents after.
+    /// Two plans with the same fingerprint make the same change. Keep it
+    /// with an approval and pass it to [`apply_approved`].
+    pub fingerprint: String,
 }
 
 /// A change to a workspace, worked out and not yet written. Read it through
@@ -209,6 +214,7 @@ impl Plan {
         files.sort_by(|left, right| left.path.cmp(&right.path));
         summary.files = files;
         summary.notes.extend(notes);
+        summary.fingerprint = fingerprint(&summary, root, &mutations, &expected);
         Ok(Self {
             summary,
             work: Work {
@@ -221,6 +227,79 @@ impl Plan {
             },
         })
     }
+}
+
+/// The version of the fingerprint's input. A Tuff release that changes what
+/// a fingerprint covers changes this, so an approval kept across an upgrade
+/// is asked for again.
+const FINGERPRINT_VERSION: u32 = 1;
+
+/// Hash everything the plan changes into one stable string.
+fn fingerprint(
+    summary: &PlanSummary,
+    root: &Path,
+    mutations: &[FileMutation],
+    expected: &BTreeMap<PathBuf, Option<String>>,
+) -> String {
+    #[derive(Serialize)]
+    struct Input<'a> {
+        version: u32,
+        operation: Operation,
+        pack: &'a str,
+        installed: &'a Option<PlanRelease>,
+        release: &'a Option<PlanRelease>,
+        targets: Vec<&'a str>,
+        members: Vec<(&'a str, CapabilityType, &'a Option<String>, MemberChange)>,
+        files: Vec<(String, FileChange, &'a Option<String>, Option<String>)>,
+    }
+    let after = mutations
+        .iter()
+        .map(|mutation| (&mutation.path, lockfile::hash_bytes(&mutation.bytes)))
+        .collect::<BTreeMap<_, _>>();
+    let mut targets = summary
+        .targets
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    targets.sort_unstable();
+    let mut members = summary
+        .members
+        .iter()
+        .map(|member| {
+            (
+                member.id.as_str(),
+                member.capability_type,
+                &member.version,
+                member.change,
+            )
+        })
+        .collect::<Vec<_>>();
+    members.sort_by(|left, right| left.0.cmp(right.0));
+    let mut files = expected
+        .iter()
+        .map(|(path, before)| {
+            let relative = lockfile::relative_or_absolute_fs(path, root).replace('\\', "/");
+            let change = summary
+                .files
+                .iter()
+                .find(|file| file.path == relative)
+                .map_or(FileChange::Delete, |file| file.change);
+            (relative, change, before, after.get(path).cloned())
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    let input = Input {
+        version: FINGERPRINT_VERSION,
+        operation: summary.operation,
+        pack: &summary.pack,
+        installed: &summary.installed,
+        release: &summary.release,
+        targets,
+        members,
+        files,
+    };
+    let bytes = serde_json::to_vec(&input).expect("a plan fingerprint input serializes");
+    format!("sha256:{}", lockfile::hash_bytes(&bytes))
 }
 
 /// A staged change, before it is described as a plan.
@@ -289,6 +368,7 @@ pub fn plan_install(
         targets: target_ids,
         files: Vec::new(),
         notes: Vec::new(),
+        fingerprint: String::new(),
     };
     Plan::new(
         summary,
@@ -385,6 +465,7 @@ pub fn plan_update(workspace: &Workspace, request: UpdateRequest<'_>) -> Result<
         members: planned,
         files: Vec::new(),
         notes: Vec::new(),
+        fingerprint: String::new(),
     };
     Plan::new(summary, repo_root, staged).map(Some)
 }
@@ -430,6 +511,7 @@ pub fn plan_remove(workspace: &Workspace, pack: &str, force: bool) -> Result<Pla
         members: removed_members(&lock, &members, None),
         files: Vec::new(),
         notes: Vec::new(),
+        fingerprint: String::new(),
     };
     Plan::new(summary, repo_root, staged)
 }
@@ -478,6 +560,36 @@ pub fn apply(workspace: &Workspace, baselines: &Baselines, plan: Plan) -> Result
         }
     }
     Ok(summary)
+}
+
+/// What [`apply_approved`] did.
+#[derive(Debug)]
+pub enum Approval {
+    /// The plan matched the approved fingerprint and was written.
+    Applied(PlanSummary),
+    /// The plan is a different change from the one approved, and nothing was
+    /// written. Show this plan and ask again.
+    Changed(Plan),
+}
+
+/// Write `plan` only when it is the change someone approved earlier.
+///
+/// Use this when an approval can come long after the plan was shown, even
+/// after a restart: keep the shown plan's [`PlanSummary::fingerprint`] with
+/// the approval, make the plan again when it arrives, and pass both here.
+/// A plan with the same fingerprint is applied as [`apply`] does. Any other
+/// plan, such as one for a release published since, comes back as
+/// [`Approval::Changed`] with nothing written.
+pub fn apply_approved(
+    workspace: &Workspace,
+    baselines: &Baselines,
+    plan: Plan,
+    approved_fingerprint: &str,
+) -> Result<Approval> {
+    if plan.fingerprint != approved_fingerprint {
+        return Ok(Approval::Changed(plan));
+    }
+    apply(workspace, baselines, plan).map(Approval::Applied)
 }
 
 fn same_folder(left: &Path, right: &Path) -> bool {
