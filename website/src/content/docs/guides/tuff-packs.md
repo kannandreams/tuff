@@ -21,8 +21,25 @@ serde_json = "1"
 - **It never prints.** Each result carries its notes and warnings, such as a harness a plugin's pack is not built for. Show them in your own interface or logs.
 - **It writes only where you tell it.** The project and output folders are arguments. Builds and checkouts use temporary folders from the system's temporary directory, and each is deleted when the value that owns it is dropped.
 - **It reads no environment variables of its own.** It needs no `HOME`, so it runs under a service account or in a container.
-- **git is a program it runs.** Checkouts use the `git` on the machine, with the machine's git settings and credentials, so private repositories work as they do for `git clone`.
+- **git is a program it runs.** Checkouts use the `git` on the machine, with the machine's git settings and credentials, so private repositories work as they do for `git clone`. On a Mac without the Xcode Command Line Tools, the first call to `git` asks the user to install them, so check that `git` runs before offering installs from git.
 - **Errors are `tuff_core::error::TuffError`.** `kind()` is the same kind as the `kind` field of the CLI's JSON errors, and `hint()` is the suggestion to show.
+
+## Optional features
+
+Two features are on by default. Turning both off leaves out about a hundred dependencies and every C library:
+
+| Feature | What it adds | Without it |
+|---|---|---|
+| `registry` | Tuff's OCI and MCP registry clients in `tuff-core`, with reqwest, the OCI client, and tokio | Nothing in `tuff-packs` changes; it does not call them |
+| `diff` | Line-by-line patches in an update preview, through libgit2 | A preview still lists each changed file and its status, with an empty `patch` |
+
+Building, inspecting, importing, git checkouts, previews, marketplaces, and plan and apply work without either feature:
+
+```toml title="Cargo.toml"
+[dependencies]
+tuff-packs = { version = "0.20", default-features = false }
+tuff-core = { version = "0.20", default-features = false }
+```
 
 ## Inspect a pack for a review screen
 

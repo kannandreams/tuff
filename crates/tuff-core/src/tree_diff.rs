@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "diff")]
 use git2::{DiffFormat, DiffOptions, Repository, Tree};
 use sha2::{Digest, Sha256};
+#[cfg(feature = "diff")]
 use tempfile::TempDir;
 
 use crate::error::{Result, TuffError};
@@ -17,35 +19,15 @@ pub struct FileChange {
 
 #[derive(Debug)]
 pub struct TreeComparison {
+    /// A unified patch of every change. Empty without the `diff` feature.
     pub patch: String,
     pub changes: Vec<FileChange>,
 }
 
-/// Imports both directories into one scoped temporary Git repository and compares
-/// the resulting Git trees through libgit2. The repository is deleted with `temp`.
+/// Compares two directories: each changed file by content hash, and with the
+/// `diff` feature a unified patch of the changes.
 pub fn compare(old_root: &Path, new_root: &Path) -> Result<TreeComparison> {
-    let temp = TempDir::new()?;
-    let repository = Repository::init(temp.path()).map_err(git_error)?;
-    let old_tree = write_tree(&repository, old_root)?;
-    let new_tree = write_tree(&repository, new_root)?;
-
-    let mut options = DiffOptions::new();
-    let diff = repository
-        .diff_tree_to_tree(Some(&old_tree), Some(&new_tree), Some(&mut options))
-        .map_err(git_error)?;
-    let mut patch = Vec::new();
-    diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
-        match line.origin() {
-            '+' | '-' | ' ' => {
-                patch.push(line.origin() as u8);
-                patch.extend_from_slice(line.content());
-            }
-            _ => patch.extend_from_slice(line.content()),
-        }
-        true
-    })
-    .map_err(git_error)?;
-
+    let patch = patch(old_root, new_root)?;
     let old_files = file_hashes(old_root)?;
     let new_files = file_hashes(new_root)?;
     let mut changes = Vec::new();
@@ -78,12 +60,43 @@ pub fn compare(old_root: &Path, new_root: &Path) -> Result<TreeComparison> {
         });
     }
 
-    Ok(TreeComparison {
-        patch: String::from_utf8_lossy(&patch).into_owned(),
-        changes,
-    })
+    Ok(TreeComparison { patch, changes })
 }
 
+/// Imports both directories into one scoped temporary Git repository and diffs
+/// the resulting Git trees through libgit2. The repository is deleted with `temp`.
+#[cfg(feature = "diff")]
+fn patch(old_root: &Path, new_root: &Path) -> Result<String> {
+    let temp = TempDir::new()?;
+    let repository = Repository::init(temp.path()).map_err(git_error)?;
+    let old_tree = write_tree(&repository, old_root)?;
+    let new_tree = write_tree(&repository, new_root)?;
+
+    let mut options = DiffOptions::new();
+    let diff = repository
+        .diff_tree_to_tree(Some(&old_tree), Some(&new_tree), Some(&mut options))
+        .map_err(git_error)?;
+    let mut patch = Vec::new();
+    diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
+        match line.origin() {
+            '+' | '-' | ' ' => {
+                patch.push(line.origin() as u8);
+                patch.extend_from_slice(line.content());
+            }
+            _ => patch.extend_from_slice(line.content()),
+        }
+        true
+    })
+    .map_err(git_error)?;
+    Ok(String::from_utf8_lossy(&patch).into_owned())
+}
+
+#[cfg(not(feature = "diff"))]
+fn patch(_old_root: &Path, _new_root: &Path) -> Result<String> {
+    Ok(String::new())
+}
+
+#[cfg(feature = "diff")]
 fn write_tree<'repo>(repository: &'repo Repository, root: &Path) -> Result<Tree<'repo>> {
     let workdir = repository
         .workdir()
@@ -115,6 +128,7 @@ fn write_tree<'repo>(repository: &'repo Repository, root: &Path) -> Result<Tree<
     repository.find_tree(tree_id).map_err(git_error)
 }
 
+#[cfg(feature = "diff")]
 fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     for entry in std::fs::read_dir(source)? {
         let entry = entry?;
@@ -164,6 +178,7 @@ fn file_hashes(root: &Path) -> Result<BTreeMap<String, String>> {
     Ok(result)
 }
 
+#[cfg(feature = "diff")]
 fn git_error(error: git2::Error) -> TuffError {
     TuffError::new(format!("git2 diff failed: {error}"))
 }
@@ -196,6 +211,13 @@ mod tests {
                 .changes
                 .iter()
                 .any(|change| change.status == "modified")
+        );
+        // The patch needs libgit2; the list of changes does not.
+        assert_eq!(
+            result.patch.contains("+new file"),
+            cfg!(feature = "diff"),
+            "{}",
+            result.patch
         );
     }
 }

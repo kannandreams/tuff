@@ -9,6 +9,15 @@ homepage.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
+[features]
+default = ["registry", "diff"]
+# Pulling and pushing packs in OCI registries, and the MCP registry client:
+# the `oci` and `registry` modules.
+registry = ["dep:reqwest", "dep:oci-client", "dep:tokio", "dep:docker_credential"]
+# Line-by-line patches in `tree_diff`, and the `report` module, through
+# libgit2. Without it, `tree_diff` still lists changed files.
+diff = ["dep:git2"]
+
 [dependencies]
 tuff-hooks-spec.workspace = true
 serde = { version = "1.0.228", features = ["derive"] }
@@ -18,7 +27,9 @@ serde_json = "1.0.145"
 # the whole workspace.
 indexmap = { version = "2", features = ["serde"] }
 sha2 = "0.10.9"
-git2 = { version = "0.20", features = ["vendored-libgit2", "vendored-openssl"] }
+# Local trees and repositories only, so without its network features (and
+# the OpenSSL and libssh2 they build).
+git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"], optional = true }
 semver = "1.0.27"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 tempfile = "3.23.0"
@@ -27,7 +38,7 @@ toml = "0.9.8"
 # (Codex's .codex/config.toml).
 toml_edit = "0.25"
 url = "2.5.6"
-docker_credential = "1.4.0"
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "charset", "http2"] }
-oci-client = { version = "0.17.0", default-features = false, features = ["rustls-tls"] }
-tokio = { version = "1.47.1", features = ["fs", "io-util"] }
+docker_credential = { version = "1.4.0", optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "charset", "http2"], optional = true }
+oci-client = { version = "0.17.0", default-features = false, features = ["rustls-tls"], optional = true }
+tokio = { version = "1.47.1", features = ["fs", "io-util"], optional = true }

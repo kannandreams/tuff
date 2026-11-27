@@ -13,13 +13,16 @@ pub mod host;
 pub mod lockfile;
 pub mod manifest;
 pub mod mcp;
+#[cfg(feature = "registry")]
 pub mod oci;
 pub mod pack;
 pub mod paths;
 pub mod policy;
 pub mod policy_eval;
+#[cfg(feature = "registry")]
 pub mod registry;
 pub mod release;
+#[cfg(feature = "diff")]
 pub mod report;
 pub mod resolver;
 pub mod tool;

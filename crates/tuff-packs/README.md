@@ -26,4 +26,6 @@ fn main() -> tuff_packs::Result<()> {
 }
 ```
 
+The `registry` and `diff` features are on by default. With `default-features = false` the crate leaves out reqwest, the OCI client, tokio, and libgit2, and an update preview lists changed files without line-by-line patches.
+
 The Rust API is 0.x and can change in a minor release. The JSON documents the `tuff` command prints are the stable interface; see the [Pack JSON Specification](https://tuffcli.dev/spec/packs/). Guide: [The tuff-packs Rust library](https://tuffcli.dev/guides/tuff-packs/).

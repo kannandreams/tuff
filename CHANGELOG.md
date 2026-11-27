@@ -9,6 +9,11 @@ The historical entries below were reconstructed from release tags, merged pull r
 ### Added
 
 - **Approvals that come later.** A `tuff-packs` plan now has a `fingerprint` that identifies exactly the change it makes, in Rust and in its JSON. `install::apply_approved` takes a fresh plan and the fingerprint kept with an earlier approval, and applies the plan only when the two match; otherwise it returns the new plan with nothing written. An application can ask for approval, restart, and still install only what was approved. See [The tuff-packs Rust library](https://tuffcli.dev/guides/tuff-packs/#apply-an-approval-that-comes-later).
+- **Optional features in `tuff-core` and `tuff-packs`.** `registry` (the OCI and MCP registry clients, with reqwest, the OCI client, and tokio) and `diff` (line-by-line patches through libgit2) are on by default. An application that turns both off builds about 80 dependencies in place of about 185, and still builds, inspects, checks out from git, previews, plans, and applies; its update previews list changed files with an empty `patch`. See [Optional features](https://tuffcli.dev/guides/tuff-packs/#optional-features).
+
+### Changed
+
+- **No OpenSSL or libssh2 in the build.** libgit2 is built without its network support, which Tuff never used: git checkouts run the `git` program. Builds of `tuff` and of the libraries are faster, and OpenSSL is no longer a dependency.
 
 ## [0.19.0] - 2026-11-27
 

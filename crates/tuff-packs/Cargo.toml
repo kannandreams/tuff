@@ -12,6 +12,18 @@ readme = "README.md"
 keywords = ["agents", "claude-code", "mcp", "skills", "tuff"]
 categories = ["development-tools"]
 
+[features]
+default = ["registry", "diff"]
+# Tuff's registry clients, in tuff-core. Nothing in tuff-packs calls them;
+# turn the feature off to leave out reqwest, the OCI client, and tokio.
+registry = ["tuff-core/registry"]
+# Line-by-line patches in an update preview, through libgit2. Without it, a
+# preview still lists each changed file, with an empty `patch`.
+diff = ["tuff-core/diff"]
+
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 tuff-core.workspace = true
 tuff-hooks-spec.workspace = true
