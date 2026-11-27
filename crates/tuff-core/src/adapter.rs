@@ -338,15 +338,14 @@ pub trait AgentAdapter {
             .merge_fragment(self.hook_settings_relpath(), existing, fragment)
     }
     /// Take Tuff's registrations out of the settings file, leaving the
-    /// user's own alone.
+    /// user's own alone. Returns whether the file was rewritten.
     fn remove_hook_settings(
         &self,
         repo_root: &Path,
         managed_hooks: &[crate::lockfile::ManagedHook],
-    ) -> Result<()> {
+    ) -> Result<bool> {
         crate::hook_settings::remove_registrations(
             self.hook_settings_relpath(),
-            self.display_name(),
             repo_root,
             managed_hooks,
         )
@@ -607,25 +606,27 @@ pub trait AgentAdapter {
         }
     }
 
+    /// Remove a capability's files and registrations. Returns whether the
+    /// hook settings file was rewritten, so the caller can say so.
     fn remove(
         &self,
         primitive_id: &str,
         repo_root: &Path,
         managed_hooks: &[crate::lockfile::ManagedHook],
-    ) -> Result<()> {
+    ) -> Result<bool> {
         // Settings first, files last. Taking registrations out of a settings
         // file is the step that can refuse, when the user's file is not valid
         // JSON; deleting directories cannot meaningfully be refused. In this
         // order a corrupt file stops the removal with every file still in
         // place and the capability still tracked, instead of after its files
         // are gone.
-        self.remove_hook_settings(repo_root, managed_hooks)?;
+        let settings_updated = self.remove_hook_settings(repo_root, managed_hooks)?;
         crate::mcp::remove_tool(&repo_root.join(self.mcp_config_relpath()), primitive_id)?;
         let prefix = self.dir_prefix();
         for kind in &["skills", "tools", "hooks", "mcp-servers", "policies"] {
             self.remove_dir(repo_root, prefix, kind, primitive_id)?;
         }
-        Ok(())
+        Ok(settings_updated)
     }
 
     // ── internal helpers ───────────────────────────────────────────────

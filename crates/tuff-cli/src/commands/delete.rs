@@ -37,35 +37,7 @@ fn remove_target_tracking(
 
 pub(crate) use tuff_packs::preview::{LocalModifications, local_modifications};
 
-/// The installed policies with rules on an MCP server's own table for one
-/// agent, as Codex's `disabled_tools` and tool `approval_mode` are. Removing
-/// the server would take those rules with it.
-pub(crate) fn policies_on_server_table(
-    lf: &lockfile::Lockfile,
-    server_id: &str,
-    target: &str,
-) -> Vec<String> {
-    let Some(adapter) = AdapterKind::from_id(target) else {
-        return Vec::new();
-    };
-    let config = adapter.mcp_config_relpath();
-    if !tuff_core::policy::is_codex_config(config) {
-        return Vec::new();
-    }
-    let prefix = format!("{server_id}:");
-    lf.capabilities
-        .iter()
-        .filter(|(_, entry)| entry.capability_type == CapabilityType::Policy)
-        .filter(|(_, entry)| {
-            entry.targets.get(target).is_some_and(|target_entry| {
-                target_entry.managed_permissions.iter().any(|permission| {
-                    permission.settings_path == config && permission.rule.starts_with(&prefix)
-                })
-            })
-        })
-        .map(|(id, _)| id.clone())
-        .collect()
-}
+pub(crate) use tuff_packs::install::policies_on_server_table;
 
 pub fn cmd_delete(
     repo_root: &Path,
@@ -155,7 +127,13 @@ pub fn cmd_delete(
                 .get(target)
                 .map(|target_entry| target_entry.managed_hooks.as_slice())
                 .unwrap_or(&[]);
-            adapter.remove(id, &scope_root, managed_hooks)?;
+            if adapter.remove(id, &scope_root, managed_hooks)? {
+                eprintln!(
+                    "updated {} hook settings -> {}",
+                    adapter.display_name(),
+                    adapter.hook_settings_relpath()
+                );
+            }
         }
         remove_target_tracking(&scope_root, id, &mut entry, target)?;
     }

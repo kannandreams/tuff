@@ -297,20 +297,7 @@ pub(crate) fn registered_adapters(repo_root: &Path) -> Result<Vec<AdapterKind>> 
     registered_adapters_in(&config::read_config(repo_root)?)
 }
 
-/// The harnesses a config registers, in order, without duplicates.
-pub(crate) fn registered_adapters_in(config: &config::TuffConfig) -> Result<Vec<AdapterKind>> {
-    let mut adapters = Vec::new();
-    for id in &config.agents {
-        let adapter = AdapterKind::from_id(id).ok_or_else(|| {
-            TuffError::usage(format!("unknown registered agent '{}'", id))
-                .with_hint("run 'tuff harness list' to inspect config")
-        })?;
-        if !adapters.contains(&adapter) {
-            adapters.push(adapter);
-        }
-    }
-    Ok(adapters)
-}
+pub(crate) use tuff_packs::engine::index::registered_adapters_in;
 
 fn ensure_registered(repo_root: &Path, adapter: AdapterKind) -> Result<()> {
     let registered = registered_adapters(repo_root)?;

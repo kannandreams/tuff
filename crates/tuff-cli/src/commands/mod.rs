@@ -229,6 +229,24 @@ pub(crate) fn block_on_oci<T>(future: impl std::future::Future<Output = Result<T
         .block_on(future)
 }
 
+/// Where the `tuff` command keeps baseline copies: its cache folder.
+pub(crate) fn baselines() -> Result<tuff_packs::workspace::Baselines> {
+    tuff_packs::workspace::Environment::from_process()?.baselines()
+}
+
+/// Print what a library call returned to say: `Done` lines on standard
+/// output, notes and warnings on standard error.
+pub(crate) fn print_messages(messages: &[tuff_packs::workspace::Message]) {
+    use tuff_packs::workspace::Message;
+    for message in messages {
+        match message {
+            Message::Done(text) => println!("{text}"),
+            Message::Note(text) => eprintln!("note: {text}"),
+            Message::Warning(text) => eprintln!("{text}"),
+        }
+    }
+}
+
 pub(crate) fn home_dir() -> Result<PathBuf> {
     home_dir_opt().ok_or_else(|| TuffError::usage("HOME environment variable not set"))
 }

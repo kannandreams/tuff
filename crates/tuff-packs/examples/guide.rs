@@ -8,14 +8,18 @@
 use std::path::{Path, PathBuf};
 use tuff_core::bundle::write_source_pack;
 use tuff_core::lockfile::{self, PackSource};
+use tuff_core::pack::PackArtifact;
 use tuff_packs::build::build_as;
 use tuff_packs::build::build_for_declared_targets;
+use tuff_packs::build::build_for_targets;
 use tuff_packs::git::{CheckoutRequest, checkout};
 use tuff_packs::git::{GitPackStatus, status};
 use tuff_packs::import::source_pack_of;
 use tuff_packs::import::{ImportRequest, import};
 use tuff_packs::inspect;
+use tuff_packs::install::{UpdateRequest, apply, plan_install, plan_remove, plan_update};
 use tuff_packs::marketplace::{MarketplaceBuildOptions, build_marketplace};
+use tuff_packs::workspace::{Baselines, Workspace};
 
 fn review(folder: &Path) -> tuff_packs::Result<()> {
     let built = build_for_declared_targets(folder)?;
@@ -111,6 +115,67 @@ fn publish(packs: &[PathBuf], output: &Path) -> tuff_packs::Result<()> {
     for (name, version) in &built.plugins {
         println!("{name} {version}");
     }
+    Ok(())
+}
+
+fn install(project: &Path, url: &str, baselines: &Path) -> tuff_packs::Result<()> {
+    let workspace = Workspace::open(project)?;
+    let checked_out = checkout(CheckoutRequest {
+        url,
+        path: None,
+        git_ref: None,
+        plugin: None,
+        allow_remote: false,
+    })?;
+    let pack = source_pack_of(&checked_out)?;
+    let targets = ["claude".to_string()];
+    let built = build_for_targets(&pack.root, &targets)?;
+    let source = PackSource::Git(checked_out.source.clone());
+
+    let plan = plan_install(&workspace, &built.artifact, &source, &targets)?;
+    for file in &plan.files {
+        println!("{:?} {}", file.change, file.path);
+    }
+    for note in &plan.notes {
+        println!("note: {note}");
+    }
+    // The same plan as JSON, for a confirmation screen.
+    println!("{}", serde_json::to_string(&plan)?);
+
+    apply(&workspace, &Baselines::dir(baselines), plan)?;
+    Ok(())
+}
+
+fn update(
+    project: &Path,
+    pack: &str,
+    artifact: &PackArtifact,
+    source: &PackSource,
+) -> tuff_packs::Result<()> {
+    let workspace = Workspace::open(project)?;
+    let request = UpdateRequest {
+        pack,
+        artifact,
+        source,
+        targets: &[], // every harness the pack is installed for
+        force: false,
+    };
+    match plan_update(&workspace, request)? {
+        None => println!("{pack} is up to date"),
+        Some(plan) => {
+            for member in &plan.members {
+                println!("{:?} {}", member.change, member.id);
+            }
+            apply(&workspace, &Baselines::none(), plan)?;
+        }
+    }
+    Ok(())
+}
+
+fn remove(project: &Path, pack: &str) -> tuff_packs::Result<()> {
+    let workspace = Workspace::open(project)?;
+    let plan = plan_remove(&workspace, pack, false)?;
+    apply(&workspace, &Baselines::none(), plan)?;
     Ok(())
 }
 

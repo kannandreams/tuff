@@ -118,7 +118,7 @@ forward_to_implementation! {
     fn hook_file_content(&self, hook_cfg: &HookConfig) -> Result<Vec<u8>>;
     fn command_hook_fragment(&self, native_event: &str, command: &str) -> serde_json::Value;
     fn merge_hook_fragment(&self, existing: Option<&[u8]>, fragment: &serde_json::Value) -> Result<Vec<u8>>;
-    fn remove_hook_settings(&self, repo_root: &Path, managed_hooks: &[tuff_core::lockfile::ManagedHook]) -> Result<()>;
+    fn remove_hook_settings(&self, repo_root: &Path, managed_hooks: &[tuff_core::lockfile::ManagedHook]) -> Result<bool>;
     fn detect(&self, repo_root: &Path) -> bool;
     fn kinds_supported(&self) -> &[CapabilityType];
     fn policy_compatibility(&self) -> Vec<tuff_core::policy::PolicyCoverageEntry>;

@@ -9,8 +9,13 @@ pub fn cache_root(home: &Path) -> PathBuf {
 }
 
 pub fn cache_path(home: &Path, hash: &str) -> Result<PathBuf> {
+    cache_path_in(&cache_root(home), hash)
+}
+
+/// Where a baseline with `hash` lives under a baseline folder `root`.
+pub fn cache_path_in(root: &Path, hash: &str) -> Result<PathBuf> {
     validate_hash(hash)?;
-    Ok(cache_root(home).join(&hash[..2]).join(hash))
+    Ok(root.join(&hash[..2]).join(hash))
 }
 
 pub fn validate_hash(hash: &str) -> Result<()> {
@@ -41,7 +46,13 @@ pub fn hash_tree(root: &Path) -> Result<String> {
 }
 
 pub fn populate(home: &Path, hash: &str, source: &Path) -> Result<PathBuf> {
-    let destination = cache_path(home, hash)?;
+    populate_in(&cache_root(home), hash, source)
+}
+
+/// `populate` into a baseline folder the caller names, such as the one
+/// [`cache_root`] gives for a home directory.
+pub fn populate_in(root: &Path, hash: &str, source: &Path) -> Result<PathBuf> {
+    let destination = cache_path_in(root, hash)?;
     let actual = hash_tree(source)?;
     if actual != hash {
         return Err(TuffError::corrupt(format!(
