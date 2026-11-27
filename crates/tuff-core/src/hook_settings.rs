@@ -13,7 +13,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::error::{Result, TuffError};
-use crate::lockfile::{self, ManagedHook};
+use crate::lockfile::ManagedHook;
 
 /// How a harness lays out the hook registrations in its settings file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -176,29 +176,26 @@ pub fn extend_hook_groups(existing: &mut Vec<serde_json::Value>, additions: &[se
 /// group's `hooks`, a flat entry is the group itself, and a group or an
 /// event left empty is pruned so the file reads as if Tuff had never
 /// written to it.
+///
+/// Returns whether the file was rewritten, so the caller can say so.
 pub fn remove_registrations(
     settings_relpath: &str,
-    display_name: &str,
     repo_root: &Path,
     managed_hooks: &[ManagedHook],
-) -> Result<()> {
+) -> Result<bool> {
     if managed_hooks.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
     let settings_path = repo_root.join(settings_relpath);
     if !settings_path.is_file() {
-        return Ok(());
+        return Ok(false);
     }
     let existing = std::fs::read(&settings_path)?;
     let Some(updated) = without_registrations(settings_relpath, &existing, managed_hooks)? else {
-        return Ok(());
+        return Ok(false);
     };
     std::fs::write(&settings_path, updated)?;
-    eprintln!(
-        "updated {display_name} hook settings -> {}",
-        lockfile::relative_or_absolute_fs(&settings_path, repo_root)
-    );
-    Ok(())
+    Ok(true)
 }
 
 /// `remove_registrations` on a settings file's bytes: the bytes it should
@@ -399,7 +396,6 @@ mod tests {
         std::fs::write(temp.path().join(".claude/settings.json"), grouped).unwrap();
         remove_registrations(
             ".claude/settings.json",
-            "Claude",
             temp.path(),
             &[
                 managed(".claude/settings.json", "Stop", "ours"),
@@ -426,7 +422,6 @@ mod tests {
         std::fs::write(temp.path().join(".cursor/hooks.json"), flat).unwrap();
         remove_registrations(
             ".cursor/hooks.json",
-            "Cursor",
             temp.path(),
             &[
                 managed(".cursor/hooks.json", "stop", "ours"),
@@ -447,10 +442,9 @@ mod tests {
     #[test]
     fn removal_with_nothing_registered_or_no_file_is_a_no_op() {
         let temp = tempfile::tempdir().unwrap();
-        remove_registrations(".claude/settings.json", "Claude", temp.path(), &[]).unwrap();
+        remove_registrations(".claude/settings.json", temp.path(), &[]).unwrap();
         remove_registrations(
             ".claude/settings.json",
-            "Claude",
             temp.path(),
             &[managed(".claude/settings.json", "Stop", "ours")],
         )

@@ -1,8 +1,8 @@
 # tuff-packs
 
-Tuff capability packs from Rust. Build a source pack for its harnesses and for Claude Code, describe a pack for a review screen, read a Claude Code plugin as a pack, check out a pack from git and compare it with its release tags, preview an update, and write packs as a Claude Code marketplace.
+Tuff capability packs from Rust. Build a source pack for its harnesses and for Claude Code, describe a pack for a review screen, read a Claude Code plugin as a pack, check out a pack from git and compare it with its release tags, preview an update, write packs as a Claude Code marketplace, and install, update, and remove packs in a project.
 
-The `tuff` command is built on these functions. They return values and never print, and they write only to the folders you give them and to temporary folders they remove.
+The `tuff` command is built on these functions. They return values and never print, and they write only to the folders you give them and to temporary folders they remove. Installing is a plan, which writes nothing and lists every member and file that will change, and an apply, which writes exactly that plan.
 
 ```toml
 [dependencies]
@@ -25,7 +25,5 @@ fn main() -> tuff_packs::Result<()> {
     Ok(())
 }
 ```
-
-Installing, updating, and removing packs are not in this crate yet. Run `tuff add pack`, `tuff update`, and `tuff pack remove` with `--json` for those.
 
 The Rust API is 0.x and can change in a minor release. The JSON documents the `tuff` command prints are the stable interface; see the [Pack JSON Specification](https://tuffcli.dev/spec/packs/). Guide: [Using Tuff from Rust](https://tuffcli.dev/guides/packs-from-rust/).

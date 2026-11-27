@@ -8,11 +8,13 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ### Added
 
-- **The `tuff-packs` crate: packs from Rust.** It builds a source pack for its harnesses and for Claude Code, describes a pack with the same document as `tuff pack inspect --json`, reads a Claude Code plugin as a pack, checks out a pack from git and compares it with its release tags, previews an update as `tuff update --check --json` does, and writes packs as a Claude Code marketplace. Its functions return notes and warnings in place of printing them, and read no environment variables of their own. The `tuff pack` commands are built on it. Installing, updating, and removing packs are not in the crate yet. Its Rust API is 0.x.
+- **The `tuff-packs` crate: packs from Rust.** It builds a source pack for its harnesses and for Claude Code, describes a pack with the same document as `tuff pack inspect --json`, reads a Claude Code plugin as a pack, checks out a pack from git and compares it with its release tags, previews an update as `tuff update --check --json` does, and writes packs as a Claude Code marketplace. Its functions return notes and warnings in place of printing them, and read no environment variables of their own. The `tuff pack` commands are built on it. Its Rust API is 0.x.
+- **`tuff-packs` installs, updates, and removes packs as a plan and an apply.** `plan_install`, `plan_update`, and `plan_remove` check the request and render every member in a staging folder without touching the project, and return a plan listing each member and file that will change and the notes to show first. `apply` writes that plan as one change. It refuses when a file the plan touches changed after the plan was made, and takes a lock so that two changes to one project, from an application or from `tuff`, never overlap. The caller names the project and where baseline copies go, which can be nowhere, and the library reads no `HOME`. `tuff add pack`, `tuff update` of a pack member, and `tuff pack remove` are built on these functions.
 
 ### Changed
 
 - **The hook and runtime dependency notes print when a capability is installed.** Loading a capability's `tuff.toml` no longer prints them, so `tuff pack build`, `tuff pack inspect`, and `tuff pack check` no longer repeat them for every member; `tuff add`, `tuff add pack`, and `tuff update` print them as before.
+- **`tuff update` of a pack member and `tuff pack remove` no longer print `updated <harness> hook settings` lines.** The lines described the staging copy of the project, before the project itself changed.
 
 ## [0.18.0] - 2026-11-27
 

@@ -3,7 +3,7 @@ title: Packs in Your Application
 description: Install, review, update, and remove capability packs and Claude Code plugins from your own application, using Tuff's JSON output.
 ---
 
-This guide is for developers of an application that gives agents capabilities on behalf of its users: an agent platform, an internal tool, or anything with a "plugins" page. It shows how to let a user install a pack or a Claude Code plugin from a git address, review what it adds before anything is written, keep your own settings with it, and preview and apply updates. Every step is one `tuff` command with `--json`. A Rust application can call the [`tuff-packs` library](/guides/packs-from-rust/) for inspecting, importing, building, and checking packs.
+This guide is for developers of an application that gives agents capabilities on behalf of its users: an agent platform, an internal tool, or anything with a "plugins" page. It shows how to let a user install a pack or a Claude Code plugin from a git address, review what it adds before anything is written, keep your own settings with it, and preview and apply updates. Every step is one `tuff` command with `--json`. A Rust application can call the [`tuff-packs` library](/guides/packs-from-rust/) for the same steps.
 
 :::note[Tuff version]
 These commands need Tuff 0.18.0 or later. Check with `tuff --version`, and see [Installation](/installation/) to upgrade.
@@ -260,7 +260,7 @@ To keep a plugin as a pack you can edit, run [`tuff pack import`](/cli/packs/#im
 
 ## Related
 
-- [Packs from Rust](/guides/packs-from-rust/): the same inspect, import, build, and update checks from the `tuff-packs` crate.
+- [Packs from Rust](/guides/packs-from-rust/): the same steps from the `tuff-packs` crate, with installs as a plan and an apply.
 - [Pack JSON Specification](/spec/packs/): every field of every document on this page, with a JSON Schema.
 - [Packs CLI reference](/cli/packs/): every flag of `tuff pack` and `tuff add pack`.
 - [Capability Packs](/concepts/packs/): what a pack is and how its artifact is verified.

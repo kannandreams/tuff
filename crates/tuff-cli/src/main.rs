@@ -1,5 +1,4 @@
 mod adapter;
-mod adapters;
 mod commands;
 mod display;
 mod mcp_client;
