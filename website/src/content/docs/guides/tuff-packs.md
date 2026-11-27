@@ -1,5 +1,5 @@
 ---
-title: Packs from Rust
+title: The tuff-packs Rust library
 description: Build, inspect, import, and check packs and Claude Code plugins from a Rust application with the tuff-packs crate.
 ---
 

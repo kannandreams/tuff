@@ -4,6 +4,9 @@ import starlightBlog from 'starlight-blog';
 
 export default defineConfig({
   site: 'https://tuffcli.dev',
+  redirects: {
+    '/guides/packs-from-rust/': '/guides/tuff-packs/',
+  },
   devToolbar: {
     enabled: false,
   },
@@ -118,7 +121,7 @@ export default defineConfig({
           items: [
             { label: 'Capability Packs', slug: 'concepts/packs' },
             { label: 'Packs in Your Application', slug: 'guides/packs-in-your-application' },
-            { label: 'Packs from Rust', slug: 'guides/packs-from-rust' },
+            { label: 'The tuff-packs Rust library', slug: 'guides/tuff-packs' },
             { label: 'Pack JSON Specification', slug: 'spec/packs' },
             { label: 'OCI Registries & Container Images', slug: 'guides/oci-registries-and-container-images' },
           ],

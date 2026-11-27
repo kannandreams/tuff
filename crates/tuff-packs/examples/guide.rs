@@ -1,5 +1,5 @@
-//! The examples on the "Packs from Rust" guide page
-//! (website/src/content/docs/guides/packs-from-rust.md), compiled so the
+//! The examples on "The tuff-packs Rust library" guide page
+//! (website/src/content/docs/guides/tuff-packs.md), compiled so the
 //! page stays in step with the API. tests/guide_examples.rs checks that
 //! every block on the page is here.
 
