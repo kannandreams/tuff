@@ -6,11 +6,7 @@ description: Install, review, update, and remove capability packs and Claude Cod
 This guide is for developers of an application that gives agents capabilities on behalf of its users: an agent platform, an internal tool, or anything with a "plugins" page. It shows how to let a user install a pack or a Claude Code plugin from a git address, review what it adds before anything is written, keep your own settings with it, and preview and apply updates. Every step is one `tuff` command with `--json`.
 
 :::note[Tuff version]
-These commands arrive in Tuff 0.18.0. Until it is released, install Tuff from the main branch:
-
-```sh frame="terminal"
-cargo install --locked --git https://github.com/kannandreams/tuff tuffcli
-```
+These commands need Tuff 0.18.0 or later. Check with `tuff --version`, and see [Installation](/installation/) to upgrade.
 :::
 
 ## How your application calls Tuff

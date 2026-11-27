@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-27
+
 ### Added
 
 - **`tuff add pack` installs a pack from a git repository.** A repository that holds a standalone `tuff-pack.toml` installs from its URL, at its newest release tag (`v1.2.0`, or `<name>/v1.2.0` in a repository with several packs), or at the tag, branch, or commit given with `--ref`. `--path` names the folder holding the pack. The `tuff-pack.toml` at a release tag must declare the tag's version. Tuff builds the pack from the checkout and installs it with the same all-or-nothing checks as an artifact, and `tuff.lock` pins the commit. `--json` prints the installed pack, its source, and its members.
@@ -433,7 +435,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/kannandreams/tuff/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/kannandreams/tuff/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/kannandreams/tuff/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/kannandreams/tuff/compare/v0.14.0...v0.15.0
