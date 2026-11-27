@@ -57,6 +57,7 @@ mise run docs-check
 mise run docs-build
 mise run capabilities-check
 mise run plugin-check
+mise run lint-slim
 ```
 
 Direct Cargo and npm commands remain valid when a narrower check is more appropriate, including `cargo test -p tuffcli`, `cargo test -p tuff-core`, and `npm --prefix website run build`.

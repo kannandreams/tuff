@@ -46,6 +46,13 @@ run = [
   { task = "lint-error-kinds" },
 ]
 
+[tasks.lint-slim]
+description = "Lint and test the libraries without their default features, as an application that turns them off builds them"
+run = [
+  "cargo clippy -p tuff-core -p tuff-packs --all-targets --no-default-features -- -D warnings",
+  "cargo test -p tuff-core -p tuff-packs --no-default-features",
+]
+
 [tasks.lint-error-kinds]
 description = "Keep untyped errors from creeping back (RFC-105 D6)"
 run = """
@@ -206,6 +213,7 @@ description = "Run the full repository check"
 run = [
   { task = "deps" },
   { task = "lint" },
+  { task = "lint-slim" },
   { task = "test" },
   { task = "build-release" },
   { task = "security-audit" },
