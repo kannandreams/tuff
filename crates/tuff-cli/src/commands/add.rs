@@ -954,6 +954,7 @@ fn synthetic_local_manifest(
         server: None,
         policy: None,
         targets: vec![],
+        x: Default::default(),
         root: capability_dir.to_path_buf(),
     })
 }

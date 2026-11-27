@@ -18,6 +18,7 @@ mod mcp_search;
 mod outdated;
 mod pack;
 mod pack_git;
+mod pack_inspect;
 mod policy;
 mod project_pack;
 mod report;

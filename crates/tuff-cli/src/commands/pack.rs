@@ -70,6 +70,11 @@ pub fn cmd_pack_init(root: &Path, options: PackInitOptions) -> Result<()> {
         name: options.name,
         version: "0.1.0".into(),
         description: "Describe the capabilities and runtime contract in this pack.".into(),
+        homepage: None,
+        license: None,
+        keywords: Vec::new(),
+        author: None,
+        x: Default::default(),
         build: pack::PackBuild {
             targets: vec!["open-agents".into()],
         },
@@ -274,6 +279,11 @@ fn project_pack_manifest(
         name: name.to_string(),
         version: version.to_string(),
         description: description.to_string(),
+        homepage: None,
+        license: None,
+        keywords: Vec::new(),
+        author: None,
+        x: Default::default(),
         build: pack::PackBuild { targets },
         project: Some(pack::ProjectPackSelection { capabilities }),
         capabilities: Vec::new(),
@@ -365,20 +375,90 @@ fn default_project_artifact_path(root: &Path, manifest: &pack::PackManifest) -> 
         .join(format!("{leaf}-{}.tuffpack", manifest.version))
 }
 
-pub fn cmd_pack_inspect(path: &Path, json: bool) -> Result<()> {
-    let artifact = pack::read_artifact(path)?;
+/// Where `tuff pack inspect` reads a pack from.
+pub struct PackInspectOptions<'a> {
+    /// An artifact path, a source folder or `tuff-pack.toml`, or a git URL.
+    pub source: &'a str,
+    /// For a git URL: the tag, branch, or commit.
+    pub git_ref: Option<&'a str>,
+    /// For a git URL: the folder holding `tuff-pack.toml`.
+    pub path: Option<&'a str>,
+    pub json: bool,
+}
+
+/// Where an inspected pack came from, as the JSON document reports it.
+#[derive(serde::Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum InspectedSource {
+    Artifact { path: String },
+    Folder { path: String },
+    Git(lockfile::PackGitSource),
+}
+
+pub fn cmd_pack_inspect(options: PackInspectOptions<'_>) -> Result<()> {
+    let PackInspectOptions {
+        source,
+        git_ref,
+        path,
+        json,
+    } = options;
+    let as_path = Path::new(source);
+    let is_git = crate::git::is_git_url(source);
+    if !is_git && (git_ref.is_some() || path.is_some()) {
+        return Err(TuffError::usage(
+            "--ref and --path apply to a pack inspected from a git address",
+        ));
+    }
+    // A source pack is built in a temporary directory so the document can
+    // say what each member writes; nothing in the project changes.
+    let (_built, artifact, inspected) = if is_git {
+        let checkout = super::pack_git::checkout(source, path, git_ref)?;
+        let (directory, artifact) = build_pack_for_declared_targets(&checkout.pack_root)?;
+        (
+            Some(directory),
+            artifact,
+            InspectedSource::Git(checkout.source),
+        )
+    } else if as_path.is_dir()
+        || as_path
+            .file_name()
+            .is_some_and(|name| name == pack::PACK_MANIFEST_FILE)
+    {
+        let (directory, artifact) = build_pack_for_declared_targets(as_path)?;
+        (
+            Some(directory),
+            artifact,
+            InspectedSource::Folder {
+                path: source.to_string(),
+            },
+        )
+    } else {
+        (
+            None,
+            pack::read_artifact(as_path)?,
+            InspectedSource::Artifact {
+                path: source.to_string(),
+            },
+        )
+    };
     if json {
-        println!("{}", serde_json::to_string_pretty(&artifact.metadata)?);
+        let document = super::pack_inspect::document(&artifact, &inspected)?;
+        println!("{}", serde_json::to_string_pretty(&document)?);
         return Ok(());
     }
     println!("pack: {}", artifact.metadata.name);
     println!("version: {}", artifact.metadata.version);
     println!("digest: sha256:{}", artifact.digest);
-    println!("capabilities: {}", artifact.metadata.capabilities.len());
-    for capability in &artifact.metadata.capabilities {
+    if let InspectedSource::Git(git) = &inspected {
+        println!("source: {} ({})", git.url, describe_git_ref(git));
+    }
+    let members = super::pack_inspect::members(&artifact)?;
+    println!("capabilities: {}", members.len());
+    for member in &members {
+        let runs = if member.runs_code { ", runs code" } else { "" };
         println!(
-            "  - {} {} ({})",
-            capability.id, capability.version, capability.capability_type
+            "  - {} {} ({}{runs})",
+            member.id, member.version, member.capability_type
         );
     }
     println!("targets: {}", artifact.metadata.targets.len());
@@ -386,6 +466,13 @@ pub fn cmd_pack_inspect(path: &Path, json: bool) -> Result<()> {
         println!("  - {}", target.id);
     }
     Ok(())
+}
+
+/// Build a source pack for every target its manifest declares.
+fn build_pack_for_declared_targets(pack_root: &Path) -> Result<(tempfile::TempDir, PackArtifact)> {
+    let (_, manifest) = pack::load_manifest(pack_root)?;
+    let targets = canonical_target_ids(&manifest.build.targets)?;
+    build_pack_for_targets(pack_root, &targets)
 }
 
 pub fn cmd_pack_verify(path: &Path) -> Result<()> {
@@ -741,6 +828,7 @@ fn record_pack_entry(lock: &mut lockfile::Lockfile, artifact: &PackArtifact, sou
             version: artifact.metadata.version.clone(),
             digest: artifact.digest.clone(),
             source: source.clone(),
+            x: artifact.metadata.x.clone(),
         },
     );
 }
@@ -797,6 +885,7 @@ fn render_artifact(
         )?;
         targets.push(PackArtifactTarget {
             id: adapter.id().to_string(),
+            kind: pack::PackTargetKind::Harness,
             capabilities: target_capabilities,
         });
     }
@@ -818,10 +907,19 @@ fn render_artifact(
         name: loaded.manifest.name.clone(),
         version: loaded.manifest.version.clone(),
         description: loaded.manifest.description.clone(),
+        homepage: loaded.manifest.homepage.clone(),
+        license: loaded.manifest.license.clone(),
+        keywords: loaded.manifest.keywords.clone(),
+        author: loaded.manifest.author.clone(),
+        x: tuff_core::host::to_json(&loaded.manifest.x),
         capabilities,
         targets,
         files: Vec::new(),
     };
+    contents.push(PackArtifactContent {
+        path: pack::ARTIFACT_MANIFEST_PATH.to_string(),
+        bytes: pack::manifest_bytes(loaded)?,
+    });
     Ok((metadata, contents))
 }
 
@@ -1674,6 +1772,8 @@ struct PackListEntry<'a> {
     digest: String,
     source: PackSource,
     members: Vec<PackListMember<'a>>,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    x: tuff_core::host::HostTablesJson,
 }
 
 #[derive(serde::Serialize)]
@@ -1710,6 +1810,7 @@ pub fn cmd_pack_list(repo_root: &Path, json: bool) -> Result<()> {
                 digest: pack.digest,
                 source: pack.source,
                 members,
+                x: pack.x,
             }
         })
         .collect::<Vec<_>>();

@@ -1,0 +1,14 @@
+id = "github"
+version = "2.0.0"
+type = "mcp-server"
+description = "GitHub's MCP server."
+
+[server]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+[server.env]
+GITHUB_PERSONAL_ACCESS_TOKEN = { from_env = "GITHUB_TOKEN" }
+
+[x.example-host]
+default_level = "ask"

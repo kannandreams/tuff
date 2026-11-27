@@ -7192,8 +7192,9 @@ fn project_pack_build_packages_tracked_capabilities_with_simple_defaults() {
         .unwrap();
     assert!(output.status.success());
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(metadata["capabilities"][0]["id"], "code-review");
-    assert_eq!(metadata["capabilities"].as_array().unwrap().len(), 1);
+    assert_eq!(metadata["schema"], 1);
+    assert_eq!(metadata["members"][0]["id"], "code-review");
+    assert_eq!(metadata["members"].as_array().unwrap().len(), 1);
 }
 
 #[test]

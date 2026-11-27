@@ -152,6 +152,23 @@ path = "capabilities/pii-guard"
 path = "capabilities/lead-triage"
 ```
 
+A pack manifest can also carry who publishes it and host tables:
+
+```toml title="tuff-pack.toml"
+homepage = "https://example.com/crm"
+license = "MIT"
+keywords = ["crm", "sales"]
+
+[author]
+name = "Acme"
+url = "https://example.com"
+
+[x.myapp]
+default_level = "read"
+```
+
+`homepage`, `license`, `keywords`, and `author` are optional, appear in `tuff pack inspect`, and are written into a bundle format that has fields for them. A table under `x` belongs to an application that installs packs for its users: Tuff keeps it as written and never reads it. See [Host tables](/spec/packs/#2-host-tables).
+
 ### Validate and build the standalone source
 
 ```sh frame="terminal"
@@ -264,6 +281,7 @@ When the installed version is already the newest tag, `tuff update` still resolv
 ## Current boundaries
 
 - A built artifact always contains canonical portable member sources and pre-rendered targets; project-backed selection is an authoring convenience, not a new artifact format.
+- Artifacts are format version 2, which adds the optional manifest fields, host tables, and the pack's `tuff-pack.toml` as written. Tuff reads versions 1 and 2. Tuff 0.17 and earlier refuse a version 2 artifact and ask to upgrade Tuff.
 - Standalone source packs contain local manifest-backed members only. A pack installed from git is a standalone source pack in a repository.
 - Pack installation is project-scoped; `--global` is not supported.
 - Tuff does not resolve pack-to-pack dependencies or semantic-version constraints. Registry resolution picks the newest semver tag; it does not pin to a range.

@@ -1,0 +1,8 @@
+id = "lint-hook"
+version = "1.0.0"
+type = "hook"
+description = "Lint after each edit."
+
+[hook]
+event = "post_tool_use"
+command = "echo lint"

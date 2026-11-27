@@ -307,6 +307,7 @@ pub fn to_manifest(server: &RegistryServer, id: &str) -> Result<CapabilityManife
         capability_type: CapabilityType::McpServer,
         description: server.description.clone(),
         files: Vec::new(),
+        x: Default::default(),
         root: std::path::PathBuf::new(),
         implementation: None,
         parameters: None,

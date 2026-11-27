@@ -92,12 +92,12 @@ description = "Validate the Claude Code plugin and marketplace manifests"
 run = "./scripts/check-plugin.sh"
 
 [tasks.spec-sync]
-description = "Regenerate the published hooks specification from the crates"
-run = "./scripts/check-spec.sh --sync"
+description = "Regenerate the published hooks and pack specifications from the crates"
+run = ["./scripts/check-spec.sh --sync", "./scripts/check-pack-spec.sh --sync"]
 
 [tasks.spec-check]
-description = "Verify the published hooks specification matches the crates"
-run = "./scripts/check-spec.sh"
+description = "Verify the published hooks and pack specifications match the crates"
+run = ["./scripts/check-spec.sh", "./scripts/check-pack-spec.sh"]
 
 [tasks.extension-check]
 description = "Type-check and test the VS Code extension"

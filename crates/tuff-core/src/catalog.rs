@@ -104,6 +104,7 @@ pub fn lookup(id: &str) -> Result<Option<CapabilityManifest>> {
         server: Some(config),
         policy: None,
         targets: Vec::new(),
+        x: Default::default(),
         root: PathBuf::new(),
     }))
 }

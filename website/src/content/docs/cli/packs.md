@@ -48,9 +48,14 @@ For a standalone pack, omitting `--output` writes `<pack-name>-<pack-version>.tu
 
 ```sh frame="terminal"
 tuff pack inspect <artifact.tuffpack>
-tuff pack inspect <artifact.tuffpack> --json
+tuff pack inspect ./review-pack --json
+tuff pack inspect https://github.com/acme/review-pack --ref v1.2.0 --json
 tuff pack verify <artifact.tuffpack>
 ```
+
+`pack inspect` reads an artifact, a source pack folder, or a git URL, with `--ref` and `--path` as for [`tuff add pack`](#install-from-git). A folder or repository is built in a temporary directory, so nothing in the project changes. The text form lists each member and marks the ones that run code. `--json` prints one document with the pack's metadata, its source (for git, the resolved commit), and for each member the files it writes on each harness, whether it runs code (hooks, tools, and MCP servers started as local processes), the MCP servers it starts or connects to with the environment variables they read, and its host tables. The [Pack JSON Specification](/spec/packs/) describes every field.
+
+To review a pack from git and then install exactly what was reviewed, pass the `source.ref` from the inspect document to `tuff add pack <url> --ref <commit>`.
 
 ### Push and pull
 

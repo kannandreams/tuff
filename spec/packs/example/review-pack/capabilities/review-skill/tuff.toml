@@ -1,0 +1,5 @@
+id = "review-skill"
+version = "1.0.0"
+type = "skill"
+description = "How to review a pull request."
+files = ["SKILL.md", "scripts/check.sh"]
