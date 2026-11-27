@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-27
+
 ### Added
 
 - **The `tuff-packs` crate: packs from Rust.** It builds a source pack for its harnesses and for Claude Code, describes a pack with the same document as `tuff pack inspect --json`, reads a Claude Code plugin as a pack, checks out a pack from git and compares it with its release tags, previews an update as `tuff update --check --json` does, and writes packs as a Claude Code marketplace. Its functions return notes and warnings in place of printing them, and read no environment variables of their own. The `tuff pack` commands are built on it. Its Rust API is 0.x.
@@ -445,7 +447,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/kannandreams/tuff/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/kannandreams/tuff/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/kannandreams/tuff/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/kannandreams/tuff/compare/v0.15.0...v0.16.0
