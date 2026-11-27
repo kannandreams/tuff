@@ -26,4 +26,4 @@ fn main() -> tuff_packs::Result<()> {
 }
 ```
 
-The Rust API is 0.x and can change in a minor release. The JSON documents the `tuff` command prints are the stable interface; see the [Pack JSON Specification](https://tuffcli.dev/spec/packs/). Guide: [Using Tuff from Rust](https://tuffcli.dev/guides/packs-from-rust/).
+The Rust API is 0.x and can change in a minor release. The JSON documents the `tuff` command prints are the stable interface; see the [Pack JSON Specification](https://tuffcli.dev/spec/packs/). Guide: [The tuff-packs Rust library](https://tuffcli.dev/guides/tuff-packs/).
