@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-27
+
 ### Added
 
 - **Approvals that come later.** A `tuff-packs` plan now has a `fingerprint` that identifies exactly the change it makes, in Rust and in its JSON. `install::apply_approved` takes a fresh plan and the fingerprint kept with an earlier approval, and applies the plan only when the two match; otherwise it returns the new plan with nothing written. An application can ask for approval, restart, and still install only what was approved. See [The tuff-packs Rust library](https://tuffcli.dev/guides/tuff-packs/#apply-an-approval-that-comes-later).
@@ -14,6 +16,7 @@ The historical entries below were reconstructed from release tags, merged pull r
 ### Changed
 
 - **No OpenSSL or libssh2 in the build.** libgit2 is built without its network support, which Tuff never used: git checkouts run the `git` program. Builds of `tuff` and of the libraries are faster, and OpenSSL is no longer a dependency.
+- **The Rust guide is now [The tuff-packs Rust library](https://tuffcli.dev/guides/tuff-packs/).** The old address redirects to it.
 
 ## [0.19.0] - 2026-11-27
 
@@ -456,7 +459,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/kannandreams/tuff/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/kannandreams/tuff/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/kannandreams/tuff/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/kannandreams/tuff/compare/v0.16.0...v0.17.0
