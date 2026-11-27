@@ -1,0 +1,26 @@
+[package]
+name = "tuff-python"
+version.workspace = true
+edition.workspace = true
+description = "The Tuff SDK for Python: install, update, and remove capability packs from a Python application."
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+# Published to PyPI as `tuff-sdk` by maturin, not to crates.io.
+publish = false
+
+[lib]
+name = "tuff_sdk"
+crate-type = ["cdylib"]
+# The module links against Python only when maturin builds it; its tests are
+# the pytest suite in tests/.
+test = false
+doctest = false
+
+[dependencies]
+tuff-core.workspace = true
+tuff-packs = { workspace = true, features = ["diff"] }
+pyo3 = { version = "0.30", features = ["abi3-py39"] }
+serde = "1.0.228"
+serde_json = "1.0.145"

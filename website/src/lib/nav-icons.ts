@@ -3,8 +3,10 @@
 // `puzzle`, `server`, `pencil`, and `vscode` are Starlight's own icons, so the nav
 // matches the docs header. Starlight has no box or plug, so those come from
 // Unicons (https://github.com/Iconscout/unicons, Apache-2.0), the line set
-// Starlight's icons are drawn from. `console` is drawn for this site.
+// Starlight's icons are drawn from. `console` and `code` are drawn for this site.
 export const navIcons = {
+  code:
+    '<path d="M8.7 6.3a1 1 0 0 1 0 1.4L4.4 12l4.3 4.3a1 1 0 1 1-1.4 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 0Zm6.6 0a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l4.3-4.3-4.3-4.3a1 1 0 0 1 0-1.4Z"/>',
   console:
     '<path d="M4 3h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm1 2v5h5V5H5Zm9-2h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm1 2v2h4V5h-4Zm-1 6h6a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm1 2v6h4v-6h-4ZM4 14h7a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Zm1 2v3h5v-3H5Z"/>',
   puzzle:

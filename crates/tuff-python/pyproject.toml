@@ -1,0 +1,33 @@
+[build-system]
+requires = ["maturin>=1.9.4,<2"]
+build-backend = "maturin"
+
+[project]
+name = "tuff-sdk"
+dynamic = ["version"]
+description = "The Tuff SDK for Python: install, update, and remove agent capability packs from your application."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "Kannan Kalidasan" },
+]
+maintainers = [
+  { name = "kannandreams" },
+]
+keywords = ["agents", "claude-code", "mcp", "skills", "tuff"]
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://tuffcli.dev/sdk/python/"
+Repository = "https://github.com/kannandreams/tuff"
+Documentation = "https://tuffcli.dev/sdk/python/"
+Issues = "https://github.com/kannandreams/tuff/issues"
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "tuff_sdk"

@@ -40,6 +40,22 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
+      # The Python SDK: one abi3 wheel per platform for Python 3.9 and later.
+      - name: Build tuff-sdk wheel
+        uses: PyO3/maturin-action@v1.51.0
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          rust-toolchain: 1.97.1
+          args: --locked --release --manifest-path crates/tuff-python/Cargo.toml --out sdk-dist
+
+      - name: Upload tuff-sdk wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: tuff-sdk-wheel-${{ matrix.target }}
+          path: sdk-dist/*.whl
+          if-no-files-found: error
+
   publish:
     name: Publish wheels to PyPI
     needs: wheels
@@ -56,6 +72,33 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: tuffcli-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Check distributions
+        run: pipx run twine check dist/*
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  publish-sdk:
+    name: Publish tuff-sdk wheels to PyPI
+    needs: wheels
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi-tuff-sdk
+      url: https://pypi.org/p/tuff-sdk
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tuff-sdk-wheel-*
           path: dist
           merge-multiple: true
 

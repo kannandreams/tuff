@@ -3,7 +3,7 @@ title: Packs in Your Application
 description: Install, review, update, and remove capability packs and Claude Code plugins from your own application, using Tuff's JSON output.
 ---
 
-This guide is for developers of an application that gives agents capabilities on behalf of its users: an agent platform, an internal tool, or anything with a "plugins" page. It shows how to let a user install a pack or a Claude Code plugin from a git address, review what it adds before anything is written, keep your own settings with it, and preview and apply updates. Every step is one `tuff` command with `--json`. A Rust application can call the [`tuff-packs` library](/guides/tuff-packs/) for the same steps.
+This guide is for developers of an application that gives agents capabilities on behalf of its users: an agent platform, an internal tool, or anything with a "plugins" page. It shows how to let a user install a pack or a Claude Code plugin from a git address, review what it adds before anything is written, keep your own settings with it, and preview and apply updates. Every step is one `tuff` command with `--json`. A Rust application can call the [`tuff-packs` library](/sdk/rust/), and a Python application the [`tuff-sdk` package](/sdk/python/), for the same steps.
 
 :::note[Tuff version]
 These commands need Tuff 0.18.0 or later. Check with `tuff --version`, and see [Installation](/installation/) to upgrade.
@@ -260,7 +260,8 @@ To keep a plugin as a pack you can edit, run [`tuff pack import`](/cli/packs/#im
 
 ## Related
 
-- [The tuff-packs Rust library](/guides/tuff-packs/): the same steps from the `tuff-packs` crate, with installs as a plan and an apply.
+- [The tuff-packs Rust library](/sdk/rust/): the same steps from the `tuff-packs` crate, with installs as a plan and an apply.
+- [Tuff from Python](/sdk/python/): the same steps from the `tuff-sdk` package.
 - [Pack JSON Specification](/spec/packs/): every field of every document on this page, with a JSON Schema.
 - [Packs CLI reference](/cli/packs/): every flag of `tuff pack` and `tuff add pack`.
 - [Capability Packs](/concepts/packs/): what a pack is and how its artifact is verified.

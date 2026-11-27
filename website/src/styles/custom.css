@@ -1377,3 +1377,21 @@ nav.sidebar a[aria-current='true'] {
   .tuff-catalog-meta > div { grid-template-columns: 1fr; gap: .15rem; }
   .tuff-catalog-title { font-size: 1.55rem; }
 }
+
+/* The landing page's SDK section: points beside a dark code panel, in the
+   install box's colours. */
+.tuff-sdk { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 2.5rem; align-items: start; }
+.tuff-sdk-points { display: grid; gap: 1.35rem; margin: 0; padding: 0; list-style: none; }
+.tuff-sdk-points li { display: flex; flex-direction: column; gap: .3rem; padding-left: 1rem; border-left: 2px solid var(--tuff-border); }
+.tuff-sdk-points strong { color: var(--tuff-text); font-size: .95rem; font-weight: 600; }
+.tuff-sdk-points span { color: var(--tuff-dim); font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+.tuff-sdk-points code { color: var(--tuff-text); font-family: 'JetBrains Mono', monospace; font-size: .78rem; }
+.tuff-sdk-code { max-width: none; margin-top: 0; overflow: hidden; }
+.tuff-sdk-install { display: flex; gap: .65rem; padding: .85rem .95rem .2rem; font-family: 'JetBrains Mono', monospace; font-size: .8rem; }
+.tuff-sdk-install span { color: #989d94; }
+.tuff-sdk-install code { color: #eeeae2; font-family: 'JetBrains Mono', monospace; }
+.tuff-sdk-code pre.astro-code { margin: 0; padding: .75rem .95rem 1rem; overflow-x: auto; background: transparent !important; font-family: 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.6; }
+.tuff-sdk-ctas { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.5rem; }
+@media (max-width: 900px) {
+  .tuff-sdk { grid-template-columns: minmax(0, 1fr); gap: 1.75rem; }
+}

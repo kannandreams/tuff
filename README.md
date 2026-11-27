@@ -127,6 +127,25 @@ tuff lock migrate
 
 Older releases cannot read the converted file, so upgrade before migrating. The VS Code extension runs the `tuff` on your machine and needs no separate step.
 
+## Tuff from your application
+
+The Tuff SDK runs the same engine inside your own program. Plan an install, show the user every file it will write, then apply exactly that plan.
+
+```python
+import tuff_sdk as tuff
+
+workspace = tuff.Workspace.open("my-project")
+pack = tuff.Pack.build("review-pack")
+
+plan = workspace.plan_install(pack, ["claude"])
+for file in plan.files:
+    print(file.change, file.path)  # nothing is written yet
+
+workspace.apply(plan)
+```
+
+Python: `pip install tuff-sdk`. Rust: `cargo add tuff-packs tuff-core`. Any language: the `tuff` commands with `--json`. See the [SDK documentation](https://tuffcli.dev/sdk/).
+
 ## Other installation options
 
 ```sh

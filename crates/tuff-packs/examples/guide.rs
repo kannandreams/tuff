@@ -1,5 +1,5 @@
 //! The examples on "The tuff-packs Rust library" guide page
-//! (website/src/content/docs/guides/tuff-packs.md), compiled so the
+//! (website/src/content/docs/sdk/rust.md), compiled so the
 //! page stays in step with the API. tests/guide_examples.rs checks that
 //! every block on the page is here.
 
@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 use tuff_core::bundle::write_source_pack;
-use tuff_core::lockfile::{self, PackSource};
+use tuff_core::lockfile::{self, PackArtifactSource, PackSource};
 use tuff_core::pack::PackArtifact;
 use tuff_packs::build::build_as;
 use tuff_packs::build::build_for_declared_targets;
@@ -203,6 +203,20 @@ fn approve(
         // Something changed since: show the new plan and ask again.
         Approval::Changed(plan) => println!("{}", serde_json::to_string(&plan)?),
     }
+    Ok(())
+}
+
+/// The landing page's Rust example (website/src/data/sdk/install.rs).
+fn landing() -> tuff_packs::Result<()> {
+    let workspace = Workspace::open("my-project")?;
+    let pack = build_for_declared_targets("review-pack".as_ref())?;
+    let source = PackSource::Artifact(PackArtifactSource { registry: None });
+
+    let plan = plan_install(&workspace, &pack.artifact, &source, &["claude".into()])?;
+    for file in &plan.files {
+        println!("{:?} {}", file.change, file.path); // nothing is written yet
+    }
+    apply(&workspace, &Baselines::none(), plan)?;
     Ok(())
 }
 
