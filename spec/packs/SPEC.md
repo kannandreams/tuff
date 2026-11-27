@@ -2,7 +2,7 @@
 
 Version 1. This document describes the JSON documents Tuff prints about capability packs, so that an application which installs packs for its own users can show what a pack adds before installing it, preview an update, and keep its own settings in a pack. It also describes host tables, the part of a pack manifest Tuff carries for such an application. The [JSON Schema for the inspect document](https://github.com/kannandreams/tuff/blob/main/spec/packs/inspect.schema.json) and [an example of it](https://github.com/kannandreams/tuff/blob/main/spec/packs/inspect.example.json) sit beside this file. The example is what `tuff pack inspect --json` prints for the [example pack](https://github.com/kannandreams/tuff/tree/main/spec/packs/example/review-pack), and `mise run check` fails when either drifts from the code. On tuffcli.dev the two files are served at `/spec/packs/inspect.schema.json` and `/spec/packs/inspect.example.json`.
 
-The words MUST, SHOULD, and MAY are used as in RFC 2119.
+The words MUST, SHOULD, and MAY are used as in RFC 2119. For a walk through these documents in the order an application uses them, see [Packs in Your Application](https://tuffcli.dev/guides/packs-in-your-application/).
 
 ## 1. Scope
 

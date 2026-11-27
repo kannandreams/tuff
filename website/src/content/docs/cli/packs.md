@@ -3,6 +3,8 @@ title: Packs
 description: Build, publish, install, and update capability packs.
 ---
 
+Building an application that installs packs for its users? See [Packs in Your Application](/guides/packs-in-your-application/) for the review, install, and update flow with `--json`.
+
 New to packs? Start with the [Tuff Pack examples repository](https://github.com/kannandreams/tuff-pack-examples). It follows tracked capabilities through build, inspection, GHCR publication, pull, extraction, and a container image before introducing the lower-level details. See [Capability Packs](/concepts/packs/) for the source manifest and artifact guarantees.
 
 ## `tuff pack`
