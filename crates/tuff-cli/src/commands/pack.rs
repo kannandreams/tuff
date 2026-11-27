@@ -42,6 +42,8 @@ pub struct PackBuildOptions {
     pub capabilities: Vec<String>,
     pub agents: Vec<String>,
     pub output: Option<PathBuf>,
+    /// Build bundle targets without the members they cannot hold.
+    pub skip_unsupported: bool,
 }
 
 pub fn cmd_pack_init(root: &Path, options: PackInitOptions) -> Result<()> {
@@ -133,7 +135,7 @@ pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()>
         let output = options
             .output
             .unwrap_or_else(|| default_project_artifact_path(repo_root, &prepared.loaded.manifest));
-        return build_loaded_pack(&prepared.loaded, &output);
+        return build_loaded_pack(&prepared.loaded, &output, options.skip_unsupported);
     }
     if options.version.is_some()
         || options.description.is_some()
@@ -152,23 +154,23 @@ pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()>
         let output = options
             .output
             .unwrap_or_else(|| default_project_artifact_path(repo_root, &prepared.loaded.manifest));
-        return build_loaded_pack(&prepared.loaded, &output);
+        return build_loaded_pack(&prepared.loaded, &output, options.skip_unsupported);
     }
     let loaded = pack::load_pack(path)?;
     let output = options
         .output
         .unwrap_or_else(|| default_artifact_path(&loaded));
-    build_loaded_pack(&loaded, &output)
+    build_loaded_pack(&loaded, &output, options.skip_unsupported)
 }
 
-fn build_loaded_pack(loaded: &LoadedPack, output: &Path) -> Result<()> {
+fn build_loaded_pack(loaded: &LoadedPack, output: &Path, skip_unsupported: bool) -> Result<()> {
     if output.exists() {
         return Err(TuffError::refused(format!(
             "refusing to overwrite existing pack artifact: {}",
             output.display()
         )));
     }
-    let (metadata, contents) = render_artifact(loaded)?;
+    let (metadata, contents) = render_artifact_with(loaded, skip_unsupported)?;
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -359,7 +361,17 @@ fn project_manifest_path(root: &Path, name: &str) -> Result<PathBuf> {
 
 fn resolve_project_agent_selection(root: &Path, requested: &[String]) -> Result<Vec<String>> {
     if !requested.is_empty() {
-        return resolve_agent_selection(root, requested, false);
+        let (bundles, harnesses): (Vec<String>, Vec<String>) = requested
+            .iter()
+            .cloned()
+            .partition(|target| crate::adapter::bundle_writer(target).is_some());
+        let mut targets = if harnesses.is_empty() {
+            Vec::new()
+        } else {
+            resolve_agent_selection(root, &harnesses, false)?
+        };
+        targets.extend(bundles);
+        return Ok(targets);
     }
     let config_path = crate::paths::project_config(root);
     let default_agent = if config_path.is_file() {
@@ -492,8 +504,51 @@ pub(crate) fn build_pack_for_declared_targets(
     pack_root: &Path,
 ) -> Result<(tempfile::TempDir, PackArtifact)> {
     let (_, manifest) = pack::load_manifest(pack_root)?;
-    let targets = canonical_target_ids(&manifest.build.targets)?;
-    build_pack_for_targets(pack_root, &targets)
+    let mut loaded = pack::load_pack(pack_root)?;
+    let mut targets = canonical_target_ids(&harness_targets(&manifest.build.targets))?;
+    targets.extend(
+        manifest
+            .build
+            .targets
+            .iter()
+            .filter(|target| crate::adapter::bundle_writer(target).is_some())
+            .cloned(),
+    );
+    loaded.manifest.build.targets = targets;
+    // An inspection describes what each bundle could hold, so a member a
+    // bundle cannot take is left out of it rather than refused.
+    let (metadata, contents) = render_artifact_with(&loaded, true)?;
+    let directory = tempfile::tempdir()?;
+    let output = directory.path().join("pack.tuffpack");
+    pack::write_artifact(&output, metadata, contents)?;
+    let artifact = pack::read_artifact(&output)?;
+    Ok((directory, artifact))
+}
+
+/// Build the source pack at `pack_root` for exactly `targets`, which may
+/// name bundle formats, whatever its own `[build] targets` list.
+pub(crate) fn build_pack_as(
+    pack_root: &Path,
+    targets: &[String],
+    skip_unsupported: bool,
+) -> Result<(tempfile::TempDir, PackArtifact)> {
+    let mut loaded = pack::load_pack(pack_root)?;
+    loaded.manifest.build.targets = targets.to_vec();
+    let (metadata, contents) = render_artifact_with(&loaded, skip_unsupported)?;
+    let directory = tempfile::tempdir()?;
+    let output = directory.path().join("pack.tuffpack");
+    pack::write_artifact(&output, metadata, contents)?;
+    let artifact = pack::read_artifact(&output)?;
+    Ok((directory, artifact))
+}
+
+/// The targets that are harnesses, leaving out bundle formats.
+fn harness_targets(targets: &[String]) -> Vec<String> {
+    targets
+        .iter()
+        .filter(|target| crate::adapter::bundle_writer(target).is_none())
+        .cloned()
+        .collect()
 }
 
 pub fn cmd_pack_verify(path: &Path) -> Result<()> {
@@ -620,6 +675,15 @@ pub fn cmd_add_pack(repo_root: &Path, options: AddPackOptions<'_>) -> Result<()>
         plugin,
         json,
     } = options;
+    // Before harness names are checked, so a bundle format gets its own
+    // answer rather than "unknown harness".
+    canonical_target_ids(
+        &targets
+            .iter()
+            .filter(|target| crate::adapter::bundle_writer(target).is_some())
+            .cloned()
+            .collect::<Vec<_>>(),
+    )?;
     if crate::git::is_git_url(source) {
         if reference.is_some() {
             return Err(TuffError::usage(
@@ -666,7 +730,7 @@ fn build_pack_for_targets(
     targets: &[String],
 ) -> Result<(tempfile::TempDir, PackArtifact)> {
     let mut loaded = pack::load_pack(pack_root)?;
-    let declared = canonical_target_ids(&loaded.manifest.build.targets)?;
+    let declared = canonical_target_ids(&harness_targets(&loaded.manifest.build.targets))?;
     for target in targets {
         if !declared.contains(target) {
             return Err(TuffError::unsupported(format!(
@@ -873,7 +937,20 @@ fn record_pack_entry(lock: &mut lockfile::Lockfile, artifact: &PackArtifact, sou
 fn render_artifact(
     loaded: &LoadedPack,
 ) -> Result<(PackArtifactMetadata, Vec<PackArtifactContent>)> {
-    let mut adapters = validate_pack_targets(loaded)?;
+    render_artifact_with(loaded, false)
+}
+
+/// Render every target of a pack. A member a bundle format cannot hold
+/// fails the build unless `skip_unsupported`, which leaves it out of that
+/// bundle and says so.
+fn render_artifact_with(
+    loaded: &LoadedPack,
+    skip_unsupported: bool,
+) -> Result<(PackArtifactMetadata, Vec<PackArtifactContent>)> {
+    let PackTargets {
+        harnesses: mut adapters,
+        bundles,
+    } = validate_pack_targets(loaded)?;
     adapters.sort_by_key(|adapter| adapter.id());
     let capabilities = loaded
         .members
@@ -927,6 +1004,63 @@ fn render_artifact(
         });
     }
 
+    for writer in bundles {
+        let output = writer.write(&loaded.manifest, &capabilities)?;
+        if !output.skipped.is_empty() {
+            let list = output
+                .skipped
+                .iter()
+                .map(|item| {
+                    format!(
+                        "{} '{}': {}",
+                        item.kind,
+                        item.name.as_deref().unwrap_or_default(),
+                        item.reason
+                    )
+                })
+                .collect::<Vec<_>>();
+            if !skip_unsupported {
+                return Err(TuffError::unsupported(format!(
+                    "the {} target cannot hold {}",
+                    writer.id(),
+                    list.join("; ")
+                ))
+                .with_hint(format!(
+                    "pass --skip-unsupported to build the {} without them",
+                    writer.id()
+                )));
+            }
+            for item in &list {
+                eprintln!("note: {} leaves out {item}", writer.id());
+            }
+        }
+        for warning in &output.warnings {
+            eprintln!("warning: {warning}");
+        }
+        for file in output.files {
+            contents.push(PackArtifactContent {
+                path: format!("targets/{}/{}", writer.id(), file.path),
+                bytes: file.bytes,
+            });
+        }
+        targets.push(PackArtifactTarget {
+            id: writer.id().to_string(),
+            kind: pack::PackTargetKind::Bundle,
+            capabilities: output
+                .members
+                .into_iter()
+                .map(|member| PackArtifactTargetCapability {
+                    id: member.id,
+                    installed_path: member.path,
+                    sha256: lockfile::hash_bytes(&member.content),
+                    emitted_files: member.files,
+                    managed_hooks: Vec::new(),
+                })
+                .collect(),
+        });
+    }
+    targets.sort_by(|a, b| a.id.cmp(&b.id));
+
     let capabilities = loaded
         .members
         .iter()
@@ -961,13 +1095,32 @@ fn render_artifact(
     Ok((metadata, contents))
 }
 
-fn validate_pack_targets(loaded: &LoadedPack) -> Result<Vec<AdapterKind>> {
+/// A pack's build targets: harnesses it installs into, and bundle formats
+/// it is written as.
+struct PackTargets {
+    harnesses: Vec<AdapterKind>,
+    bundles: Vec<&'static dyn tuff_core::bundle::BundleWriter>,
+}
+
+fn validate_pack_targets(loaded: &LoadedPack) -> Result<PackTargets> {
     let mut adapters = Vec::with_capacity(loaded.manifest.build.targets.len());
+    let mut bundles: Vec<&'static dyn tuff_core::bundle::BundleWriter> = Vec::new();
     let mut canonical = BTreeSet::new();
     for target in &loaded.manifest.build.targets {
+        if let Some(writer) = crate::adapter::bundle_writer(target) {
+            if !canonical.insert(writer.id()) {
+                return Err(TuffError::usage(format!(
+                    "duplicate pack build target '{target}'"
+                )));
+            }
+            bundles.push(writer);
+            continue;
+        }
         let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-            TuffError::usage(format!("unknown pack build target '{target}'"))
-                .with_hint("run 'tuff harness list' to see available harnesses")
+            TuffError::usage(format!("unknown pack build target '{target}'")).with_hint(format!(
+                "run 'tuff harness list' to see available harnesses; bundle formats: {}",
+                crate::adapter::BUNDLE_FORMATS.join(", ")
+            ))
         })?;
         if !canonical.insert(adapter.id()) {
             return Err(TuffError::usage(format!(
@@ -988,12 +1141,23 @@ fn validate_pack_targets(loaded: &LoadedPack) -> Result<Vec<AdapterKind>> {
         }
         adapters.push(adapter);
     }
-    Ok(adapters)
+    Ok(PackTargets {
+        harnesses: adapters,
+        bundles,
+    })
 }
 
 fn canonical_target_ids(targets: &[String]) -> Result<Vec<String>> {
     let mut canonical = BTreeSet::new();
     for target in targets {
+        if crate::adapter::bundle_writer(target).is_some() {
+            return Err(TuffError::usage(format!(
+                "{target} is a bundle format, which is extracted, not installed into a project"
+            ))
+            .with_hint(format!(
+                "write it with 'tuff pack extract <artifact> -a {target} --output <dir>'"
+            )));
+        }
         let adapter = AdapterKind::from_id(target)
             .ok_or_else(|| TuffError::usage(format!("unknown harness '{target}'")))?;
         canonical.insert(adapter.id().to_string());

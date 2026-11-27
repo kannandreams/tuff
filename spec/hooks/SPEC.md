@@ -1,6 +1,6 @@
 # Tuff Hooks Specification
 
-Version 0.2.0. This document describes the hook vocabulary Tuff implements, how a hook written against it is rendered into each supported harness, and what a second implementation has to do to be compatible. It is generated in part: the tables below come from the same constants Tuff runs on, produced by `tuff hooks spec --json`, and the [machine-readable document](https://github.com/kannandreams/tuff/blob/main/spec/hooks/hooks-spec.json) and its [JSON Schema](https://github.com/kannandreams/tuff/blob/main/spec/hooks/hooks-spec.schema.json) sit beside this file. On tuffcli.dev the same two files are served at `/spec/hooks/hooks-spec.json` and `/spec/hooks/hooks-spec.schema.json`.
+Version 0.3.0. This document describes the hook vocabulary Tuff implements, how a hook written against it is rendered into each supported harness, and what a second implementation has to do to be compatible. It is generated in part: the tables below come from the same constants Tuff runs on, produced by `tuff hooks spec --json`, and the [machine-readable document](https://github.com/kannandreams/tuff/blob/main/spec/hooks/hooks-spec.json) and its [JSON Schema](https://github.com/kannandreams/tuff/blob/main/spec/hooks/hooks-spec.schema.json) sit beside this file. On tuffcli.dev the same two files are served at `/spec/hooks/hooks-spec.json` and `/spec/hooks/hooks-spec.schema.json`.
 
 This version was tested by building a second implementation from the specification alone, without access to Tuff's source, and comparing what it writes against Tuff for every harness and event name. Every place that implementation had to guess is now stated below. The [conformance kit](https://github.com/kannandreams/tuff/tree/main/spec/hooks/conformance) holds that implementation and the comparison, and section 8 describes how to run it against your own.
 
@@ -77,7 +77,7 @@ Only the files listed in `files` are installed. Other files in the manifest's di
 
 Each listed file is copied to the hook directory under its listed path, with one leading `src/` removed if present: `scripts/check-format.sh` installs as `<dir_prefix>/hooks/<id>/scripts/check-format.sh`, and `src/check.sh` as `<dir_prefix>/hooks/<id>/check.sh`. An implementation MUST refuse a manifest in which two different listed files would be installed under the same path, such as `check.sh` and `src/check.sh`, rather than keep one of them. It MUST also refuse a manifest in which a listed file would be installed as the wrapper's path, `run.sh` at the top of the hook directory, since it would replace the script the registration runs.
 
-**Known limitation.** The command does not run from the hook directory, and the hook directory differs per harness, so a command cannot portably refer to its own runtime files by a relative path. In the example above, `scripts/check-format.sh` is installed but `cargo fmt --check` does not use it. A command that needs a runtime file has to name its installed path for one harness. This undercuts writing a hook once for every harness exactly when a hook ships more than a one-line command, and the second implementation of this specification singled it out for that reason. Closing it needs a way for the command to learn its hook directory, such as a variable the wrapper sets, and is left to a future minor version because it changes the wrapper every existing install carries.
+**The hook directory in a command.** The command does not run from the hook directory, and the hook directory differs per harness, so a command names its runtime files through the placeholder `{{hook_dir}}`. Before writing the wrapper, an implementation MUST replace every `{{hook_dir}}` in the command with the hook directory, `<dir_prefix>/hooks/<id>`, as a path relative to the project root, with no trailing `/`. A command of `sh {{hook_dir}}/scripts/check-format.sh` installs for Claude Code as `sh .claude/hooks/format-check/scripts/check-format.sh`. The replacement is plain text, made once per occurrence, with no quoting added, and a command without the placeholder is unchanged. The path is relative to the project root, so a command that uses it SHOULD leave `working_directory` at `.`.
 
 ### 4.3 The wrapper
 
@@ -89,6 +89,8 @@ set -euo pipefail
 cd -- '<working_directory>'
 exec bash -euo pipefail -c '<command>'
 ```
+
+`<command>` is the command after the replacement of section 4.2.
 
 Each value is placed between single quotes, with every single quote inside the value written as the five characters `'"'"'`, which closes the quoted string, emits a double-quoted single quote, and reopens it. The value `echo 'hi'` becomes `'echo '"'"'hi'"'"''`. An implementation MUST refuse a `working_directory` or `command` containing NUL, which no shell string can carry. The file's mode is not significant, because the registration runs it through `sh`; Tuff writes it with the default permissions of the process.
 
@@ -275,7 +277,7 @@ The `events` member is the table of section 3, one object per canonical event wi
 
 ## 9. Versioning
 
-The specification carries a semantic version, currently 0.2.0, and it moves independently of Tuff's release version:
+The specification carries a semantic version, currently 0.3.0, and it moves independently of Tuff's release version:
 
 - A **patch** change rewords or clarifies without changing what a conforming implementation does.
 - A **minor** change adds a canonical event, a payload field, or an optional row attribute, or requires an implementation to refuse input that could only cause harm. A hook that installed under the previous minor, and was not hostile, still installs and renders the same way.
@@ -289,8 +291,11 @@ Compatibility matrices are data about harnesses, not part of the vocabulary. A r
 |---|---|
 | 0.1.2 through 0.9.0 | 0.1.0 |
 | 0.10.0 through 0.17.0 | 0.2.0 |
+| 0.18.0 and later | 0.3.0 |
 
 ## 10. Changes to this specification
+
+- **0.3.0.** A command names its hook directory with `{{hook_dir}}`, which an implementation replaces before writing the wrapper (4.2). This closes the known limitation 0.2.0 recorded: a hook that ships a script can now run it on every harness. A command written for 0.2.0 that does not contain the text `{{hook_dir}}` installs exactly as before. The example implementation in the conformance kit was updated for this change by Tuff's maintainers; a fresh clean-room pass against 0.3.0 has not been made.
 
 - **Matrix data, 2026-09-16 (Tuff 0.12.0).** The Codex matrix now names the events Codex reads from `.codex/hooks.json` (`SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `Stop`; `before_finish` partial through `Stop`; `after_save` unsupported), with the earlier snake_case names kept as aliases; the earlier rows described a file Codex never read. The Open Agents matrix no longer cites Codex's documentation for events no harness documents. Matrices are data about harnesses, so the specification version is unchanged.
 - **0.2.0.** Tested by a clean-room implementation, and every gap it found is closed. New requirements: an implementation MUST refuse an `id` that is not a relative path of plain names, a `files` entry that escapes the manifest's directory or passes through a symbolic link, and a listed file that would replace the wrapper; each closes a way for a hostile capability to write, delete, or run something the user was not shown, and Tuff 0.9.0 and earlier do not meet them. Clarified from Tuff's behaviour: only listed files are installed, and where (4.2); the exact quoting in the wrapper and that its mode is not significant (4.3); the order of installation and that a refusal changes nothing (4.4); that a name matching no row is refused and what the message lists (5); that a flat fragment's `version` is optional (6.2); what counts as an equal group, how corrupt files are treated, and that formatting is not significant (6.3); exactly which object the entry hash covers and how it is computed (6.4); and the removal algorithm step by step (6.5). Section 8 describes the conformance kit. A third pass against the final text settled all but one wording point, which section 5 now states: both kinds of refusal list the usable event names. A second pass of the same clean-room implementation against a draft of 0.2.0 closed its original gaps and found five more, all settled here: that every refusal comes before any write, including a corrupt settings file (4.4); that a repeated `files` entry installs once and two entries colliding on one installed path are refused (4.1, 4.2); which parts of a settings file are inspected (6.3); that removal updates the settings file before deleting files and stops on a corrupt one (6.5); and which empty directories removal prunes, and what counts as whitespace in an id. Three of those were also bugs in Tuff, fixed alongside: colliding files silently kept the last one, a hook could list its own `run.sh` and replace the wrapper, and a delete with a corrupt settings file removed the files before failing.

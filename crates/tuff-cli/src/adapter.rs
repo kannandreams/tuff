@@ -23,6 +23,20 @@ static CURSOR: Cursor = Cursor;
 static OPENCODE: OpenCode = OpenCode;
 static PI: Pi = Pi;
 
+static CLAUDE_PLUGIN: tuff_adapter_claude::plugin::ClaudePlugin =
+    tuff_adapter_claude::plugin::ClaudePlugin;
+
+/// Bundle formats a pack can be built as (RFC-110 D9), by target id.
+pub const BUNDLE_FORMATS: &[&str] = &[tuff_adapter_claude::plugin::FORMAT_ID];
+
+/// The writer for a bundle format target, if `id` names one.
+pub fn bundle_writer(id: &str) -> Option<&'static dyn tuff_core::bundle::BundleWriter> {
+    match id {
+        tuff_adapter_claude::plugin::FORMAT_ID => Some(&CLAUDE_PLUGIN),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdapterKind {
     OpenAgents,

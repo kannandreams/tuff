@@ -113,6 +113,51 @@ pub trait BundleReader {
     fn read(&self, bundle: &LocalBundle, version_hint: Option<&str>) -> Result<ImportedPack>;
 }
 
+/// What a bundle writer produced for a pack.
+#[derive(Debug, Clone, Default)]
+pub struct BundleOutput {
+    /// Every file of the bundle, relative to the bundle's root.
+    pub files: Vec<BundleFile>,
+    /// Where each member the bundle holds lives in it.
+    pub members: Vec<BundleMemberOutput>,
+    /// Members the format cannot hold, with why.
+    pub skipped: Vec<PackUnsupported>,
+    /// Things the author should know, such as a hook that will not find its
+    /// files inside the bundle.
+    pub warnings: Vec<String>,
+}
+
+/// One member's place in a written bundle.
+#[derive(Debug, Clone)]
+pub struct BundleMemberOutput {
+    pub id: String,
+    /// The member's folder, or the shared file holding it, in the bundle.
+    pub path: String,
+    /// The files that belong to this member alone, relative to the bundle.
+    pub files: Vec<String>,
+    /// The member's content as the bundle holds it, for its hash: its own
+    /// files, or its entry in a shared file.
+    pub content: Vec<u8>,
+}
+
+/// What an adapter crate implements to write its harness's bundle format.
+pub trait BundleWriter {
+    /// The format id, used as a build target, such as `claude-plugin`.
+    fn id(&self) -> &'static str;
+    /// Write `members` of the pack described by `manifest` as one bundle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the pack cannot be a bundle at all, such as a
+    /// name the format does not allow. A member the format cannot hold is
+    /// returned in `skipped`.
+    fn write(
+        &self,
+        manifest: &PackManifest,
+        members: &[crate::adapter::ResolvedCapability],
+    ) -> Result<BundleOutput>;
+}
+
 /// Every regular file under `relative` in `root`, with paths relative to
 /// `root`. Symbolic links are never followed; each one is returned in the
 /// second list so the caller can report it. `.git` folders are skipped.

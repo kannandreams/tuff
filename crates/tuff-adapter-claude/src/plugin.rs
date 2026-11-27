@@ -1013,3 +1013,260 @@ mod tests {
         assert!(placeholder_problem("--dir=${HOME}").is_some());
     }
 }
+
+// ── writing a pack as a plugin (RFC-110 D10) ───────────────────────────────
+
+mod writer {
+    use super::*;
+    use tuff_core::adapter::{
+        AgentAdapter, CapabilityKind, HookDefinition, ResolvedCapability, with_hook_dir,
+    };
+    use tuff_core::bundle::{BundleMemberOutput, BundleOutput, BundleWriter};
+
+    impl BundleWriter for ClaudePlugin {
+        fn id(&self) -> &'static str {
+            FORMAT_ID
+        }
+
+        fn write(
+            &self,
+            manifest: &PackManifest,
+            members: &[ResolvedCapability],
+        ) -> Result<BundleOutput> {
+            let name = plugin_name(&manifest.name)?;
+            let mut output = BundleOutput::default();
+            let mut servers = Map::new();
+            let mut hooks: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+            for member in members {
+                write_member(member, &mut output, &mut servers, &mut hooks)?;
+            }
+
+            let mut plugin = Map::new();
+            plugin.insert("name".into(), name.clone().into());
+            plugin.insert("version".into(), manifest.version.clone().into());
+            plugin.insert("description".into(), manifest.description.clone().into());
+            if let Some(author) = &manifest.author {
+                let mut value = Map::new();
+                value.insert("name".into(), author.name.clone().into());
+                if let Some(email) = &author.email {
+                    value.insert("email".into(), email.clone().into());
+                }
+                if let Some(url) = &author.url {
+                    value.insert("url".into(), url.clone().into());
+                }
+                plugin.insert("author".into(), value.into());
+            }
+            if let Some(homepage) = &manifest.homepage {
+                plugin.insert("homepage".into(), homepage.clone().into());
+            }
+            if let Some(license) = &manifest.license {
+                plugin.insert("license".into(), license.clone().into());
+            }
+            if !manifest.keywords.is_empty() {
+                plugin.insert("keywords".into(), manifest.keywords.clone().into());
+            }
+            output
+                .files
+                .push(json_file(PLUGIN_MANIFEST, &Value::Object(plugin))?);
+            if !servers.is_empty() {
+                output.files.push(json_file(
+                    ".mcp.json",
+                    &serde_json::json!({ "mcpServers": servers }),
+                )?);
+            }
+            if !hooks.is_empty() {
+                let events = hooks
+                    .into_iter()
+                    .map(|(event, groups)| (event, Value::Array(groups)))
+                    .collect::<Map<_, _>>();
+                output.files.push(json_file(
+                    "hooks/hooks.json",
+                    &serde_json::json!({ "hooks": events }),
+                )?);
+            }
+            output.files.sort_by(|a, b| a.path.cmp(&b.path));
+            output.members.sort_by(|a, b| a.id.cmp(&b.id));
+            Ok(output)
+        }
+    }
+
+    /// The plugin's name: the last part of the pack name, which Claude Code
+    /// requires to have no path separators, spaces, `@`, or `:`.
+    pub(super) fn plugin_name(pack_name: &str) -> Result<String> {
+        let name = pack_name.rsplit('/').next().unwrap_or(pack_name);
+        if name.is_empty()
+            || name
+                .chars()
+                .any(|c| c.is_whitespace() || c.is_control() || matches!(c, '@' | ':' | '\\'))
+        {
+            return Err(TuffError::usage(format!(
+                "pack name '{pack_name}' does not end in a name Claude Code accepts for a plugin"
+            ))
+            .with_hint("end the pack name in a plain name such as acme/review"));
+        }
+        Ok(name.to_string())
+    }
+
+    fn shell_quote(value: &str) -> String {
+        format!("'{}'", value.replace('\'', "'\"'\"'"))
+    }
+
+    fn json_file(path: &str, value: &Value) -> Result<BundleFile> {
+        let mut text = serde_json::to_string_pretty(value)?;
+        text.push('\n');
+        Ok(BundleFile {
+            path: path.to_string(),
+            bytes: text.into_bytes(),
+        })
+    }
+
+    fn skip(output: &mut BundleOutput, member: &ResolvedCapability, reason: &str) {
+        output.skipped.push(PackUnsupported {
+            kind: member.capability_type.to_string(),
+            name: Some(member.id.clone()),
+            path: None,
+            reason: reason.to_string(),
+        });
+    }
+
+    /// Copy a member's files under `folder` and record it.
+    fn add_folder(
+        output: &mut BundleOutput,
+        member: &ResolvedCapability,
+        folder: &str,
+        extra: Vec<BundleFile>,
+    ) {
+        let mut files = member
+            .source_files
+            .iter()
+            .map(|(relative, bytes)| BundleFile {
+                path: format!("{folder}/{relative}"),
+                bytes: bytes.clone(),
+            })
+            .chain(extra)
+            .collect::<Vec<_>>();
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        let mut content = Vec::new();
+        for file in &files {
+            content.extend_from_slice(file.path.as_bytes());
+            content.push(0);
+            content.extend_from_slice(&file.bytes);
+            content.push(0);
+        }
+        output.members.push(BundleMemberOutput {
+            id: member.id.clone(),
+            path: folder.to_string(),
+            files: files.iter().map(|file| file.path.clone()).collect(),
+            content,
+        });
+        output.files.extend(files);
+    }
+
+    fn write_member(
+        member: &ResolvedCapability,
+        output: &mut BundleOutput,
+        servers: &mut Map<String, Value>,
+        hooks: &mut BTreeMap<String, Vec<Value>>,
+    ) -> Result<()> {
+        if member.id.contains('/') {
+            skip(
+                output,
+                member,
+                "its id has a '/', and Claude Code reads a plugin's components from one folder level",
+            );
+            return Ok(());
+        }
+        match &member.kind {
+            CapabilityKind::Skill => {
+                add_folder(output, member, &format!("skills/{}", member.id), Vec::new());
+            }
+            CapabilityKind::McpServer { server } => {
+                let entry = crate::Claude.mcp_server_entry_checked(server)?;
+                output.members.push(BundleMemberOutput {
+                    id: member.id.clone(),
+                    path: ".mcp.json".to_string(),
+                    files: Vec::new(),
+                    content: serde_json::to_vec(&entry)?,
+                });
+                servers.insert(member.id.clone(), entry);
+            }
+            CapabilityKind::Tool { implementation, .. } if implementation.mcp => {
+                let folder = format!("tools/{}", member.id);
+                let entrypoint = implementation.entrypoint.trim_start_matches("./");
+                let entry = serde_json::json!({
+                    "command": implementation.language,
+                    "args": [format!("${{CLAUDE_PLUGIN_ROOT}}/{folder}/{entrypoint}")],
+                });
+                servers.insert(member.id.clone(), entry);
+                add_folder(output, member, &folder, Vec::new());
+            }
+            CapabilityKind::Tool { .. } => skip(
+                output,
+                member,
+                "a tool that is not served over MCP has no Claude Code plugin form",
+            ),
+            CapabilityKind::Hook {
+                hook: HookDefinition::Command(hook),
+            } => {
+                let compatibility = crate::Claude.hook_compatibility();
+                let Some(native) = compatibility
+                    .find_event(&hook.event)
+                    .and_then(|entry| entry.native_event_name())
+                else {
+                    skip(
+                        output,
+                        member,
+                        &format!("Claude Code has no hook event for '{}'", hook.event),
+                    );
+                    return Ok(());
+                };
+                let folder = format!("hooks/{}", member.id);
+                if hook.command.contains('\0') {
+                    return Err(TuffError::usage("a hook command cannot contain a NUL byte"));
+                }
+                if !member.source_files.is_empty()
+                    && !hook
+                        .command
+                        .contains(tuff_core::adapter::HOOK_DIR_PLACEHOLDER)
+                {
+                    output.warnings.push(format!(
+                        "hook '{}' ships files but its command does not use {{{{hook_dir}}}}, so inside a plugin it will not find them",
+                        member.id
+                    ));
+                }
+                // Claude Code substitutes ${CLAUDE_PLUGIN_ROOT} in a hook's
+                // command, so the registration runs the command itself, from
+                // the hook's working directory, with {{hook_dir}} naming the
+                // hook's folder inside the plugin.
+                let hook = with_hook_dir(hook, &format!("${{CLAUDE_PLUGIN_ROOT}}/{folder}"));
+                let command = match hook.working_directory.as_str() {
+                    "." | "" => hook.command.clone(),
+                    directory => format!("cd {} && {}", shell_quote(directory), hook.command),
+                };
+                hooks
+                    .entry(native.to_string())
+                    .or_default()
+                    .push(serde_json::json!({
+                        "hooks": [{ "type": "command", "command": command }]
+                    }));
+                add_folder(output, member, &folder, Vec::new());
+                if let Some(added) = output.members.last_mut() {
+                    added.content.extend_from_slice(command.as_bytes());
+                }
+            }
+            CapabilityKind::Hook {
+                hook: HookDefinition::Native(_),
+            } => skip(
+                output,
+                member,
+                "a native hook fragment is written for one project, not a plugin",
+            ),
+            CapabilityKind::Policy { .. } => skip(
+                output,
+                member,
+                "a Claude Code plugin cannot carry permission rules",
+            ),
+        }
+        Ok(())
+    }
+}

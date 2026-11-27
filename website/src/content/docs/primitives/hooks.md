@@ -134,6 +134,22 @@ in `tuff.lock`.
 
 ## Hook event reference
 
+A Tuff-standard hook's command can run a script the hook ships: list it in `files`, and write `{{hook_dir}}` where its folder goes. Tuff replaces the placeholder with the folder the hook is installed in, relative to the project root, for each harness:
+
+```toml title="tuff.toml"
+id = "format-check"
+version = "1.0.0"
+type = "hook"
+description = "Check formatting after each edit."
+files = ["check.sh"]
+
+[hook]
+event = "post_tool_use"
+command = "sh {{hook_dir}}/check.sh"
+```
+
+For Claude Code this runs `sh .claude/hooks/format-check/check.sh`, for Codex `sh .codex/hooks/format-check/check.sh`, and inside a Claude Code plugin `sh ${CLAUDE_PLUGIN_ROOT}/hooks/format-check/check.sh`. Leave `working_directory` at `.`, since the folder is relative to the project root.
+
 Manifest-style Tuff-standard hooks use canonical event names: `session_start`, `session_end`, `pre_tool_use`, `post_tool_use`, `before_finish`, `after_save`, and `stop`. Tuff maps aliases such as `pre_tool_execution` to the canonical `pre_tool_use` event where a harness supports it, and each harness declares how faithfully it can honour every event: fully, partially with a stated caveat, or not at all, in which case the install is refused with the list of events that harness does support.
 
 The full vocabulary, what each event may block, and every harness's compatibility matrix are published in the [Hooks Specification](/spec/hooks/). Those tables are generated from the code Tuff runs, so they cannot drift from what `tuff add` does. The short version:

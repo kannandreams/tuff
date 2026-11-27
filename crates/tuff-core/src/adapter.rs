@@ -242,13 +242,18 @@ pub trait AgentAdapter {
             context.capability_id,
             self.hook_filename()
         );
+        // `{{hook_dir}}` in a hook's command names the folder its files are
+        // installed in, relative to the project root, so a hook can run a
+        // script it ships however the harness lays folders out (RFC-110 D10).
+        let hook_dir = format!("{}/hooks/{}", self.dir_prefix(), context.capability_id);
+        let hook = with_hook_dir(context.hook, &hook_dir);
         let target_path = context
             .repo_root
             .join(self.dir_prefix())
             .join("hooks")
             .join(context.capability_id)
             .join(self.hook_filename());
-        let script = self.hook_file_content(context.hook)?;
+        let script = self.hook_file_content(&hook)?;
         let settings_relpath = self.hook_settings_relpath();
         let fragment = self.command_hook_fragment(native_event, &command);
         let settings_path = context.repo_root.join(settings_relpath);
@@ -932,13 +937,25 @@ fn path_is_under(path: &Path, root: &Path) -> bool {
     canonical_path.starts_with(canonical_root)
 }
 
+/// A standard hook with `{{hook_dir}}` in its command replaced by `hook_dir`.
+pub fn with_hook_dir(hook: &HookConfig, hook_dir: &str) -> HookConfig {
+    HookConfig {
+        command: hook.command.replace(HOOK_DIR_PLACEHOLDER, hook_dir),
+        ..hook.clone()
+    }
+}
+
+/// The placeholder for a hook's own folder, in native fragments and in
+/// standard hook commands.
+pub const HOOK_DIR_PLACEHOLDER: &str = "{{hook_dir}}";
+
 pub fn replace_hook_dir_placeholder(
     mut value: serde_json::Value,
     hook_dir: &str,
 ) -> serde_json::Value {
     match &mut value {
         serde_json::Value::String(s) => {
-            *s = s.replace("{{hook_dir}}", hook_dir);
+            *s = s.replace(HOOK_DIR_PLACEHOLDER, hook_dir);
         }
         serde_json::Value::Array(items) => {
             for item in items {

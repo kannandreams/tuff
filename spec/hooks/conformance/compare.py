@@ -39,7 +39,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HOOK_ID = "conformance-hook"
-COMMAND = "echo 'it''s here' && sh scripts/check.sh"
+# 0.3.0: {{hook_dir}} is replaced by the hook directory (section 4.2).
+COMMAND = "echo 'it''s here' && sh {{hook_dir}}/scripts/check.sh"
 WORKING_DIRECTORY = "sub dir"
 RUNTIME_FILES = {"scripts/check.sh": "#!/bin/sh\necho checked\n"}
 UNLISTED_FILES = {"notes.txt": "not listed in files, never installed\n"}

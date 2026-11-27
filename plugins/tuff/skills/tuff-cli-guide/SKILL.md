@@ -52,6 +52,8 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff pack pull <registry/repository:tag-or-digest> -o <artifact.tuffpack>` — download and verify an OCI-distributed pack without overwriting an existing file
 - `tuff pack extract <artifact.tuffpack> -a <agent> -o <dir>` — extract a runtime-native target
 - `tuff pack import <plugin-dir|git-url> [--plugin <name>] -o <dir>` — read a Claude Code plugin as a source pack: skills and MCP servers become members; commands, agents, hooks and the rest are listed as not carried and kept under `extra/`
+- `tuff pack build [path] -o <artifact>` with `claude-plugin` in `[build] targets`, then `tuff pack extract <artifact> -a claude-plugin -o <dir>` — write a pack as a Claude Code plugin (`--skip-unsupported` leaves out members a plugin cannot hold)
+- `tuff pack marketplace build <packs...> -o <dir> --owner-name <name>` — write packs as a Claude Code marketplace
 - `tuff pack list [--json]` — list installed packs, their sources, and members
 - `tuff pack remove <name> [--force]` — remove every member of an installed pack as one change
 - `tuff update <member> --check --json` — preview a pack update: members added, updated, removed, and the files that change
