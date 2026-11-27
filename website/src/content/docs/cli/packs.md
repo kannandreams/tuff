@@ -126,6 +126,48 @@ tuff add pack https://github.com/acme/engineering-pack --ref v1.2.0
 
 Tuff checks out the commit, builds the pack, and installs it with the same checks as an artifact. Nothing in the repository runs: Tuff does not fetch submodules and runs no hooks. `tuff.lock` records the repository, the folder, the commit, and the tag or branch that chose it. `--json` prints the installed pack, its source, and its members.
 
+### Install a Claude Code plugin from git
+
+A repository whose folder holds a Claude Code plugin (`.claude-plugin/plugin.json`) or a marketplace (`.claude-plugin/marketplace.json`) installs the same way. Tuff reads the plugin as a pack, as [`tuff pack import`](#import-a-claude-code-plugin) does, and installs its skills and MCP servers:
+
+```sh frame="terminal"
+tuff add pack https://github.com/acme/review-kit -a claude -a codex
+tuff add pack https://github.com/acme/plugins --plugin review-kit -a claude
+```
+
+- Release tags are read against the plugin's name, and a plugin that declares a `version` must declare the tag's version.
+- `--plugin` picks one entry of a marketplace. The entry must be in the marketplace's own repository, so that updates follow that repository's tags; for an entry that names another repository, install from that repository, or import it with `tuff pack import --plugin`.
+- What the plugin has that Tuff does not carry is printed after the install and returned under `unsupported` with `--json`. Nothing from it is written into the project.
+- `tuff update` imports the new release the same way.
+
+## Import a Claude Code plugin
+
+`tuff pack import` reads a plugin, or one plugin of a marketplace, and writes it as a standalone source pack:
+
+```sh frame="terminal"
+tuff pack import ./review-kit --output packs/review-kit
+tuff pack import https://github.com/acme/plugins --plugin review-kit --output packs/review-kit
+tuff pack import ./review-kit --output packs/review-kit --json
+```
+
+| In the plugin | In the pack |
+|---|---|
+| `skills/<name>/` and folders named by `skills` in `plugin.json` | A skill member per folder, with every file in it |
+| A `SKILL.md` at the plugin's root, when it has no `skills/` | One skill named after the plugin |
+| Servers in `.mcp.json` and in `mcpServers` in `plugin.json` | An `mcp-server` member per server |
+| `name`, `version`, `description`, `author`, `homepage`, `license`, `keywords` | The pack's manifest |
+| Everything else | Listed under `unsupported` in `tuff-pack.toml`, and kept under `extra/` |
+
+An MCP server becomes a member when Tuff can write it for every harness exactly as Claude Code would run it:
+
+- an environment value or header must be a reference such as `${GITHUB_TOKEN}` or `Bearer ${API_KEY}`. A value written into the config is not carried, since it may be a secret. A `${VAR:-default}` default is dropped, with a note;
+- a server whose command runs a program bundled in the plugin (`${CLAUDE_PLUGIN_ROOT}`) is not carried, since Tuff does not install the plugin's own files for other harnesses;
+- the `stdio` and `http` transports are carried; `sse` and `ws` are not.
+
+The pack's `[build] targets` are every harness that can write all of its members. A harness that cannot is left out with a note saying why: Pi takes no skills, and Codex passes an environment variable to a server only under its own name, so a server that reads `GITHUB_TOKEN` as `GITHUB_PERSONAL_ACCESS_TOKEN` keeps the pack off Codex.
+
+Commands, agents, hooks, output styles, LSP servers, programs in `bin/`, `userConfig`, and dependencies are not carried. Hooks are left out because a Claude Code hook can have a matcher and handler types that a Tuff hook cannot express. Each item names its reason. The output folder must be missing or empty, and `tuff-pack.toml` records where the plugin came from and the commit. `--json` prints the [inspect document](/spec/packs/) of the imported pack.
+
 ## List and remove packs
 
 ```sh frame="terminal"

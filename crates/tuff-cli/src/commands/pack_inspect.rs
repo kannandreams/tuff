@@ -35,10 +35,26 @@ pub(crate) struct InspectDocument<'a, S: Serialize> {
     artifact_version: u8,
     targets: Vec<&'a str>,
     members: Vec<InspectedMember>,
-    /// Parts of a source Tuff could not carry. Empty for a Tuff pack;
-    /// filled by imports (RFC-110 D11).
-    unsupported: Vec<serde_json::Value>,
+    /// Where an imported pack came from, for a pack read from another
+    /// bundle format (RFC-110 D11).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    import: Option<InspectedImport<'a>>,
+    /// Parts of a source Tuff could not carry. Empty for a Tuff pack.
+    unsupported: &'a [pack::PackUnsupported],
     x: &'a tuff_core::host::HostTablesJson,
+}
+
+#[derive(Serialize)]
+struct InspectedImport<'a> {
+    format: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugin: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    commit: Option<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -126,7 +142,18 @@ pub(crate) fn document<'a, S: Serialize>(
             .map(|target| target.id.as_str())
             .collect(),
         members: members(artifact)?,
-        unsupported: Vec::new(),
+        import: metadata.import.as_ref().map(|import| InspectedImport {
+            format: &import.format,
+            url: import.url.as_deref(),
+            path: import.path.as_deref(),
+            plugin: import.plugin.as_deref(),
+            commit: import.commit.as_deref(),
+        }),
+        unsupported: metadata
+            .import
+            .as_ref()
+            .map(|import| import.unsupported.as_slice())
+            .unwrap_or_default(),
         x: &metadata.x,
     })
 }

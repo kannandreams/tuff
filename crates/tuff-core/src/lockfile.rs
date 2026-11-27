@@ -197,6 +197,13 @@ pub struct PackGitSource {
     /// The branch that chose the commit, when the install followed one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    /// The bundle format the folder holds when it is not a Tuff pack, such
+    /// as `claude-plugin`. Each update imports it the same way (RFC-110 D12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// The entry of a marketplace the pack was chosen from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1527,6 +1534,8 @@ requested = "^1.2"
             git_ref: "4b1e".repeat(10),
             tag: Some("v1.2.0".into()),
             branch: None,
+            format: None,
+            plugin: None,
         });
         lf.packs.insert(
             "acme/review".into(),

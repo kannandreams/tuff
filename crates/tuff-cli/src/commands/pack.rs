@@ -74,6 +74,7 @@ pub fn cmd_pack_init(root: &Path, options: PackInitOptions) -> Result<()> {
         license: None,
         keywords: Vec::new(),
         author: None,
+        import: None,
         x: Default::default(),
         build: pack::PackBuild {
             targets: vec!["open-agents".into()],
@@ -283,6 +284,7 @@ fn project_pack_manifest(
         license: None,
         keywords: Vec::new(),
         author: None,
+        import: None,
         x: Default::default(),
         build: pack::PackBuild { targets },
         project: Some(pack::ProjectPackSelection { capabilities }),
@@ -383,6 +385,8 @@ pub struct PackInspectOptions<'a> {
     pub git_ref: Option<&'a str>,
     /// For a git URL: the folder holding `tuff-pack.toml`.
     pub path: Option<&'a str>,
+    /// For a marketplace in a git repository: the plugin to read.
+    pub plugin: Option<&'a str>,
     pub json: bool,
 }
 
@@ -400,6 +404,7 @@ pub fn cmd_pack_inspect(options: PackInspectOptions<'_>) -> Result<()> {
         source,
         git_ref,
         path,
+        plugin,
         json,
     } = options;
     let as_path = Path::new(source);
@@ -412,13 +417,24 @@ pub fn cmd_pack_inspect(options: PackInspectOptions<'_>) -> Result<()> {
     // A source pack is built in a temporary directory so the document can
     // say what each member writes; nothing in the project changes.
     let (_built, artifact, inspected) = if is_git {
-        let checkout = super::pack_git::checkout(source, path, git_ref)?;
-        let (directory, artifact) = build_pack_for_declared_targets(&checkout.pack_root)?;
+        let checkout = super::pack_git::checkout(super::pack_git::CheckoutRequest {
+            url: source,
+            path,
+            git_ref,
+            plugin,
+            allow_remote: true,
+        })?;
+        let (_imported, root) = super::pack_import::source_pack_of(&checkout)?;
+        let (directory, artifact) = build_pack_for_declared_targets(&root)?;
         (
             Some(directory),
             artifact,
             InspectedSource::Git(checkout.source),
         )
+    } else if plugin.is_some() {
+        return Err(TuffError::usage(
+            "--plugin applies to a git address; for a local plugin, run 'tuff pack import' first",
+        ));
     } else if as_path.is_dir()
         || as_path
             .file_name()
@@ -465,11 +481,16 @@ pub fn cmd_pack_inspect(options: PackInspectOptions<'_>) -> Result<()> {
     for target in &artifact.metadata.targets {
         println!("  - {}", target.id);
     }
+    super::pack_import::print_unsupported(super::pack_import::unsupported_of(
+        artifact.metadata.import.as_ref(),
+    ));
     Ok(())
 }
 
 /// Build a source pack for every target its manifest declares.
-fn build_pack_for_declared_targets(pack_root: &Path) -> Result<(tempfile::TempDir, PackArtifact)> {
+pub(crate) fn build_pack_for_declared_targets(
+    pack_root: &Path,
+) -> Result<(tempfile::TempDir, PackArtifact)> {
     let (_, manifest) = pack::load_manifest(pack_root)?;
     let targets = canonical_target_ids(&manifest.build.targets)?;
     build_pack_for_targets(pack_root, &targets)
@@ -584,6 +605,8 @@ pub struct AddPackOptions<'a> {
     pub git_ref: Option<&'a str>,
     /// Repository folder holding a git pack's `tuff-pack.toml` (`--path`).
     pub path: Option<&'a str>,
+    /// The marketplace entry to install (`--plugin`).
+    pub plugin: Option<&'a str>,
     pub json: bool,
 }
 
@@ -594,6 +617,7 @@ pub fn cmd_add_pack(repo_root: &Path, options: AddPackOptions<'_>) -> Result<()>
         reference,
         git_ref,
         path,
+        plugin,
         json,
     } = options;
     if crate::git::is_git_url(source) {
@@ -606,15 +630,22 @@ pub fn cmd_add_pack(repo_root: &Path, options: AddPackOptions<'_>) -> Result<()>
         lockfile::require_lockfile(repo_root)?;
         let target_ids =
             canonical_target_ids(&resolve_agent_selection(repo_root, targets, false)?)?;
-        let checkout = super::pack_git::checkout(source, path, git_ref)?;
-        let (_built, artifact) = build_pack_for_targets(&checkout.pack_root, &target_ids)?;
+        let checkout = super::pack_git::checkout(super::pack_git::CheckoutRequest {
+            url: source,
+            path,
+            git_ref,
+            plugin,
+            allow_remote: false,
+        })?;
+        let (_imported, root) = super::pack_import::source_pack_of(&checkout)?;
+        let (_built, artifact) = build_pack_for_targets(&root, &target_ids)?;
         let source = PackSource::Git(checkout.source.clone());
         install_pack_artifact(repo_root, &artifact, &target_ids, &source)?;
         return report_pack_install(&artifact, &source, &target_ids, json);
     }
-    if git_ref.is_some() || path.is_some() {
+    if git_ref.is_some() || path.is_some() || plugin.is_some() {
         return Err(TuffError::usage(
-            "--ref and --path apply to a pack installed from a git address",
+            "--ref, --path, and --plugin apply to a pack installed from a git address",
         ));
     }
     // Normalized before any install work starts: a malformed --reference
@@ -665,6 +696,8 @@ struct PackInstallReport<'a> {
     source: &'a PackSource,
     targets: &'a [String],
     members: Vec<PackInstallMember<'a>>,
+    /// What an imported source had that the pack does not carry.
+    unsupported: &'a [pack::PackUnsupported],
 }
 
 #[derive(serde::Serialize)]
@@ -699,6 +732,7 @@ fn report_pack_install(
                     version: &capability.version,
                 })
                 .collect(),
+            unsupported: super::pack_import::unsupported_of(artifact.metadata.import.as_ref()),
         };
         println!("{}", serde_json::to_string_pretty(&report)?);
         return Ok(());
@@ -719,6 +753,9 @@ fn report_pack_install(
     for capability in &artifact.metadata.capabilities {
         println!("  - {} {}", capability.id, capability.version);
     }
+    super::pack_import::print_unsupported(super::pack_import::unsupported_of(
+        artifact.metadata.import.as_ref(),
+    ));
     if let PackSource::Git(git) = source
         && git.tag.is_none()
         && git.branch.is_some()
@@ -912,6 +949,7 @@ fn render_artifact(
         keywords: loaded.manifest.keywords.clone(),
         author: loaded.manifest.author.clone(),
         x: tuff_core::host::to_json(&loaded.manifest.x),
+        import: loaded.manifest.import.clone(),
         capabilities,
         targets,
         files: Vec::new(),
@@ -1530,8 +1568,15 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
             let Some(reference) = git_update_ref(id, &provenance, git, check, force, json)? else {
                 return Ok(());
             };
-            let checkout = super::pack_git::checkout(&git.url, Some(&git.path), Some(&reference))?;
-            let (directory, artifact) = build_pack_for_targets(&checkout.pack_root, &target_ids)?;
+            let checkout = super::pack_git::checkout(super::pack_git::CheckoutRequest {
+                url: &git.url,
+                path: Some(&git.path),
+                git_ref: Some(&reference),
+                plugin: git.plugin.as_deref(),
+                allow_remote: false,
+            })?;
+            let (_imported, root) = super::pack_import::source_pack_of(&checkout)?;
+            let (directory, artifact) = build_pack_for_targets(&root, &target_ids)?;
             _built = Some(directory);
             let describe = format!(
                 "{} ({})",

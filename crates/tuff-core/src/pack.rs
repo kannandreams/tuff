@@ -49,9 +49,53 @@ pub struct PackManifest {
     pub project: Option<ProjectPackSelection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<PackMember>,
+    /// Where an imported pack came from and what its source had that Tuff
+    /// could not carry (RFC-110 D11). Written by `tuff pack import`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub import: Option<PackImport>,
     /// Host tables (RFC-110 D6), carried and never read.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub x: crate::host::HostTables,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// The origin of a pack imported from another bundle format.
+pub struct PackImport {
+    /// The bundle format, such as `claude-plugin`.
+    pub format: String,
+    /// The git repository or folder it was read from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The folder inside the repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// The marketplace entry, when the source was a marketplace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
+    /// The commit that was read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// What the source had that the pack does not carry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported: Vec<PackUnsupported>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// One part of an imported source that the pack does not carry. Its files,
+/// when it has any, are kept under the pack's `extra/` folder.
+pub struct PackUnsupported {
+    /// What it is, such as `commands`, `hooks`, or `mcp-server`.
+    pub kind: String,
+    /// Its name, when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Where it is in the source, relative to the source's root.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Why Tuff does not carry it.
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +166,9 @@ pub struct PackArtifactMetadata {
     /// [`ARTIFACT_MANIFEST_PATH`].
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub x: crate::host::HostTablesJson,
+    /// Where an imported pack came from, as its manifest records it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub import: Option<PackImport>,
     pub capabilities: Vec<PackArtifactCapability>,
     pub targets: Vec<PackArtifactTarget>,
     pub files: Vec<PackArtifactFile>,
@@ -912,6 +959,7 @@ mod tests {
             keywords: Vec::new(),
             author: None,
             x: BTreeMap::new(),
+            import: None,
             capabilities: vec![PackArtifactCapability {
                 id: "demo".into(),
                 capability_type: CapabilityType::Skill,
