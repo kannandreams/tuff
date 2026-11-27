@@ -9,8 +9,8 @@ An application in another language runs the `tuff` commands with `--json`, as [P
 
 ```toml title="Cargo.toml"
 [dependencies]
-tuff-packs = "0.19"
-tuff-core = "0.19"
+tuff-packs = "0.20"
+tuff-core = "0.20"
 serde_json = "1"
 ```
 
