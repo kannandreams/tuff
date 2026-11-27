@@ -1,0 +1,27 @@
+[package]
+name = "tuff-packs"
+version.workspace = true
+edition.workspace = true
+description = "Build, inspect, import, and preview Tuff capability packs and Claude Code plugins from Rust."
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/tuff-packs"
+repository.workspace = true
+readme = "README.md"
+keywords = ["agents", "claude-code", "mcp", "skills", "tuff"]
+categories = ["development-tools"]
+
+[dependencies]
+tuff-core.workspace = true
+tuff-hooks-spec.workspace = true
+tuff-adapter-open-agents.workspace = true
+tuff-adapter-claude.workspace = true
+tuff-adapter-codex.workspace = true
+tuff-adapter-cursor.workspace = true
+tuff-adapter-opencode.workspace = true
+tuff-adapter-pi.workspace = true
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tempfile = "3.23.0"
+semver = "1.0.27"

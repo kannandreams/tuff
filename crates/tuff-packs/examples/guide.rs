@@ -1,0 +1,117 @@
+//! The examples on the "Packs from Rust" guide page
+//! (website/src/content/docs/guides/packs-from-rust.md), compiled so the
+//! page stays in step with the API. tests/guide_examples.rs checks that
+//! every block on the page is here.
+
+#![allow(dead_code)]
+
+use std::path::{Path, PathBuf};
+use tuff_core::bundle::write_source_pack;
+use tuff_core::lockfile::{self, PackSource};
+use tuff_packs::build::build_as;
+use tuff_packs::build::build_for_declared_targets;
+use tuff_packs::git::{CheckoutRequest, checkout};
+use tuff_packs::git::{GitPackStatus, status};
+use tuff_packs::import::source_pack_of;
+use tuff_packs::import::{ImportRequest, import};
+use tuff_packs::inspect;
+use tuff_packs::marketplace::{MarketplaceBuildOptions, build_marketplace};
+
+fn review(folder: &Path) -> tuff_packs::Result<()> {
+    let built = build_for_declared_targets(folder)?;
+    let source = serde_json::json!({ "kind": "folder", "path": folder.display().to_string() });
+    let document = inspect::document(&built.artifact, &source)?;
+
+    for member in &document.members {
+        println!(
+            "{} ({:?}) runs code: {}",
+            member.id, member.capability_type, member.runs_code
+        );
+        if let Some(mcp) = &member.mcp {
+            println!("  needs {:?}", mcp.env);
+        }
+    }
+    for item in document.unsupported {
+        println!("not carried: {} ({})", item.kind, item.reason);
+    }
+    // The same document as JSON, for a web front end.
+    println!("{}", serde_json::to_string(&document)?);
+    Ok(())
+}
+
+fn review_git(url: &str) -> tuff_packs::Result<()> {
+    let checked_out = checkout(CheckoutRequest {
+        url,
+        path: None,          // the folder inside the repository
+        git_ref: None,       // newest release tag
+        plugin: None,        // a marketplace entry
+        allow_remote: false, // keep to this repository's tags
+    })?;
+    let pack = source_pack_of(&checked_out)?;
+    let built = build_for_declared_targets(&pack.root)?;
+
+    let mut source = serde_json::to_value(&checked_out.source)?;
+    source["kind"] = "git".into();
+    let document = inspect::document(&built.artifact, &source)?;
+
+    // The commit to install, so what is installed is what was reviewed.
+    println!("{} at {}", document.version, checked_out.source.git_ref);
+    for note in pack.notes.iter().chain(&built.notes) {
+        println!("note: {note}");
+    }
+    Ok(())
+}
+
+fn check(project: &Path) -> tuff_packs::Result<()> {
+    let lock = lockfile::require_lockfile(project)?;
+    for (name, pack) in lock.normalized_packs() {
+        let PackSource::Git(git) = &pack.source else {
+            continue;
+        };
+        match status(&name, &pack.version, git)?.0 {
+            GitPackStatus::Newer { version, .. } => println!("{name}: {version} is available"),
+            GitPackStatus::Repointed { .. } => {
+                println!("{name}: its tag moved; review before updating")
+            }
+            GitPackStatus::TagMissing => println!("{name}: its tag was deleted"),
+            GitPackStatus::BranchMoved { commit } => println!("{name}: branch moved to {commit}"),
+            GitPackStatus::Current | GitPackStatus::Pinned => {}
+        }
+    }
+    Ok(())
+}
+
+fn convert(plugin: &str, output: &Path) -> tuff_packs::Result<()> {
+    let imported = import(ImportRequest {
+        source: plugin, // a folder or a git URL
+        plugin: None,   // a marketplace entry
+        git_ref: None,
+        path: None,
+    })?;
+    for item in imported.unsupported() {
+        println!("not carried: {} {}", item.kind, item.reason);
+    }
+    write_source_pack(output, &imported)
+}
+
+fn publish(packs: &[PathBuf], output: &Path) -> tuff_packs::Result<()> {
+    // One pack as a plugin, held in the artifact under targets/claude-plugin/.
+    let plugin = build_as(&packs[0], &["claude-plugin".to_string()], false)?;
+    println!("{} files", plugin.artifact.contents.len());
+
+    // Every pack as one marketplace folder.
+    let built = build_marketplace(MarketplaceBuildOptions {
+        sources: packs,
+        output,
+        name: Some("acme"),
+        owner_name: "Acme",
+        owner_url: Some("https://example.com"),
+        skip_unsupported: false,
+    })?;
+    for (name, version) in &built.plugins {
+        println!("{name} {version}");
+    }
+    Ok(())
+}
+
+fn main() {}

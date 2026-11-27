@@ -6,6 +6,14 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **The `tuff-packs` crate: packs from Rust.** It builds a source pack for its harnesses and for Claude Code, describes a pack with the same document as `tuff pack inspect --json`, reads a Claude Code plugin as a pack, checks out a pack from git and compares it with its release tags, previews an update as `tuff update --check --json` does, and writes packs as a Claude Code marketplace. Its functions return notes and warnings in place of printing them, and read no environment variables of their own. The `tuff pack` commands are built on it. Installing, updating, and removing packs are not in the crate yet. Its Rust API is 0.x.
+
+### Changed
+
+- **The hook and runtime dependency notes print when a capability is installed.** Loading a capability's `tuff.toml` no longer prints them, so `tuff pack build`, `tuff pack inspect`, and `tuff pack check` no longer repeat them for every member; `tuff add`, `tuff add pack`, and `tuff update` print them as before.
+
 ## [0.18.0] - 2026-11-27
 
 ### Added

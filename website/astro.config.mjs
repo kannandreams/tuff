@@ -118,6 +118,7 @@ export default defineConfig({
           items: [
             { label: 'Capability Packs', slug: 'concepts/packs' },
             { label: 'Packs in Your Application', slug: 'guides/packs-in-your-application' },
+            { label: 'Packs from Rust', slug: 'guides/packs-from-rust' },
             { label: 'Pack JSON Specification', slug: 'spec/packs' },
             { label: 'OCI Registries & Container Images', slug: 'guides/oci-registries-and-container-images' },
           ],

@@ -14,6 +14,8 @@ use crate::manifest::{self, CapabilityType, load_manifest};
 use crate::release;
 use crate::resolver::{self, Scope};
 
+pub(crate) use tuff_packs::build::{contained_planned_path, mcp_entry_tracked};
+
 use super::{capability_index, home_dir, infer_from_path, resolve_agent_selection};
 
 pub fn cmd_add(
@@ -419,16 +421,6 @@ fn add_catalog_server(
         ),
     }
     Ok(())
-}
-
-/// Whether the lockfile already records `id` for `target` — the one case in
-/// which overwriting an existing `mcpServers.<id>` entry is a re-install of
-/// our own work rather than clobbering something a person wrote by hand.
-pub(crate) fn mcp_entry_tracked(lockfile: &lockfile::Lockfile, id: &str, target: &str) -> bool {
-    lockfile
-        .capabilities
-        .get(id)
-        .is_some_and(|entry| entry.targets.contains_key(target))
 }
 
 /// Take a hook's registrations out of a settings file the adapter no longer
@@ -1230,19 +1222,6 @@ pub(crate) fn write_planned_file(
     })
 }
 
-/// Refuse to write a planned file anywhere but under the install root.
-///
-/// Planners build these paths from manifest content, so this is the last
-/// line of defence if one of them ever lets `..` or an absolute path
-/// through: nothing is written outside the project, whatever planned it.
-pub(crate) fn contained_planned_path(path: &str) -> Result<std::path::PathBuf> {
-    crate::pack::validate_relative_path(Path::new(path)).map_err(|_| {
-        TuffError::refused(format!(
-            "refusing to write outside the install directory: '{path}'"
-        ))
-    })
-}
-
 /// Emits an already-tracked capability into harnesses it is not yet recorded
 /// for, and records those targets. Returns how many targets were added.
 ///
@@ -1730,6 +1709,11 @@ pub(crate) fn install_capability_accepting(
     report: bool,
     policy_options: PolicyOptions,
 ) -> Result<()> {
+    if report {
+        for note in manifest::install_notes(manifest) {
+            eprintln!("note: {note}");
+        }
+    }
     let policy_enforcement = match capability.kind {
         CapabilityKind::Policy { ref policy } => {
             let accept = policy_options.accept_unenforced
