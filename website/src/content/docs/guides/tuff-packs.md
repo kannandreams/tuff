@@ -284,6 +284,47 @@ fn remove(project: &Path, pack: &str) -> tuff_packs::Result<()> {
 
 A pack's members are installed into the project. The `tuff` command's global scope, under the home directory, is not part of the library.
 
+## Apply an approval that comes later
+
+A plan holds its rendered files in memory and in a temporary folder, so it does not outlive the program that made it. When an approval can come hours later, after a restart, keep the plan's `fingerprint` with the request instead of the plan. When the approval arrives, make the plan again and pass it to `apply_approved` with the kept fingerprint:
+
+```rust
+use std::path::Path;
+
+use tuff_core::lockfile::PackSource;
+use tuff_core::pack::PackArtifact;
+use tuff_packs::install::{Approval, apply_approved, plan_install};
+use tuff_packs::workspace::{Baselines, Workspace};
+
+/// When the request comes in: show the plan and keep its fingerprint.
+fn ask(project: &Path, artifact: &PackArtifact, source: &PackSource) -> tuff_packs::Result<String> {
+    let workspace = Workspace::open(project)?;
+    let plan = plan_install(&workspace, artifact, source, &["claude".to_string()])?;
+    println!("{}", serde_json::to_string(&plan)?);
+    Ok(plan.fingerprint.clone())
+}
+
+/// When the approval comes in, even after a restart: make the plan again
+/// and apply it only if it is the change that was approved.
+fn approve(
+    project: &Path,
+    artifact: &PackArtifact,
+    source: &PackSource,
+    approved: &str,
+) -> tuff_packs::Result<()> {
+    let workspace = Workspace::open(project)?;
+    let plan = plan_install(&workspace, artifact, source, &["claude".to_string()])?;
+    match apply_approved(&workspace, &Baselines::none(), plan, approved)? {
+        Approval::Applied(summary) => println!("installed {}", summary.pack),
+        // Something changed since: show the new plan and ask again.
+        Approval::Changed(plan) => println!("{}", serde_json::to_string(&plan)?),
+    }
+    Ok(())
+}
+```
+
+The fingerprint covers the pack release, the targets, each member, and every file the plan touches: its path, its contents now, and its contents after the change. Two plans with the same fingerprint make the same change. `apply_approved` applies a matching plan as `apply` does. Any other plan comes back as `Approval::Changed` with nothing written, for example when the pack's author published a new release, a file the plan touches was edited, or a newer Tuff renders the pack differently. The fingerprint is also in the plan's JSON.
+
 ## Stability
 
 The crate's Rust API is 0.x. It can change in a minor release, and each change is in the [changelog](/changelog/). The JSON documents in the [Pack JSON Specification](/spec/packs/) are the stable interface, and the library's inspect and preview documents serialize to exactly those. A plan's JSON is not in the specification yet; read it through the Rust types. API reference: [docs.rs/tuff-packs](https://docs.rs/tuff-packs).

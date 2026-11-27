@@ -9,13 +9,27 @@ use tuff_core::error::ErrorKind;
 use tuff_core::lockfile::{PackArtifactSource, PackSource};
 use tuff_packs::build::build_for_declared_targets;
 use tuff_packs::install::{
-    FileChange, MemberChange, Operation, UpdateRequest, apply, plan_install, plan_remove,
-    plan_update,
+    Approval, FileChange, MemberChange, Operation, UpdateRequest, apply, apply_approved,
+    plan_install, plan_remove, plan_update,
 };
 use tuff_packs::workspace::{Baselines, Workspace};
 
 fn example_pack() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/packs/example/review-pack")
+}
+
+/// Copy the folder `from` to `to`.
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let path = entry.unwrap().path();
+        let target = to.join(path.file_name().unwrap());
+        if path.is_dir() {
+            copy_tree(&path, &target);
+        } else {
+            fs::copy(&path, &target).unwrap();
+        }
+    }
 }
 
 /// Every file under `root`, relative to it, sorted.
@@ -128,6 +142,42 @@ fn packs_install_update_and_remove_without_home() {
     assert_eq!(error.kind(), ErrorKind::Refused, "{error}");
     drop(held);
 
+    // Someone approves a plan hours later, after a restart: only its
+    // fingerprint was kept. The same change made again has the same one.
+    let approved = plan_install(&workspace, artifact, &source, &claude)
+        .unwrap()
+        .fingerprint
+        .clone();
+    assert!(approved.starts_with("sha256:"), "{approved}");
+    let again = plan_install(&workspace, artifact, &source, &claude).unwrap();
+    assert_eq!(again.fingerprint, approved);
+    assert_eq!(
+        serde_json::to_value(&again).unwrap()["fingerprint"],
+        *approved
+    );
+    drop(again);
+    // Other targets are another change.
+    let both = ["claude".to_string(), "open-agents".to_string()];
+    let other = plan_install(&workspace, artifact, &source, &both).unwrap();
+    assert_ne!(other.fingerprint, approved);
+    drop(other);
+
+    // The author changed the pack since, keeping its version: the new plan
+    // is a different change, so nothing is written.
+    let changed_pack = sandbox.path().join("changed-pack");
+    copy_tree(&example_pack(), &changed_pack);
+    let skill_source = changed_pack.join("capabilities/review-skill/SKILL.md");
+    let mut text = fs::read_to_string(&skill_source).unwrap();
+    text.push_str("\nOne more step.\n");
+    fs::write(&skill_source, text).unwrap();
+    let changed_artifact = build_for_declared_targets(&changed_pack).unwrap().artifact;
+    let plan = plan_install(&workspace, &changed_artifact, &source, &claude).unwrap();
+    match apply_approved(&workspace, &baselines, plan, &approved).unwrap() {
+        Approval::Changed(plan) => assert_ne!(plan.fingerprint, approved),
+        Approval::Applied(_) => panic!("applied a plan nobody approved"),
+    }
+    assert_eq!(files_under(&root), ["tuff.lock"]);
+
     // Applied, the workspace holds exactly the planned files.
     let plan = plan_install(&workspace, artifact, &source, &claude).unwrap();
     let planned = plan
@@ -135,7 +185,11 @@ fn packs_install_update_and_remove_without_home() {
         .iter()
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
-    let applied = apply(&workspace, &baselines, plan).unwrap();
+    let Approval::Applied(applied) =
+        apply_approved(&workspace, &baselines, plan, &approved).unwrap()
+    else {
+        panic!("the approved plan was not applied");
+    };
     assert_eq!(applied.pack, "com.example/review");
     assert_eq!(files_under(&root), planned);
     assert!(!files_under(&baseline_dir).is_empty());

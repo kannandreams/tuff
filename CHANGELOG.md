@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **Approvals that come later.** A `tuff-packs` plan now has a `fingerprint` that identifies exactly the change it makes, in Rust and in its JSON. `install::apply_approved` takes a fresh plan and the fingerprint kept with an earlier approval, and applies the plan only when the two match; otherwise it returns the new plan with nothing written. An application can ask for approval, restart, and still install only what was approved. See [The tuff-packs Rust library](https://tuffcli.dev/guides/tuff-packs/#apply-an-approval-that-comes-later).
+
 ## [0.19.0] - 2026-11-27
 
 ### Added

@@ -17,6 +17,7 @@ use tuff_packs::git::{GitPackStatus, status};
 use tuff_packs::import::source_pack_of;
 use tuff_packs::import::{ImportRequest, import};
 use tuff_packs::inspect;
+use tuff_packs::install::{Approval, apply_approved};
 use tuff_packs::install::{UpdateRequest, apply, plan_install, plan_remove, plan_update};
 use tuff_packs::marketplace::{MarketplaceBuildOptions, build_marketplace};
 use tuff_packs::workspace::{Baselines, Workspace};
@@ -176,6 +177,32 @@ fn remove(project: &Path, pack: &str) -> tuff_packs::Result<()> {
     let workspace = Workspace::open(project)?;
     let plan = plan_remove(&workspace, pack, false)?;
     apply(&workspace, &Baselines::none(), plan)?;
+    Ok(())
+}
+
+/// When the request comes in: show the plan and keep its fingerprint.
+fn ask(project: &Path, artifact: &PackArtifact, source: &PackSource) -> tuff_packs::Result<String> {
+    let workspace = Workspace::open(project)?;
+    let plan = plan_install(&workspace, artifact, source, &["claude".to_string()])?;
+    println!("{}", serde_json::to_string(&plan)?);
+    Ok(plan.fingerprint.clone())
+}
+
+/// When the approval comes in, even after a restart: make the plan again
+/// and apply it only if it is the change that was approved.
+fn approve(
+    project: &Path,
+    artifact: &PackArtifact,
+    source: &PackSource,
+    approved: &str,
+) -> tuff_packs::Result<()> {
+    let workspace = Workspace::open(project)?;
+    let plan = plan_install(&workspace, artifact, source, &["claude".to_string()])?;
+    match apply_approved(&workspace, &Baselines::none(), plan, approved)? {
+        Approval::Applied(summary) => println!("installed {}", summary.pack),
+        // Something changed since: show the new plan and ask again.
+        Approval::Changed(plan) => println!("{}", serde_json::to_string(&plan)?),
+    }
     Ok(())
 }
 
