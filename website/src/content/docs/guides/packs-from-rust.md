@@ -7,17 +7,6 @@ description: Build, inspect, import, and check packs and Claude Code plugins fro
 
 An application in another language runs the `tuff` commands with `--json`, as [Packs in Your Application](/guides/packs-in-your-application/) describes.
 
-:::note[Version]
-`tuff-packs` is published from Tuff 0.19.0. Until then, depend on the repository:
-
-```toml title="Cargo.toml"
-[dependencies]
-tuff-packs = { git = "https://github.com/kannandreams/tuff" }
-tuff-core = { git = "https://github.com/kannandreams/tuff" }
-serde_json = "1"
-```
-:::
-
 ```toml title="Cargo.toml"
 [dependencies]
 tuff-packs = "0.19"
