@@ -81,7 +81,11 @@ pub(crate) fn local_modifications(
 /// The installed policies with rules on an MCP server's own table for one
 /// agent, as Codex's `disabled_tools` and tool `approval_mode` are. Removing
 /// the server would take those rules with it.
-fn policies_on_server_table(lf: &lockfile::Lockfile, server_id: &str, target: &str) -> Vec<String> {
+pub(crate) fn policies_on_server_table(
+    lf: &lockfile::Lockfile,
+    server_id: &str,
+    target: &str,
+) -> Vec<String> {
     let Some(adapter) = AdapterKind::from_id(target) else {
         return Vec::new();
     };

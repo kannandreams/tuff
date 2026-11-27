@@ -36,6 +36,7 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - without `@`, a git install records the version the source declares (`version` in `tuff.toml`, or `version:`/`metadata.version:` in `SKILL.md` frontmatter), shown as `1.2.0 (declared)` since it is weaker than a release; a source declaring nothing records the commit SHA
 - `tuff create <type> <id> -a <agent>` — create and track a capability
 - `tuff add pack <artifact.tuffpack> -a <agent>` — atomically install a verified capability pack
+- `tuff add pack <git-url> [--ref <tag|branch|commit>] [--path <dir>] -a <agent>` — install a pack from a repository holding a `tuff-pack.toml`, at its newest release tag by default; the lockfile pins the commit
 - `tuff add <policy-dir> -a claude` — install a policy (`type = "policy"`); only Claude Code enforces policies today, and the install is refused for any agent that would not enforce every rule
 - `tuff add mcp <catalog-id|path|git-url>... -a <agent>` — wire external MCP servers (catalog: filesystem, memory, github, fetch, git, time, sequentialthinking, everything, brave-search, notion, playwright, sentry, linear, context7, screenpipe) into each harness config; secrets stay as `${VAR}` references. Prompts once per required variable at a real terminal (add `--yes` to skip, or it's automatic in a non-interactive shell)
 
@@ -50,6 +51,9 @@ If the project has no `tuff.lock`, run `tuff init` before anything else. Never h
 - `tuff pack push <artifact.tuffpack> <registry/repository:tag>` — publish exact pack bytes as an OCI artifact
 - `tuff pack pull <registry/repository:tag-or-digest> -o <artifact.tuffpack>` — download and verify an OCI-distributed pack without overwriting an existing file
 - `tuff pack extract <artifact.tuffpack> -a <agent> -o <dir>` — extract a runtime-native target
+- `tuff pack list [--json]` — list installed packs, their sources, and members
+- `tuff pack remove <name> [--force]` — remove every member of an installed pack as one change
+- `tuff update <member> --check --json` — preview a pack update: members added, updated, removed, and the files that change
 
 ### Inspect
 - `tuff list` — show all installed capabilities with drift status

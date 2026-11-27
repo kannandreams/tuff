@@ -96,7 +96,7 @@ enum Command {
         json: bool,
     },
 
-    /// Build, inspect, verify, and extract capability packs.
+    /// Build, inspect, verify, extract, list, and remove capability packs.
     Pack {
         #[command(subcommand)]
         action: PackCommand,
@@ -199,6 +199,11 @@ enum Command {
         /// updating a pack-installed capability.
         #[arg(long = "ca-file")]
         ca_file: Vec<PathBuf>,
+
+        /// With --check on a pack member: print the preview as JSON, with
+        /// every member added, updated, or removed and the files that change.
+        #[arg(long = "json")]
+        json: bool,
     },
 
     /// Validate installed capabilities (CI mode).
@@ -556,11 +561,23 @@ enum AddCommand {
         #[arg(short = 'g', long = "global")]
         global: bool,
     },
-    /// Install every capability in a verified pack artifact.
+    /// Install every capability in a pack, from a verified artifact or a git
+    /// repository holding a tuff-pack.toml.
     Pack {
-        source: PathBuf,
+        /// A .tuffpack artifact path, or a git URL.
+        source: String,
         #[arg(short = 'a', long = "harness", value_name = "HARNESS")]
         agent: Vec<String>,
+        /// For a git URL: the tag, branch, or commit to install. Without it,
+        /// the newest release tag, or the default branch when there is none.
+        #[arg(long = "ref", value_name = "REF")]
+        git_ref: Option<String>,
+        /// For a git URL: the repository folder holding tuff-pack.toml.
+        #[arg(long = "path", value_name = "DIR")]
+        path: Option<String>,
+        /// Print the installed pack, its source, and its members as JSON.
+        #[arg(long = "json")]
+        json: bool,
         /// OCI reference this pack was pulled from (e.g.
         /// ghcr.io/acme/engineering:1.2.0), recorded so `tuff outdated` can
         /// check whether a newer pack version has been published. Omit if
@@ -597,6 +614,20 @@ enum AddCommand {
 
 #[derive(Subcommand)]
 enum PackCommand {
+    /// List installed packs, where each came from, and their members.
+    List {
+        /// Output the packs as JSON.
+        #[arg(long = "json")]
+        json: bool,
+    },
+    /// Remove every member of an installed pack.
+    Remove {
+        /// Installed pack name.
+        name: String,
+        /// Remove members even when they have local changes.
+        #[arg(short = 'f', long = "force")]
+        force: bool,
+    },
     /// Create a source pack manifest.
     Init {
         /// Stable pack name, optionally namespaced with slashes.
@@ -967,6 +998,9 @@ fn run() -> Result<()> {
                     source: typed_source,
                     agent: typed_agent,
                     reference: typed_reference,
+                    git_ref,
+                    path,
+                    json,
                 }) => {
                     reject_parent_add_options(
                         source.as_ref(),
@@ -977,9 +1011,14 @@ fn run() -> Result<()> {
                     )?;
                     cmd_add_pack(
                         &repo_root,
-                        &typed_source,
-                        &typed_agent,
-                        typed_reference.as_deref(),
+                        commands::AddPackOptions {
+                            source: &typed_source,
+                            targets: &typed_agent,
+                            reference: typed_reference.as_deref(),
+                            git_ref: git_ref.as_deref(),
+                            path: path.as_deref(),
+                            json,
+                        },
                     )
                 }
                 Some(AddCommand::Mcp {
@@ -1008,6 +1047,10 @@ fn run() -> Result<()> {
             }
         }
         Some(Command::Pack { action }) => match action {
+            PackCommand::List { json } => commands::cmd_pack_list(&repo_root, json),
+            PackCommand::Remove { name, force } => {
+                commands::cmd_pack_remove(&repo_root, &name, force)
+            }
             PackCommand::Init {
                 name,
                 from_project,
@@ -1113,6 +1156,7 @@ fn run() -> Result<()> {
             pack,
             plain_http,
             ca_file,
+            json,
         }) => cmd_update(
             &repo_root,
             &id,
@@ -1126,6 +1170,7 @@ fn run() -> Result<()> {
                     plain_http,
                     ca_files: ca_file,
                 },
+                json,
             },
         ),
         Some(Command::Check {

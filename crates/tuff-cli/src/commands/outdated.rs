@@ -235,6 +235,53 @@ fn classify_pack(
     row
 }
 
+/// Check a member of a pack installed from git against the repository's
+/// tags, or its branch when it follows one (RFC-110 D4). The digest is not
+/// compared: Tuff built that artifact itself, and a later Tuff can render
+/// the same commit differently.
+fn classify_git_pack(
+    pack: &lockfile::PackProvenance,
+    git: &lockfile::PackGitSource,
+    cache: &mut PackCheckCache,
+) -> (String, String, String) {
+    use super::pack_git::GitPackStatus;
+    let key = format!("git:{}#{}@{}", git.url, git.path, git.git_ref);
+    if let Some(row) = cache.rows.get(&key) {
+        return row.clone();
+    }
+    let current = pack.version.clone();
+    let row = match super::pack_git::status(&pack.name, &pack.version, git) {
+        Err(_) => (current, "unavailable".to_string(), "error".to_string()),
+        Ok((status, latest)) => {
+            let latest_version = latest.map(|release| release.version.to_string());
+            match status {
+                GitPackStatus::Current => (current.clone(), current, "up to date".to_string()),
+                GitPackStatus::Newer { version, .. } => (current, version, "outdated".to_string()),
+                GitPackStatus::Repointed { .. } => (
+                    current.clone(),
+                    latest_version.unwrap_or(current),
+                    "repointed".to_string(),
+                ),
+                GitPackStatus::TagMissing => (
+                    current,
+                    latest_version.unwrap_or_else(|| UNRESOLVED.to_string()),
+                    "tag missing".to_string(),
+                ),
+                GitPackStatus::BranchMoved { commit } => (
+                    short_sha(&git.git_ref).to_string(),
+                    short_sha(&commit).to_string(),
+                    "outdated".to_string(),
+                ),
+                GitPackStatus::Pinned => {
+                    (current, UNRESOLVED.to_string(), "not checked".to_string())
+                }
+            }
+        }
+    };
+    cache.rows.insert(key, row.clone());
+    row
+}
+
 /// Classify one capability against its upstream.
 ///
 /// A capability with no recorded source and no registry-aware pack — anything
@@ -245,11 +292,18 @@ fn classify_pack(
 fn classify(
     id: &str,
     entry: &lockfile::CapabilityLockEntry,
+    packs: &std::collections::BTreeMap<String, lockfile::PackLockEntry>,
     oci_options: &OciTransferOptions,
     cache: &mut PackCheckCache,
 ) -> Verdict {
     let git = match &entry.source {
         lockfile::CapabilitySource::Pack(pack) => {
+            if let Some(git) = packs
+                .get(&pack.name)
+                .and_then(|entry| entry.source.as_git())
+            {
+                return classify_git_pack(pack, git, cache).into();
+            }
             return match &pack.registry {
                 Some(registry) => classify_pack(pack, registry, oci_options, cache),
                 None => (
@@ -471,9 +525,10 @@ fn collect_rows(
     cache: &mut PackCheckCache,
     rows: &mut Vec<OutdatedRow>,
 ) {
+    let packs = lf.normalized_packs();
     for (id, entry) in &lf.capabilities {
         // One upstream check per capability; the rows differ only by target.
-        let verdict = classify(id, entry, oci_options, cache);
+        let verdict = classify(id, entry, &packs, oci_options, cache);
         let (status, change) = split_change(verdict.status);
         for target_id in entry.targets.keys() {
             rows.push(OutdatedRow {
@@ -651,6 +706,7 @@ mod tests {
             &entry(lockfile::CapabilitySource::local(
                 "agent-capabilities/example",
             )),
+            &std::collections::BTreeMap::new(),
             &OciTransferOptions::default(),
             &mut PackCheckCache::default(),
         );

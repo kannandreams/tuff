@@ -139,10 +139,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn create_lockfile(path: &std::path::Path, entries: &[(&str, &str, &str)]) {
-        let mut lf = lockfile::Lockfile {
-            version: lockfile::LOCKFILE_VERSION,
-            capabilities: std::collections::BTreeMap::new(),
-        };
+        let mut lf = lockfile::Lockfile::empty();
         for (id, capability_type, version) in entries {
             let ct = CapabilityType::parse(capability_type).unwrap_or(CapabilityType::Skill);
             lf.capabilities.insert(

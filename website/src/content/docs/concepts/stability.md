@@ -10,7 +10,7 @@ Tuff is version 0.x today. In 0.x, any minor release can change commands, flags,
 - **CLI commands, flags, and exit codes.** The commands and flags in the [CLI reference](/cli), and the [exit codes](/cli/#exit-codes-and-errors) `0`, `1`, `2`, and `70`.
 - **`--json` output.** The shape of the output of every command that takes `--json`, including the error object written to stderr and its `kind` values.
 - **The `tuff.toml` manifest.** The fields and values described on [The tuff.toml File](/primitives/format).
-- **The `tuff.lock` format.** Schema version 3, described on [The tuff.lock File](/concepts/lockfile), and the migration rules below.
+- **The `tuff.lock` format.** Schema version 4, described on [The tuff.lock File](/concepts/lockfile), and the migration rules below.
 - **The hooks specification.** The [Hooks Specification](/spec/hooks), including its event vocabulary and the files an implementation writes. The specification keeps its own version number and the rules in its section 9. Its compatibility matrices describe what each harness supports, and they can change when a harness changes, without a new specification version.
 - **File locations in each harness.** The paths Tuff writes into each harness's folder, listed on [Harness Adapters](/concepts/adapters).
 
@@ -30,11 +30,11 @@ A feature that is added after 1.0 and labelled Preview is excluded until its pag
 
 ### tuff.lock today
 
-- Tuff reads schema versions 1, 2, and 3. Versions 1 and 2 are TOML and version 3 is JSON.
-- Every command that changes the lockfile writes version 3. Commands that only read it leave an older file as it is.
-- `tuff lock migrate` rewrites the file as version 3 and changes nothing else.
+- Tuff reads schema versions 1, 2, 3, and 4. Versions 1 and 2 are TOML and versions 3 and 4 are JSON.
+- Every command that changes the lockfile writes version 4. Commands that only read it leave an older file as it is.
+- `tuff lock migrate` rewrites the file as version 4 and changes nothing else.
 - A lockfile with a version newer than the running Tuff understands is refused with an `unsupported` error that names the file's version, the versions the running Tuff reads, and the instruction to upgrade Tuff. The error exits with code `1`.
-- A file whose syntax does not match its version, such as TOML that claims version 3, is refused as `corrupt`.
+- A file whose syntax does not match its version, such as TOML that claims version 4, is refused as `corrupt`.
 
 ### A new format version after 1.0
 
