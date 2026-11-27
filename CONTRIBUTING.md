@@ -131,6 +131,8 @@ To cut a release:
 
 The `tuff-console` crate is published by the `tuff-console` job of `crates.yml`, after `tuff-core` and before `tuffcli`. Before the first tag that includes it, a maintainer reserves the crate name on crates.io and adds its trusted publisher (owner `kannandreams`, repository `tuff`, workflow `crates.yml`, environment `release-tuff-console`). A trusted publisher can only be added to a crate that exists, and the crate needs this release's `tuff-core` on crates.io to compile, so the reservation is done after that crate is published or with a stub.
 
+The `tuff-packs` crate is published by the `tuff-packs` job, after the adapter crates and before `tuffcli`. It needs the same one-time setup before its first tag: reserve the name on crates.io and add a trusted publisher with environment `release-tuff-packs`.
+
 GitHub release notes are generated automatically from merged pull requests. Apply the `enhancement` or `feature`, `documentation`, `dependencies`, `maintenance`, `ci`, `bug`, or `fix` label when one category clearly applies; unlabeled changes remain visible under “Other Changes.” The curated changelog remains the authoritative summary of user-visible behavior.
 
 ## Checks

@@ -403,13 +403,6 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             let impl_cfg = manifest.implementation.as_ref().unwrap();
             crate::tool::validate_entrypoint(&manifest.root, &impl_cfg.entrypoint)?;
 
-            if !impl_cfg.runtime_deps.is_empty() {
-                eprintln!(
-                    "note: this tool requires runtime dependencies: {}",
-                    impl_cfg.runtime_deps.join(", ")
-                );
-            }
-
             if !manifest.files.is_empty() {
                 manifest.source_files()?;
             }
@@ -430,11 +423,6 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
             }
 
             crate::tool::check_path_traversal(&hook_cfg.working_directory)?;
-
-            eprintln!(
-                "note: this hook runs '{}' on event '{}' — it will not be executed during install",
-                hook_cfg.command, hook_cfg.event
-            );
 
             if !manifest.files.is_empty() {
                 manifest.source_files()?;
@@ -466,6 +454,31 @@ pub fn load_manifest(capability_dir: &Path) -> Result<CapabilityManifest> {
     }
 
     Ok(manifest)
+}
+
+/// Notes for a person installing this capability: what a hook runs and on
+/// which event, and the runtime dependencies a tool needs. Loading a
+/// manifest prints nothing; an installer shows these.
+pub fn install_notes(manifest: &CapabilityManifest) -> Vec<String> {
+    let mut notes = Vec::new();
+    if let Some(implementation) = &manifest.implementation
+        && manifest.capability_type == CapabilityType::Tool
+        && !implementation.runtime_deps.is_empty()
+    {
+        notes.push(format!(
+            "this tool requires runtime dependencies: {}",
+            implementation.runtime_deps.join(", ")
+        ));
+    }
+    if let Some(hook) = &manifest.hook
+        && manifest.capability_type == CapabilityType::Hook
+    {
+        notes.push(format!(
+            "this hook runs '{}' on event '{}' — it will not be executed during install",
+            hook.command, hook.event
+        ));
+    }
+    notes
 }
 
 pub fn validate_mcp_server(server: &McpServerConfig) -> Result<()> {

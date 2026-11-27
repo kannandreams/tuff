@@ -8,118 +8,118 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use crate::adapter::{AdapterKind, AgentAdapter};
-use crate::error::Result;
-use crate::manifest::{self, CapabilityManifest, CapabilityType, McpTransport};
-use crate::pack::{self, PackArtifact, PackAuthor};
+use tuff_core::error::Result;
+use tuff_core::manifest::{self, CapabilityManifest, CapabilityType, McpTransport};
+use tuff_core::pack::{self, PackArtifact, PackAuthor};
 
 /// The JSON document's schema. It changes only by adding fields; a removal
 /// or a change of meaning is a new schema number.
-pub(crate) const INSPECT_SCHEMA: u8 = 1;
+pub const INSPECT_SCHEMA: u8 = 1;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct InspectDocument<'a, S: Serialize> {
-    schema: u8,
-    name: &'a str,
-    version: &'a str,
-    description: &'a str,
+pub struct InspectDocument<'a, S: Serialize> {
+    pub schema: u8,
+    pub name: &'a str,
+    pub version: &'a str,
+    pub description: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    homepage: Option<&'a str>,
+    pub homepage: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    license: Option<&'a str>,
-    keywords: &'a [String],
+    pub license: Option<&'a str>,
+    pub keywords: &'a [String],
     #[serde(skip_serializing_if = "Option::is_none")]
-    author: Option<&'a PackAuthor>,
-    source: &'a S,
-    digest: &'a str,
-    artifact_version: u8,
-    targets: Vec<&'a str>,
-    members: Vec<InspectedMember>,
+    pub author: Option<&'a PackAuthor>,
+    pub source: &'a S,
+    pub digest: &'a str,
+    pub artifact_version: u8,
+    pub targets: Vec<&'a str>,
+    pub members: Vec<InspectedMember>,
     /// Where an imported pack came from, for a pack read from another
     /// bundle format (RFC-110 D11).
     #[serde(skip_serializing_if = "Option::is_none")]
-    import: Option<InspectedImport<'a>>,
+    pub import: Option<InspectedImport<'a>>,
     /// Parts of a source Tuff could not carry. Empty for a Tuff pack.
-    unsupported: &'a [pack::PackUnsupported],
-    x: &'a tuff_core::host::HostTablesJson,
+    pub unsupported: &'a [pack::PackUnsupported],
+    pub x: &'a tuff_core::host::HostTablesJson,
 }
 
 #[derive(Serialize)]
-struct InspectedImport<'a> {
-    format: &'a str,
+pub struct InspectedImport<'a> {
+    pub format: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<&'a str>,
+    pub url: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<&'a str>,
+    pub path: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    plugin: Option<&'a str>,
+    pub plugin: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    commit: Option<&'a str>,
+    pub commit: Option<&'a str>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct InspectedMember {
-    pub(crate) id: String,
+pub struct InspectedMember {
+    pub id: String,
     #[serde(rename = "type")]
-    pub(crate) capability_type: CapabilityType,
-    pub(crate) version: String,
-    description: String,
-    source_path: String,
+    pub capability_type: CapabilityType,
+    pub version: String,
+    pub description: String,
+    pub source_path: String,
     /// Whether the harness or the agent runs code from this member: a hook
     /// command, a tool entrypoint, or a local MCP server process.
-    pub(crate) runs_code: bool,
-    runs_code_reason: &'static str,
+    pub runs_code: bool,
+    pub runs_code_reason: &'static str,
     /// Files the member writes on each harness, relative to the project.
-    files: BTreeMap<String, Vec<String>>,
+    pub files: BTreeMap<String, Vec<String>>,
     /// Shared harness files the member adds an entry to, such as a hook
     /// settings file or an MCP config, on each harness.
-    shared_files: BTreeMap<String, Vec<String>>,
+    pub shared_files: BTreeMap<String, Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mcp: Option<InspectedMcp>,
+    pub mcp: Option<InspectedMcp>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool: Option<InspectedTool>,
+    pub tool: Option<InspectedTool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    hook: Option<InspectedHook>,
-    x: tuff_core::host::HostTablesJson,
+    pub hook: Option<InspectedHook>,
+    pub x: tuff_core::host::HostTablesJson,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct InspectedMcp {
-    transport: McpTransport,
+pub struct InspectedMcp {
+    pub transport: McpTransport,
     #[serde(skip_serializing_if = "Option::is_none")]
-    command: Option<String>,
-    args: Vec<String>,
+    pub command: Option<String>,
+    pub args: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<String>,
+    pub url: Option<String>,
     /// Names of the environment variables the server reads. Values never
     /// appear in a manifest.
-    env: Vec<String>,
+    pub env: Vec<String>,
     /// Names of the environment variables HTTP headers are read from.
-    header_env: Vec<String>,
+    pub header_env: Vec<String>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct InspectedTool {
-    language: String,
-    entrypoint: String,
+pub struct InspectedTool {
+    pub language: String,
+    pub entrypoint: String,
     /// Whether the tool is served to the harness as an MCP server.
-    mcp: bool,
-    runtime_deps: Vec<String>,
+    pub mcp: bool,
+    pub runtime_deps: Vec<String>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct InspectedHook {
-    event: String,
-    command: String,
-    working_directory: String,
+pub struct InspectedHook {
+    pub event: String,
+    pub command: String,
+    pub working_directory: String,
 }
 
 /// The inspect document for a verified artifact, from `source`.
-pub(crate) fn document<'a, S: Serialize>(
+pub fn document<'a, S: Serialize>(
     artifact: &'a PackArtifact,
     source: &'a S,
 ) -> Result<InspectDocument<'a, S>> {
@@ -160,7 +160,7 @@ pub(crate) fn document<'a, S: Serialize>(
 
 /// Every member of a verified artifact, described from its stored manifest
 /// and its rendered targets.
-pub(crate) fn members(artifact: &PackArtifact) -> Result<Vec<InspectedMember>> {
+pub fn members(artifact: &PackArtifact) -> Result<Vec<InspectedMember>> {
     let scratch = tempfile::tempdir()?;
     let sources = scratch.path().join("sources");
     pack::extract_prefix(artifact, "sources", &sources)?;

@@ -3,19 +3,20 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::adapter::{
-    AdapterKind, AgentAdapter, CapabilityKind, HookDefinition, HookRenderContext,
-    resolve_capability,
-};
+use crate::adapter::{AdapterKind, AgentAdapter, resolve_capability};
 use crate::error::{Result, TuffError};
 use crate::lockfile::{self, PackLockEntry, PackProvenance, PackSource};
 use crate::manifest;
 use crate::oci::{self, OciPushStatus, OciTransferOptions};
 use crate::pack::{
     self, LoadedPack, PackArtifact, PackArtifactCapability, PackArtifactContent,
-    PackArtifactMetadata, PackArtifactTarget, PackArtifactTargetCapability,
+    PackArtifactMetadata,
 };
 use crate::resolver::Scope;
+
+use tuff_packs::build::{Built, canonical_target_ids, validate_pack_targets};
+use tuff_packs::import::unsupported_of;
+use tuff_packs::preview::{artifact_target, dirty_pack_members};
 
 use super::add::install_capability;
 use super::block_on_oci;
@@ -161,6 +162,67 @@ pub fn cmd_pack_build(repo_root: &Path, options: PackBuildOptions) -> Result<()>
         .output
         .unwrap_or_else(|| default_artifact_path(&loaded));
     build_loaded_pack(&loaded, &output, options.skip_unsupported)
+}
+
+/// Print what a build had to say to standard error.
+pub(crate) fn print_build_notes(built: &Built) {
+    print_notes(&built.notes, &built.warnings);
+}
+
+fn print_notes(notes: &[String], warnings: &[String]) {
+    for note in notes {
+        eprintln!("note: {note}");
+    }
+    for warning in warnings {
+        eprintln!("warning: {warning}");
+    }
+}
+
+/// Render a pack with [`tuff_packs::build::render`], printing its notes.
+fn render_artifact_with(
+    loaded: &LoadedPack,
+    skip_unsupported: bool,
+) -> Result<(PackArtifactMetadata, Vec<PackArtifactContent>)> {
+    let rendered = tuff_packs::build::render(loaded, skip_unsupported)?;
+    print_notes(&rendered.notes, &rendered.warnings);
+    Ok((rendered.metadata, rendered.contents))
+}
+
+fn render_artifact(
+    loaded: &LoadedPack,
+) -> Result<(PackArtifactMetadata, Vec<PackArtifactContent>)> {
+    render_artifact_with(loaded, false)
+}
+
+fn printed(built: Built) -> (tempfile::TempDir, PackArtifact) {
+    print_build_notes(&built);
+    (built.directory, built.artifact)
+}
+
+fn build_pack_for_declared_targets(pack_root: &Path) -> Result<(tempfile::TempDir, PackArtifact)> {
+    Ok(printed(tuff_packs::build::build_for_declared_targets(
+        pack_root,
+    )?))
+}
+
+fn build_pack_for_targets(
+    pack_root: &Path,
+    targets: &[String],
+) -> Result<(tempfile::TempDir, PackArtifact)> {
+    Ok(printed(tuff_packs::build::build_for_targets(
+        pack_root, targets,
+    )?))
+}
+
+/// The source pack a git checkout holds, printing the import's notes.
+fn source_pack_of(
+    checkout: &tuff_packs::git::GitPackCheckout,
+) -> Result<(Option<tempfile::TempDir>, PathBuf)> {
+    let source = tuff_packs::import::source_pack_of(checkout)?;
+    for note in &source.notes {
+        eprintln!("note: {note}");
+    }
+    Ok((source.directory, source.root))
 }
 
 fn build_loaded_pack(loaded: &LoadedPack, output: &Path, skip_unsupported: bool) -> Result<()> {
@@ -436,7 +498,7 @@ pub fn cmd_pack_inspect(options: PackInspectOptions<'_>) -> Result<()> {
             plugin,
             allow_remote: true,
         })?;
-        let (_imported, root) = super::pack_import::source_pack_of(&checkout)?;
+        let (_imported, root) = source_pack_of(&checkout)?;
         let (directory, artifact) = build_pack_for_declared_targets(&root)?;
         (
             Some(directory),
@@ -493,62 +555,8 @@ pub fn cmd_pack_inspect(options: PackInspectOptions<'_>) -> Result<()> {
     for target in &artifact.metadata.targets {
         println!("  - {}", target.id);
     }
-    super::pack_import::print_unsupported(super::pack_import::unsupported_of(
-        artifact.metadata.import.as_ref(),
-    ));
+    super::pack_import::print_unsupported(unsupported_of(artifact.metadata.import.as_ref()));
     Ok(())
-}
-
-/// Build a source pack for every target its manifest declares.
-pub(crate) fn build_pack_for_declared_targets(
-    pack_root: &Path,
-) -> Result<(tempfile::TempDir, PackArtifact)> {
-    let (_, manifest) = pack::load_manifest(pack_root)?;
-    let mut loaded = pack::load_pack(pack_root)?;
-    let mut targets = canonical_target_ids(&harness_targets(&manifest.build.targets))?;
-    targets.extend(
-        manifest
-            .build
-            .targets
-            .iter()
-            .filter(|target| crate::adapter::bundle_writer(target).is_some())
-            .cloned(),
-    );
-    loaded.manifest.build.targets = targets;
-    // An inspection describes what each bundle could hold, so a member a
-    // bundle cannot take is left out of it rather than refused.
-    let (metadata, contents) = render_artifact_with(&loaded, true)?;
-    let directory = tempfile::tempdir()?;
-    let output = directory.path().join("pack.tuffpack");
-    pack::write_artifact(&output, metadata, contents)?;
-    let artifact = pack::read_artifact(&output)?;
-    Ok((directory, artifact))
-}
-
-/// Build the source pack at `pack_root` for exactly `targets`, which may
-/// name bundle formats, whatever its own `[build] targets` list.
-pub(crate) fn build_pack_as(
-    pack_root: &Path,
-    targets: &[String],
-    skip_unsupported: bool,
-) -> Result<(tempfile::TempDir, PackArtifact)> {
-    let mut loaded = pack::load_pack(pack_root)?;
-    loaded.manifest.build.targets = targets.to_vec();
-    let (metadata, contents) = render_artifact_with(&loaded, skip_unsupported)?;
-    let directory = tempfile::tempdir()?;
-    let output = directory.path().join("pack.tuffpack");
-    pack::write_artifact(&output, metadata, contents)?;
-    let artifact = pack::read_artifact(&output)?;
-    Ok((directory, artifact))
-}
-
-/// The targets that are harnesses, leaving out bundle formats.
-fn harness_targets(targets: &[String]) -> Vec<String> {
-    targets
-        .iter()
-        .filter(|target| crate::adapter::bundle_writer(target).is_none())
-        .cloned()
-        .collect()
 }
 
 pub fn cmd_pack_verify(path: &Path) -> Result<()> {
@@ -701,7 +709,7 @@ pub fn cmd_add_pack(repo_root: &Path, options: AddPackOptions<'_>) -> Result<()>
             plugin,
             allow_remote: false,
         })?;
-        let (_imported, root) = super::pack_import::source_pack_of(&checkout)?;
+        let (_imported, root) = source_pack_of(&checkout)?;
         let (_built, artifact) = build_pack_for_targets(&root, &target_ids)?;
         let source = PackSource::Git(checkout.source.clone());
         install_pack_artifact(repo_root, &artifact, &target_ids, &source)?;
@@ -720,34 +728,6 @@ pub fn cmd_add_pack(repo_root: &Path, options: AddPackOptions<'_>) -> Result<()>
     let source = PackSource::Artifact(lockfile::PackArtifactSource { registry });
     install_pack_artifact(repo_root, &artifact, &target_ids, &source)?;
     report_pack_install(&artifact, &source, &target_ids, json)
-}
-
-/// Load the source pack at `pack_root` and build an artifact holding only
-/// `targets`, each of which the pack must declare in `[build] targets`.
-/// The artifact lives in the returned temporary directory.
-fn build_pack_for_targets(
-    pack_root: &Path,
-    targets: &[String],
-) -> Result<(tempfile::TempDir, PackArtifact)> {
-    let mut loaded = pack::load_pack(pack_root)?;
-    let declared = canonical_target_ids(&harness_targets(&loaded.manifest.build.targets))?;
-    for target in targets {
-        if !declared.contains(target) {
-            return Err(TuffError::unsupported(format!(
-                "pack {} is built for {}, not for {target}",
-                loaded.manifest.name,
-                declared.join(", ")
-            ))
-            .with_hint("choose one of those harnesses with -a"));
-        }
-    }
-    loaded.manifest.build.targets = targets.to_vec();
-    let (metadata, contents) = render_artifact(&loaded)?;
-    let directory = tempfile::tempdir()?;
-    let output = directory.path().join("pack.tuffpack");
-    pack::write_artifact(&output, metadata, contents)?;
-    let artifact = pack::read_artifact(&output)?;
-    Ok((directory, artifact))
 }
 
 #[derive(serde::Serialize)]
@@ -796,7 +776,7 @@ fn report_pack_install(
                     version: &capability.version,
                 })
                 .collect(),
-            unsupported: super::pack_import::unsupported_of(artifact.metadata.import.as_ref()),
+            unsupported: unsupported_of(artifact.metadata.import.as_ref()),
         };
         println!("{}", serde_json::to_string_pretty(&report)?);
         return Ok(());
@@ -817,9 +797,7 @@ fn report_pack_install(
     for capability in &artifact.metadata.capabilities {
         println!("  - {} {}", capability.id, capability.version);
     }
-    super::pack_import::print_unsupported(super::pack_import::unsupported_of(
-        artifact.metadata.import.as_ref(),
-    ));
+    super::pack_import::print_unsupported(unsupported_of(artifact.metadata.import.as_ref()));
     if let PackSource::Git(git) = source
         && git.tag.is_none()
         && git.branch.is_some()
@@ -870,6 +848,9 @@ fn install_pack_artifact(
     for capability in &artifact.metadata.capabilities {
         let manifest = manifest::load_manifest(&sources.join(&capability.id))?;
         validate_artifact_member(capability, &manifest)?;
+        for note in manifest::install_notes(&manifest) {
+            eprintln!("note: {note}");
+        }
         let resolved = resolve_capability(&manifest)?;
         install_capability(
             staging.path(),
@@ -932,351 +913,6 @@ fn record_pack_entry(lock: &mut lockfile::Lockfile, artifact: &PackArtifact, sou
             x: artifact.metadata.x.clone(),
         },
     );
-}
-
-fn render_artifact(
-    loaded: &LoadedPack,
-) -> Result<(PackArtifactMetadata, Vec<PackArtifactContent>)> {
-    render_artifact_with(loaded, false)
-}
-
-/// Render every target of a pack. A member a bundle format cannot hold
-/// fails the build unless `skip_unsupported`, which leaves it out of that
-/// bundle and says so.
-fn render_artifact_with(
-    loaded: &LoadedPack,
-    skip_unsupported: bool,
-) -> Result<(PackArtifactMetadata, Vec<PackArtifactContent>)> {
-    let PackTargets {
-        harnesses: mut adapters,
-        bundles,
-    } = validate_pack_targets(loaded)?;
-    adapters.sort_by_key(|adapter| adapter.id());
-    let capabilities = loaded
-        .members
-        .iter()
-        .map(|member| resolve_capability(&member.manifest))
-        .collect::<Result<Vec<_>>>()?;
-    let staging = tempfile::tempdir()?;
-    let mut targets = Vec::with_capacity(adapters.len());
-    let mut contents = pack::source_contents(loaded)?;
-
-    for adapter in adapters {
-        let target_root = staging.path().join(adapter.id());
-        fs::create_dir_all(&target_root)?;
-        let mut target_capabilities = Vec::with_capacity(capabilities.len());
-        for capability in &capabilities {
-            let planned = adapter.plan(capability, &target_root)?;
-            let managed_hooks = managed_hooks_for(capability, adapter, &target_root)?;
-            write_render_plan(&target_root, &planned)?;
-            register_mcp_if_needed(capability, adapter, &target_root)?;
-            let shared_paths = managed_hooks
-                .iter()
-                .map(|hook| hook.settings_path.as_str())
-                .collect::<BTreeSet<_>>();
-            let emitted_files = planned
-                .iter()
-                .filter(|file| !shared_paths.contains(file.path.as_str()))
-                .map(|file| file.path.clone())
-                .collect();
-            let installed_root = target_root
-                .join(adapter.dir_prefix())
-                .join(capability.capability_type.plural_dir())
-                .join(&capability.id);
-            target_capabilities.push(PackArtifactTargetCapability {
-                id: capability.id.clone(),
-                installed_path: lockfile::relative_or_absolute_fs(&installed_root, &target_root),
-                sha256: crate::cache::hash_tree(&installed_root)?,
-                emitted_files,
-                managed_hooks,
-            });
-        }
-        collect_tree_contents(
-            &target_root,
-            &target_root,
-            &format!("targets/{}", adapter.id()),
-            &mut contents,
-        )?;
-        targets.push(PackArtifactTarget {
-            id: adapter.id().to_string(),
-            kind: pack::PackTargetKind::Harness,
-            capabilities: target_capabilities,
-        });
-    }
-
-    for writer in bundles {
-        let output = writer.write(&loaded.manifest, &capabilities)?;
-        if !output.skipped.is_empty() {
-            let list = output
-                .skipped
-                .iter()
-                .map(|item| {
-                    format!(
-                        "{} '{}': {}",
-                        item.kind,
-                        item.name.as_deref().unwrap_or_default(),
-                        item.reason
-                    )
-                })
-                .collect::<Vec<_>>();
-            if !skip_unsupported {
-                return Err(TuffError::unsupported(format!(
-                    "the {} target cannot hold {}",
-                    writer.id(),
-                    list.join("; ")
-                ))
-                .with_hint(format!(
-                    "pass --skip-unsupported to build the {} without them",
-                    writer.id()
-                )));
-            }
-            for item in &list {
-                eprintln!("note: {} leaves out {item}", writer.id());
-            }
-        }
-        for warning in &output.warnings {
-            eprintln!("warning: {warning}");
-        }
-        for file in output.files {
-            contents.push(PackArtifactContent {
-                path: format!("targets/{}/{}", writer.id(), file.path),
-                bytes: file.bytes,
-            });
-        }
-        targets.push(PackArtifactTarget {
-            id: writer.id().to_string(),
-            kind: pack::PackTargetKind::Bundle,
-            capabilities: output
-                .members
-                .into_iter()
-                .map(|member| PackArtifactTargetCapability {
-                    id: member.id,
-                    installed_path: member.path,
-                    sha256: lockfile::hash_bytes(&member.content),
-                    emitted_files: member.files,
-                    managed_hooks: Vec::new(),
-                })
-                .collect(),
-        });
-    }
-    targets.sort_by(|a, b| a.id.cmp(&b.id));
-
-    let capabilities = loaded
-        .members
-        .iter()
-        .map(|member| PackArtifactCapability {
-            id: member.manifest.id.clone(),
-            capability_type: member.manifest.capability_type,
-            version: member.manifest.version.clone(),
-            description: member.manifest.description.clone(),
-            source_path: member.source_path.clone(),
-        })
-        .collect();
-    let metadata = PackArtifactMetadata {
-        artifact_version: pack::PACK_ARTIFACT_VERSION,
-        pack_schema: loaded.manifest.schema,
-        name: loaded.manifest.name.clone(),
-        version: loaded.manifest.version.clone(),
-        description: loaded.manifest.description.clone(),
-        homepage: loaded.manifest.homepage.clone(),
-        license: loaded.manifest.license.clone(),
-        keywords: loaded.manifest.keywords.clone(),
-        author: loaded.manifest.author.clone(),
-        x: tuff_core::host::to_json(&loaded.manifest.x),
-        import: loaded.manifest.import.clone(),
-        capabilities,
-        targets,
-        files: Vec::new(),
-    };
-    contents.push(PackArtifactContent {
-        path: pack::ARTIFACT_MANIFEST_PATH.to_string(),
-        bytes: pack::manifest_bytes(loaded)?,
-    });
-    Ok((metadata, contents))
-}
-
-/// A pack's build targets: harnesses it installs into, and bundle formats
-/// it is written as.
-struct PackTargets {
-    harnesses: Vec<AdapterKind>,
-    bundles: Vec<&'static dyn tuff_core::bundle::BundleWriter>,
-}
-
-fn validate_pack_targets(loaded: &LoadedPack) -> Result<PackTargets> {
-    let mut adapters = Vec::with_capacity(loaded.manifest.build.targets.len());
-    let mut bundles: Vec<&'static dyn tuff_core::bundle::BundleWriter> = Vec::new();
-    let mut canonical = BTreeSet::new();
-    for target in &loaded.manifest.build.targets {
-        if let Some(writer) = crate::adapter::bundle_writer(target) {
-            if !canonical.insert(writer.id()) {
-                return Err(TuffError::usage(format!(
-                    "duplicate pack build target '{target}'"
-                )));
-            }
-            bundles.push(writer);
-            continue;
-        }
-        let adapter = AdapterKind::from_id(target).ok_or_else(|| {
-            TuffError::usage(format!("unknown pack build target '{target}'")).with_hint(format!(
-                "run 'tuff harness list' to see available harnesses; bundle formats: {}",
-                crate::adapter::BUNDLE_FORMATS.join(", ")
-            ))
-        })?;
-        if !canonical.insert(adapter.id()) {
-            return Err(TuffError::usage(format!(
-                "pack build targets '{}' and another alias resolve to the same adapter '{}'",
-                target,
-                adapter.id()
-            )));
-        }
-        for member in &loaded.members {
-            if !adapter.supports(member.manifest.capability_type) {
-                return Err(TuffError::unsupported(format!(
-                    "{} does not support {} capability '{}'",
-                    adapter.display_name(),
-                    member.manifest.capability_type,
-                    member.manifest.id
-                )));
-            }
-        }
-        adapters.push(adapter);
-    }
-    Ok(PackTargets {
-        harnesses: adapters,
-        bundles,
-    })
-}
-
-fn canonical_target_ids(targets: &[String]) -> Result<Vec<String>> {
-    let mut canonical = BTreeSet::new();
-    for target in targets {
-        if crate::adapter::bundle_writer(target).is_some() {
-            return Err(TuffError::usage(format!(
-                "{target} is a bundle format, which is extracted, not installed into a project"
-            ))
-            .with_hint(format!(
-                "write it with 'tuff pack extract <artifact> -a {target} --output <dir>'"
-            )));
-        }
-        let adapter = AdapterKind::from_id(target)
-            .ok_or_else(|| TuffError::usage(format!("unknown harness '{target}'")))?;
-        canonical.insert(adapter.id().to_string());
-    }
-    Ok(canonical.into_iter().collect())
-}
-
-fn managed_hooks_for(
-    capability: &crate::adapter::ResolvedCapability,
-    adapter: AdapterKind,
-    root: &Path,
-) -> Result<Vec<lockfile::ManagedHook>> {
-    let CapabilityKind::Hook { hook } = &capability.kind else {
-        return Ok(Vec::new());
-    };
-    match hook {
-        HookDefinition::Command(hook) => Ok(adapter
-            .render_standard_hook(HookRenderContext {
-                capability_id: &capability.id,
-                hook,
-                source_files: &capability.source_files,
-                repo_root: root,
-                track_managed_hooks: true,
-            })?
-            .managed_hooks),
-        HookDefinition::Native(_) => Err(TuffError::unsupported(
-            "native hook fragments are not supported in pack manifests",
-        )),
-    }
-}
-
-fn write_render_plan(root: &Path, files: &[crate::adapter::PlannedFile]) -> Result<()> {
-    for file in files {
-        let destination = root.join(super::add::contained_planned_path(&file.path)?);
-        if destination.exists() && !file.allow_existing {
-            return Err(TuffError::usage(format!(
-                "pack members render the same target path: {}",
-                file.path
-            )));
-        }
-        if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(destination, &file.content)?;
-    }
-    Ok(())
-}
-
-fn register_mcp_if_needed(
-    capability: &crate::adapter::ResolvedCapability,
-    adapter: AdapterKind,
-    root: &Path,
-) -> Result<()> {
-    if let CapabilityKind::McpServer { server } = &capability.kind {
-        // `root` is the staging tree here, seeded with the live lockfile and
-        // MCP config, so "already tracked" means "this pack is re-installing
-        // over its own earlier install" — the one case overwriting is right.
-        let tracked = lockfile::require_lockfile(root)
-            .map(|lock| super::add::mcp_entry_tracked(&lock, &capability.id, adapter.id()))
-            .unwrap_or(false);
-        return tuff_core::mcp::register_server(
-            &root.join(adapter.mcp_config_relpath()),
-            &capability.id,
-            adapter.mcp_server_entry_checked(server)?,
-            tracked,
-        );
-    }
-    let CapabilityKind::Tool { implementation, .. } = &capability.kind else {
-        return Ok(());
-    };
-    if !implementation.mcp {
-        return Ok(());
-    }
-    let entrypoint = format!(
-        "{}/tools/{}/{}",
-        adapter.dir_prefix(),
-        capability.id,
-        implementation.entrypoint
-    );
-    tuff_core::mcp::register_tool(
-        &root.join(adapter.mcp_config_relpath()),
-        &capability.id,
-        &implementation.language,
-        &[entrypoint],
-    )
-}
-
-fn collect_tree_contents(
-    root: &Path,
-    current: &Path,
-    prefix: &str,
-    output: &mut Vec<PackArtifactContent>,
-) -> Result<()> {
-    let mut entries = fs::read_dir(current)?.collect::<std::io::Result<Vec<_>>>()?;
-    entries.sort_by_key(fs::DirEntry::file_name);
-    for entry in entries {
-        let path = entry.path();
-        let metadata = fs::symlink_metadata(&path)?;
-        if metadata.file_type().is_symlink() {
-            return Err(TuffError::refused(format!(
-                "symbolic links are not allowed in rendered pack output: {}",
-                path.display()
-            )));
-        }
-        if metadata.is_dir() {
-            collect_tree_contents(root, &path, prefix, output)?;
-        } else if metadata.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|error| TuffError::of(crate::error::ErrorKind::Io, error.to_string()))?
-                .to_string_lossy()
-                .replace('\\', "/");
-            output.push(PackArtifactContent {
-                path: format!("{prefix}/{relative}"),
-                bytes: fs::read(path)?,
-            });
-        }
-    }
-    Ok(())
 }
 
 fn preflight_pack_install(
@@ -1620,20 +1256,6 @@ fn rollback_mutations(
     first_error.map_or(Ok(()), Err)
 }
 
-fn artifact_target<'a>(artifact: &'a PackArtifact, target: &str) -> Result<&'a PackArtifactTarget> {
-    artifact
-        .metadata
-        .targets
-        .iter()
-        .find(|item| item.id == target)
-        .ok_or_else(|| {
-            TuffError::usage(format!(
-                "pack '{}' has no target '{}'",
-                artifact.metadata.name, target
-            ))
-        })
-}
-
 fn default_artifact_path(loaded: &LoadedPack) -> PathBuf {
     let leaf = loaded
         .manifest
@@ -1739,7 +1361,7 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
                 plugin: git.plugin.as_deref(),
                 allow_remote: false,
             })?;
-            let (_imported, root) = super::pack_import::source_pack_of(&checkout)?;
+            let (_imported, root) = source_pack_of(&checkout)?;
             let (directory, artifact) = build_pack_for_targets(&root, &target_ids)?;
             _built = Some(directory);
             let describe = format!(
@@ -1898,7 +1520,7 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
     }
 
     if check && json {
-        return print_pack_update_preview(
+        let preview = tuff_packs::preview::preview_update(
             repo_root,
             &lock,
             &provenance,
@@ -1906,7 +1528,9 @@ pub fn cmd_update_pack(request: PackUpdateRequest<'_>) -> Result<()> {
             &artifact,
             &new_source,
             &target_ids,
-        );
+        )?;
+        println!("{}", serde_json::to_string_pretty(&preview)?);
+        return Ok(());
     }
     if check {
         return report_pack_update_plan(
@@ -2135,190 +1759,6 @@ fn print_no_update(
     Ok(())
 }
 
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UpdatePreview<'a> {
-    schema: u8,
-    pack: &'a str,
-    status: &'static str,
-    from: PreviewRelease<'a>,
-    to: PreviewRelease<'a>,
-    targets: &'a [String],
-    members: Vec<PreviewMember>,
-    blocked_by: Vec<String>,
-}
-
-#[derive(serde::Serialize)]
-struct PreviewRelease<'a> {
-    version: &'a str,
-    digest: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    source: Option<&'a PackSource>,
-}
-
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PreviewMember {
-    id: String,
-    change: &'static str,
-    from_version: Option<String>,
-    to_version: Option<String>,
-    files: Vec<PreviewFile>,
-}
-
-#[derive(serde::Serialize)]
-struct PreviewFile {
-    target: String,
-    path: String,
-    status: String,
-    /// The unified diff of this file, empty for a binary file.
-    patch: String,
-}
-
-/// `tuff update <member> --check --json` (RFC-110 D5): every member the new
-/// release adds, updates, or removes, and for each the files that change
-/// on each harness, compared with what is on disk now.
-fn print_pack_update_preview(
-    repo_root: &Path,
-    lock: &lockfile::Lockfile,
-    provenance: &PackProvenance,
-    members: &[String],
-    artifact: &PackArtifact,
-    new_source: &PackSource,
-    target_ids: &[String],
-) -> Result<()> {
-    let scratch = tempfile::tempdir()?;
-    let empty = scratch.path().join("empty");
-    fs::create_dir_all(&empty)?;
-    let mut rendered = BTreeMap::new();
-    for target in target_ids {
-        let output = scratch.path().join("targets").join(target);
-        pack::extract_prefix(artifact, &format!("targets/{target}"), &output)?;
-        rendered.insert(target.clone(), output);
-    }
-
-    let mut ids = members.iter().cloned().collect::<BTreeSet<_>>();
-    ids.extend(
-        artifact
-            .metadata
-            .capabilities
-            .iter()
-            .map(|capability| capability.id.clone()),
-    );
-    let mut preview_members = Vec::new();
-    for id in ids {
-        let installed = members
-            .iter()
-            .any(|member| member == &id)
-            .then(|| lock.capabilities.get(&id))
-            .flatten();
-        let incoming = artifact
-            .metadata
-            .capabilities
-            .iter()
-            .find(|capability| capability.id == id);
-        let mut files = Vec::new();
-        for target in target_ids {
-            let old_relative = installed
-                .and_then(|entry| entry.targets.get(target))
-                .map(|entry| entry.installed_path.clone());
-            let new_relative = incoming
-                .and_then(|_| artifact_target(artifact, target).ok())
-                .and_then(|rendered| rendered.capabilities.iter().find(|c| c.id == id))
-                .map(|capability| capability.installed_path.clone());
-            let old_root = old_relative
-                .as_ref()
-                .map(|relative| repo_root.join(relative))
-                .filter(|path| path.is_dir())
-                .unwrap_or_else(|| empty.clone());
-            let new_root = new_relative
-                .as_ref()
-                .map(|relative| rendered[target].join(relative))
-                .filter(|path| path.is_dir())
-                .unwrap_or_else(|| empty.clone());
-            let shown = new_relative.or(old_relative).unwrap_or_default();
-            let comparison = crate::tree_diff::compare(&old_root, &new_root)?;
-            let patches = split_patch(&comparison.patch);
-            for change in comparison.changes {
-                files.push(PreviewFile {
-                    target: target.clone(),
-                    path: if shown.is_empty() {
-                        change.path.clone()
-                    } else {
-                        format!("{shown}/{}", change.path)
-                    },
-                    status: change.status,
-                    patch: patches.get(&change.path).cloned().unwrap_or_default(),
-                });
-            }
-        }
-        let change = match (installed, incoming) {
-            (None, Some(_)) => "added",
-            (Some(_), None) => "removed",
-            _ if files.is_empty() => "unchanged",
-            _ => "updated",
-        };
-        preview_members.push(PreviewMember {
-            id,
-            change,
-            from_version: installed.map(|entry| entry.version.clone()),
-            to_version: incoming.map(|capability| capability.version.clone()),
-            files,
-        });
-    }
-
-    let installed_source = lock
-        .normalized_packs()
-        .get(&provenance.name)
-        .map(|pack| pack.source.clone());
-    let preview = UpdatePreview {
-        schema: 1,
-        pack: &provenance.name,
-        status: "update",
-        from: PreviewRelease {
-            version: &provenance.version,
-            digest: &provenance.digest,
-            source: installed_source.as_ref(),
-        },
-        to: PreviewRelease {
-            version: &artifact.metadata.version,
-            digest: &artifact.digest,
-            source: Some(new_source),
-        },
-        targets: target_ids,
-        members: preview_members,
-        blocked_by: dirty_pack_members(repo_root, lock, members, target_ids),
-    };
-    println!("{}", serde_json::to_string_pretty(&preview)?);
-    Ok(())
-}
-
-/// Split a multi-file unified diff into one patch per file, keyed by the
-/// path after `b/` (or `a/` for a deleted file).
-fn split_patch(patch: &str) -> BTreeMap<String, String> {
-    let mut patches = BTreeMap::new();
-    let mut current: Option<(String, String)> = None;
-    for line in patch.split_inclusive('\n') {
-        if let Some(rest) = line.strip_prefix("diff --git ") {
-            if let Some((path, body)) = current.take() {
-                patches.insert(path, body);
-            }
-            let path = rest
-                .trim_end()
-                .rsplit_once(" b/")
-                .map(|(_, path)| path.to_string())
-                .unwrap_or_default();
-            current = Some((path, line.to_string()));
-        } else if let Some((_, body)) = current.as_mut() {
-            body.push_str(line);
-        }
-    }
-    if let Some((path, body)) = current {
-        patches.insert(path, body);
-    }
-    patches
-}
-
 /// The ref a git pack update checks out, or `None` when there is nothing
 /// to do and the reason has been printed. Mirrors the registry path: a
 /// repointed tag is refused without `--force` and reported by `--check`.
@@ -2420,28 +1860,6 @@ fn pack_update_targets(
 }
 
 /// Members with local edits on any selected target, as `id (agent)`.
-fn dirty_pack_members(
-    repo_root: &Path,
-    lock: &lockfile::Lockfile,
-    members: &[String],
-    target_ids: &[String],
-) -> Vec<String> {
-    let mut dirty = Vec::new();
-    for member in members {
-        let Some(entry) = lock.capabilities.get(member) else {
-            continue;
-        };
-        for target in target_ids {
-            if let Some(target_entry) = entry.targets.get(target)
-                && super::delete::local_modifications(repo_root, member, target_entry).any()
-            {
-                dirty.push(format!("{member} ({target})"));
-            }
-        }
-    }
-    dirty
-}
-
 fn report_pack_update_plan(
     repo_root: &Path,
     provenance: &PackProvenance,
@@ -2526,6 +1944,9 @@ fn stage_release(
     for capability in &artifact.metadata.capabilities {
         let manifest = manifest::load_manifest(&sources.join(&capability.id))?;
         validate_artifact_member(capability, &manifest)?;
+        for note in manifest::install_notes(&manifest) {
+            eprintln!("note: {note}");
+        }
         let resolved = resolve_capability(&manifest)?;
         install_capability(
             stage,

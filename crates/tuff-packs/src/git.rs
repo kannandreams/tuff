@@ -16,14 +16,14 @@ use tempfile::TempDir;
 use tuff_adapter_claude::plugin::{self as claude_plugin, ClaudePlugin};
 use tuff_core::bundle::{BundleLocation, BundleReader, LocalBundle, RemoteBundle};
 
-use crate::error::{Result, TuffError};
-use crate::git;
-use crate::lockfile::PackGitSource;
-use crate::pack;
-use crate::release;
+use tuff_core::error::{Result, TuffError};
+use tuff_core::git;
+use tuff_core::lockfile::PackGitSource;
+use tuff_core::pack;
+use tuff_core::release;
 
 /// What a checked-out folder holds.
-pub(crate) enum CheckedOut {
+pub enum CheckedOut {
     /// A standalone Tuff source pack at `pack_root`.
     Tuff,
     /// A Claude Code plugin, read from this bundle.
@@ -32,33 +32,33 @@ pub(crate) enum CheckedOut {
 
 /// A pack folder checked out at one commit. The checkout is deleted when
 /// this is dropped.
-pub(crate) struct GitPackCheckout {
+pub struct GitPackCheckout {
     _guards: Vec<TempDir>,
     /// The folder that was checked out: the one holding `tuff-pack.toml`,
     /// or the plugin or marketplace.
-    pub(crate) pack_root: PathBuf,
-    pub(crate) found: CheckedOut,
-    pub(crate) source: PackGitSource,
+    pub pack_root: PathBuf,
+    pub found: CheckedOut,
+    pub source: PackGitSource,
     /// The version the release tag names, for a plugin that declares none.
-    pub(crate) version_hint: Option<String>,
+    pub version_hint: Option<String>,
 }
 
 /// What to check out.
-pub(crate) struct CheckoutRequest<'a> {
-    pub(crate) url: &'a str,
-    pub(crate) path: Option<&'a str>,
+pub struct CheckoutRequest<'a> {
+    pub url: &'a str,
+    pub path: Option<&'a str>,
     /// A tag, branch, or commit; the newest release tag when absent.
-    pub(crate) git_ref: Option<&'a str>,
+    pub git_ref: Option<&'a str>,
     /// The marketplace entry to read.
-    pub(crate) plugin: Option<&'a str>,
+    pub plugin: Option<&'a str>,
     /// Whether a marketplace entry may live in another repository. An
     /// install follows one repository's tags, so only an import allows it.
-    pub(crate) allow_remote: bool,
+    pub allow_remote: bool,
 }
 
 /// The name release tags are scoped by: the last component of a pack name
 /// such as `acme/review`.
-pub(crate) fn release_name(pack_name: &str) -> &str {
+pub fn release_name(pack_name: &str) -> &str {
     pack_name.rsplit('/').next().unwrap_or(pack_name)
 }
 
@@ -89,7 +89,7 @@ impl Found {
 
 /// Check out `request.url`, in `request.path` (or the folder the URL
 /// names), at `request.git_ref` or else at the newest release tag.
-pub(crate) fn checkout(request: CheckoutRequest<'_>) -> Result<GitPackCheckout> {
+pub fn checkout(request: CheckoutRequest<'_>) -> Result<GitPackCheckout> {
     let CheckoutRequest {
         url,
         path,
@@ -103,7 +103,7 @@ pub(crate) fn checkout(request: CheckoutRequest<'_>) -> Result<GitPackCheckout> 
     }
     .filter(|path| !path.is_empty());
     if let Some(subdir) = subdir.as_deref() {
-        crate::tool::check_path_traversal(subdir)?;
+        tuff_core::tool::check_path_traversal(subdir)?;
     }
     let tags = git::list_remote_tags(url)?;
 
@@ -219,9 +219,7 @@ pub(crate) fn checkout(request: CheckoutRequest<'_>) -> Result<GitPackCheckout> 
 
 /// Clone the repository a marketplace entry names, at the commit or ref it
 /// names, and return the plugin folder in it.
-pub(crate) fn checkout_remote(
-    remote: &RemoteBundle,
-) -> Result<(TempDir, LocalBundle, PackGitSource)> {
+pub fn checkout_remote(remote: &RemoteBundle) -> Result<(TempDir, LocalBundle, PackGitSource)> {
     let (guard, checkout, clean_url) = match (&remote.commit, &remote.git_ref) {
         (Some(commit), _) => git::clone_to_temp(&remote.url, Some(commit))?,
         (None, Some(reference)) => git::clone_tag_to_temp(&remote.url, reference)?,
@@ -373,7 +371,7 @@ fn check_tag_version(tag: &str, release: &Version, declared: Option<&str>) -> Re
 
 /// What the remote says about an installed git pack.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum GitPackStatus {
+pub enum GitPackStatus {
     /// A newer release tag exists.
     Newer { tag: String, version: String },
     /// The install is the newest release, or its branch has not moved.
@@ -392,7 +390,7 @@ pub(crate) enum GitPackStatus {
 /// over a newer release, as they do for registry packs: a repointed or
 /// deleted tag changes what the installed version means. The newest release
 /// is still returned with them so the way forward is visible.
-pub(crate) fn status(
+pub fn status(
     pack_name: &str,
     installed_version: &str,
     source: &PackGitSource,

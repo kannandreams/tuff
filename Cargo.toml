@@ -10,12 +10,13 @@ members = [
     "crates/tuff-adapter-opencode",
     "crates/tuff-adapter-pi",
     "crates/tuff-console",
+    "crates/tuff-packs",
 ]
 resolver = "2"
 
 # Every workspace crate publishes in lockstep: bump this version, then run
 # `cargo update -w` to refresh the lockfile, then tag. release.yml publishes
-# all ten crates to crates.io in dependency order on every `v*` tag.
+# all eleven crates to crates.io in dependency order on every `v*` tag.
 [workspace.package]
 version = "0.18.0"
 edition = "2024"
@@ -35,3 +36,4 @@ tuff-adapter-cursor = { path = "crates/tuff-adapter-cursor", version = "0.18.0" 
 tuff-adapter-opencode = { path = "crates/tuff-adapter-opencode", version = "0.18.0" }
 tuff-adapter-pi = { path = "crates/tuff-adapter-pi", version = "0.18.0" }
 tuff-console = { path = "crates/tuff-console", version = "0.18.0" }
+tuff-packs = { path = "crates/tuff-packs", version = "0.18.0" }

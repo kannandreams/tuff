@@ -35,48 +35,7 @@ fn remove_target_tracking(
     Ok(())
 }
 
-/// Where a tracked target has drifted from its recorded baseline.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct LocalModifications {
-    /// The installed tree or an emitted file differs from baseline.
-    pub files: bool,
-    /// A managed hook registration or MCP entry differs from baseline.
-    pub managed: bool,
-}
-
-impl LocalModifications {
-    pub(crate) fn any(self) -> bool {
-        self.files || self.managed
-    }
-}
-
-/// Check one tracked target for local edits, the same way `delete` and a
-/// pack update decide whether `--force` is needed.
-pub(crate) fn local_modifications(
-    scope_root: &Path,
-    id: &str,
-    target_entry: &lockfile::TargetLockEntry,
-) -> LocalModifications {
-    let modified_tree = !target_entry.installed_path.is_empty()
-        && crate::cache::hash_tree(&scope_root.join(&target_entry.installed_path))
-            .map(|hash| hash != target_entry.sha256)
-            .unwrap_or(true);
-    let files = modified_tree;
-    let managed = target_entry
-        .managed_hooks
-        .iter()
-        .any(|hook| lockfile::managed_hook_status(scope_root, hook) == "modified")
-        || target_entry.managed_permissions.iter().any(|permission| {
-            tuff_core::policy::managed_permission_status(scope_root, permission) != "clean"
-        })
-        || target_entry
-            .managed_mcp_entry
-            .as_ref()
-            .is_some_and(|entry| {
-                lockfile::managed_mcp_entry_status(scope_root, id, entry) == "modified"
-            });
-    LocalModifications { files, managed }
-}
+pub(crate) use tuff_packs::preview::{LocalModifications, local_modifications};
 
 /// The installed policies with rules on an MCP server's own table for one
 /// agent, as Codex's `disabled_tools` and tool `approval_mode` are. Removing
