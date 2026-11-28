@@ -6,7 +6,7 @@ The `tuff` command is built on these functions. They return values and never pri
 
 ```toml
 [dependencies]
-tuff-packs = "0.20"
+tuff-packs = "0.21"
 ```
 
 ```rust

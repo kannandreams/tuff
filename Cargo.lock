@@ -2397,7 +2397,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tuff-adapter-claude"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "serde_json",
  "toml",
@@ -2407,7 +2407,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-codex"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2416,7 +2416,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-cursor"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2425,7 +2425,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-open-agents"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2434,7 +2434,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-opencode"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2443,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-adapter-pi"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "serde_json",
  "tuff-core",
@@ -2452,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-console"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -2472,7 +2472,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-core"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "chrono",
  "docker_credential",
@@ -2494,14 +2494,14 @@ dependencies = [
 
 [[package]]
 name = "tuff-hooks-spec"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "tuff-packs"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "semver",
  "serde",
@@ -2519,7 +2519,7 @@ dependencies = [
 
 [[package]]
 name = "tuff-python"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "pyo3",
  "serde",
@@ -2530,7 +2530,7 @@ dependencies = [
 
 [[package]]
 name = "tuffcli"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "assert_cmd",
  "clap",

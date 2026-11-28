@@ -9,8 +9,8 @@ A Python application uses [the Python package](/sdk/python/), and an application
 
 ```toml title="Cargo.toml"
 [dependencies]
-tuff-packs = "0.20"
-tuff-core = "0.20"
+tuff-packs = "0.21"
+tuff-core = "0.21"
 serde_json = "1"
 ```
 
@@ -37,8 +37,8 @@ Building, inspecting, importing, git checkouts, previews, marketplaces, and plan
 
 ```toml title="Cargo.toml"
 [dependencies]
-tuff-packs = { version = "0.20", default-features = false }
-tuff-core = { version = "0.20", default-features = false }
+tuff-packs = { version = "0.21", default-features = false }
+tuff-core = { version = "0.21", default-features = false }
 ```
 
 ## Inspect a pack for a review screen
