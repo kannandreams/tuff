@@ -16,13 +16,13 @@ serde_json = "1"
 
 `tuff-core` holds the shared types, such as the lockfile and the pack artifact. Keep both crates on the same version.
 
-## What the library does and does not do
+## Behavior
 
-- **It never prints.** Each result carries its notes and warnings, such as a harness a plugin's pack is not built for. Show them in your own interface or logs.
-- **It writes only where you tell it.** The project and output folders are arguments. Builds and checkouts use temporary folders from the system's temporary directory, and each is deleted when the value that owns it is dropped.
-- **It reads no environment variables of its own.** It needs no `HOME`, so it runs under a service account or in a container.
-- **git is a program it runs.** Checkouts use the `git` on the machine, with the machine's git settings and credentials, so private repositories work as they do for `git clone`. On a Mac without the Xcode Command Line Tools, the first call to `git` asks the user to install them, so check that `git` runs before offering installs from git.
-- **Errors are `tuff_core::error::TuffError`.** `kind()` is the same kind as the `kind` field of the CLI's JSON errors, and `hint()` is the suggestion to show.
+- **Results.** Each result carries its notes and warnings, such as a harness a plugin's pack is not built for.
+- **Files.** Calls write to the project and output folders passed to them. Builds and checkouts use temporary folders in the system's temporary directory, deleted when the value that owns them is dropped.
+- **Configuration.** Every location is an argument, so the library runs under a service account or in a container. `workspace::Environment::from_process` reads `HOME` and the current directory for an application that wants them.
+- **git.** Checkouts run the `git` program on the machine, with its settings and credentials, so private repositories work as they do for `git clone`. On a Mac without the Xcode Command Line Tools, the first `git` call prompts the user to install them; check that `git` runs before offering installs from git.
+- **Errors.** Errors are `tuff_core::error::TuffError`. `kind()` is the same kind as the `kind` field of the CLI's JSON errors, and `hint()` is the suggestion to show.
 
 ## Optional features
 
@@ -201,7 +201,7 @@ fn publish(packs: &[PathBuf], output: &Path) -> tuff_packs::Result<()> {
 
 ## Install, update, and remove a pack
 
-Each change to a project is two calls. A plan function does everything that can fail and writes nothing; `apply` writes the plan. Show the plan to the user, and apply it once they confirm, so what is installed is what they saw.
+Each change to a project is two calls. A plan function does the work that can fail and returns the change; `apply` writes it. Show the plan to the user and call `apply` after they confirm.
 
 ```rust
 use std::path::Path;

@@ -11,14 +11,14 @@ pip install tuff-sdk
 
 The package supports Python 3.9 and later on macOS (Apple silicon and Intel) and Linux (x86_64 and arm64). It is imported as `tuff_sdk`. The command-line tool is the separate `tuffcli` package.
 
-## What the package does and does not do
+## Behavior
 
-- **It never prints.** Notes and warnings are lists on the results, such as a hook that runs code. Show them in your own interface or logs.
-- **It writes only where you tell it.** The workspace and the baseline folder are arguments. Builds and checkouts use temporary folders that are removed when they are done.
-- **It reads no environment variables of its own.** It needs no `HOME`, so it runs under a service account or in a container.
-- **git is a program it runs.** `Pack.checkout` uses the `git` on the machine, with its settings and credentials. On a Mac without the Xcode Command Line Tools, the first call to `git` asks the user to install them.
-- **It releases the GIL** while it plans, applies, builds, or checks out, so other threads keep running.
-- **It is typed.** The package ships type stubs, so editors and type checkers see every class and method.
+- **Results.** Notes and warnings are lists on each result, such as a note that a hook runs code.
+- **Files.** Calls write to the workspace and the baseline folder passed to them. Builds and checkouts use temporary folders, removed when the object that owns them is released.
+- **Configuration.** Every location is an argument, so the package runs under a service account or in a container.
+- **git.** `Pack.checkout` runs the `git` program on the machine, with its settings and credentials. On a Mac without the Xcode Command Line Tools, the first `git` call prompts the user to install them.
+- **Threads.** Plans, applies, builds, and checkouts release the GIL while they run.
+- **Types.** The package ships type stubs for every class and method.
 
 ## Read a pack
 
@@ -45,7 +45,7 @@ for member in document["members"]:
 
 ## Install, update, and remove a pack
 
-Each change is two calls. A plan method does everything that can fail and writes nothing; `apply` writes the plan. Show the plan to the user, and apply it once they confirm, so what is installed is what they saw.
+Each change is two calls. A plan method does the work that can fail and returns the change; `apply` writes it. Show the plan to the user and call `apply` after they confirm.
 
 ```python
 import tuff_sdk as tuff
