@@ -6,6 +6,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-28
+
 ### Added
 
 - **The Tuff SDK for Python.** `pip install tuff-sdk`, then `import tuff_sdk`. It reads packs (from a folder, a `.tuffpack` file, or git, Claude Code plugins included), inspects them, and installs, updates, and removes them with a plan and an apply, fingerprints, and `apply_approved`, running the same Rust code as `tuff` in process. Errors are `TuffError` subclasses per kind with `kind` and `hint`; the package ships type stubs and releases the GIL during long calls. One abi3 wheel per platform for Python 3.9 and later, on macOS and Linux. See [Tuff from Python](https://tuffcli.dev/sdk/python/).
@@ -464,7 +466,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/kannandreams/tuff/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/kannandreams/tuff/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/kannandreams/tuff/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/kannandreams/tuff/compare/v0.17.0...v0.18.0
