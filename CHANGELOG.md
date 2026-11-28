@@ -6,9 +6,15 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-11-28
+
 ### Fixed
 
 - **Linux wheels install on older distributions.** The `tuffcli` and `tuff-sdk` wheels for Linux are built for manylinux_2_28, so `pip install` works on any distribution with glibc 2.28 or later, such as Debian 11 and 12, Ubuntu 20.04 and 22.04, Amazon Linux 2023, and RHEL 8 and 9. The 0.21.0 wheels needed glibc 2.39.
+
+### Changed
+
+- **The SDK on the landing page.** SDK in the top bar leads to the landing page's SDK section, the hero links to it as new in 0.21, and the examples are three numbered steps with the plan they print.
 
 ## [0.21.0] - 2026-11-28
 
@@ -470,7 +476,8 @@ The historical entries below were reconstructed from release tags, merged pull r
 - Refined adapter and renderer contracts so harness-specific output remains isolated behind dedicated adapter crates.
 - Added repository validation, integration tests, release automation, and reproducible Cargo builds.
 
-[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/kannandreams/tuff/compare/v0.21.1...HEAD
+[0.21.1]: https://github.com/kannandreams/tuff/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/kannandreams/tuff/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/kannandreams/tuff/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/kannandreams/tuff/compare/v0.18.0...v0.19.0
