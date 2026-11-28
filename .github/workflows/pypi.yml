@@ -13,10 +13,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux wheels build in a manylinux_2_28 container, so they install on glibc 2.28 and later.
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            manylinux: '2_28'
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            manylinux: '2_28'
           - os: macos-15-intel
             target: x86_64-apple-darwin
           - os: macos-15
@@ -30,6 +33,7 @@ jobs:
         with:
           command: build
           target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux || 'auto' }}
           rust-toolchain: 1.97.1
           args: --locked --release --manifest-path crates/tuff-cli/Cargo.toml --bindings bin --out dist
 
@@ -46,6 +50,7 @@ jobs:
         with:
           command: build
           target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux || 'auto' }}
           rust-toolchain: 1.97.1
           args: --locked --release --manifest-path crates/tuff-python/Cargo.toml --out sdk-dist
 
