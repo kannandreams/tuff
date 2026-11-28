@@ -2,8 +2,8 @@
 // The navigation shared by every standalone page (the landing page and the
 // MCP catalog). Extracted so a link is added or removed in one place.
 //
-// `Packs` points at the landing page's anchor rather than a bare `#packs`,
-// so it works from a page that does not contain that section.
+// `SDK` and `Packs` point at the landing page's anchor rather than a bare `#sdk`
+// or `#packs`, so they work from a page that does not contain the section.
 //
 // An `external` link leaves the site, so it opens in a new tab and never
 // matches `current`.
@@ -22,7 +22,7 @@ const { current } = Astro.props;
 
 const links: { href: string; label: string; external?: boolean; icon?: string }[] = [
   { href: '/primitives/overview', label: 'Capabilities', icon: navIcons.puzzle },
-  { href: '/sdk/', label: 'SDK', icon: navIcons.code },
+  { href: '/#sdk', label: 'SDK', icon: navIcons.code },
   { href: '/mcp-catalog', label: 'MCP Catalog', icon: navIcons.server },
   { href: '/#packs', label: 'Packs', icon: navIcons.box },
   { href: '/#console', label: 'Console', icon: navIcons.console },
