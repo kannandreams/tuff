@@ -6,6 +6,10 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Fixed
+
+- **Linux wheels install on older distributions.** The `tuffcli` and `tuff-sdk` wheels for Linux are built for manylinux_2_28, so `pip install` works on any distribution with glibc 2.28 or later, such as Debian 11 and 12, Ubuntu 20.04 and 22.04, Amazon Linux 2023, and RHEL 8 and 9. The 0.21.0 wheels needed glibc 2.39.
+
 ## [0.21.0] - 2026-11-28
 
 ### Added
