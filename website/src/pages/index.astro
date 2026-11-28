@@ -107,13 +107,13 @@ const description = 'Manage project-owned skills, tools, hooks, MCP servers, and
       </section>
 
       <section class="tuff-section" id="sdk">
-        <div class="tuff-section-head"><div class="tuff-section-label">//tuff sdk</div><h2 id="sdk-title">Install capabilities from your own application.</h2><p>The Tuff SDK puts the same engine as the <code>tuff</code> command inside your app. Plan an install, show the user every file it will write, then apply exactly that plan, from Python or Rust.</p></div>
+        <div class="tuff-section-head"><div class="tuff-section-label">//tuff sdk</div><h2 id="sdk-title">Install capabilities from your own application.</h2><p>The Tuff SDK runs the engine of the <code>tuff</code> command inside your Python or Rust application. A plan lists each file an install writes, and apply writes those files.</p></div>
         <div class="tuff-sdk">
           <ul class="tuff-sdk-points">
-            <li><strong>Plan, then apply</strong><span>A plan lists every member and file a change creates, modifies, or deletes, and writes nothing.</span></li>
-            <li><strong>Approvals that come later</strong><span>Keep a plan's fingerprint, and apply only the change that was approved, even after a restart.</span></li>
-            <li><strong>Safe beside the CLI</strong><span>Each apply locks the project and writes the same files and <code>tuff.lock</code> entries as <code>tuff pack install</code>.</span></li>
-            <li><strong>Never prints</strong><span>Notes, such as a hook that runs code, come back as values for your own interface.</span></li>
+            <li><strong>Plan, then apply</strong><span>A plan lists each member and file a change creates, modifies, or deletes. Apply writes those files.</span></li>
+            <li><strong>Approvals</strong><span>A fingerprint identifies each change. <code>apply_approved</code> writes a fresh plan when its fingerprint matches the approved one.</span></li>
+            <li><strong>Shared with the CLI</strong><span>Each apply locks the project and writes the same files and <code>tuff.lock</code> entries as <code>tuff pack install</code>.</span></li>
+            <li><strong>Results as values</strong><span>Notes, such as a note that a hook runs code, are lists on each result.</span></li>
           </ul>
           <div class="tuff-install tuff-sdk-code" data-sdk-tabs>
             <div class="tuff-install-tabs" role="tablist" aria-label="SDK language">
