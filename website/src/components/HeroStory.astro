@@ -48,7 +48,6 @@ const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
 {part === 'hero' && (
 <section class="tuff-hero hs">
   <div class="tuff-hero-main hs-main">
-    <a class="hs-new" href="#sdk"><b>New in 0.21</b><span>The Tuff SDK for Python and Rust</span><i aria-hidden="true">→</i></a>
     <h1 class="tuff-wordmark">t<span>u</span>ff</h1>
     <div class="hs-headlines">
       <h2 class="hs-roll">
@@ -140,6 +139,7 @@ const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
         </div>
       </div>
     </figure>
+    <a class="hs-new" href="#sdk"><b>New in 0.21</b> The Tuff SDK for Python and Rust <i aria-hidden="true">→</i></a>
   </div>
 
 </section>
@@ -216,11 +216,10 @@ const harnesses = ['claude', 'codex', 'cursor', 'opencode'];
   .hs, .hs-dash-section { --g: #4a7a5e; --g-dark: #83b477; --g-soft: rgba(131, 180, 119, .14); }
   .hs { grid-template-columns: minmax(0, .66fr) minmax(0, 1.34fr); column-gap: 2.5rem; align-items: center; padding-top: 3rem; padding-bottom: 2.75rem; }
   .hs-main { padding-top: 0; }
-  .hs-new { display: inline-flex; align-items: center; gap: .55rem; max-width: 100%; margin-bottom: 1.4rem; padding: .3rem .7rem .3rem .3rem; border: 1px solid var(--tuff-border); border-radius: 999px; color: var(--tuff-text); background: rgba(255, 255, 255, .55); font-family: 'Geist', system-ui, sans-serif; font-size: .82rem; font-weight: 500; text-decoration: none; transition: border-color .15s; }
-  .hs-new b { padding: .15rem .55rem; border-radius: 999px; color: #f4f1ea; background: var(--g); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
-  .hs-new span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hs-new i { color: var(--tuff-dim); font-style: normal; transition: transform .15s; }
-  .hs-new:hover { border-color: var(--g); }
+  .hs-new { display: block; width: fit-content; max-width: 100%; text-align: right; margin: .85rem 0 0 auto; color: var(--tuff-dim); font-family: 'JetBrains Mono', monospace; font-size: .72rem; text-decoration: none; }
+  .hs-new b { color: var(--tuff-text); font-weight: 600; }
+  .hs-new i { font-style: normal; display: inline-block; transition: transform .15s; }
+  .hs-new:hover { color: var(--tuff-text); }
   .hs-new:hover i { transform: translateX(2px); }
   .hs-headlines { margin-top: 1.4rem; }
   .hs :global(.tuff-button--quiet:hover) { border-color: var(--g); color: var(--g); }
