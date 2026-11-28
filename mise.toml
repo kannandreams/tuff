@@ -53,6 +53,16 @@ run = [
   "cargo test -p tuff-core -p tuff-packs --no-default-features",
 ]
 
+[tasks.python-test]
+description = "Build the Python SDK into a local virtual environment and run its tests"
+run = [
+  "cargo clippy -p tuff-python --all-targets -- -D warnings",
+  "python -m venv target/python-venv",
+  "target/python-venv/bin/pip install --quiet --disable-pip-version-check 'maturin>=1.9.4,<2' 'pytest>=8,<10'",
+  "VIRTUAL_ENV=$PWD/target/python-venv target/python-venv/bin/maturin develop --quiet --manifest-path crates/tuff-python/Cargo.toml",
+  "target/python-venv/bin/pytest -q crates/tuff-python/tests",
+]
+
 [tasks.lint-error-kinds]
 description = "Keep untyped errors from creeping back (RFC-105 D6)"
 run = """
@@ -215,6 +225,7 @@ run = [
   { task = "lint" },
   { task = "lint-slim" },
   { task = "test" },
+  { task = "python-test" },
   { task = "build-release" },
   { task = "security-audit" },
   { task = "docs-check" },

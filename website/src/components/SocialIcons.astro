@@ -1,6 +1,7 @@
 ---
 // Starlight's header social links, with the GitHub icon replaced by the
-// repository card. The other links (VS Code Marketplace, the blog's RSS
+// repository card, after an SDK link styled like the blog plugin's Blog link.
+// The other links (VS Code Marketplace, the blog's RSS
 // feed) stay as icons. The GitHub entry is kept in astro.config.mjs so
 // anything else reading `social` still sees it.
 import config from 'virtual:starlight/user-config';
@@ -10,6 +11,7 @@ import GitHubRepo from './GitHubRepo.astro';
 const links = (config.social ?? []).filter((link) => link.icon !== 'github');
 ---
 
+<a class="tuff-header-link" href="/sdk/">SDK</a>
 <GitHubRepo />
 {
   links.map(({ label, href, icon }) => (
@@ -21,6 +23,18 @@ const links = (config.social ?? []).filter((link) => link.icon !== 'github');
 }
 
 <style>
+  .tuff-header-link {
+    display: none;
+    color: var(--sl-color-text-accent);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  @media (min-width: 50rem) {
+    .tuff-header-link {
+      display: inline;
+    }
+  }
   @layer starlight.core {
     .tuff-social-icon {
       color: var(--sl-color-text-accent);

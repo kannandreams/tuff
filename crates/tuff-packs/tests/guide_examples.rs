@@ -7,8 +7,7 @@ use std::path::Path;
 fn every_guide_example_is_compiled() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let page =
-        std::fs::read_to_string(root.join("../../website/src/content/docs/guides/tuff-packs.md"))
-            .unwrap();
+        std::fs::read_to_string(root.join("../../website/src/content/docs/sdk/rust.md")).unwrap();
     let example = std::fs::read_to_string(root.join("examples/guide.rs")).unwrap();
     let mut blocks = 0;
     for block in page.split("```rust\n").skip(1) {
@@ -25,4 +24,27 @@ fn every_guide_example_is_compiled() {
         blocks += 1;
     }
     assert!(blocks >= 5, "found {blocks} Rust blocks");
+}
+
+#[test]
+fn the_landing_page_example_is_compiled() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let snippet =
+        std::fs::read_to_string(root.join("../../website/src/data/sdk/install.rs")).unwrap();
+    let example = std::fs::read_to_string(root.join("examples/guide.rs")).unwrap();
+    let indented = snippet
+        .lines()
+        .map(|line| {
+            if line.is_empty() {
+                String::new()
+            } else {
+                format!("    {line}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        example.contains(&indented),
+        "examples/guide.rs is missing the landing page example:\n{snippet}"
+    );
 }

@@ -11,6 +11,23 @@ members = [
     "crates/tuff-adapter-pi",
     "crates/tuff-console",
     "crates/tuff-packs",
+    "crates/tuff-python",
+]
+# tuff-python is a Python extension module that maturin builds and links;
+# plain `cargo build` and `cargo test` leave it out. `mise run python-test`
+# builds and tests it.
+default-members = [
+    "crates/tuff-cli",
+    "crates/tuff-core",
+    "crates/tuff-hooks-spec",
+    "crates/tuff-adapter-open-agents",
+    "crates/tuff-adapter-claude",
+    "crates/tuff-adapter-codex",
+    "crates/tuff-adapter-cursor",
+    "crates/tuff-adapter-opencode",
+    "crates/tuff-adapter-pi",
+    "crates/tuff-console",
+    "crates/tuff-packs",
 ]
 resolver = "2"
 

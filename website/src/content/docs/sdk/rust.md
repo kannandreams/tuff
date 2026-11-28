@@ -5,7 +5,7 @@ description: Build, inspect, import, and check packs and Claude Code plugins fro
 
 `tuff-packs` is the library the `tuff pack` commands are built on. A Rust application calls it directly, with no `tuff` process to start and no JSON to parse. It inspects a pack for a review screen, reads a Claude Code plugin as a pack, checks a git pack for a newer release, previews an update, writes packs as a Claude Code plugin or marketplace, and installs, updates, and removes packs in a project.
 
-An application in another language runs the `tuff` commands with `--json`, as [Packs in Your Application](/guides/packs-in-your-application/) describes.
+A Python application uses [the Python package](/sdk/python/), and an application in another language runs the `tuff` commands with `--json`, as [Packs in Your Application](/guides/packs-in-your-application/) describes.
 
 ```toml title="Cargo.toml"
 [dependencies]

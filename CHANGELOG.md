@@ -6,6 +6,11 @@ The historical entries below were reconstructed from release tags, merged pull r
 
 ## [Unreleased]
 
+### Added
+
+- **The Tuff SDK for Python.** `pip install tuff-sdk`, then `import tuff_sdk`. It reads packs (from a folder, a `.tuffpack` file, or git, Claude Code plugins included), inspects them, and installs, updates, and removes them with a plan and an apply, fingerprints, and `apply_approved`, running the same Rust code as `tuff` in process. Errors are `TuffError` subclasses per kind with `kind` and `hint`; the package ships type stubs and releases the GIL during long calls. One abi3 wheel per platform for Python 3.9 and later, on macOS and Linux. See [Tuff from Python](https://tuffcli.dev/sdk/python/).
+- **An SDK section on tuffcli.dev.** [SDK](https://tuffcli.dev/sdk/) in the top bar and the docs header leads to an overview and the Python, Rust, and JSON guides, and the landing page shows a Python and a Rust example. The Rust guide moved to [/sdk/rust/](https://tuffcli.dev/sdk/rust/); its old addresses redirect.
+
 ## [0.20.0] - 2026-11-27
 
 ### Added
