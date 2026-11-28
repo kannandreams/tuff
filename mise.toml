@@ -57,7 +57,7 @@ run = [
 description = "Build the Python SDK into a local virtual environment and run its tests"
 run = [
   "cargo clippy -p tuff-python --all-targets -- -D warnings",
-  "python -m venv target/python-venv",
+  "python -m venv --clear target/python-venv",
   "target/python-venv/bin/pip install --quiet --disable-pip-version-check 'maturin>=1.9.4,<2' 'pytest>=8,<10'",
   "VIRTUAL_ENV=$PWD/target/python-venv target/python-venv/bin/maturin develop --quiet --manifest-path crates/tuff-python/Cargo.toml",
   "target/python-venv/bin/pytest -q crates/tuff-python/tests",
