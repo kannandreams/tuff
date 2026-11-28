@@ -1391,6 +1391,12 @@ nav.sidebar a[aria-current='true'] {
 .tuff-sdk-install span { color: #989d94; }
 .tuff-sdk-install code { color: #eeeae2; font-family: 'JetBrains Mono', monospace; }
 .tuff-sdk-code pre.astro-code { margin: 0; padding: .75rem .95rem 1rem; overflow-x: auto; background: transparent !important; font-family: 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.6; }
+.tuff-sdk-output { padding: .8rem .95rem 1rem; border-top: 1px solid #343934; background: #161916; }
+.tuff-sdk-output-label { margin-bottom: .5rem; color: #989d94; font-family: 'JetBrains Mono', monospace; font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; }
+.tuff-sdk-output ul { display: grid; gap: .2rem; margin: 0; padding: 0; list-style: none; font-family: 'JetBrains Mono', monospace; font-size: .74rem; }
+.tuff-sdk-output li { display: flex; gap: .75rem; }
+.tuff-sdk-output code { color: #eeeae2; font-family: inherit; overflow-wrap: anywhere; }
+.tuff-sdk-change { flex: 0 0 3.6rem; color: #83b477; }
 .tuff-sdk-ctas { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.5rem; }
 @media (max-width: 900px) {
   .tuff-sdk { grid-template-columns: minmax(0, 1fr); gap: 1.75rem; }
